@@ -280,20 +280,20 @@ static int copy_para_from_user(unsigned long addr, char *buf, size_t buf_len)
 
 static int unlink_filename(const char *filename)
 {
-    struct file *filp;
+    struct path path;
     struct inode *parent_inode;
     struct user_namespace *user_ns;
     int ret;
 
-    filp = filp_open(filename, O_RDONLY, 0);
-    if (IS_ERR(filp))
-        return PTR_ERR(filp);
-    
-    user_ns = mnt_user_ns(filp->f_path.mnt);
-    
-    parent_inode = filp->f_path.dentry->d_parent->d_inode;
+	ret = kern_path(filename, 0, &path);
+	if (ret)
+		return ret;
+
+    user_ns = mnt_user_ns(path.mnt);
+
+    parent_inode = path.dentry->d_parent->d_inode;
     inode_lock(parent_inode);
-    ret = vfs_unlink(user_ns, parent_inode, filp->f_path.dentry, NULL);    
+    ret = vfs_unlink(user_ns, parent_inode, path.dentry, NULL);
     inode_unlock(parent_inode);
 
     return ret;
@@ -311,7 +311,7 @@ static int create_symlink(const char *oldname, const char *newname)
 
     dentry = kern_path_create(AT_FDCWD, newname, &path, 0);
 	if (IS_ERR(dentry))
-		return PTR_ERR(dentry);
+        return PTR_ERR(dentry);
 
 	error = vfs_symlink(mnt_user_ns(path.mnt), path.dentry->d_inode,
 		dentry, oldname);
@@ -696,7 +696,6 @@ static int __register_uprobe(const char *buf, size_t count,
 out:
     return ret;
 }
-
 
 static ssize_t __default_store(const char *buf, size_t count, char *elf_path,
     loff_t *entry_offset, struct uprobe_consumer *uc)
