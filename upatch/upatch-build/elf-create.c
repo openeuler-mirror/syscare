@@ -555,7 +555,7 @@ void upatch_create_symtab(struct upatch_elf *uelf)
     int nr = 0, nr_local = 0;
     unsigned long offset = 0;
 
-    symtab = find_section_by_name(&uelf->sections, ".sysmtab");
+    symtab = find_section_by_name(&uelf->sections, ".symtab");
     if (!symtab)
         ERROR("find_section_by_name failed.");
 
