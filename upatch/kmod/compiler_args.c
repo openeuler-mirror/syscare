@@ -22,7 +22,7 @@
 
 static const char *append_args[] = {
     "-v", /* used for upatch-build to get link information */
-    "-g3", /* obatain debug information */
+    "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
     "-fdata-sections",
     "NULL",
