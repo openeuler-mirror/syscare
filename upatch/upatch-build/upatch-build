@@ -1,3 +1,4 @@
+#!/bin/bash
 BASE=${PWD}
 SCRIPT_DIR="$(readlink -f "$(dirname "$(type -p "$0")")")"
 CACHE_DIR="${CACHE_DIR:-$HOME/.upatch}"
@@ -8,7 +9,6 @@ LOGFILE="${CACHE_DIR}/build.log"
 DEBUG=0
 UPATCHS=""
 declare -a DIFFER_LIST
-declare -A objMap
 
 warn() {
 	echo "ERROR: $1" >&2
@@ -114,7 +114,7 @@ differ_obj() {
                 # echo "patch_file: $2/${patchMap["${file_name}"]}     source_file: $3/${sourceMap[${file_name}]}"
                 # use create-differ-object to create upatch
                 if [[ -f "$2/${patchMap["${file_name}"]}" && -f "$3/${sourceMap[${file_name}]}" ]];then
-                    "${TOOLS_DIR}"/create-diff-object -s "$3/${sourceMap[${file_name}]}" -p "$2/${patchMap["${file_name}"]}" -r "${RUNNING_FILE}" -o "${OUTPUT_DIR}/${obj_name}" -d >> ${LOGFILE} #|| die "differ $2/${arg} error"
+                    "${TOOLS_DIR}"/create-diff-object -s "$3/${sourceMap[${file_name}]}" -p "$2/${patchMap["${file_name}"]}" -r "${RUNNING_FILE}" -o "${OUTPUT_DIR}/${patchMap["${file_name}"]}" -d >> ${LOGFILE} #|| die "differ $2/${arg} error"
                 fi
             fi
         fi
@@ -141,20 +141,14 @@ choose_binary_differ() {
     differ_obj "${binary_args}" $1 $2
 }
 
-print_Map() {
-    for key in ${!objMap[*]};do
-      echo $key ${objMap[$key]}
-    done
-}
-
 usage() {
 	echo "usage: $(basename "$0") [options] <patch1 ... patchN>" >&2
 	echo "		patchN                  Input patchfile(s)" >&2
 	echo "		-h, --help              Show this help message" >&2
 	echo "		-s, --sourcedir         Specify source directory" >&2
 	echo "		-b, --buildfile         Specify build file, in source dir" >&2
-	echo "		-r, --runningfile       Specify original runningfile" >&2
-	echo "		-c, --compiler          Specify compiler" >&2
+	echo "		-r, --runningfile       Specify original running file" >&2
+	echo "		-c, --compiler          Specify compiler, default" >&2
 	echo "		-o, --output            Specify output folder" >&2
 }
 
@@ -250,8 +244,6 @@ rm -rf ${CACHE_DIR}/$(basename ${USER_SRC_DIR})
 declare -A sourceMap
 declare -A patchMap
 create_obj_map
-#correlate_obj
-#print_Map
 
 # choose the binary's obj create upatch file
 choose_binary_differ "${PATCH_DIR}" "${SOURCE_DIR}"
