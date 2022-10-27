@@ -83,3 +83,46 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
 
     return rela->addend + add_off;
 }
+
+unsigned int insn_length(struct upatch_elf *uelf, void * addr)
+{
+    struct insn decoded_insn;
+    char *insn = addr;
+
+    switch(uelf->arch) {
+    case X86_64:
+        insn_init(&decoded_insn, addr, 1);
+        insn_get_length(&decoded_insn);
+        return decoded_insn.length;
+    default:
+        ERROR("unsupported arch");
+    }
+
+    return 0;
+}
+
+/* check: http://ref.x86asm.net/coder64.html */
+bool insn_is_load_immediate(struct upatch_elf *uelf, void *addr)
+{
+    unsigned char *insn = addr;
+
+    switch(uelf->arch) {
+    case X86_64:
+        /* arg2: mov $imm, %esi */
+        if (insn[0] == 0xbe)
+            return true;
+
+        /* arg3: mov $imm, %edx */
+        if (insn[0] == 0xba)
+            return true;
+
+        /* 0x41 is the prefix extend - REX.B */
+        if (insn[0] == 0x41 && insn[1] == 0xb8)
+            return true;
+
+        break;
+    default:
+        ERROR("unsupported arch");
+    }
+    return false;
+}

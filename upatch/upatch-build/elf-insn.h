@@ -38,4 +38,8 @@ void rela_insn(const struct section *sec, const struct rela *rela, struct insn *
 
 long rela_target_offset(struct upatch_elf *, struct section *, struct rela *);
 
+unsigned int insn_length(struct upatch_elf *, void *);
+
+bool insn_is_load_immediate(struct upatch_elf *, void *);
+
 #endif /* __UPATCH_INSN_H_ */

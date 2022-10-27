@@ -21,6 +21,8 @@
  * 02110-1301, USA.
  */
 
+#include <libgen.h>
+
 #include "log.h"
 #include "elf-common.h"
 #include "elf-compare.h"
@@ -150,13 +152,106 @@ out:
     return 0;
 }
 
+bool upatch_handle_redis_line(const char *symname)
+{
+	if (!strncmp(symname, "_serverPanic", 12) ||
+		!strncmp(symname, "_serverAssert", 13) ||
+		!strncmp(symname, "_serverAssertWithInfo", 21))
+		return true;
+	return false;
+}
+
+/* TODO: let user support this list or generate by the compiler ? */
+bool check_line_func(struct upatch_elf *uelf, const char *symname)
+{
+	if (!strncmp(basename(upatch_elf_name), "redis-server", 12))
+		return upatch_handle_redis_line(symname);
+
+	return false;
+}
+
 /* Determine if a section has changed only due to a __LINE__ bumber change.
  * For example, a WARN() or might_sleep() macro's embedding of the line number into an
  * instruction operand.
  */
 static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 {
-    return false;
+    unsigned long offset, insn1_len, insn2_len;
+    void *data1, *data2, *insn1, *insn2;
+    struct rela *rela;
+    bool found, found_any = false;
+
+	if (sec->status != CHANGED ||
+		is_rela_section(sec) ||
+		!is_text_section(sec) ||
+		sec->sh.sh_size != sec->twin->sh.sh_size ||
+		!sec->rela ||
+		sec->rela->status != SAME)
+		return false;
+
+	data1 = sec->twin->data->d_buf;
+	data2 = sec->data->d_buf;
+	for (offset = 0; offset < sec->sh.sh_size; offset += insn1_len) {
+		insn1 = data1 + offset;
+		insn2 = data2 + offset;
+
+		insn1_len = insn_length(uelf, insn1);
+		insn2_len = insn_length(uelf, insn2);
+
+		if (!insn1_len || !insn2_len)
+			ERROR("decode instruction in section %s at offset 0x%lx failed",
+				sec->name, offset);
+
+		if (insn1_len != insn2_len)
+			return false;
+
+		/* if insn are same, continue*/
+		if (!memcmp(insn1, insn2, insn1_len))
+			continue;
+
+		log_debug("check list for %s at 0x%lx \n", sec->name, offset);
+
+		/*
+		 * Here we found a differece between two instructions of the
+		 * same length. Only ignore the change if:
+		 *
+		 * 1) the instruction match a known pattern of a '__LINE__'
+		 * 	  macro immediate value which was embedded in the instruction.
+		 *
+		 * 2) the instructions are followed by certain expected relocations.
+		 *    (white-list)
+		 */
+		if (!insn_is_load_immediate(uelf, insn1) ||
+			!insn_is_load_immediate(uelf, insn2))
+			return false;
+
+		found = false;
+		list_for_each_entry(rela, &sec->rela->relas, list) {
+			if (rela->offset < offset + insn1_len)
+				continue;
+
+			if (rela->string)
+				continue;
+
+			/* TODO: we may need black list ? */
+			if (check_line_func(uelf, rela->sym->name)) {
+				found = true;
+				break;
+			}
+
+			return false;
+		}
+		if (!found)
+			return false;
+
+		found_any = true;
+	}
+
+	if (!found_any)
+		ERROR("no instruction changes detected for changed section %s",
+			sec->name);
+
+    return true;
 }
 
 void upatch_compare_sections(struct upatch_elf *uelf)

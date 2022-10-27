@@ -157,7 +157,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     unsigned int symndx;
     struct rela *rela;
     struct rela *rela_arr = NULL;
-    int skip = 0;
+    int index = 0, skip = 0;
 
     /* for relocation sections, sh_info is the index which these informations apply */
     relasec->base = find_section_by_index(&uelf->sections, relasec->sh.sh_info);
@@ -178,8 +178,10 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     while (rela_nr --) {
         ALLOC_LINK(rela, &relasec->relas);
 
-        if (!gelf_getrela(relasec->data, rela_nr, &rela->rela))
+        /* use index because we need to keep the order of rela */
+        if (!gelf_getrela(relasec->data, index, &rela->rela))
             ERROR("gelf_getrela with error %s", elf_errmsg(0));
+        index++;
         
         rela->type = GELF_R_TYPE(rela->rela.r_info);
         rela->addend = rela->rela.r_addend;
@@ -193,12 +195,15 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
             rela->string = rela->sym->sec->data->d_buf +
                 rela->sym->sym.st_value +
                 rela_target_offset(uelf, relasec, rela);
+            if (!rela->string)
+                ERROR("could not lookup rela string for %s+%ld",
+                    rela->sym->name, rela->addend);
         }
 
         if (skip)
             continue;
         
-        log_debug("offset %d, type %d, %s %s %ld", rela->offset,
+        log_debug("offset %d, type %d, %s %s %ld \n", rela->offset,
             rela->type, rela->sym->name,
             (rela->addend < 0) ? "-" : "+", labs(rela->addend));
         if (rela->string)

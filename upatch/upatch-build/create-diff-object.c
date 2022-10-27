@@ -58,6 +58,7 @@
 
 enum loglevel loglevel = NORMAL;
 char *logprefix;
+char *upatch_elf_name;
 
 struct arguments {
     char *source_obj;
@@ -741,6 +742,9 @@ int main(int argc, char*argv[])
 
     if (elf_version(EV_CURRENT) ==  EV_NONE)
         ERROR("ELF library initialization failed");
+
+    /* TODO: with debug info, this may changed */
+    upatch_elf_name = arguments.running_elf;
 
     /* check error in log, since errno may be from libelf */
     upatch_elf_open(&uelf_source, arguments.source_obj);

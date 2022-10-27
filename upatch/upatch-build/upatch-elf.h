@@ -31,6 +31,8 @@
 #include "list.h"
 #include "running-elf.h"
 
+extern char *upatch_elf_name;
+
 // these data structs contain each other
 struct section;
 struct rela;
