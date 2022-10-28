@@ -415,12 +415,24 @@ static void find_file_symbol(struct upatch_elf *uelf, struct running_elf *relf)
 
 static void mark_grouped_sections(struct upatch_elf *uelf)
 {
-    struct section *groupsec;
-
+    struct section *groupsec, *sec;
+	unsigned int *data, *end;
+    
     list_for_each_entry(groupsec, &uelf->sections, list) {
         if (groupsec->sh.sh_type != SHT_GROUP)
             continue;
-        ERROR("find group section, please handle it.");
+		data = groupsec->data->d_buf;
+		end = groupsec->data->d_buf + groupsec->data->d_size;
+		data++; /* skip first flag word (e.g. GRP_COMDAT) */
+		while (data < end) {
+			sec = find_section_by_index(&uelf->sections, *data);
+			if (!sec)
+				ERROR("group section not found");
+			sec->grouped = 1;
+			log_debug("marking section %s (%d) as grouped\n",
+			          sec->name, sec->index);
+			data++;
+		}
     }
 }
 

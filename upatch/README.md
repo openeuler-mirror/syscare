@@ -41,6 +41,8 @@ echo "/usr/bin/as" > /sys/kernel/upatch/assembler_path
 ## TODO list
 1. previliage for sysfs (allow no-root)
 2. support mutiple compilers work at the same time
+3. gcc don't support -g3 (.debug_macro is group section)
+
 
 
 

@@ -71,7 +71,7 @@ void upatch_correlate_symbols(struct list_head *symlist_orig, struct list_head *
 			/* group section symbols must have correlated sections */
 			if (sym_orig->sec && sym_orig->sec->sh.sh_type == SHT_GROUP &&
 			    sym_orig->sec->twin != sym_patched->sec)
-				ERROR("find grouped symbol \n");
+				continue;
 
 			correlate_symbol(sym_orig, sym_patched);
 			break;
@@ -141,7 +141,11 @@ void upatch_correlate_sections(struct list_head *seclist_source, struct list_hea
 			 * Group sections must match exactly to be correlated.
 			 */
 			if (sec_orig->sh.sh_type == SHT_GROUP) {
-                ERROR("Find group sections \n");
+				if (sec_orig->data->d_size != sec_patched->data->d_size)
+					continue;
+				if (memcmp(sec_orig->data->d_buf, sec_patched->data->d_buf,
+				           sec_orig->data->d_size))
+					continue;
 			}
 
 			correlate_section(sec_orig, sec_patched);
