@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 cmake_minimum_required(VERSION 3.14)
-project(upatch_build)
+project(upatch-build)
 
 include_directories(
     ${CMAKE_SOURCE_DIR}/

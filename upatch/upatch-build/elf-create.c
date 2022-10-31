@@ -57,7 +57,7 @@ static struct section *create_section_pair(struct upatch_elf *uelf, char *name,
 
     sec->data->d_buf = calloc(nr, entsize);
     if (!sec->data->d_buf)
-        ERROR("dbuf of section data malloc failed.");
+        ERROR("d_buf of section data malloc failed.");
 
     sec->data->d_size = entsize * nr;
     sec->data->d_type = ELF_T_BYTE;
@@ -161,7 +161,7 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
         log_debug("lookup for %s: symbol name %s sympos=%lu size=%lu .\n",
             sym->name, symbol.symbol->name, symbol.sympos, symbol.symbol->size);
 
-        /* TODO: kpatch convert global symbols to local symbols here. */
+        /* ATTENTION: kpatch convert global symbols to local symbols here. */
 
         funcs[index].old_addr = symbol.symbol->addr;
         funcs[index].old_size = symbol.symbol->size;
