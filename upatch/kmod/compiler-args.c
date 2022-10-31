@@ -17,7 +17,7 @@
 #include <asm/uaccess.h>
 #include <asm/ptrace.h>
 
-#include "compiler_args.h"
+#include "compiler-args.h"
 #include "asm/hijack.h"
 
 static const char *append_args[] = {

@@ -9,35 +9,90 @@
 
 #include <linux/kernel.h>
 #include <linux/module.h>
+#include <linux/miscdevice.h>
+#include <linux/fs.h>
 
 #include "kmod.h"
 #include "compiler.h"
 
-struct kobject *upatch_kobj;
+static int upatch_open(struct inode *inode, struct file *file)
+{
+    return 0;
+}
+
+static int upatch_release(struct inode *inode, struct file *file)
+{
+    return 0;
+}
+
+static ssize_t upatch_read(struct file *filp, char __user *ubuf,
+			     size_t usize, loff_t *off)
+{
+    return 0;
+}
+
+static ssize_t upatch_write(struct file *filp, const char __user *ubuf,
+			      size_t usize, loff_t *off)
+{
+    return 0;
+}
+
+static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
+{
+    if (_IOC_TYPE(cmd) != UPATCH_IOCTL_MAGIC)
+        return -EINVAL;
+
+    switch (cmd) {
+    case UPATCH_REGISTER_COMPILER:
+    case UPATCH_UNREGISTER_COMPILER:
+    case UPATCH_REGISTER_ASSEMBLER:
+    case UPATCH_UNREGISTER_ASSEMBLER:
+        return handle_compiler_cmd(arg, cmd);
+    default:
+        return -ENOTTY;
+    }
+
+    return 0;
+}
+
+static const struct file_operations upatch_ops = {
+	.owner		= THIS_MODULE,
+	.open		= upatch_open,
+	.release	= upatch_release,
+	.read		= upatch_read,
+	.write		= upatch_write,
+	.unlocked_ioctl	= upatch_ioctl,
+	.llseek		= no_llseek,
+};
+
+static struct miscdevice upatch_dev = {
+	.minor	= MISC_DYNAMIC_MINOR,
+	.name	= UPATCH_DEV_NAME,
+	.fops	= &upatch_ops,
+    .mode = 0666,
+};
 
 static int __init upatch_init(void)
 {
     int ret;
 
-    upatch_kobj = kobject_create_and_add("upatch", kernel_kobj);
-    if (!upatch_kobj)
-        return -ENOMEM;
+    ret = misc_register(&upatch_dev);
+    if (ret) {
+        pr_err("register misc device for %s failed\n", UPATCH_DEV_NAME);
+        return ret;
+    }
 
     ret = compiler_hack_init();
     if (ret < 0)
-        goto kobj_out;
+        return ret;
 
-    goto out;
-kobj_out:
-    kobject_put(upatch_kobj);
-out:
-    return ret;
+    return 0;
 }
 
 static void __exit upatch_exit(void)
 {
     compiler_hack_exit();
-    kobject_put(upatch_kobj);
+    misc_deregister(&upatch_dev);
 }
 
 module_init(upatch_init);

@@ -3,7 +3,8 @@ kernel ?= /lib/modules/$(shell uname -r)/build
 
 obj-m += upatch.o
 upatch-y += kmod.o
-upatch-y += compiler.o compiler_args.o ./asm/$(ARCH)/hijack_code.o ./asm/$(ARCH)/hijack.o
+upatch-y += compiler.o compiler-args.o
+upatch-y += asm/$(ARCH)/hijack-code.o asm/$(ARCH)/hijack.o
 
 all:
 	make -C $(kernel) M=$(shell pwd) modules

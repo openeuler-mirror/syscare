@@ -10,10 +10,10 @@
 #ifndef _UPATCH_KMOD_H
 #define _UPATCH_KMOD_H
 
-#include <linux/kobject.h>
-#include <linux/sysfs.h>
+#include <linux/ioctl.h>
+#include <linux/types.h>
 
-extern struct kobject *upatch_kobj;
+#include "upatch-ioctl.h"
 
 #endif /* _UPATCH_KMOD_H */
 

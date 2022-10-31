@@ -26,7 +26,7 @@
 
 #include "kmod.h"
 #include "compiler.h"
-#include "compiler_args.h"
+#include "upatch-ioctl.h"
 
 #include "asm/hijack.h"
 
@@ -622,20 +622,8 @@ static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
     struct file *file;
     int ret;
     char *p;
-    char *temp_buff = NULL;
-    int len = strlen(buf);
 
-    /* trim '\n' from sys read */
-    if (len && buf[len - 1] == '\n')
-        len --;
-
-    temp_buff = kzalloc(len + 1, GFP_KERNEL);
-    if (!temp_buff)
-        return -ENOMEM;
-
-    memcpy(temp_buff, buf, len);
-
-    file = filp_open(temp_buff, O_RDONLY, 0);
+    file = filp_open(buf, O_RDONLY, 0);
     if (IS_ERR(file)) {
         ret = PTR_ERR(file);
         pr_err("open elf failed - %d \n", ret);
@@ -656,13 +644,11 @@ static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
 put_file:
     fput(file);
 out:
-    if (temp_buff)
-        kfree(temp_buff);
     return ret;
 }
 
-static int __register_uprobe(const char *buf, size_t count,
-    char *elf_path, loff_t *entry_offset, struct uprobe_consumer *uc)
+static int __register_uprobe(const char *buf, char *elf_path,
+    loff_t *entry_offset, struct uprobe_consumer *uc)
 {
     int ret;
     struct path path;
@@ -692,71 +678,60 @@ static int __register_uprobe(const char *buf, size_t count,
         goto out;
     }
 
-    ret = count;
+    ret = 0;
 out:
     return ret;
 }
 
-static ssize_t __default_store(const char *buf, size_t count, char *elf_path,
-    loff_t *entry_offset, struct uprobe_consumer *uc)
+int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
 {
-    if (strlen(buf))
-        return __register_uprobe(buf, count, elf_path, entry_offset, uc);
-    else
-        return __unregister_uprobe(elf_path, entry_offset, uc);
+    int ret;
+    char *path = NULL;
+
+    path = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path)
+        return -ENOMEM;
+
+    ret = copy_para_from_user(user_addr, path, PATH_MAX);
+    if (ret)
+        goto out;
+
+    switch (cmd)
+    {
+    case UPATCH_REGISTER_COMPILER:
+        ret = __register_uprobe(path, compiler_path,
+            &compiler_entry_offset, &uprobe_compiler_consumer);
+        break;
+
+    case UPATCH_UNREGISTER_COMPILER:
+        ret = __unregister_uprobe(compiler_path,
+            &compiler_entry_offset, &uprobe_compiler_consumer);
+        break;
+
+    case UPATCH_REGISTER_ASSEMBLER:
+        ret = __register_uprobe(path, assembler_path,
+            &assembler_entry_offset, &uprobe_assembler_consumer);
+        break;
+
+    case UPATCH_UNREGISTER_ASSEMBLER:
+        ret = __unregister_uprobe(assembler_path,
+            &assembler_entry_offset, &uprobe_assembler_consumer);
+        break;
+
+    default:
+        return -ENOTTY;
+        break;
+    }
+
+out:
+    if (path)
+        kfree(path);
+    return ret;
 }
-
-static ssize_t compiler_store(struct kobject *kobj, struct kobj_attribute *attr,
-    const char *buf, size_t count)
-{
-    return __default_store(buf, count, compiler_path,
-        &compiler_entry_offset, &uprobe_compiler_consumer);
-}
-
-static ssize_t compiler_show(struct kobject *kobj, struct kobj_attribute *attr,
-    char *buf)
-{
-    return sysfs_emit(buf, "%s\n", compiler_path);
-}
-
-static ssize_t assembler_store(struct kobject *kobj, struct kobj_attribute *attr,
-    const char *buf, size_t count)
-{
-    return __default_store(buf, count, assembler_path,
-        &assembler_entry_offset, &uprobe_assembler_consumer);
-}
-
-static ssize_t assembler_show(struct kobject *kobj, struct kobj_attribute *attr,
-    char *buf)
-{
-    return sysfs_emit(buf, "%s\n", assembler_path);
-}
-
-static struct kobj_attribute compiler_path_attribute =
-    __ATTR(compiler_path, 0664, compiler_show, compiler_store);
-
-static struct kobj_attribute assembler_path_attribute =
-    __ATTR(assembler_path, 0664, assembler_show, assembler_store);
-
-static struct attribute *attrs[] = {
-    &compiler_path_attribute.attr,
-    &assembler_path_attribute.attr,
-    NULL,
-};
-
-static struct attribute_group attr_group = {
-    .attrs = attrs,
-};
 
 int __init compiler_hack_init(void)
 {
     int ret;
-
-    ret = sysfs_create_group(upatch_kobj, &attr_group);
-    if (ret) {
-        pr_err("create sysfs group failed - %d \n", ret);
-        goto out;
-    }
 
     ret = compiler_step_init();
     if (ret) {
