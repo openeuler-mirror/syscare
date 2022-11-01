@@ -99,5 +99,6 @@ module_init(upatch_init);
 module_exit(upatch_exit);
 
 MODULE_AUTHOR("Longjun Luo (luolongjuna@gmail.com)");
+MODULE_AUTHOR("Zongwu Li (lzw32321226@163.com)");
 MODULE_DESCRIPTION("kernel module for upatch(live-patch in userspace)");
 MODULE_LICENSE("GPL");
