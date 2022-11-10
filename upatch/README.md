@@ -28,11 +28,39 @@ make && make install
 cd -
 ```
 
-3. prepare parameters for the compiler(default is gcc from SYMTEM env)
+3. prepare kmod
 ```
-echo "/usr/bin/gcc" > /sys/kernel/upatch/compiler_path
-echo "/usr/bin/as" > /sys/kernel/upatch/assembler_path
+cd kmod
+make kernel={your patched kernel path}
+insmod upatch.ko
+cd -
 ```
+
+4. build the create-diff-object in patch-build
+```
+mkdir build
+cd build
+cmake ..
+make
+cd -
+```
+
+5. build the upatch-build in patch-build/upatch-build
+```
+cargo build
+./target/debug/upatch-build
+
+parameters:
+-h|--help:          options message;
+-s|--debugsource:   Specify source directory;
+-b|--buildfile:     Specify the build script of debugsource;
+-i|--debuginfo:     Specify debug info;
+-c|--compiler:      Specify compiler, default gcc;
+-o|--output:        Specify output file, default;
+```
+    
+
+
 
 
 ## Limitaion
