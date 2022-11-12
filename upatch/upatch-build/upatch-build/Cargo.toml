@@ -1,6 +1,7 @@
 [package]
 name = "upatch-build"
 version = "0.0.1"
+edition = "2021"
 authors = ["lizongwu@huawei.com"]
 description = "upatch-build tool"
 
