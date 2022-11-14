@@ -1,7 +1,5 @@
 use crate::util::fs;
 
-const WORK_DIR_PREFIX: &str = "syscare/patch-build";
-
 pub struct CliWorkDir {
     work_dir:            String,
     patch_build_root:    String,
@@ -12,11 +10,14 @@ pub struct CliWorkDir {
 
 impl CliWorkDir {
     pub fn new() -> Self {
-        let temp_dir = std::env::temp_dir().canonicalize().expect("Get temporary directory failed");
-        let work_dir = format!("{}/{}.{}", temp_dir.display(), WORK_DIR_PREFIX, std::process::id());
-        let patch_build_root = format!("{}/patch_root", work_dir);
-        let patch_output_dir = format!("{}/patch_output", patch_build_root);
-        let package_build_root = format!("{}/pkg_root", work_dir);
+        let process_id   = std::process::id();
+        let process_name = fs::stringtify_path(std::env::current_exe().unwrap().file_name().unwrap());
+        let current_dir  = fs::stringtify_path(std::env::current_dir().expect("Get working directory failed"));
+
+        let work_dir            = format!("{}/{}.{}", current_dir, process_name, process_id);
+        let patch_build_root    = format!("{}/patch_root", work_dir);
+        let patch_output_dir    = format!("{}/patch_output", patch_build_root);
+        let package_build_root  = format!("{}/pkg_root", work_dir);
         let package_extract_dir = format!("{}/pkg_extract", work_dir);
 
         fs::create_dir_all(&work_dir).expect("Create work directory failed");
@@ -57,6 +58,6 @@ impl CliWorkDir {
 
 impl Drop for CliWorkDir {
     fn drop(&mut self) {
-        // std::fs::remove_dir_all(self.get_work_dir()).ok();
+        std::fs::remove_dir_all(self.get_work_dir()).ok();
     }
 }
