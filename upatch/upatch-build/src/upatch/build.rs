@@ -178,7 +178,7 @@ impl UpatchBuild {
                                 return Err(io::Error::new(io::ErrorKind::NotFound, format!("{}: please look {} for detail.", output.status, &self.log_file)));
                             }
                         },
-                        None => { fs::copy(&source_name, output_dir)?; },
+                        None => { fs::copy(&patch, output_dir)?; },
                     };
                 },
                 None => {},

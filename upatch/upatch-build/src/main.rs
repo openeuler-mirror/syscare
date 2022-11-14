@@ -14,7 +14,7 @@ fn main() {
             exit(0);
         },
         Err(e) => {
-            println!("ERROR: {}", e);
+            eprintln!("ERROR: {}", e);
             exit(-1);
         },
     }

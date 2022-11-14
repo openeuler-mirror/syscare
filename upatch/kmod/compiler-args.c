@@ -21,7 +21,6 @@
 #include "asm/hijack.h"
 
 static const char *append_args[] = {
-    "-v", /* used for upatch-build to get link information */
     "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
     "-fno-asynchronous-unwind-tables",

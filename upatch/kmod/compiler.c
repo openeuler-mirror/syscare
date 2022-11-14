@@ -22,6 +22,8 @@
 #include <linux/mman.h>
 #include <linux/string.h>
 #include <linux/spinlock.h>
+#include <linux/slab.h>
+#include <linux/version.h>
 
 #include <asm/ptrace.h>
 
@@ -375,18 +377,19 @@ static int unlink_filename(const char *filename)
 {
     struct path path;
     struct inode *parent_inode;
-    struct user_namespace *user_ns;
     int ret;
 
 	ret = kern_path(filename, 0, &path);
 	if (ret)
 		return ret;
 
-    user_ns = mnt_user_ns(path.mnt);
-
     parent_inode = path.dentry->d_parent->d_inode;
     inode_lock(parent_inode);
-    ret = vfs_unlink(user_ns, parent_inode, path.dentry, NULL);
+    #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 10, 0)
+        ret = vfs_unlink(mnt_user_ns(path.mnt), parent_inode, path.dentry, NULL);
+    #else
+        ret = vfs_unlink(parent_inode, path.dentry, NULL);
+    #endif
     inode_unlock(parent_inode);
 
     return ret;
@@ -406,8 +409,11 @@ static int create_symlink(const char *oldname, const char *newname)
 	if (IS_ERR(dentry))
         return PTR_ERR(dentry);
 
-	error = vfs_symlink(mnt_user_ns(path.mnt), path.dentry->d_inode,
-		dentry, oldname);
+    #if LINUX_VERSION_CODE > KERNEL_VERSION(5, 10, 0)
+	    error = vfs_symlink(mnt_user_ns(path.mnt), path.dentry->d_inode, dentry, oldname);
+    #else
+	    error = vfs_symlink(path.dentry->d_inode, dentry, oldname);
+    #endif
 	done_path_create(&path, dentry);
 	return error;
 }
@@ -666,8 +672,8 @@ static int __elf_check(struct file *file, loff_t *entry_offset)
         goto out;
     }
 
-    if (elf_header.e_type != ET_EXEC) {
-        pr_err("invalid elf type, it should be ET_EXEC \n");
+    if (elf_header.e_type != ET_EXEC && elf_header.e_type != ET_DYN) {
+        pr_err("invalid elf type, it should be ET_EXEC or ET_DYN \n");
         ret = -EINVAL;
         goto out;
     }

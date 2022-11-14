@@ -29,7 +29,7 @@ impl DwarfCompileUnit{
     }
 
     pub fn get_source(&self) -> String {
-        self.DW_AT_comp_dir.clone() + &self.DW_AT_name
+        self.DW_AT_comp_dir.clone() + "/" + &self.DW_AT_name
     }
 
     pub fn get_compiler_version(&self) -> String {
