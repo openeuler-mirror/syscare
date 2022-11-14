@@ -1,7 +1,7 @@
 use std::ffi::OsStr;
 use std::io::{Write, LineWriter};
 
-use crate::business::patch::PatchInfo;
+use crate::patch::PatchInfo;
 use crate::util::fs;
 
 const PATCH_INSTALL_PATH:    &str = "/usr/lib/syscare/patches";

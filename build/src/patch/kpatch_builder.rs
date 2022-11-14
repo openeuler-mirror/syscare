@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::business::cmd::ExternCommand;
+use crate::cmd::ExternCommand;
 
 use super::{PatchBuilder, PatchBuilderOptions};
 

@@ -1,4 +1,4 @@
-use crate::business::cmd::ExternCommand;
+use crate::cmd::ExternCommand;
 use crate::util::fs;
 
 use super::RpmBuildRoot;

@@ -1,4 +1,4 @@
-use crate::business::package::rpm_helper::RpmHelper;
+use crate::package::rpm_helper::RpmHelper;
 
 #[derive(Clone, Copy)]
 #[derive(PartialEq)]

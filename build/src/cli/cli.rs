@@ -1,9 +1,9 @@
 use clap::Parser;
 
-use crate::business::package::{PackageInfo, PackageType};
-use crate::business::package::{RpmSpecGenerator, RpmPatchHelper, RpmHelper, RpmBuildRoot, RpmBuilder};
-use crate::business::patch::{PatchType, PatchInfo, PatchBuilderFactory, PatchBuilderOptions};
-use crate::business::patch::{UserPatchHelper, KernelPatchHelper};
+use crate::package::{PackageInfo, PackageType};
+use crate::package::{RpmSpecGenerator, RpmPatchHelper, RpmHelper, RpmBuildRoot, RpmBuilder};
+use crate::patch::{PatchType, PatchInfo, PatchBuilderFactory, PatchBuilderOptions};
+use crate::patch::{UserPatchHelper, KernelPatchHelper};
 use crate::util::fs;
 
 use super::path::CliPath;

@@ -1,6 +1,6 @@
-use crate::business::patch::{PatchFile, Version};
+use crate::patch::{PatchFile, Version};
 use crate::util::fs;
-use crate::business::cmd::ExternCommand;
+use crate::cmd::ExternCommand;
 
 use super::rpm_buildroot::RpmBuildRoot;
 

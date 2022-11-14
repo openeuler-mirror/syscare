@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::business::patch::PatchFile;
+use crate::patch::PatchFile;
 use crate::util::fs;
 
 use super::rpm_spec_parser::{RpmSpecParser, RpmSpecTag};
