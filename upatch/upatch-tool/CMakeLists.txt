@@ -3,13 +3,17 @@
 cmake_minimum_required(VERSION 3.14)
 project(upatch-tool)
 
+set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
+
 include_directories(
-    ${CMAKE_SOURCE_DIR}/../kmod
-    ${CMAKE_SOURCE_DIR}/../upatch_build
+    ../kmod
+    ../upatch_build
 )
 
 file(GLOB HOST_SRC_FILES
-    ${CMAKE_SOURCE_DIR}/*.c
+    *.c
 )
 
 add_executable(upatch-tool ${HOST_SRC_FILES})
+
+install(TARGETS upatch-tool DESTINATION ${UPATCH_INSTALL_DIR})
