@@ -40,7 +40,16 @@ impl KernelPatchHelper {
 
         println!("Using '{}' as default config", KERNEL_DEFCONFIG_NAME);
 
-        MAKE.execvp(["-C", source_dir, KERNEL_DEFCONFIG_NAME])?;
+        let exit_status = MAKE.execvp(["-C", source_dir, KERNEL_DEFCONFIG_NAME])?;
+
+        let exit_code = exit_status.exit_code();
+        if exit_code != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Process '{}' exited unsuccessfully, exit code: {}", MAKE, exit_code),
+            ));
+        }
+
         let config_file_path = fs::find_file(
             source_dir,
             KERNEL_CONFIG_NAME,
@@ -67,8 +76,29 @@ impl KernelPatchHelper {
     pub fn build_kernel(source_dir: &str) -> std::io::Result<String> {
         fs::check_dir(source_dir)?;
 
-        MAKE.execvp(["-C", source_dir, "clean"])?;
-        MAKE.execvp(["-C", source_dir, "-j"])?;
+        {
+            let exit_status = MAKE.execvp(["-C", source_dir, "clean"])?;
+
+            let exit_code = exit_status.exit_code();
+            if exit_code != 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!("Process '{}' exited unsuccessfully, exit code: {}", MAKE, exit_code),
+                ));
+            }    
+        }
+
+        {
+            let exit_status = MAKE.execvp(["-C", source_dir, "-j"])?;
+
+            let exit_code = exit_status.exit_code();
+            if exit_code != 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::BrokenPipe,
+                    format!("Process '{}' exited unsuccessfully, exit code: {}", MAKE, exit_code),
+                ));
+            }
+        }
 
         let kernel_file_path = fs::find_file(
             &source_dir,

@@ -82,7 +82,15 @@ impl KernelPatchBuilder {
 
 impl PatchBuilder for KernelPatchBuilder {
     fn build_patch(&self, options: PatchBuilderOptions) -> std::io::Result<()> {
-        KPATCH_BUILD.execve(self.map_args(&options), self.map_envs(&options))?;
+        let exit_status = KPATCH_BUILD.execve(self.map_args(&options), self.map_envs(&options))?;
+
+        let exit_code = exit_status.exit_code();
+        if exit_code != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Process '{}' exited unsuccessfully, exit code: {}", KPATCH_BUILD, exit_code),
+            ));
+        }
 
         Ok(())
     }

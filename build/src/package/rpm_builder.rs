@@ -39,11 +39,19 @@ impl RpmBuilder {
         );
 
         // Build source rpm
-        RPM_BUILD.execvp([
+        let exit_status = RPM_BUILD.execvp([
             "--define", &format!("_topdir {}", self.build_root),
             "--define", &format!("{} {}", RELEASE_TAG_MACRO_NAME, patch_release),
             "-bs", spec_file_path
         ])?;
+
+        let exit_code = exit_status.exit_code();
+        if exit_code != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Process '{}' exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
+            ));
+        }
 
         // Copy source rpm to output directory
         fs::copy_all_files(self.build_root.get_srpm_path(), output_dir)?;
@@ -55,10 +63,19 @@ impl RpmBuilder {
         fs::check_file(spec_file_path)?;
         fs::check_dir(output_dir)?;
 
-        RPM_BUILD.execvp([
+        let exit_status = RPM_BUILD.execvp([
             "--define", &format!("_topdir {}", self.build_root),
             "-bb", spec_file_path
         ])?;
+
+        let exit_code = exit_status.exit_code();
+        if exit_code != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Process '{}' exited unsuccessfully, exit code: {}", RPM_BUILD, exit_code),
+            ));
+        }
+
         fs::copy_all_files(self.build_root.get_rpm_path(), output_dir)?;
 
         Ok(())

@@ -1,16 +1,25 @@
-use std::ffi::OsStr;
+use std::fs::File;
 use std::process::{Command, Stdio};
-use std::io::{BufReader, BufRead};
+use std::io::{BufRead, BufReader, Write, LineWriter};
+use std::sync::{Mutex, MutexGuard};
+use std::ffi::OsStr;
+
+use lazy_static::*;
 
 use crate::util::fs;
 
 #[derive(Debug)]
-pub struct ExternCommandOutput {
+pub struct ExternCommandExitStatus {
+    exit_code: i32,
     stdout: String,
     stderr: String,
 }
 
-impl ExternCommandOutput {
+impl ExternCommandExitStatus {
+    pub fn exit_code(&self) -> i32 {
+        self.exit_code
+    }
+
     pub fn stdout(&self) -> &str {
         &self.stdout
     }
@@ -24,66 +33,76 @@ impl ExternCommandOutput {
 #[derive(Clone)]
 pub struct ExternCommand<'a> {
     path: &'a str,
-    redirect: bool,
 }
 
-impl<'a> ExternCommand<'a> {
+impl ExternCommand<'_> {
     #[inline(always)]
-    fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandOutput> {
+    fn get_log_writer<'a>(&self) -> MutexGuard<'a, impl Write> {
+        lazy_static! {
+            static ref LOG_FILE_PATH: String = format!("./{}.{}.log",
+                fs::stringtify_path(std::env::current_exe().unwrap().file_name().unwrap()), // process name
+                std::process::id()                                                          // process id
+            );
+
+            static ref LOG_WRITER: Mutex<LineWriter<File>> = Mutex::new(LineWriter::new(
+                std::fs::OpenOptions::new()
+                    .create(true)
+                    .truncate(true)
+                    .write(true)
+                    .open(LOG_FILE_PATH.as_str())
+                    .expect("Cannot access log file")
+            ));
+        }
+
+        LOG_WRITER.lock().expect("Lock posioned")
+    }
+
+    #[inline(always)]
+    fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
+        let mut stdout = String::new();
+        let mut stderr = String::new();
+
         let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()?;
 
-        let mut stdout = String::new();
-        let mut stderr = String::new();
+        let process_name = self.path;
+        let process_id = child_process.id();
+        let mut writer = self.get_log_writer();
+        writeln!(writer, "Executing '{}' ({}):", process_name, process_id)?;
 
-        let stdout_handle_fn = |line: String| {
+        let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
+        for read_line in BufReader::new(process_stdout).lines() {
+            let line = read_line?;
+
+            writeln!(writer, "{}", line)?;
             stdout.push_str(&line);
-            if self.redirect {
-                println!("{}", line)
-            }
-        };
+        }
 
-        let stderr_handle_fn = |line: String| {
+        let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
+        for read_line in BufReader::new(process_stderr).lines() {
+            let line = read_line?;
+
+            writeln!(writer, "{}", line)?;
             stderr.push_str(&line);
-            if self.redirect {
-                eprintln!("{}", line)
-            }
-        };
-
-        BufReader::new(child_process.stdout.as_mut().expect("Pipe stdout failed"))
-            .lines()
-            .filter_map(Result::ok)
-            .for_each(stdout_handle_fn);
-
-        BufReader::new(child_process.stderr.as_mut().expect("Pipe stderr failed"))
-            .lines()
-            .filter_map(Result::ok)
-            .for_each(stderr_handle_fn);
+        }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("process '{}' exited unsuccessfully: exit_code={}, message='{}'", self.path, exit_code, stderr)
-            ));
-        }
-        Ok(ExternCommandOutput { stdout, stderr })
+        writeln!(writer, "Process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code)?;
+        writeln!(writer)?;
+
+        let exit_status = ExternCommandExitStatus { exit_code, stdout, stderr };
+        Ok(exit_status)
     }
 }
 
 impl<'a> ExternCommand<'a> {
     pub const fn new(path: &'a str) -> Self {
-        Self { path, redirect: false }
+        Self { path }
     }
 
-    pub fn redirect_output(&mut self) -> &mut Self {
-        self.redirect = true;
-        self
-    }
-
-    pub fn execvp<I, S> (&self, arg_list: I) -> std::io::Result<ExternCommandOutput>
+    pub fn execvp<I, S> (&self, arg_list: I) -> std::io::Result<ExternCommandExitStatus>
     where
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
@@ -96,7 +115,7 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(&mut command)
     }
 
-    pub fn execve<I, E, S, K, V>(&self, arg_list: I, env_list: E) -> std::io::Result<ExternCommandOutput>
+    pub fn execve<I, E, S, K, V>(&self, arg_list: I, env_list: E) -> std::io::Result<ExternCommandExitStatus>
     where
         I: IntoIterator<Item = S>,
         E: IntoIterator<Item = (K, V)>,
@@ -111,5 +130,11 @@ impl<'a> ExternCommand<'a> {
         command.envs(env_list);
 
         self.execute_command(&mut command)
+    }
+}
+
+impl std::fmt::Display for ExternCommand<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.path))
     }
 }
