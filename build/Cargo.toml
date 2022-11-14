@@ -1,0 +1,9 @@
+[package]
+name = "syscare-build"
+version = "1.0.0"
+authors = ["Huawei Technologies Co., Ltd."]
+edition = "2021"
+
+[dependencies]
+clap = { version = "4.0.16", features = ["derive", "env", "cargo"] }
+sha2 = { version = "0.10.6" }
