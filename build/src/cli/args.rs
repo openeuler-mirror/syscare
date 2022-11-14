@@ -6,20 +6,16 @@ use super::CliPath;
 #[command(author, version, about="Syscare patch build utility")]
 pub struct CliArguments {
     /// Patch name
-    #[arg(short, long)]
-    pub name: String,
+    #[arg(short='n', long)]
+    pub patch_name: String,
 
     /// Patch version
     #[arg(long)]
-    pub version: Option<String>,
+    pub patch_version: Option<String>,
 
     /// Patch summary
     #[arg(long)]
-    pub summary: Option<String>,
-
-    /// Source directory or source package
-    #[arg(short, long)]
-    pub source: CliPath,
+    pub patch_summary: Option<String>,
 
     /// Patch target name
     #[arg(long)]
@@ -36,6 +32,10 @@ pub struct CliArguments {
     /// Patch target license
     #[arg(long)]
     pub target_license: Option<String>,
+
+    /// Source directory or source package
+    #[arg(short, long)]
+    pub source: CliPath,
 
     /// Debug info (vmlinux for kernel)
     #[arg(short, long)]
