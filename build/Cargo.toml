@@ -1,7 +1,7 @@
 [package]
 name = "syscare-build"
 version = "1.0.0"
-authors = ["Huawei Technologies Co., Ltd."]
+authors = ["renoseven"]
 edition = "2021"
 
 [dependencies]
