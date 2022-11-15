@@ -141,7 +141,7 @@ impl RpmPatchHelper {
         }
 
         // Write to file
-        fs::write_file_contect(spec_file_path, spec_file_content)?;
+        fs::write_file_content(spec_file_path, spec_file_content)?;
 
         Ok(())
     }

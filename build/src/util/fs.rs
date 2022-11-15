@@ -245,7 +245,7 @@ pub fn read_file_content<P: AsRef<Path>>(file_path: P) -> std::io::Result<VecDeq
     Ok(file_content)
 }
 
-pub fn write_file_contect<P, I>(file_path: P, file_content: I) -> std::io::Result<()>
+pub fn write_file_content<P, I>(file_path: P, file_content: I) -> std::io::Result<()>
 where
     P: AsRef<Path>,
     I: IntoIterator<Item = String>
