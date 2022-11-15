@@ -1,6 +1,6 @@
 use std::str::FromStr;
 
-const SPEC_TAG_SPLITER: char = ':';
+use crate::statics::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Debug)]
@@ -11,7 +11,7 @@ pub struct SpecTag {
 
 impl std::fmt::Display for SpecTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}{} {}", self.name, SPEC_TAG_SPLITER, self.value))
+        f.write_fmt(format_args!("{}{} {}", self.name, PKG_SPEC_TAG_SPLITER, self.value))
     }
 }
 
@@ -25,7 +25,7 @@ pub struct SpecIdTag {
 
 impl std::fmt::Display for SpecIdTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}{}{} {}", self.name, self.id, SPEC_TAG_SPLITER, self.value))
+        f.write_fmt(format_args!("{}{}{} {}", self.name, self.id, PKG_SPEC_TAG_SPLITER, self.value))
     }
 }
 
@@ -84,7 +84,7 @@ impl RpmSpecParser {
             return None;
         }
 
-        let tag_info = line.split(SPEC_TAG_SPLITER).collect::<Vec<&str>>();
+        let tag_info = line.split(PKG_SPEC_TAG_SPLITER).collect::<Vec<&str>>();
         if tag_info.len() != 2 {
             return None;
         }
@@ -100,7 +100,7 @@ impl RpmSpecParser {
             return None;
         }
 
-        let tag_info = line.split(SPEC_TAG_SPLITER).collect::<Vec<&str>>();
+        let tag_info = line.split(PKG_SPEC_TAG_SPLITER).collect::<Vec<&str>>();
         if tag_info.len() != 2 {
             return None;
         }

@@ -1,12 +1,9 @@
-use crate::cmd::ExternCommand;
+use crate::statics::*;
 use crate::util::fs;
 
 use super::RpmBuildRoot;
 
 pub struct RpmHelper;
-
-const RPM:       ExternCommand = ExternCommand::new("/usr/bin/rpm");
-const RPM_BUILD: ExternCommand = ExternCommand::new("/usr/bin/rpmbuild");
 
 impl RpmHelper {
     pub fn query_package_info(pkg_path: &str, format: &str) -> std::io::Result<String> {

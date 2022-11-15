@@ -1,10 +1,8 @@
+use crate::statics::*;
 use crate::patch::{PatchFile, Version};
 use crate::util::fs;
-use crate::cmd::ExternCommand;
 
 use super::rpm_buildroot::RpmBuildRoot;
-
-const RPM_BUILD: ExternCommand = ExternCommand::new("/usr/bin/rpmbuild");
 
 pub struct RpmBuilder {
     build_root: RpmBuildRoot
@@ -26,22 +24,19 @@ impl RpmBuilder {
 
         Ok(())
     }
-    
-    pub fn build_source_package(&self, spec_file_path: &str, patch_version: &Version, output_dir: &str) -> std::io::Result<()> {
-        const PATCHED_FLAG:           &str = "patched";
-        const RELEASE_TAG_MACRO_NAME: &str = "syscare_patch_release";
 
+    pub fn build_source_package(&self, spec_file_path: &str, patch_version: &Version, output_dir: &str) -> std::io::Result<()> {
         fs::check_file(spec_file_path)?;
         fs::check_dir(output_dir)?;
 
-        let patch_release = format!(".{}.{}.{}.{}", PATCHED_FLAG,
+        let patch_release = format!(".{}.{}.{}.{}", PKG_FLAG_PATCHED_SOURCE_PKG,
             patch_version.get_name(), patch_version.get_version(), patch_version.get_release()
         );
 
         // Build source rpm
         let exit_status = RPM_BUILD.execvp([
             "--define", &format!("_topdir {}", self.build_root),
-            "--define", &format!("{} {}", RELEASE_TAG_MACRO_NAME, patch_release),
+            "--define", &format!("{} {}", PKG_SPEC_MACRO_PATCH_RELEASE_NAME, patch_release),
             "-bs", spec_file_path
         ])?;
 

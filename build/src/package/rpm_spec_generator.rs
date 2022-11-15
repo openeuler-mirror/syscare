@@ -1,11 +1,10 @@
 use std::ffi::OsStr;
 use std::io::{Write, LineWriter};
 
-use crate::patch::PatchInfo;
+use crate::statics::*;
 use crate::util::fs;
 
-const PATCH_INSTALL_PATH:    &str = "/usr/lib/syscare/patches";
-const PATCH_FILE_PERMISSION: &str = "644";
+use crate::patch::PatchInfo;
 
 pub struct RpmSpecGenerator;
 
@@ -37,7 +36,7 @@ impl RpmSpecGenerator {
         W: Write
     {
         let pkg_file_list = fs::list_all_files(source_dir, true)?;
-        let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::get_patch_name(patch_info));
+        let pkg_install_path = format!("{}/{}", PATCH_FILE_INSTALL_PATH, Self::get_patch_name(patch_info));
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
         writeln!(writer, "Version:  {}", patch_info.get_patch_version().get_version())?;

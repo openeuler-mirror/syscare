@@ -1,3 +1,4 @@
+pub mod statics;
 pub mod util;
 pub mod cmd;
 pub mod patch;

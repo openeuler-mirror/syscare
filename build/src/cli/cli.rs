@@ -4,13 +4,13 @@ use crate::package::{PackageInfo, PackageType};
 use crate::package::{RpmSpecGenerator, RpmPatchHelper, RpmHelper, RpmBuildRoot, RpmBuilder};
 use crate::patch::{PatchType, PatchInfo, PatchBuilderFactory, PatchBuilderOptions};
 use crate::patch::{UserPatchHelper, KernelPatchHelper};
+
+use crate::statics::*;
 use crate::util::fs;
 
 use super::path::CliPath;
 use super::workdir::CliWorkDir;
 use super::args::CliArguments;
-
-const PKG_PATCH_DIR_NAME: &str = ".syscare_patches";
 
 pub struct PatchBuildCLI {
     work_dir: CliWorkDir,
@@ -49,8 +49,6 @@ impl PatchBuildCLI {
     }
 
     fn extract_source_package(&mut self) -> std::io::Result<RpmBuildRoot> {
-        const KERNEL_PKG_NAME: &str = "kernel";
-
         println!("Extracting source package");
 
         let args = &mut self.cli_args;
@@ -77,7 +75,7 @@ impl PatchBuildCLI {
         // Collect addtional patches from patched source package
         let arg_patch_list = &mut args.patches;
         let mut total_patch_list = Vec::with_capacity(arg_patch_list.len());
-        let syscare_patch_dir = format!("{}/{}", build_root.get_source_path(), PKG_PATCH_DIR_NAME);
+        let syscare_patch_dir = format!("{}/{}", build_root.get_source_path(), PKG_DIR_NAME_PATCH);
         if let Ok(patch_list) = fs::list_all_files(syscare_patch_dir, false) {
             total_patch_list.append(
                 &mut patch_list.into_iter().map(fs::stringtify_path).collect::<Vec<_>>()
@@ -177,7 +175,7 @@ impl PatchBuildCLI {
         let args = &self.cli_args;
 
         println!("Building patched source package");
-        let patch_list = RpmPatchHelper::modify_patch_list(patch_info.get_file_list());        
+        let patch_list = RpmPatchHelper::modify_patch_list(patch_info.get_file_list());
         let spec_file_path = build_root.find_spec_file()?;
         RpmPatchHelper::modify_spec_file_by_patches(&spec_file_path, &patch_list)?;
 
@@ -189,12 +187,10 @@ impl PatchBuildCLI {
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        const PATCH_INFO_FILE_NAME: &str = "patch_info";
-
         let args = &self.cli_args;
         let patch_build_root = self.work_dir.get_patch_build_root();
         let patch_output_dir = self.work_dir.get_patch_output_dir();
-        let patch_info_path = format!("{}/{}", patch_output_dir, PATCH_INFO_FILE_NAME);
+        let patch_info_path = format!("{}/{}", patch_output_dir, PATCH_FILE_PATCH_INFO_NAME);
         let package_build_root = self.work_dir.get_package_build_root();
 
         println!("Building patch, this may take a while");

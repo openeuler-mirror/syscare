@@ -1,11 +1,6 @@
-use crate::cmd::ExternCommand;
+use crate::statics::*;
 use crate::util::fs;
 
-const MAKE: ExternCommand = ExternCommand::new("/usr/bin/make");
-const KERNEL_SOURCE_PREFIX:  &str = "linux-";
-const KERNEL_DEFCONFIG_NAME: &str = "openeuler_defconfig";
-const KERNEL_CONFIG_NAME:    &str = ".config";
-const KERNEL_FILE_NAME:      &str = "vmlinux";
 pub struct KernelPatchHelper;
 
 impl KernelPatchHelper {
@@ -14,7 +9,7 @@ impl KernelPatchHelper {
 
         let source_dir = fs::find_directory(
             directory,
-            KERNEL_SOURCE_PREFIX,
+            KERNEL_SOURCE_DIR_PREFIX,
             true,
             true
         )?;
@@ -85,7 +80,7 @@ impl KernelPatchHelper {
                     std::io::ErrorKind::BrokenPipe,
                     format!("Process '{}' exited unsuccessfully, exit code: {}", MAKE, exit_code),
                 ));
-            }    
+            }
         }
 
         {

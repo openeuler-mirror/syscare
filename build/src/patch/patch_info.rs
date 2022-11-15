@@ -1,13 +1,9 @@
 use std::path::Path;
 
-use crate::cli::CliArguments;
+use crate::statics::*;
 use crate::util::fs;
 
-const PATCH_FILE_HASH_DIGITS: usize = 8;
-const PATCH_DEFAULT_VERSION:  &str  = "1";
-const PATCH_DEFAULT_GROUP:    &str  = "Patch";
-const PATCH_DEFAULT_SUMMARY:  &str  = "Syscare Patch";
-const PATCH_UNDEFINED_VALUE:  &str  = "Undefined";
+use crate::cli::CliArguments;
 
 #[derive(PartialEq)]
 #[derive(Clone)]
@@ -67,7 +63,7 @@ impl PatchFile {
         let file_path = file.as_ref().canonicalize()?;
         let name = fs::stringtify_path(file_path.file_name().expect("Get patch name failed"));
         let path = fs::stringtify_path(file_path.as_path());
-        let hash = fs::sha256_digest_file(file_path)?[..PATCH_FILE_HASH_DIGITS].to_owned();
+        let hash = fs::sha256_digest_file(file_path)?[..PATCH_VERSION_DIGITS].to_owned();
 
         Ok(Self { name, path, hash })
     }
@@ -169,17 +165,15 @@ impl TryFrom<&CliArguments> for PatchInfo {
             Ok(Version {
                 name:    args.patch_name.to_owned(),
                 version: args.patch_version.as_deref().unwrap_or(PATCH_DEFAULT_VERSION).to_owned(),
-                release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_FILE_HASH_DIGITS].to_string(),
+                release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
             })
         }
 
         #[inline(always)]
         fn parse_patch_type(args: &CliArguments) -> PatchType {
-            const KERNEL_FLAG_FILE_NAME: &str = "Kbuild";
-
             let find_result = fs::find_file(
                 args.source.to_string(),
-                KERNEL_FLAG_FILE_NAME,
+                KERNEL_SOURCE_DIR_FLAG,
                 false,
                 false,
             );

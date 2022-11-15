@@ -1,3 +1,4 @@
+use crate::statics::*;
 use crate::util::fs;
 
 pub struct RpmBuildRoot {
@@ -60,9 +61,7 @@ impl RpmBuildRoot {
     }
 
     pub fn find_spec_file(&self) -> std::io::Result<String> {
-        const SPEC_FILE_EXT: &str = "spec";
-
-        let spec_file = fs::find_file_ext(self.get_spec_path(), SPEC_FILE_EXT, false)?;
+        let spec_file = fs::find_file_ext(self.get_spec_path(), PKG_SPEC_FILE_EXTENSION, false)?;
         Ok(fs::stringtify_path(spec_file))
     }
 }

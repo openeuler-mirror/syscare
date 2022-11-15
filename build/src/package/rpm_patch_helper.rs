@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
-use crate::patch::PatchFile;
+use crate::statics::*;
 use crate::util::fs;
+
+use crate::patch::PatchFile;
 
 use super::rpm_spec_parser::{RpmSpecParser, RpmSpecTag};
 
@@ -9,17 +11,14 @@ pub struct RpmPatchHelper;
 
 impl RpmPatchHelper {
     pub fn modify_patch_list(patch_list: &[PatchFile]) -> Vec<PatchFile> {
-        const PATCH_FILE_PREFIX: &str = "syscare-patch";
-        const PATCH_EXT: &str = "patch";
-
         let mut new_patch_list = Vec::with_capacity(patch_list.len());
-    
+
         let mut patch_index = 1usize;
         for patch_file in patch_list {
             // The patch file may come form extracted source rpm, which is already renamed.
             // Thus, we have to figure out whether the patch source and rename it.
             let orig_file_name = patch_file.get_name();
-            if !orig_file_name.contains(PATCH_EXT) {
+            if !orig_file_name.contains(PATCH_FILE_EXTENSION) {
                 continue;
             }
 
@@ -39,18 +38,13 @@ impl RpmPatchHelper {
     }
 
     pub fn modify_spec_file_by_patches(spec_file_path: &str, patch_list: &[PatchFile]) -> std::io::Result<()> {
-        const RELEASE_TAG_NAME:        &str = "Release:";
-        const RELEASE_TAG_MACRO:       &str = "%{?syscare_patch_release}";
-        const SOURCE_TAG_PREFIX:       &str = "Source";
-        const BUILD_REQUIRES_TAG_NAME: &str = "BuildRequires:";
-
         #[inline(always)]
         fn create_new_release_tag(release_tag: (usize, RpmSpecTag)) -> Option<(usize, RpmSpecTag)> {
             let (line_num, original_tag) = release_tag;
 
             let tag_name = original_tag.get_name();
             let tag_value = original_tag.get_value();
-            if tag_value.contains(RELEASE_TAG_MACRO) {
+            if tag_value.contains(PKG_SPEC_MARCO_PATCH_RELEASE) {
                 return None; // Already has syscare patch macro
             }
 
@@ -58,7 +52,7 @@ impl RpmPatchHelper {
                 line_num,
                 RpmSpecTag::new_tag(
                     tag_name.to_owned(),
-                    format!("{}{}", tag_value, RELEASE_TAG_MACRO) // Append a patch info macro to release tag
+                    format!("{}{}", tag_value, PKG_SPEC_MARCO_PATCH_RELEASE) // Append a patch info macro to release tag
                 )
             ))
         }
@@ -70,7 +64,7 @@ impl RpmPatchHelper {
             let mut tag_id = start_tag_id + 1;
 
             for patch_file in patch_list {
-                let tag_name  = SOURCE_TAG_PREFIX.to_owned();
+                let tag_name  = PKG_SPEC_TAG_NAME_SOURCE.to_owned();
                 let tag_value = patch_file.get_name().to_owned();
 
                 source_tag_list.push(RpmSpecTag::new_id_tag(tag_name, tag_id, tag_value));
@@ -90,13 +84,13 @@ impl RpmPatchHelper {
         let mut current_line_num = 0usize;
         for current_line in &spec_file_content {
             // Found build requires tag means there is no more data to parse
-            if current_line.contains(BUILD_REQUIRES_TAG_NAME) {
+            if current_line.contains(PKG_SPEC_TAG_NAME_BUILD_REQUIRES) {
                 break;
             }
 
             // If the release tag is not parsed, do parse
             if release_tag.is_none() {
-                if let Some(tag) = RpmSpecParser::parse_tag(&current_line, RELEASE_TAG_NAME) {
+                if let Some(tag) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_RELEASE) {
                     release_tag = Some((current_line_num, tag));
 
                     current_line_num += 1;
@@ -104,7 +98,7 @@ impl RpmPatchHelper {
                 }
             }
             // Add parsed source tag into the btree set
-            if let Some(tag) = RpmSpecParser::parse_parse_id_tag(&current_line, SOURCE_TAG_PREFIX) {
+            if let Some(tag) = RpmSpecParser::parse_parse_id_tag(&current_line, PKG_SPEC_TAG_NAME_SOURCE) {
                 source_tags.insert(tag);
 
                 current_line_num += 1;

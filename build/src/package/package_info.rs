@@ -1,4 +1,6 @@
-use crate::package::rpm_helper::RpmHelper;
+use crate::statics::*;
+
+use super::rpm_helper::RpmHelper;
 
 #[derive(Clone, Copy)]
 #[derive(PartialEq)]
@@ -19,15 +21,14 @@ pub struct PackageInfo {
 
 impl PackageInfo {
     pub fn read_from_package(pkg_path: &str) -> std::io::Result<Self> {
-        const QUERY_FORMAT:     &str = "%{NAME}-%{VERSION}-%{RELEASE}-%{LICENSE}-%{SOURCERPM}";
-        const RPM_NAME_SPLITER: char = '-';
-        const SOURCE_PKG_FLAG:  &str = "(none)";
-
-        let query_result = RpmHelper::query_package_info(pkg_path, QUERY_FORMAT)?;
-        let pkg_info     = query_result.split(RPM_NAME_SPLITER).collect::<Vec<&str>>();
+        let query_result = RpmHelper::query_package_info(
+            pkg_path,
+            "%{NAME}-%{VERSION}-%{RELEASE}-%{LICENSE}-%{SOURCERPM}"
+        )?;
+        let pkg_info     = query_result.split(PKG_NAME_SPLITER).collect::<Vec<&str>>();
         assert_eq!(pkg_info.len(), 5);
 
-        let pkg_type = match pkg_info[4].eq(SOURCE_PKG_FLAG) {
+        let pkg_type = match pkg_info[4].eq(PKG_FLAG_SOURCE_PKG) {
             true  => PackageType::SourcePackage,
             false => PackageType::BinaryPackage,
         };

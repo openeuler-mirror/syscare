@@ -1,10 +1,8 @@
 use std::collections::HashMap;
 
-use crate::cmd::ExternCommand;
+use crate::statics::*;
 
 use super::{PatchBuilder, PatchBuilderOptions};
-
-const KPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/kpatch-build");
 
 pub struct KernelPatchBuilder {
     build_root: String
