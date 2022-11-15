@@ -41,7 +41,7 @@ impl RpmSpecGenerator {
         writeln!(writer, "Name:    {}", Self::parse_pkg_name(patch_info))?;
         writeln!(writer, "VERSION: {}", patch_info.get_patch_name().get_version())?;
         writeln!(writer, "Release: {}", patch_info.get_patch_name().get_release())?;
-        writeln!(writer, "Group:   {}", patch_info.get_group())?;
+        writeln!(writer, "Group:   {}", PKG_SPEC_TAG_VALUE_GROUP)?;
         writeln!(writer, "License: {}", patch_info.get_license())?;
         writeln!(writer, "Summary: {}", patch_info.get_summary())?;
         if let Some(requirement) = Self::parse_build_requires(patch_info) {

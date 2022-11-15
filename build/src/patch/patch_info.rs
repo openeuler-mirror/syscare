@@ -121,10 +121,6 @@ impl PatchInfo {
         self.file_list.as_slice()
     }
 
-    pub fn get_group(&self) -> &str {
-        PATCH_DEFAULT_GROUP
-    }
-
     pub fn get_license(&self) -> &str {
         &self.license
     }
@@ -164,7 +160,7 @@ impl TryFrom<&CliArguments> for PatchInfo {
         fn parse_patch_name(args: &CliArguments) -> std::io::Result<PatchName> {
             Ok(PatchName {
                 name:    args.patch_name.to_owned(),
-                version: args.patch_version.as_deref().unwrap_or(PATCH_DEFAULT_VERSION).to_owned(),
+                version: args.patch_version.to_owned(),
                 release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
             })
         }
@@ -202,8 +198,7 @@ impl TryFrom<&CliArguments> for PatchInfo {
 
         #[inline(always)]
         fn parse_summary(args: &CliArguments) -> String {
-            let summary: Option<&str> = args.patch_summary.as_deref();
-            summary.unwrap_or(PATCH_DEFAULT_SUMMARY).to_owned()
+            args.patch_summary.to_owned()
         }
 
         #[inline(always)]

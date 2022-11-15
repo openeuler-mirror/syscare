@@ -1,5 +1,7 @@
 use clap::Parser;
 
+use crate::statics::*;
+
 use super::CliPath;
 
 #[derive(Parser, Debug)]
@@ -10,12 +12,12 @@ pub struct CliArguments {
     pub patch_name: String,
 
     /// Patch version
-    #[arg(long)]
-    pub patch_version: Option<String>,
+    #[arg(long, default_value=PATCH_DEFAULT_VERSION)]
+    pub patch_version: String,
 
     /// Patch summary
-    #[arg(long)]
-    pub patch_summary: Option<String>,
+    #[arg(long, default_value=PATCH_DEFAULT_SUMMARY)]
+    pub patch_summary: String,
 
     /// Patch target name
     #[arg(long)]
@@ -76,4 +78,10 @@ pub struct CliArguments {
     /// Patch file(s)
     #[arg(required=true)]
     pub patches: Vec<String>
+}
+
+impl CliArguments {
+    pub fn new() -> Self {
+        CliArguments::parse()
+    }
 }

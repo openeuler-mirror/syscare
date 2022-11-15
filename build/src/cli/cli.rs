@@ -1,5 +1,3 @@
-use clap::Parser;
-
 use crate::package::{PackageInfo, PackageType};
 use crate::package::{RpmSpecGenerator, RpmPatchHelper, RpmHelper, RpmBuildRoot, RpmBuilder};
 use crate::patch::{PatchType, PatchInfo, PatchBuilderFactory, PatchBuilderOptions};
@@ -21,7 +19,7 @@ impl PatchBuildCLI {
     pub fn new() -> Self {
         Self {
             work_dir: CliWorkDir::new(),
-            cli_args: CliArguments::parse(),
+            cli_args: CliArguments::new(),
         }
     }
 
