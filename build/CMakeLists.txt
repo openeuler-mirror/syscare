@@ -1,0 +1,20 @@
+# SPDX-License-Identifier: GPL-2.0
+
+cmake_minimum_required(VERSION 3.14)
+project(syscare-build)
+
+set(SYSCARE_INSTALL_DIR /usr/libexec/syscare)
+
+set(CARGO_CMD cargo build --release)
+set(TARGET_DIR "release")
+
+set(SYSCARE_BUILD_BIN "syscare-build")
+
+add_custom_target(syscare-build ALL
+        COMMENT "Compiling syscare-build..."
+        COMMAND CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
+        COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/${SYSCARE_BUILD_BIN} ${CMAKE_CURRENT_BINARY_DIR}
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+
+install(FILES ${CMAKE_CURRENT_BINARY_DIR}/${SYSCARE_BUILD_BIN} DESTINATION ${SYSCARE_INSTALL_DIR})
+
