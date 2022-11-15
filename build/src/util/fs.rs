@@ -271,7 +271,11 @@ pub fn sha256_digest_file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
     Ok(format!("{:#x}", hasher.finalize()))
 }
 
-pub fn sha256_digest_file_list<P: AsRef<Path>>(file_list: &[P]) -> std::io::Result<String> {
+pub fn sha256_digest_file_list<I, P>(file_list: I) -> std::io::Result<String>
+where
+    I: IntoIterator<Item = P>,
+    P: AsRef<Path>
+{
     let mut hasher = Sha256::new();
     for file in file_list {
         hasher.update(std::fs::read(file)?);
