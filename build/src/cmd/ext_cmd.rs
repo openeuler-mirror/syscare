@@ -8,6 +8,8 @@ use lazy_static::*;
 
 use crate::util::fs;
 
+const EXTERN_CMD_LOG_PREFIX: &str = "syscare-build-process";
+
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
     exit_code: i32,
@@ -39,11 +41,7 @@ impl ExternCommand<'_> {
     #[inline(always)]
     fn get_log_writer<'a>(&self) -> MutexGuard<'a, impl Write> {
         lazy_static! {
-            static ref LOG_FILE_PATH: String = format!("./{}.{}.log",
-                fs::stringtify_path(std::env::current_exe().unwrap().file_name().unwrap()), // process name
-                std::process::id()                                                          // process id
-            );
-
+            static ref LOG_FILE_PATH: String = format!("./{}-{}.log", EXTERN_CMD_LOG_PREFIX, std::process::id());
             static ref LOG_WRITER: Mutex<LineWriter<File>> = Mutex::new(LineWriter::new(
                 std::fs::OpenOptions::new()
                     .create(true)
