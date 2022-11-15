@@ -51,7 +51,7 @@ impl PatchBuildCLI {
 
         let args = &mut self.cli_args;
         let pkg_path = args.source.to_string();
-        let pkg_extract_dir = self.work_dir.get_package_extract_dir();
+        let pkg_build_root = self.work_dir.get_package_build_root();
 
         let pkg_info = PackageInfo::read_from_package(&pkg_path)?;
         if pkg_info.get_type() != PackageType::SourcePackage {
@@ -61,7 +61,7 @@ impl PatchBuildCLI {
             ));
         }
 
-        let build_root = RpmHelper::extract_package(&pkg_path, pkg_extract_dir)?;
+        let build_root = RpmHelper::extract_package(&pkg_path, pkg_build_root)?;
 
         // Find source directory from extracted package root
         // Typically, the source directory name contains package name
