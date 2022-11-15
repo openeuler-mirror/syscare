@@ -1,5 +1,5 @@
 use crate::statics::*;
-use crate::patch::{PatchFile, Version};
+use crate::patch::{PatchFile, PatchName};
 use crate::util::fs;
 
 use super::rpm_buildroot::RpmBuildRoot;
@@ -25,12 +25,12 @@ impl RpmBuilder {
         Ok(())
     }
 
-    pub fn build_source_package(&self, spec_file_path: &str, patch_version: &Version, output_dir: &str) -> std::io::Result<()> {
+    pub fn build_source_package(&self, spec_file_path: &str, patch_name: &PatchName, output_dir: &str) -> std::io::Result<()> {
         fs::check_file(spec_file_path)?;
         fs::check_dir(output_dir)?;
 
         let patch_release = format!(".{}.{}.{}.{}", PKG_FLAG_PATCHED_SOURCE_PKG,
-            patch_version.get_name(), patch_version.get_version(), patch_version.get_release()
+            patch_name.get_name(), patch_name.get_version(), patch_name.get_release()
         );
 
         // Build source rpm

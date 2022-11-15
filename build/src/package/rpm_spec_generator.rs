@@ -11,21 +11,21 @@ pub struct RpmSpecGenerator;
 impl RpmSpecGenerator {
     #[inline(always)]
     fn get_patch_name(patch_info: &PatchInfo) -> &str {
-        patch_info.get_patch_version().get_name()
+        patch_info.get_patch_name().get_name()
     }
 
     #[inline(always)]
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         let patch_name = Self::get_patch_name(patch_info);
-        match patch_info.get_target_version() {
-            Some(target) => format!("{}-patch-{}", target, patch_name),
-            None => format!("patch-{}", patch_name),
+        match patch_info.get_target_name() {
+            Some(target_name) => format!("{}-patch-{}", target_name, patch_name),
+            None              => format!("patch-{}", patch_name),
         }
     }
 
     #[inline(always)]
     fn parse_build_requires(patch_info: &PatchInfo) -> Option<String> {
-        patch_info.get_target_version().map(|version| {
+        patch_info.get_target_name().map(|version| {
             format!("{} = {}-{}", version.get_name(), version.get_version(), version.get_release())
         })
     }
@@ -38,12 +38,12 @@ impl RpmSpecGenerator {
         let pkg_file_list = fs::list_all_files(source_dir, true)?;
         let pkg_install_path = format!("{}/{}", PATCH_FILE_INSTALL_PATH, Self::get_patch_name(patch_info));
 
-        writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "Version:  {}", patch_info.get_patch_version().get_version())?;
-        writeln!(writer, "Release:  {}", patch_info.get_patch_version().get_release())?;
-        writeln!(writer, "Group:    {}", patch_info.get_group())?;
-        writeln!(writer, "License:  {}", patch_info.get_license())?;
-        writeln!(writer, "Summary:  {}", patch_info.get_summary())?;
+        writeln!(writer, "Name:    {}", Self::parse_pkg_name(patch_info))?;
+        writeln!(writer, "VERSION: {}", patch_info.get_patch_name().get_version())?;
+        writeln!(writer, "Release: {}", patch_info.get_patch_name().get_release())?;
+        writeln!(writer, "Group:   {}", patch_info.get_group())?;
+        writeln!(writer, "License: {}", patch_info.get_license())?;
+        writeln!(writer, "Summary: {}", patch_info.get_summary())?;
         if let Some(requirement) = Self::parse_build_requires(patch_info) {
             writeln!(writer, "Requires: {}", requirement)?;
         }

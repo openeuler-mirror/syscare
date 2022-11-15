@@ -20,7 +20,7 @@ impl KernelPatchBuilder {
         let patch_info = &options.patch_info;
 
         result.push(String::from("--name"));
-        result.push(patch_info.get_patch_version().get_name().to_owned());
+        result.push(patch_info.get_patch_name().get_name().to_owned());
 
         result.push(String::from("--sourcedir"));
         result.push(options.source_dir.to_owned());

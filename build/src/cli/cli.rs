@@ -181,7 +181,7 @@ impl PatchBuildCLI {
 
         let rpm_builder = RpmBuilder::from(build_root);
         rpm_builder.copy_patch_file_to_source(&patch_list)?;
-        rpm_builder.build_source_package(&spec_file_path, patch_info.get_patch_version(), &args.output_dir)?;
+        rpm_builder.build_source_package(&spec_file_path, patch_info.get_patch_name(), &args.output_dir)?;
 
         Ok(())
     }
@@ -190,7 +190,7 @@ impl PatchBuildCLI {
         let args = &self.cli_args;
         let patch_build_root = self.work_dir.get_patch_build_root();
         let patch_output_dir = self.work_dir.get_patch_output_dir();
-        let patch_info_path = format!("{}/{}", patch_output_dir, PATCH_FILE_PATCH_INFO_NAME);
+        let patch_info_path = format!("{}/{}", patch_output_dir, PATCH_INFO_FILE_NAME);
         let package_build_root = self.work_dir.get_package_build_root();
 
         println!("Building patch, this may take a while");
