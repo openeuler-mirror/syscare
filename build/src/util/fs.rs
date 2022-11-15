@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::io::{BufRead, BufReader, Write, LineWriter};
+use std::io::{BufRead, BufReader, Write, BufWriter};
 
 use sha2::Digest;
 use sha2::Sha256;
@@ -232,6 +232,28 @@ pub fn copy_all_files<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) ->
     Ok(())
 }
 
+pub fn read_file_to_string<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
+    self::check_file(file_path.as_ref())?;
+
+    let str = std::io::read_to_string(
+        std::fs::File::open(file_path)?
+    )?;
+
+    Ok(str.trim().to_owned())
+}
+
+pub fn write_string_to_file<P: AsRef<Path>>(file_path: P, str: &str) -> std::io::Result<()> {
+    let mut file = std::fs::OpenOptions::new()
+        .create(true)
+        .truncate(true)
+        .write(true)
+        .open(file_path)?;
+
+    write!(file, "{}", str)?;
+
+    file.flush()
+}
+
 pub fn read_file_content<P: AsRef<Path>>(file_path: P) -> std::io::Result<VecDeque<String>> {
     self::check_file(file_path.as_ref())?;
 
@@ -250,19 +272,18 @@ where
     P: AsRef<Path>,
     I: IntoIterator<Item = String>
 {
-    self::check_file(file_path.as_ref())?;
-
     let file = std::fs::OpenOptions::new()
+        .create(true)
         .truncate(true)
         .write(true)
         .open(file_path)?;
 
-    let mut writer = LineWriter::new(file);
+    let mut writer = BufWriter::new(file);
     for line in file_content {
         writeln!(writer, "{}", line)?;
     }
 
-    Ok(())
+    writer.flush()
 }
 
 pub fn sha256_digest_file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
