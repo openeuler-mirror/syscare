@@ -182,7 +182,7 @@ impl TryFrom<&CliArguments> for PatchInfo {
 
         #[inline(always)]
         fn parse_target_name(args: &CliArguments) -> Option<PatchName> {
-            match (args.target_name.clone(), args.target_name.clone(), args.target_release.clone()) {
+            match (args.target_name.clone(), args.target_version.clone(), args.target_release.clone()) {
                 (Some(name), Some(version), Some(release)) => {
                     Some(PatchName { name, version, release })
                 },
