@@ -60,7 +60,7 @@ impl KernelPatchHelper {
         fs::check_dir(output_dir)?;
 
         let dst_path = format!("{}/{}", output_dir, KERNEL_CONFIG_NAME);
-        if kconfig_path.eq(&dst_path) {
+        if *kconfig_path == dst_path {
             return Ok(());
         }
         std::fs::copy(kconfig_path, dst_path)?;

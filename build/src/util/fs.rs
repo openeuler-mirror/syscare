@@ -144,7 +144,7 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
 
             if current_path_type.is_file() {
                 let current_path_ext = current_path.extension().unwrap_or_default();
-                if current_path_ext.eq(file_ext) {
+                if current_path_ext == file_ext {
                     file_list.push(current_path.canonicalize()?);
                 }
             }
@@ -172,7 +172,7 @@ pub fn find_directory<P: AsRef<Path>>(directory: P, dir_name: &str, fuzz: bool, 
 
     for dir in self::list_all_dirs(search_path, recursive)? {
         if let Some(curr_dir_name) = dir.file_name().and_then(OsStr::to_str) {
-            if curr_dir_name.eq(dir_name) {
+            if curr_dir_name == dir_name {
                 return Ok(dir);
             }
             if fuzz && curr_dir_name.contains(dir_name) {
@@ -194,7 +194,7 @@ pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recu
 
     for file in self::list_all_files(search_path, recursive)? {
         if let Some(curr_file_name) = file.file_name().and_then(OsStr::to_str) {
-            if curr_file_name.eq(file_name) {
+            if curr_file_name == file_name {
                 return Ok(file);
             }
             if fuzz && curr_file_name.contains(file_name) {
@@ -216,7 +216,7 @@ pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bo
 
     for file in self::list_all_files_ext(search_path, file_ext, recursive)? {
         if let Some(currrent_file_ext) = file.extension().and_then(OsStr::to_str) {
-            if currrent_file_ext.eq(file_ext) {
+            if currrent_file_ext == file_ext {
                 return Ok(file);
             }
         }
