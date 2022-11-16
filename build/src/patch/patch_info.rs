@@ -205,12 +205,27 @@ impl PatchInfo {
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
-        let mut file_map = HashMap::new();
+        let mut patch_file_map = HashMap::new();
 
         let mut patch_index = 1usize;
         for file in &args.patches {
             let mut patch_file = PatchFile::new(file)?;
-            let patch_file_name = patch_file.get_name();
+            let patch_file_name   = patch_file.get_name().to_owned();
+            let patch_file_path   = patch_file.get_path().to_owned();
+            let patch_file_digest = patch_file.get_digest().to_owned();
+
+            // Check file extension
+            if fs::get_file_ext(&patch_file_path)? != PATCH_FILE_EXTENSION {
+                eprintln!("Warning: file '{}' is not a patch", patch_file_path);
+                continue;
+            }
+
+            // Check duplicate file
+            if patch_file_map.contains_key(&patch_file_digest) {
+                eprintln!("Warning: patch '{}' is duplicated", patch_file_path);
+                continue;
+            }
+
             // The patch file may come form patched source rpm, which is already renamed.
             if !patch_file_name.contains(PATCH_FILE_PREFIX) {
                 // Patch file naming rule: ${prefix}-${patch_id}-${patch_name}
@@ -218,12 +233,11 @@ impl PatchInfo {
                 patch_file.set_name(new_patch_name);
             };
 
-            let file_digest = patch_file.get_digest().to_owned();
-            file_map.insert(file_digest, patch_file);
+            patch_file_map.insert(patch_file_digest, patch_file);
             patch_index += 1;
         }
 
-        Ok(file_map.into_values().collect())
+        Ok(patch_file_map.into_values().collect())
     }
 }
 
