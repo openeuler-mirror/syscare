@@ -1,5 +1,3 @@
-use std::str::FromStr;
-
 use crate::statics::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -112,8 +110,8 @@ impl RpmSpecParser {
             return None;
         }
 
-        let tag_name  = tag_prefix.to_owned();
-        let tag_id    = match usize::from_str(&full_tag_name[source_id_idx..]) {
+        let tag_name = tag_prefix.to_owned();
+        let tag_id   = match full_tag_name[source_id_idx..].parse::<usize>() {
             Ok(id) => id,
             Err(_) => return None,
         };
