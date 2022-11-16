@@ -459,7 +459,7 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
 
     ret = obtain_parameter_addr(envp, ASSEMBLER_DIR_ENV, &dir_addr, NULL);
     if (ret || dir_addr == 0) {
-        pr_err("no valid %s found \n", ASSEMBLER_DIR_ENV);
+        pr_warn("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);\
         ret = -EINVAL;
         goto out;
     }
@@ -591,7 +591,7 @@ static int uprobe_assembler_handler(struct uprobe_consumer *self, struct pt_regs
 
     ret = rewrite_object_path(argv, envp);
     if (ret) {
-        pr_err("rewrite object path failed - %d \n", ret);
+        pr_warn("rewrite object path failed - %d \n", ret);
         run_exit_syscall(regs, ret);
     }
 
@@ -645,6 +645,7 @@ static int __unregister_uprobe(unsigned int cmd, struct elf_path *ep, struct upr
     }
     inode = path.dentry->d_inode;
 
+    pr_info("unregister uprobe for %s \n", ep->name);
     uprobe_unregister(inode, ep->entry_offset, uc);
     if (cmd == UPATCH_UNREGISTER_COMPILER || cmd == UPATCH_UNREGISTER_ASSEMBLER) {
         delete_elf_path(cmd, ep->name);
@@ -711,13 +712,13 @@ out:
     return ret;
 }
 
-static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
+static int elf_check(char *elf_path, loff_t *entry_offset)
 {
     struct file *file;
     int ret;
     char *p;
 
-    file = filp_open(buf, O_RDONLY, 0);
+    file = filp_open(elf_path, O_RDONLY, 0);
     if (IS_ERR(file)) {
         ret = PTR_ERR(file);
         pr_err("open elf failed - %d \n", ret);
@@ -741,13 +742,13 @@ out:
     return ret;
 }
 
-static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
+static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
 {
     int ret;
     struct path path;
     struct inode *inode;
 
-    ret = elf_check(buf, ep->name, &ep->entry_offset);
+    ret = elf_check(ep->name, &ep->entry_offset);
     if (ret)
         goto out;
 
@@ -758,7 +759,7 @@ static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path 
     }
     inode = path.dentry->d_inode;
 
-    pr_info("register uprobe for %s \n", buf);
+    pr_info("register uprobe for %s \n", ep->name);
     ret = uprobe_register(inode, ep->entry_offset, uc);
     if (ret) {
         pr_err("uprobe register failed - %d \n", ret);
@@ -802,7 +803,7 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
             ep->count = 1;
             ep->entry_offset = 0;
             list_add(&ep->list, &compiler_paths_list);
-            ret = __register_uprobe(path, cmd, ep, &uprobe_compiler_consumer);
+            ret = __register_uprobe(cmd, ep, &uprobe_compiler_consumer);
         } else {
             ep->count++;
         }
@@ -826,7 +827,7 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
             ep->count = 1;
             ep->entry_offset = 0;
             list_add(&ep->list, &assembler_paths_list);
-            ret = __register_uprobe(path, cmd, ep, &uprobe_assembler_consumer);
+            ret = __register_uprobe(cmd, ep, &uprobe_assembler_consumer);
         } else {
             ep->count++;
         }

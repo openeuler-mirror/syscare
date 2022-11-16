@@ -64,7 +64,7 @@ impl Compiler {
         let tmp_dir = cache_dir.to_string() + "/test";
         fs::create_dir(&tmp_dir).unwrap();
         let test = tmp_dir.clone() + "/test.c";
-        let test_obj = tmp_dir.clone() + "/test.0";
+        let test_obj = tmp_dir.clone() + "/test.o";
         let mut test_file = OpenOptions::new().create(true).read(true).write(true).open(&test)?;
         test_file.write_all(b"void main(void) {}")?;
 

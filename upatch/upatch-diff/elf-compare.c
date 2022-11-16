@@ -156,7 +156,9 @@ bool upatch_handle_redis_line(const char *symname)
 {
 	if (!strncmp(symname, "_serverPanic", 12) ||
 		!strncmp(symname, "_serverAssert", 13) ||
-		!strncmp(symname, "_serverAssertWithInfo", 21))
+		!strncmp(symname, "_serverAssertWithInfo", 21) ||
+        !strncmp(symname, "rdbReportError", 14) ||
+        !strncmp(symname, "RedisModule__Assert", 19))
 		return true;
 	return false;
 }
