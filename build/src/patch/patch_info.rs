@@ -216,7 +216,7 @@ impl PatchInfo {
             let file_digest    = patch_file.get_digest().to_owned();
 
             // Check file extension
-            if fs::get_file_ext(&file_path)? != PATCH_FILE_EXTENSION {
+            if fs::file_ext(&file_path)? != PATCH_FILE_EXTENSION {
                 eprintln!("Warning: file '{}' is not a patch", file_path);
                 continue;
             }

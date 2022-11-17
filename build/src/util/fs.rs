@@ -63,7 +63,7 @@ pub fn create_dir_all<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn get_file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
+pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     let file = file_path.as_ref();
     self::check_file(file)?;
 
