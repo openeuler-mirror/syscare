@@ -25,22 +25,37 @@ impl PatchBuildCLI {
         }
     }
 
-    fn check_arguments(&self) -> std::io::Result<()> {
-        let args = &self.cli_args;
-        match &args.source {
-            CliPath::File(file_path)     => fs::check_file(file_path)?,
-            CliPath::Directory(dir_path) => fs::check_dir(dir_path)?,
-        }
+    fn check_and_canonicalize_arguments(&mut self) -> std::io::Result<()> {
+        let args = &mut self.cli_args;
+
+        args.source = match &args.source {
+            CliPath::File(file_path) => {
+                fs::check_file(file_path)?;
+                CliPath::File(fs::stringtify_path(fs::realpath(file_path)?))
+            },
+            CliPath::Directory(dir_path) => {
+                fs::check_dir(dir_path)?;
+                CliPath::Directory(fs::stringtify_path(fs::realpath(dir_path)?))
+            },
+        };
+
         if let Some(file_path) = &args.debug_info {
-            fs::check_file(file_path)?
+            fs::check_file(file_path)?;
+            args.debug_info = Some(fs::stringtify_path(fs::realpath(file_path)?));
         }
+
         if let Some(file_path) = &args.kconfig {
             fs::check_file(file_path)?;
+            args.kconfig = Some(fs::stringtify_path(fs::realpath(file_path)?))
         }
-        for file_path in &args.patches {
-            fs::check_file(file_path)?;
+
+        for patch in &mut args.patches {
+            fs::check_file(patch.as_str())?;
+            *patch = fs::stringtify_path(fs::realpath(patch.as_str())?);
         }
+
         fs::check_dir(&args.output_dir)?;
+        args.output_dir = fs::stringtify_path(fs::realpath(&args.output_dir)?);
 
         Ok(())
     }
@@ -233,7 +248,7 @@ impl PatchBuildCLI {
     }
 
     pub fn run(&mut self) {
-        self.check_arguments().expect("Check arguments failed");
+        self.check_and_canonicalize_arguments().expect("Check arguments failed");
 
         self.work_dir.create(&self.cli_args.work_dir).expect("Create working directory failed");
 

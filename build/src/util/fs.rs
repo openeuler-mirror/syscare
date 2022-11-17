@@ -75,7 +75,7 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
             if !current_path.is_dir() {
                 continue;
             }
-            dir_list.push(current_path.canonicalize()?);
+            dir_list.push(self::realpath(current_path.as_path())?);
         }
     }
 
@@ -101,10 +101,10 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
             let current_path_type = current_path.metadata()?.file_type();
 
             if current_path_type.is_file() {
-                file_list.push(current_path.canonicalize()?)
+                file_list.push(self::realpath(current_path.as_path())?);
             }
             if current_path_type.is_dir() {
-                dir_list.push(current_path.canonicalize()?);
+                dir_list.push(self::realpath(current_path.as_path())?);
             }
         }
     }
@@ -133,11 +133,11 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
             if current_path_type.is_file() {
                 let current_path_ext = current_path.extension().unwrap_or_default();
                 if current_path_ext == file_ext {
-                    file_list.push(current_path.canonicalize()?);
+                    file_list.push(self::realpath(current_path.as_path())?);
                 }
             }
             if current_path_type.is_dir() {
-                dir_list.push(current_path.canonicalize()?);
+                dir_list.push(self::realpath(current_path.as_path())?);
             }
         }
     }
@@ -245,10 +245,7 @@ pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
 }
 
 pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
-    let orig_path = path.as_ref();
-
-    self::check_exist(orig_path)?;
-    Ok(orig_path.canonicalize()?)
+    path.as_ref().canonicalize()
 }
 
 pub fn read_file_to_string<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {

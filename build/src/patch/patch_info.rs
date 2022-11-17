@@ -90,13 +90,11 @@ impl std::fmt::Display for PatchFile {
 }
 
 impl PatchFile {
-    pub fn new<P: AsRef<Path>>(file: P) -> std::io::Result<Self> {
-        fs::check_file(&file)?;
-
-        let file_path = file.as_ref().canonicalize()?;
-        let name      = fs::stringtify_path(file_path.file_name().expect("Get patch name failed"));
-        let path      = fs::stringtify_path(file_path.as_path().canonicalize()?);
-        let digest    = fs::sha256_digest_file(file_path)?[..PATCH_VERSION_DIGITS].to_owned();
+    pub fn new<P: AsRef<Path>>(file_path: P) -> std::io::Result<Self> {
+        let file   = fs::realpath(file_path)?;
+        let name   = fs::stringtify_path(file.file_name().expect("Get patch name failed"));
+        let path   = fs::stringtify_path(file.as_path());
+        let digest = fs::sha256_digest_file(file)?[..PATCH_VERSION_DIGITS].to_owned();
 
         Ok(Self { name, path, digest: digest })
     }
