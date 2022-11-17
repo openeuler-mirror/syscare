@@ -17,8 +17,8 @@ pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/upatch-buil
 // Patch
 pub const PATCH_FILE_PREFIX:       &str  = "syscare-patch";
 pub const PATCH_FILE_EXTENSION:    &str  = "patch";
-pub const PATCH_DIR_PERMISSION:    &str  = "755";
-pub const PATCH_FILE_PERMISSION:   &str  = "644";
+pub const PATCH_DIR_PERMISSION:    &str  = "750";
+pub const PATCH_FILE_PERMISSION:   &str  = "640";
 pub const PATCH_FILE_INSTALL_PATH: &str  = "/usr/lib/syscare/patches";
 pub const PATCH_UNDEFINED_VALUE:   &str  = "Undefined";
 pub const PATCH_INFO_FILE_NAME:    &str  = "patch_info";
