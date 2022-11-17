@@ -28,14 +28,11 @@ impl PatchBuildCLI {
     fn check_arguments(&self) -> std::io::Result<()> {
         let args = &self.cli_args;
         match &args.source {
-            CliPath::File(file_path) => fs::check_file(file_path)?,
+            CliPath::File(file_path)     => fs::check_file(file_path)?,
             CliPath::Directory(dir_path) => fs::check_dir(dir_path)?,
         }
-        if let Some(debug_info_path) = &args.debug_info {
-            match debug_info_path {
-                CliPath::File(file_path) => fs::check_file(file_path)?,
-                CliPath::Directory(dir_path) => fs::check_dir(dir_path)?,
-            }
+        if let Some(file_path) = &args.debug_info {
+            fs::check_file(file_path)?
         }
         if let Some(file_path) = &args.kconfig {
             fs::check_file(file_path)?;
@@ -69,13 +66,14 @@ impl PatchBuildCLI {
         // Collect patch version info from patched source package
         let patch_version_file = fs::find_file(rpm_source_dir, PKG_PATCH_VERSION_FILE_NAME, false, false);
         if let Ok(file_path) = &patch_version_file {
-            let version_str = fs::read_file_to_string(file_path)?;
-            let current_patch_version: u32 = args.patch_version.parse().expect("Parse patch version failed");
-            let package_patch_version: u32 = version_str.parse().expect("Parse patch version failed");
+            let arg_version = args.patch_version.parse::<u32>();
+            let pkg_version = fs::read_file_to_string(file_path)?.parse::<u32>();
 
-            let max_patch_version = u32::max(current_patch_version, package_patch_version + 1);
-            if max_patch_version > current_patch_version {
-                args.patch_version = max_patch_version.to_string();
+            if let (Ok(arg_ver), Ok(pkg_ver)) = (arg_version, pkg_version) {
+                let max_ver = u32::max(arg_ver, pkg_ver + 1);
+                if max_ver > arg_ver {
+                    args.patch_version = max_ver.to_string();
+                }
             }
         }
 
@@ -155,7 +153,7 @@ impl PatchBuildCLI {
             )?;
 
             let kernel_file = KernelPatchHelper::build_kernel(&source_dir, jobs)?;
-            args.debug_info = Some(CliPath::File(kernel_file));
+            args.debug_info = Some(kernel_file);
         }
 
         Ok(())
