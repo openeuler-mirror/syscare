@@ -57,7 +57,7 @@ pub struct CliArguments {
 
     /// Kernel make jobs
     #[arg(long, value_name="N")]
-    pub kjobs: Option<i32>,
+    pub kjobs: usize,
 
     // /// Kernel make targets, split by ','
     // #[arg(long, value_delimiter=',')]

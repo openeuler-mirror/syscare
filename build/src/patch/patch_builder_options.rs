@@ -8,7 +8,7 @@ pub struct PatchBuilderOptions {
     pub debug_info: String,
     pub output_dir: String,
     pub kconfig: Option<String>,
-    pub kjobs: Option<i32>,
+    pub kjobs: usize,
     // pub ktarget: Option<Vec<String>>,
     // pub kmod_dir: Option<String>,
     // pub kmod_flag: Option<String>,

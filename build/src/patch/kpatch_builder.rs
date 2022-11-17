@@ -36,10 +36,8 @@ impl KernelPatchBuilder {
             result.push(config.to_owned());
         }
 
-        if let Some(jobs) = &options.kjobs {
-            result.push(String::from("--jobs"));
-            result.push(jobs.to_string());
-        }
+        result.push(String::from("--jobs"));
+        result.push(options.kjobs.to_string());
 
         // if let Some(target) = &options.ktarget {
         //     result.push(String::from("--target"));

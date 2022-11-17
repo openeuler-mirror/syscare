@@ -146,14 +146,15 @@ impl PatchBuildCLI {
         }
 
         if args.debug_info.is_none() {
-            println!("Building kernel, this may take a while");
+            let jobs = args.kjobs;
+            println!("Building kernel with {} thread(s), this may take a while", jobs);
 
             KernelPatchHelper::write_kernel_config(
                 args.kconfig.as_ref().unwrap(), // kconfig must not be None
                 &source_dir
             )?;
 
-            let kernel_file = KernelPatchHelper::build_kernel(&source_dir)?;
+            let kernel_file = KernelPatchHelper::build_kernel(&source_dir, jobs)?;
             args.debug_info = Some(CliPath::File(kernel_file));
         }
 
