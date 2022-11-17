@@ -8,8 +8,6 @@ pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
 
 // External commands
-pub const EXT_CMD_LOG_PREFIX: &str = "syscare-build-process";
-
 pub const RPM:          ExternCommand = ExternCommand::new("/usr/bin/rpm");
 pub const RPM_BUILD:    ExternCommand = ExternCommand::new("/usr/bin/rpmbuild");
 pub const MAKE:         ExternCommand = ExternCommand::new("/usr/bin/make");
