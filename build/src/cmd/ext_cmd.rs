@@ -56,8 +56,8 @@ impl ExternCommand<'_> {
 
     #[inline(always)]
     fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        let mut stdout = String::new();
-        let mut stderr = String::new();
+        let mut last_stdout = String::new();
+        let mut last_stderr = String::new();
 
         let mut child_process = command
             .stdout(Stdio::piped())
@@ -71,26 +71,25 @@ impl ExternCommand<'_> {
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
         for read_line in BufReader::new(process_stdout).lines() {
-            let line = read_line?;
-
-            writeln!(writer, "{}", line)?;
-            stdout.push_str(&line);
+            last_stdout = read_line?;
+            writeln!(writer, "{}", last_stdout)?;
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
         for read_line in BufReader::new(process_stderr).lines() {
-            let line = read_line?;
-
-            writeln!(writer, "{}", line)?;
-            stderr.push_str(&line);
+            last_stderr = read_line?;
+            writeln!(writer, "{}", last_stderr)?;
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
         writeln!(writer, "Process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code)?;
         writeln!(writer)?;
 
-        let exit_status = ExternCommandExitStatus { exit_code, stdout, stderr };
-        Ok(exit_status)
+        Ok(ExternCommandExitStatus {
+            exit_code,
+            stdout: last_stdout,
+            stderr: last_stderr,
+        })
     }
 }
 
