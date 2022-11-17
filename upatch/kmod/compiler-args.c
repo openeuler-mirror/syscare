@@ -274,6 +274,3 @@ int compiler_args_handler(struct compiler_step *step, struct pt_regs *regs,
         return 0;
     }
 }
-
-
-
