@@ -1,6 +1,8 @@
+use lazy_static::*;
+
 use super::fs;
 
-lazy_static::lazy_static! {
+lazy_static! {
     static ref PROCESS_ID:   u32    = SysInitializer::init_process_id();
     static ref PROCESS_PATH: String = SysInitializer::init_process_path();
     static ref PROCESS_NAME: String = SysInitializer::init_process_name();
