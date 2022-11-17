@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::HashSet;
 use std::path::Path;
 
 use crate::statics::*;
@@ -205,39 +205,41 @@ impl PatchInfo {
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
-        let mut patch_file_map = HashMap::new();
+        let mut patch_file_digests = HashSet::new();
+        let mut patch_file_list = Vec::new();
 
         let mut patch_index = 1usize;
         for file in &args.patches {
             let mut patch_file = PatchFile::new(file)?;
-            let patch_file_name   = patch_file.get_name().to_owned();
-            let patch_file_path   = patch_file.get_path().to_owned();
-            let patch_file_digest = patch_file.get_digest().to_owned();
+            let file_name      = patch_file.get_name().to_owned();
+            let file_path      = patch_file.get_path().to_owned();
+            let file_digest    = patch_file.get_digest().to_owned();
 
             // Check file extension
-            if fs::get_file_ext(&patch_file_path)? != PATCH_FILE_EXTENSION {
-                eprintln!("Warning: file '{}' is not a patch", patch_file_path);
+            if fs::get_file_ext(&file_path)? != PATCH_FILE_EXTENSION {
+                eprintln!("Warning: file '{}' is not a patch", file_path);
                 continue;
             }
 
             // Check duplicate file
-            if patch_file_map.contains_key(&patch_file_digest) {
-                eprintln!("Warning: patch '{}' is duplicated", patch_file_path);
+            if patch_file_digests.contains(&file_digest) {
+                eprintln!("Warning: patch '{}' is duplicated", file_path);
                 continue;
             }
 
             // The patch file may come form patched source rpm, which is already renamed.
-            if !patch_file_name.contains(PATCH_FILE_PREFIX) {
+            if !file_name.contains(PATCH_FILE_PREFIX) {
                 // Patch file naming rule: ${prefix}-${patch_id}-${patch_name}
-                let new_patch_name = format!("{}-{:04}-{}", PATCH_FILE_PREFIX, patch_index, patch_file_name);
+                let new_patch_name = format!("{}-{:04}-{}", PATCH_FILE_PREFIX, patch_index, file_name);
                 patch_file.set_name(new_patch_name);
             };
 
-            patch_file_map.insert(patch_file_digest, patch_file);
+            patch_file_digests.insert(file_digest);
+            patch_file_list.push(patch_file);
             patch_index += 1;
         }
 
-        Ok(patch_file_map.into_values().collect())
+        Ok(patch_file_list)
     }
 }
 
