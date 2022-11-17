@@ -93,7 +93,6 @@ impl CliArguments {
     fn get_default_kjobs() -> &'static str {
         Box::leak(
             sys::get_cpu_num()
-                .expect("Get cpu number failed")
                 .to_string()
                 .into_boxed_str()
         )

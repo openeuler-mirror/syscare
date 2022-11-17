@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use crate::util::sys;
 use crate::util::fs;
 
 struct WorkDir {
@@ -11,11 +12,8 @@ struct WorkDir {
 
 impl WorkDir {
     pub fn new<P: AsRef<Path>>(base_dir: P) -> std::io::Result<Self> {
-        let process_id   = std::process::id();
-        let process_name = fs::stringtify_path(std::env::current_exe().unwrap().file_name().unwrap());
-
-        let base_dir_path      = base_dir.as_ref().canonicalize()?;
-        let work_dir           = format!("{}/{}.{}", base_dir_path.display(), process_name, process_id);
+        let base_dir_path      = fs::stringtify_path(base_dir.as_ref().canonicalize()?);
+        let work_dir           = format!("{}/{}.{}", base_dir_path, sys::get_process_name(), sys::get_process_id());
         let patch_build_root   = format!("{}/patch_root",   work_dir);
         let patch_output_dir   = format!("{}/patch_output", patch_build_root);
         let package_build_root = format!("{}/pkg_root",     work_dir);
