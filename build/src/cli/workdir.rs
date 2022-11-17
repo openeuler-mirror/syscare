@@ -14,7 +14,7 @@ impl WorkDir {
         let process_name  = sys::get_process_name();
         let base_dir_path = fs::realpath(base_dir)?;
 
-        let work_dir           = format!("{}/{}.{}", base_dir_path.display(), process_id, process_name);
+        let work_dir           = format!("{}/{}.{}", base_dir_path.display(), process_name, process_id);
         let patch_build_root   = format!("{}/patch_root",   work_dir);
         let patch_output_dir   = format!("{}/patch_output", patch_build_root);
         let package_build_root = format!("{}/pkg_root",     work_dir);
