@@ -1,7 +1,7 @@
 use std::collections::HashSet;
 use std::path::Path;
 
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 use crate::cli::CliArguments;

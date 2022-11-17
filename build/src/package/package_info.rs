@@ -1,4 +1,4 @@
-use crate::statics::*;
+use crate::constants::*;
 
 use super::rpm_helper::RpmHelper;
 

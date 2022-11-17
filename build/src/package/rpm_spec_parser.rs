@@ -1,4 +1,4 @@
-use crate::statics::*;
+use crate::constants::*;
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Debug)]

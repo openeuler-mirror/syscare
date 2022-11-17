@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use crate::statics::*;
+use crate::constants::*;
 
 use super::{PatchBuilder, PatchBuilderOptions};
 

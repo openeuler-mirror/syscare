@@ -1,4 +1,4 @@
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 use super::rpm_buildroot::RpmBuildRoot;

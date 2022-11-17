@@ -5,7 +5,7 @@ use crate::patch::{PatchInfo, PatchName, PatchType};
 use crate::patch::{PatchBuilderFactory, PatchBuilderOptions};
 use crate::patch::{PatchHelper, UserPatchHelper, KernelPatchHelper};
 
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 use super::path::CliPath;

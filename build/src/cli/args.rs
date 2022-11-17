@@ -1,6 +1,6 @@
 use clap::Parser;
 
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::sys;
 
 use super::CliPath;

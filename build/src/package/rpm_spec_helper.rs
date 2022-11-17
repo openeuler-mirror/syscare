@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 use crate::patch::PatchInfo;

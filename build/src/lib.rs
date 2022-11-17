@@ -1,4 +1,4 @@
-pub mod statics;
+pub mod constants;
 pub mod util;
 pub mod cmd;
 pub mod patch;

@@ -1,7 +1,7 @@
 use std::io::{Write, LineWriter};
 use std::ffi::OsStr;
 
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 use crate::patch::PatchInfo;

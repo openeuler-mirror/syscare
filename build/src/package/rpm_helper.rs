@@ -1,4 +1,4 @@
-use crate::statics::*;
+use crate::constants::*;
 use crate::util::fs;
 
 pub struct RpmHelper;
