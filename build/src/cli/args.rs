@@ -43,6 +43,10 @@ pub struct CliArguments {
     #[arg(short, long)]
     pub debug_info: Option<CliPath>,
 
+    /// Working directory
+    #[arg(long)]
+    pub work_dir: Option<String>,
+
     /// Generated patch output directory
     #[arg(short, long, default_value=".")]
     pub output_dir: String,

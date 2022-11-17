@@ -236,6 +236,8 @@ impl PatchBuildCLI {
     pub fn run(&mut self) {
         self.check_arguments().expect("Check arguments failed");
 
+        self.work_dir.create(self.cli_args.work_dir.clone()).expect("Create working directory failed");
+
         let mut source_package_root = None;
         if self.cli_args.source.is_file() {
             source_package_root = Some(
@@ -260,6 +262,7 @@ impl PatchBuildCLI {
             self.build_source_package(build_root, &patch_info).expect("Build source package failed");
         }
 
+        self.work_dir.clean_all().expect("Clean working directory failed");
         println!("Done");
     }
 }
