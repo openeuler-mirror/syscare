@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 
 use crate::constants::*;
+use crate::util::sys;
 use crate::util::fs;
 
 use crate::patch::PatchInfo;
@@ -29,35 +30,49 @@ impl RpmSpecHelper {
     }
 
     fn create_new_source_tags(start_tag_id: usize, patch_info: &PatchInfo) -> Vec<RpmSpecTag> {
+        let tag_name = PKG_SPEC_TAG_NAME_SOURCE;
+
         let mut source_tag_list = Vec::new();
 
-        let tag_name = PKG_SPEC_TAG_NAME_SOURCE.to_owned();
-
         let mut tag_id = start_tag_id + 1;
+        let mut is_patched_pkg = false;
+
         for patch_file in patch_info.get_file_list() {
-            source_tag_list.push(RpmSpecTag::new_id_tag(
-                tag_name.to_owned(),
-                tag_id,
-                patch_file.get_name().to_owned()
-            ));
+            // File path contains pid (in workdir) means some of patches are come from source package
+            match patch_file.get_path().contains(&sys::get_process_id().to_string()) {
+                true  => {
+                    // Exclude patches from patched source package
+                    // and leave a flag to identify this
+                    is_patched_pkg = true;
+                },
+                false => {
+                    source_tag_list.push(RpmSpecTag::new_id_tag(
+                        tag_name.to_owned(),
+                        tag_id,
+                        patch_file.get_name().to_owned()
+                    ));
+                }
+            }
+
             tag_id += 1;
         }
 
-        // Add patch version file
-        source_tag_list.push(RpmSpecTag::new_id_tag(
-            tag_name.to_owned(),
-            tag_id,
-            PKG_PATCH_VERSION_FILE_NAME.to_owned()
-        ));
-        tag_id += 1;
+        // If the package is patched, generate files to record
+        // patch target name and patch version
+        if !is_patched_pkg {
+            source_tag_list.push(RpmSpecTag::new_id_tag(
+                tag_name.to_owned(),
+                tag_id,
+                PKG_PATCH_VERSION_FILE_NAME.to_owned()
+            ));
+            tag_id += 1;
 
-        // Add patch target file
-        source_tag_list.push(RpmSpecTag::new_id_tag(
-            tag_name.to_owned(),
-            tag_id,
-            PKG_PATCH_TARGET_FILE_NAME.to_owned()
-        ));
-        // tag_id += 1;
+            source_tag_list.push(RpmSpecTag::new_id_tag(
+                tag_name.to_owned(),
+                tag_id,
+                PKG_PATCH_TARGET_FILE_NAME.to_owned()
+            ));
+        }
 
         source_tag_list
     }
@@ -79,15 +94,14 @@ impl RpmSpecHelper {
             if release_tag.is_none() {
                 if let Some(tag) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_RELEASE) {
                     release_tag = Some((current_line_num, tag));
-
                     current_line_num += 1;
                     continue; // Since parsed release tag, the other tag would not be parsed
                 }
             }
+
             // Add parsed source tag into the btree set
             if let Some(tag) = RpmSpecParser::parse_parse_id_tag(&current_line, PKG_SPEC_TAG_NAME_SOURCE) {
                 source_tags.insert(tag);
-
                 current_line_num += 1;
                 continue;
             }
@@ -105,7 +119,6 @@ impl RpmSpecHelper {
 
         // Modify 'Release' tag
         if let Some((line_num, tag)) = Self::create_new_release_tag(release_tag.unwrap(), patch_info) {
-            // lines_to_write.insert((line_num, tag.to_string()));
             spec_file_content.remove(line_num);
             spec_file_content.insert(line_num, tag.to_string());
         }
