@@ -63,18 +63,6 @@ pub fn create_dir_all<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
     Ok(())
 }
 
-pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
-    let file = file_path.as_ref();
-    self::check_file(file)?;
-
-    let file_ext = file.extension()
-        .and_then(OsStr::to_str)
-        .unwrap_or_default()
-        .to_string();
-
-    Ok(file_ext)
-}
-
 pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
 
@@ -242,6 +230,18 @@ pub fn copy_all_files<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) ->
     }
 
     Ok(())
+}
+
+pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
+    let file = file_path.as_ref();
+    self::check_file(file)?;
+
+    let file_ext = file.extension()
+        .and_then(OsStr::to_str)
+        .unwrap_or_default()
+        .to_string();
+
+    Ok(file_ext)
 }
 
 pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
