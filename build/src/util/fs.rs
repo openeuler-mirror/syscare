@@ -244,6 +244,13 @@ pub fn copy_all_files<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) ->
     Ok(())
 }
 
+pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    let orig_path = path.as_ref();
+
+    self::check_exist(orig_path)?;
+    Ok(orig_path.canonicalize()?)
+}
+
 pub fn read_file_to_string<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     self::check_file(file_path.as_ref())?;
 
