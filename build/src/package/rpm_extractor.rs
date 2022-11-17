@@ -7,7 +7,13 @@ pub struct RpmExtractor;
 
 impl RpmExtractor {
     fn install_package(pkg_path: &str, root_path: &str) -> std::io::Result<()> {
-        let exit_status = RPM.execvp([ "--install", "--allfiles", "--root", root_path, pkg_path ])?;
+        let exit_status = RPM.execvp([
+            "--install",
+            "--nodeps",
+            "--allfiles",
+            "--root", root_path,
+            pkg_path
+        ])?;
         let exit_code = exit_status.exit_code();
 
         if exit_code != 0 {
