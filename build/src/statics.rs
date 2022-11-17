@@ -1,5 +1,12 @@
 use crate::cmd::ExternCommand;
 
+// CLI Defaults
+pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
+pub const CLI_DEFAULT_PATCH_SUMMARY:       &str = "Syscare Patch";
+pub const CLI_DEFAULT_WORK_DIR:            &str = ".";
+pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
+pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
+
 // External commands
 pub const EXT_CMD_LOG_PREFIX: &str = "syscare-build-process";
 
@@ -16,8 +23,6 @@ pub const PATCH_FILE_PREFIX:       &str  = "syscare-patch";
 pub const PATCH_FILE_INSTALL_PATH: &str  = "/usr/lib/syscare/patches";
 pub const PATCH_DIR_PERMISSION:    &str  = "755";
 pub const PATCH_FILE_PERMISSION:   &str  = "644";
-pub const PATCH_DEFAULT_VERSION:   &str  = "1";
-pub const PATCH_DEFAULT_SUMMARY:   &str  = "Syscare Patch";
 pub const PATCH_UNDEFINED_VALUE:   &str  = "Undefined";
 pub const PATCH_INFO_FILE_NAME:    &str  = "patch_info";
 

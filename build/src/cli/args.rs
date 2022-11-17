@@ -1,6 +1,7 @@
 use clap::Parser;
 
 use crate::statics::*;
+use crate::util::sys;
 
 use super::CliPath;
 
@@ -12,11 +13,11 @@ pub struct CliArguments {
     pub patch_name: String,
 
     /// Patch version
-    #[arg(long, default_value=PATCH_DEFAULT_VERSION)]
+    #[arg(long, default_value=CLI_DEFAULT_PATCH_VERSION)]
     pub patch_version: String,
 
     /// Patch summary
-    #[arg(long, default_value=PATCH_DEFAULT_SUMMARY)]
+    #[arg(long, default_value=CLI_DEFAULT_PATCH_SUMMARY)]
     pub patch_summary: String,
 
     /// Patch target name
@@ -44,11 +45,11 @@ pub struct CliArguments {
     pub debug_info: Option<CliPath>,
 
     /// Working directory
-    #[arg(long)]
-    pub work_dir: Option<String>,
+    #[arg(long, default_value=CLI_DEFAULT_WORK_DIR)]
+    pub work_dir: String,
 
     /// Generated patch output directory
-    #[arg(short, long, default_value=".")]
+    #[arg(short, long, default_value=CLI_DEFAULT_OUTPUT_DIR)]
     pub output_dir: String,
 
     /// Kernel make config file
@@ -56,7 +57,7 @@ pub struct CliArguments {
     pub kconfig: Option<String>,
 
     /// Kernel make jobs
-    #[arg(long, value_name="N")]
+    #[arg(long, value_name="N", default_value=Self::get_default_kjobs())]
     pub kjobs: usize,
 
     // /// Kernel make targets, split by ','
@@ -76,7 +77,7 @@ pub struct CliArguments {
     pub build_entry: Option<String>,
 
     /// Skip compiler version check (not recommended)
-    #[arg(long, default_value="false")]
+    #[arg(long, default_value=CLI_DEFAULT_SKIP_COMPILER_CHECK)]
     pub skip_compiler_check: bool,
 
     /// Patch file(s)
@@ -87,5 +88,14 @@ pub struct CliArguments {
 impl CliArguments {
     pub fn new() -> Self {
         CliArguments::parse()
+    }
+
+    fn get_default_kjobs() -> &'static str {
+        Box::leak(
+            sys::get_cpu_num()
+                .expect("Get cpu number failed")
+                .to_string()
+                .into_boxed_str()
+        )
     }
 }

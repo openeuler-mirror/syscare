@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::util::fs;
 
 struct WorkDir {
@@ -8,12 +10,12 @@ struct WorkDir {
 }
 
 impl WorkDir {
-    pub fn new(base: Option<String>) -> std::io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(base_dir: P) -> std::io::Result<Self> {
         let process_id   = std::process::id();
         let process_name = fs::stringtify_path(std::env::current_exe().unwrap().file_name().unwrap());
 
-        let base_dir = base.unwrap_or(fs::stringtify_path(std::env::current_dir()?));
-        let work_dir = format!("{}/{}.{}", base_dir, process_name, process_id);
+        let base_dir_path      = base_dir.as_ref().canonicalize()?;
+        let work_dir           = format!("{}/{}.{}", base_dir_path.display(), process_name, process_id);
         let patch_build_root   = format!("{}/patch_root",   work_dir);
         let patch_output_dir   = format!("{}/patch_output", patch_build_root);
         let package_build_root = format!("{}/pkg_root",     work_dir);
@@ -67,8 +69,8 @@ impl CliWorkDir {
 }
 
 impl CliWorkDir {
-    pub fn create(&mut self, base: Option<String>) -> std::io::Result<()> {
-        self.inner = Some(WorkDir::new(base)?);
+    pub fn create(&mut self, base_dir: &str) -> std::io::Result<()> {
+        self.inner = Some(WorkDir::new(base_dir)?);
 
         Ok(())
     }

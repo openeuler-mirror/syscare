@@ -237,7 +237,7 @@ impl PatchBuildCLI {
     pub fn run(&mut self) {
         self.check_arguments().expect("Check arguments failed");
 
-        self.work_dir.create(self.cli_args.work_dir.clone()).expect("Create working directory failed");
+        self.work_dir.create(&self.cli_args.work_dir).expect("Create working directory failed");
 
         let mut source_package_root = None;
         if self.cli_args.source.is_file() {
