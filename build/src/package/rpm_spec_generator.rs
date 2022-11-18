@@ -80,9 +80,6 @@ impl RpmSpecGenerator {
 
         writeln!(writer, "%files")?;
         writeln!(writer, "{}", pkg_install_path)?;
-        for file_name in &pkg_file_list {
-            writeln!(writer, "{}/{}", pkg_install_path, file_name)?;
-        }
         writeln!(writer)?;
 
         writeln!(writer, "%changelog")?;
