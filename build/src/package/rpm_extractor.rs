@@ -50,7 +50,7 @@ impl RpmExtractor {
 
         Self::install_package(pkg_path, output_dir)?;
 
-        let rpm_buildroot = RpmBuildRoot::new(&fs::stringtify_path(
+        let rpm_buildroot = RpmBuildRoot::new(&fs::stringtify(
             fs::find_directory(output_dir, "rpmbuild", false, true)?
         ));
 

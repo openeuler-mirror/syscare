@@ -11,6 +11,6 @@ impl UserPatchHelper {
             true
         )?;
 
-        Ok(fs::stringtify_path(source_dir))
+        Ok(fs::stringtify(source_dir))
     }
 }

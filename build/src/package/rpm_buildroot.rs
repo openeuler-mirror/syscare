@@ -65,7 +65,7 @@ impl RpmBuildRoot {
 impl RpmBuildRoot {
     pub fn find_spec_file(&self) -> std::io::Result<String> {
         let spec_file = fs::find_file_ext(self.get_spec_path(), PKG_SPEC_FILE_EXTENSION, false)?;
-        Ok(fs::stringtify_path(spec_file))
+        Ok(fs::stringtify(spec_file))
     }
 }
 

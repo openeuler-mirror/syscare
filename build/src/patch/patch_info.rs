@@ -122,7 +122,7 @@ impl PatchFile {
 
         Ok(Some(Self {
             name:   file_name,
-            path:   fs::stringtify_path(file_path.as_path()),
+            path:   fs::stringtify(file_path.as_path()),
             digest: file_digest.to_owned()
         }))
     }

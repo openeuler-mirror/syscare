@@ -31,31 +31,31 @@ impl PatchBuildCLI {
         args.source = match &args.source {
             CliPath::File(file_path) => {
                 fs::check_file(file_path)?;
-                CliPath::File(fs::stringtify_path(fs::realpath(file_path)?))
+                CliPath::File(fs::stringtify(fs::realpath(file_path)?))
             },
             CliPath::Directory(dir_path) => {
                 fs::check_dir(dir_path)?;
-                CliPath::Directory(fs::stringtify_path(fs::realpath(dir_path)?))
+                CliPath::Directory(fs::stringtify(fs::realpath(dir_path)?))
             },
         };
 
         if let Some(file_path) = &args.debug_info {
             fs::check_file(file_path)?;
-            args.debug_info = Some(fs::stringtify_path(fs::realpath(file_path)?));
+            args.debug_info = Some(fs::stringtify(fs::realpath(file_path)?));
         }
 
         if let Some(file_path) = &args.kconfig {
             fs::check_file(file_path)?;
-            args.kconfig = Some(fs::stringtify_path(fs::realpath(file_path)?))
+            args.kconfig = Some(fs::stringtify(fs::realpath(file_path)?))
         }
 
         for patch in &mut args.patches {
             fs::check_file(patch.as_str())?;
-            *patch = fs::stringtify_path(fs::realpath(patch.as_str())?);
+            *patch = fs::stringtify(fs::realpath(patch.as_str())?);
         }
 
         fs::check_dir(&args.output_dir)?;
-        args.output_dir = fs::stringtify_path(fs::realpath(&args.output_dir)?);
+        args.output_dir = fs::stringtify(fs::realpath(&args.output_dir)?);
 
         Ok(())
     }

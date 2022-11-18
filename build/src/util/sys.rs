@@ -13,7 +13,7 @@ struct SysInitializer;
 
 impl SysInitializer {
     pub fn init_process_id() -> u32 {
-        fs::stringtify_path(
+        fs::stringtify(
             std::fs::read_link("/proc/self").expect("Get process id failed")
         ).parse::<u32>().expect("Parse process id failed")
     }
@@ -33,7 +33,7 @@ impl SysInitializer {
     }
 
     pub fn init_process_path() -> String {
-        fs::stringtify_path(
+        fs::stringtify(
             std::fs::read_link("/proc/self/exe")
                 .expect("Read process id failed")
         )

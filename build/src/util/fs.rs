@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Write, BufWriter};
 use sha2::Digest;
 use sha2::Sha256;
 
-pub fn stringtify_path<P: AsRef<Path>>(path: P) -> String {
+pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
     format!("{}", path.as_ref().display())
 }
 
@@ -237,7 +237,7 @@ pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
 
     match file.file_name() {
         Some(file_name) => {
-            Ok(self::stringtify_path(file_name))
+            Ok(self::stringtify(file_name))
         },
         None => {
             Err(std::io::Error::new(
@@ -255,7 +255,7 @@ pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
 
     match file.extension() {
         Some(file_ext) => {
-            Ok(self::stringtify_path(file_ext))
+            Ok(self::stringtify(file_ext))
         },
         None => {
             Err(std::io::Error::new(

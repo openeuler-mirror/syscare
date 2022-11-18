@@ -14,7 +14,7 @@ impl KernelPatchHelper {
             true
         )?;
 
-        Ok(fs::stringtify_path(source_dir))
+        Ok(fs::stringtify(source_dir))
     }
 
     pub fn find_kernel_config(directory: &str) -> std::io::Result<String> {
@@ -27,7 +27,7 @@ impl KernelPatchHelper {
             true
         )?;
 
-        Ok(fs::stringtify_path(config_file_path))
+        Ok(fs::stringtify(config_file_path))
     }
 
     pub fn generate_defconfig(source_dir: &str) -> std::io::Result<String> {
@@ -52,7 +52,7 @@ impl KernelPatchHelper {
             true
         )?;
 
-        Ok(fs::stringtify_path(config_file_path))
+        Ok(fs::stringtify(config_file_path))
     }
 
     pub fn write_kernel_config(kconfig_path: &str, output_dir: &str) -> std::io::Result<()> {
@@ -105,6 +105,6 @@ impl KernelPatchHelper {
             true
         )?;
 
-        Ok(fs::stringtify_path(kernel_file_path))
+        Ok(fs::stringtify(kernel_file_path))
     }
 }
