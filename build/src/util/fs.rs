@@ -7,7 +7,7 @@ use sha2::Digest;
 use sha2::Sha256;
 
 pub fn stringtify_path<P: AsRef<Path>>(path: P) -> String {
-    path.as_ref().to_string_lossy().to_string()
+    format!("{}", path.as_ref().display())
 }
 
 pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
