@@ -1,12 +1,14 @@
 use std::collections::HashSet;
 use std::path::Path;
+use std::sync::Mutex;
+
+use lazy_static::*;
 
 use crate::constants::*;
 use crate::util::fs;
 
 use crate::cli::CliArguments;
 
-#[derive(PartialEq)]
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct PatchName {
@@ -55,7 +57,6 @@ impl std::str::FromStr for PatchName {
     }
 }
 
-#[derive(PartialEq)]
 #[derive(Clone, Copy)]
 #[derive(Debug)]
 pub enum PatchType {
@@ -69,8 +70,6 @@ impl std::fmt::Display for PatchType {
     }
 }
 
-#[derive(Hash)]
-#[derive(PartialEq, Eq)]
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct PatchFile {
@@ -90,13 +89,62 @@ impl std::fmt::Display for PatchFile {
 }
 
 impl PatchFile {
-    pub fn new<P: AsRef<Path>>(file_path: P) -> std::io::Result<Self> {
-        let file   = fs::realpath(file_path)?;
-        let name   = fs::stringtify_path(file.file_name().expect("Get patch name failed"));
-        let path   = fs::stringtify_path(file.as_path());
-        let digest = fs::sha256_digest_file(file)?[..PATCH_VERSION_DIGITS].to_owned();
+    pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Option<Self>> {
+        lazy_static! {
+            static ref FILE_COUNTER: Mutex<usize>           = Mutex::new(1);
+            static ref FILE_DIGESTS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
+        }
 
-        Ok(Self { name, path, digest: digest })
+        let mut file_id      = FILE_COUNTER.lock().unwrap();
+        let mut file_digests = FILE_DIGESTS.lock().unwrap();
+
+        let file_path     = fs::realpath(path)?;
+        let mut file_name = fs::file_name(file_path.as_path())?;
+        if !Self::validate_naming_rule(&file_name) {
+            // The patch file may come form patched source rpm, which is already renamed.
+            // Patch file naming rule: ${patch_id}-${patch_name}.patch
+            file_name = format!("{:04}-{}", file_id, file_name);
+        };
+
+        let file_ext = fs::file_ext(file_path.as_path())?;
+        if file_ext != PATCH_FILE_EXTENSION {
+            eprintln!("File {} is not a patch", file_name);
+            return Ok(None);
+        }
+
+        let file_digest = &fs::sha256_digest_file(file_path.as_path())?[..PATCH_VERSION_DIGITS];
+        if !file_digests.insert(file_digest.to_owned()) {
+            eprintln!("Patch file '{}' is duplicated", file_name);
+            return Ok(None);
+        }
+
+        *file_id += 1;
+
+        Ok(Some(Self {
+            name:   file_name,
+            path:   fs::stringtify_path(file_path.as_path()),
+            digest: file_digest.to_owned()
+        }))
+    }
+
+    pub fn validate_naming_rule(file_name: &str) -> bool {
+        // Patch file naming rule: ${patch_id}-${patch_name}.patch
+        let file_name_slice = file_name.split(PATCH_NAME_SPLITER).collect::<Vec<_>>();
+        if file_name_slice.len() < 2 {
+            return false;
+        }
+
+        let patch_id = file_name_slice[0];
+        if (patch_id.len() != 4) || patch_id.parse::<usize>().is_err() {
+            return false;
+        }
+
+        let patch_name = file_name_slice.last().unwrap();
+        if !patch_name.ends_with(PATCH_FILE_EXTENSION) {
+            return false;
+        }
+
+        true
     }
 
     pub fn get_name(&self) -> &str {
@@ -203,38 +251,12 @@ impl PatchInfo {
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
-        let mut patch_file_digests = HashSet::new();
         let mut patch_file_list = Vec::new();
 
-        let mut patch_index = 1usize;
-        for file in &args.patches {
-            let mut patch_file = PatchFile::new(file)?;
-            let file_name      = patch_file.get_name().to_owned();
-            let file_path      = patch_file.get_path().to_owned();
-            let file_digest    = patch_file.get_digest().to_owned();
-
-            // Check file extension
-            if fs::file_ext(&file_path)? != PATCH_FILE_EXTENSION {
-                eprintln!("Warning: file '{}' is not a patch", file_path);
-                continue;
+        for file_path in &args.patches {
+            if let Some(patch_file) = PatchFile::new(file_path)? {
+                patch_file_list.push(patch_file);
             }
-
-            // Check duplicate file
-            if patch_file_digests.contains(&file_digest) {
-                eprintln!("Warning: patch '{}' is duplicated", file_path);
-                continue;
-            }
-
-            // The patch file may come form patched source rpm, which is already renamed.
-            if !file_name.contains(PATCH_FILE_PREFIX) {
-                // Patch file naming rule: ${prefix}-${patch_id}-${patch_name}
-                let new_patch_name = format!("{}-{:04}-{}", PATCH_FILE_PREFIX, patch_index, file_name);
-                patch_file.set_name(new_patch_name);
-            };
-
-            patch_file_digests.insert(file_digest);
-            patch_file_list.push(patch_file);
-            patch_index += 1;
         }
 
         Ok(patch_file_list)
