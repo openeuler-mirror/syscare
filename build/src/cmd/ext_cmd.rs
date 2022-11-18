@@ -40,7 +40,7 @@ impl ExternCommand<'_> {
     #[inline(always)]
     fn get_log_writer<'a>(&self) -> MutexGuard<'a, impl Write> {
         lazy_static! {
-            static ref LOG_FILE_PATH: String = format!("./{}-{}.log", sys::get_process_name(), sys::get_process_id());
+            static ref LOG_FILE_PATH: String = format!("./{}.{}.log", sys::get_process_name(), sys::get_process_id());
             static ref LOG_WRITER: Mutex<LineWriter<File>> = Mutex::new(LineWriter::new(
                 std::fs::OpenOptions::new()
                     .create(true)
