@@ -34,15 +34,16 @@ impl SysInitializer {
 
     pub fn init_process_path() -> String {
         fs::stringtify_path(
-            std::fs::read_link("/proc/self/exe").expect("Read process id failed")
+            std::fs::read_link("/proc/self/exe")
+                .expect("Read process id failed")
         )
     }
 
     pub fn init_process_name() -> String {
-        fs::stringtify_path(
-            std::fs::read_link("/proc/self/exe").expect("Read process name failed")
-                .file_name().expect("Parse process name failed")
-        )
+        fs::file_name(
+            std::fs::read_link("/proc/self/exe")
+                .expect("Read process name failed")
+        ).expect("Parse process name failed")
     }
 }
 
