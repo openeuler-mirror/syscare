@@ -1,5 +1,4 @@
 use std::io::{Write, LineWriter};
-use std::ffi::OsStr;
 
 use crate::constants::*;
 use crate::util::fs;
@@ -18,8 +17,8 @@ impl RpmSpecGenerator {
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         let patch_name = Self::get_patch_name(patch_info);
         match patch_info.get_target() {
-            Some(target_name) => format!("{}-patch-{}", target_name, patch_name),
-            None              => format!("patch-{}", patch_name),
+            Some(target_name) => format!("{}-{}-{}", target_name, PKG_FLAG_PATCH_BINARY_PKG, patch_name),
+            None              => format!("{}-{}",    PKG_FLAG_PATCH_BINARY_PKG, patch_name),
         }
     }
 
@@ -37,15 +36,13 @@ impl RpmSpecGenerator {
     {
         let pkg_file_list = fs::list_all_files(source_dir, true)?
             .into_iter()
-            .filter_map(|file_path| {
-                file_path.file_name()
-                         .and_then(OsStr::to_str)
-                         .and_then(|str| Some(str.to_owned()))
-            }).collect::<Vec<_>>();
-        let pkg_install_path = format!("{}/{}", PATCH_FILE_INSTALL_PATH, Self::get_patch_name(patch_info));
+            .map(fs::file_name)
+            .filter_map(Result::ok)
+            .collect::<Vec<_>>();
+        let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::get_patch_name(patch_info));
 
         writeln!(writer, "Name:    {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "VERSION: {}", patch_info.get_patch().get_version())?;
+        writeln!(writer, "Version: {}", patch_info.get_patch().get_version())?;
         writeln!(writer, "Release: {}", patch_info.get_patch().get_release())?;
         writeln!(writer, "Group:   {}", PKG_SPEC_TAG_VALUE_GROUP)?;
         writeln!(writer, "License: {}", patch_info.get_license())?;
