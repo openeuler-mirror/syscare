@@ -232,6 +232,24 @@ pub fn copy_all_files<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) ->
     Ok(())
 }
 
+pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
+    let file = file_path.as_ref();
+
+    self::check_file(file)?;
+
+    match file.file_name() {
+        Some(file_name) => {
+            Ok(self::stringtify_path(file_name))
+        },
+        None => {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Parse file name from '{}' failed", file.display())
+            ))
+        }
+    }
+}
+
 pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     let file = file_path.as_ref();
     self::check_file(file)?;
