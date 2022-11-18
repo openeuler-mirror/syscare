@@ -29,7 +29,10 @@
 
 #include "kmod.h"
 #include "compiler.h"
+#include "common.h"
+#include "patch-uprobe.h"
 #include "upatch-ioctl.h"
+
 
 #include "asm/hijack.h"
 
@@ -356,23 +359,6 @@ static struct compiler_step *check_env_for_step(char __user **envp,
     return get_compiler_setp(&__env[COMPILER_CMD_ENV_LEN + 1]);
 }
 
-static int copy_para_from_user(unsigned long addr, char *buf, size_t buf_len)
-{
-    size_t len;
-
-    if (!buf || addr == 0)
-        return -EINVAL;
-
-    len = strnlen_user((void __user *)addr, MAX_ARG_STRLEN);
-    if (len > buf_len)
-        return -EOVERFLOW;
-
-    if (copy_from_user(buf, (void __user *)addr, len))
-        return -ENOMEM;
-    
-    return 0;
-}
-
 static int unlink_filename(const char *filename)
 {
     struct path path;
@@ -418,7 +404,6 @@ static int create_symlink(const char *oldname, const char *newname)
 	return error;
 }
 
-
 /*
  * To generate the new object filepath, three ways:
  * 1. append source path from '-o' to the output dir
@@ -459,7 +444,7 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
 
     ret = obtain_parameter_addr(envp, ASSEMBLER_DIR_ENV, &dir_addr, NULL);
     if (ret || dir_addr == 0) {
-        pr_warn("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);\
+        pr_warn("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);
         ret = -EINVAL;
         goto out;
     }
@@ -516,7 +501,7 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
     goto out_normal;
 
 out:
-    if (!IS_ERR((void *)new_path))
+    if (new_path && !IS_ERR((void *)new_path))
         vm_munmap((unsigned long)new_path, len);
 out_normal:
     if (object_path)
@@ -526,13 +511,6 @@ out_normal:
     if (kernel_new_path)
         kfree(kernel_new_path);
     return ret;
-}
-
-/* We don't utilize filter now */
-static bool uprobe_default_filter(struct uprobe_consumer *self,
-    enum uprobe_filter_ctx ctx, struct mm_struct *mm)
-{
-    return true;
 }
 
 static inline char __user **get_argv_from_regs(struct pt_regs *regs)
@@ -656,47 +634,18 @@ out:
 
 static int __elf_check(struct file *file, loff_t *entry_offset)
 {
-    struct elfhdr elf_header;
-    int ret, size, i;
-    struct elf_phdr *phdr = NULL;
-    elf_addr_t min_addr = -1;
+    Elf_Ehdr elf_header;
+    int ret;
+    elf_addr_t min_addr;
 
     ret = kernel_read(file, &elf_header, sizeof(elf_header), 0);
-    if (ret < 0) {
+    if (ret != sizeof(elf_header)) {
         pr_err("kernel read failed - %d \n", ret);
-        goto out;
-    }
-
-    if (memcmp(elf_header.e_ident, ELFMAG, SELFMAG) != 0) {
-        pr_err("provided path is not an ELF \n");
-        ret = -EINVAL;
-        goto out;
-    }
-
-    if (elf_header.e_type != ET_EXEC && elf_header.e_type != ET_DYN) {
-        pr_err("invalid elf type, it should be ET_EXEC or ET_DYN \n");
-        ret = -EINVAL;
-        goto out;
-    }
-
-    size = sizeof(struct elf_phdr) * elf_header.e_phnum;
-    phdr = kmalloc(size, GFP_KERNEL);
-    if (!phdr) {
         ret = -ENOMEM;
         goto out;
     }
 
-    ret = kernel_read(file, phdr, size, &elf_header.e_phoff);
-    if (ret < 0) {
-        pr_err("kernel read failed - %d \n", ret);
-        goto out;
-    }
-
-    for (i = 0; i < elf_header.e_phnum; i ++) {
-        if (phdr[i].p_type == PT_LOAD)
-            min_addr = min(min_addr, phdr[i].p_vaddr);
-    }
-
+    min_addr = calculate_load_address(file, false);
     if (min_addr == -1) {
         pr_err("no valid segment found \n");
         ret = -EINVAL;
@@ -707,18 +656,16 @@ static int __elf_check(struct file *file, loff_t *entry_offset)
 
     ret = 0;
 out:
-    if (phdr)
-        kfree(phdr);
     return ret;
 }
 
-static int elf_check(char *elf_path, loff_t *entry_offset)
+static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
 {
     struct file *file;
     int ret;
     char *p;
 
-    file = filp_open(elf_path, O_RDONLY, 0);
+    file = filp_open(buf, O_RDONLY, 0);
     if (IS_ERR(file)) {
         ret = PTR_ERR(file);
         pr_err("open elf failed - %d \n", ret);
@@ -742,13 +689,13 @@ out:
     return ret;
 }
 
-static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
+static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
 {
     int ret;
     struct path path;
     struct inode *inode;
 
-    ret = elf_check(ep->name, &ep->entry_offset);
+    ret = elf_check(buf, ep->name, &ep->entry_offset);
     if (ret)
         goto out;
 
@@ -759,7 +706,7 @@ static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprob
     }
     inode = path.dentry->d_inode;
 
-    pr_info("register uprobe for %s \n", ep->name);
+    pr_info("register uprobe for %s \n", buf);
     ret = uprobe_register(inode, ep->entry_offset, uc);
     if (ret) {
         pr_err("uprobe register failed - %d \n", ret);
@@ -803,7 +750,7 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
             ep->count = 1;
             ep->entry_offset = 0;
             list_add(&ep->list, &compiler_paths_list);
-            ret = __register_uprobe(cmd, ep, &uprobe_compiler_consumer);
+            ret = __register_uprobe(path, cmd, ep, &uprobe_compiler_consumer);
         } else {
             ep->count++;
         }
@@ -827,7 +774,7 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
             ep->count = 1;
             ep->entry_offset = 0;
             list_add(&ep->list, &assembler_paths_list);
-            ret = __register_uprobe(cmd, ep, &uprobe_assembler_consumer);
+            ret = __register_uprobe(path, cmd, ep, &uprobe_assembler_consumer);
         } else {
             ep->count++;
         }
@@ -842,7 +789,7 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
         break;
 
     default:
-        return -ENOTTY;
+        ret = -ENOTTY;
         break;
     }
 

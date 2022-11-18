@@ -23,8 +23,8 @@
 static const char *append_args[] = {
     "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
-    "-fno-asynchronous-unwind-tables",
     "-fdata-sections",
+    "-fno-asynchronous-unwind-tables", /* temporary paras */
     "NULL",
 };
 
@@ -136,7 +136,7 @@ static char __user **create_new_args(int argc, char __user **old_argv)
     goto out;
 
 out_munmap:
-    if (!IS_ERR((void *)argv)) {
+    if (argv && !IS_ERR((void *)argv)) {
         vm_munmap((unsigned long)argv, mmap_size);
         argv = NULL;
     }

@@ -13,6 +13,7 @@
 #include <linux/fs.h>
 
 #include "kmod.h"
+#include "patch.h"
 #include "compiler.h"
 
 static int upatch_open(struct inode *inode, struct file *file)
@@ -48,6 +49,14 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case UPATCH_REGISTER_ASSEMBLER:
     case UPATCH_UNREGISTER_ASSEMBLER:
         return handle_compiler_cmd(arg, cmd);
+    case UPATCH_INSTALL_PATCH:
+        return upatch_attach(arg, cmd);
+    // case UPATCH_UNINSTALL_PATCH:
+    // case UPATCH_APPLY_PATCH:
+    case UPATCH_REMOVE_PATCH:
+        return upatch_remove(arg, cmd);
+    // case UPATCH_ACTIVE_PATCH:
+    // case UPATCH_DEACTIVE_PATCH:
     default:
         return -ENOTTY;
     }

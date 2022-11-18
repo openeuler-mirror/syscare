@@ -12,6 +12,7 @@
 
     .text
     .align PAGE_SIZE
+
 SYM_CODE_START_NOALIGN(__run_execve)
     .code64
     mov     $0x3b, %eax
