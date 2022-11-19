@@ -1,3 +1,4 @@
+mod upatch_helper;
 mod upatch_builder;
 mod upatch_builder_args;
 

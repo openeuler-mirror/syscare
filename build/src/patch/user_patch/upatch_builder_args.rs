@@ -1,13 +1,12 @@
-use crate::patch::{PatchName, PatchFile};
+use crate::patch::PatchFile;
 
 pub struct UserPatchBuilderArguments {
-    pub build_root:  String,
-    pub patch_name:  PatchName,
-    pub source_dir:  String,
-    pub kconfig:     String,
-    pub vmlinux:     String,
-    pub jobs:        usize,
-    pub skip_check:  bool,
-    pub output_dir:  String,
-    pub patch_files: Vec<PatchFile>,
+    pub name:                String,
+    pub build_root:          String,
+    pub elf_name:            String,
+    pub source_dir:          String,
+    pub debuginfo:           String,
+    pub output_dir:          String,
+    pub skip_compiler_check: bool,
+    pub patch_list:          Vec<PatchFile>,
 }
