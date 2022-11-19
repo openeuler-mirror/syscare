@@ -171,7 +171,10 @@ pub fn find_directory<P: AsRef<Path>>(directory: P, dir_name: &str, fuzz: bool, 
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Cannot find directory '{}' in '{}'", dir_name, search_path.display())
+        match fuzz {
+            true  => format!("Cannot find directory '*{}*' in '{}'", dir_name, search_path.display()),
+            false => format!("Cannot find directory '{}' in '{}'",   dir_name, search_path.display()),
+        }
     ))
 }
 
@@ -193,7 +196,10 @@ pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recu
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Cannot find file '{}' in '{}'", file_name, search_path.display())
+        match fuzz {
+            true  => format!("Cannot find file '*{}*' in '{}'", file_name, search_path.display()),
+            false => format!("Cannot find file '{}' in '{}'",   file_name, search_path.display()),
+        }
     ))
 }
 
