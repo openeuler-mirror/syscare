@@ -1,12 +1,12 @@
 use crate::cli::{CliWorkDir, CliArguments};
 
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchInfo, PatchBuilderArgumentsParser};
+use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments, PatchBuilderArgumentsParser};
 
 use crate::constants::*;
 
-use super::KernelPatchBuilderArguments;
 use super::kpatch_helper::KernelPatchHelper;
+use super::kpatch_builder_args::KernelPatchBuilderArguments;
 
 pub struct KernelPatchBuilder;
 
