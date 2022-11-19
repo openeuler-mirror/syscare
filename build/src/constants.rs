@@ -43,4 +43,4 @@ pub const KERNEL_SOURCE_DIR_FLAG:   &str = "Kbuild";
 pub const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 pub const KERNEL_CONFIG_NAME:       &str = ".config";
 pub const KERNEL_DEFCONFIG_NAME:    &str = "openeuler_defconfig";
-pub const KERNEL_FILE_NAME:         &str = "vmlinux";
+pub const KERNEL_ELF_NAME:          &str = "vmlinux";

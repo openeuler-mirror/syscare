@@ -107,7 +107,7 @@ impl PatchBuildCLI {
 
         // If the source package is kernel, append target elf name 'vmlinux' to arguments
         if pkg_info.get_name() == KERNEL_PKG_NAME {
-            args.target_elf_name.get_or_insert(KERNEL_FILE_NAME.to_owned());
+            args.target_elf_name.get_or_insert(KERNEL_ELF_NAME.to_owned());
         }
 
         // Find source directory from extracted package root
