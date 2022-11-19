@@ -1,6 +1,8 @@
-use std::io;
 use std::process::Command;
 use std::fs::File;
+
+use super::Result;
+use super::Error;
 
 const COMPILER_CMD_ENV: &str = "UPATCH_CMD";
 const ASSEMBLER_DIR_ENV: &str = "UPATCH_OUTPUT";
@@ -18,7 +20,7 @@ impl Project {
         }
     }
 
-    pub fn build(&self, cmd: &str, output: &str) -> io::Result<()> {
+    pub fn build(&self, cmd: &str, output: &str) -> Result<()> {
         let mut build_cmd = Command::new("sh");
         let result = build_cmd.current_dir(&self.project_dir)
                 .arg(&self.build_file)
@@ -26,12 +28,12 @@ impl Project {
                 .env(ASSEMBLER_DIR_ENV, output)
                 .output()?;
         if !result.status.success(){
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("build project error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
+            return Err(Error::Project(format!("build project error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
         }
         Ok(())
     }
 
-    pub fn patch(&self, patch: String) -> io::Result<()> {
+    pub fn patch(&self, patch: String) -> Result<()> {
         let mut build_cmd = Command::new("patch");
         let result = build_cmd.current_dir(&self.project_dir).arg("-N").arg("-p1").stdin(File::open(&patch).unwrap()).output()?;
         match result.status.success() {
@@ -40,7 +42,7 @@ impl Project {
                 Ok(())
             },
             false => {
-                Err(io::Error::new(io::ErrorKind::InvalidData, format!("patch file {} error: {}", patch, String::from_utf8(result.stderr).unwrap().trim())))
+                Err(Error::Project(format!("patch file {} error: {}", patch, String::from_utf8(result.stderr).unwrap().trim())))
             }
         }
     }

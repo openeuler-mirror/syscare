@@ -1,9 +1,11 @@
 use std::ffi::CString;
 use std::process::Command;
 use std::fs::{OpenOptions, self};
-use std::io::{self, Write};
+use std::io::Write;
 
 use crate::dwarf::Dwarf;
+use super::Result;
+use super::Error;
 
 const UPATCH_REGISTER_COMPILER: u64 = 1074324737;
 const UPATCH_UNREGISTER_COMPILER: u64 = 1074324738;
@@ -26,16 +28,16 @@ impl Compiler {
         }
     }
 
-    pub fn readlink(&self, name: String) -> io::Result<String> {
+    pub fn readlink(&self, name: String) -> Result<String> {
         let mut path_str = String::from_utf8(Command::new("which").arg(&name).output()?.stdout).unwrap();
         path_str.pop();
         if path_str.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't found compiler")));
+            return Err(Error::Compiler(format!("can't found compiler")));
         }
         Ok(path_str)
     }
 
-    pub fn analyze(&mut self) -> io::Result<()> {
+    pub fn analyze(&mut self) -> Result<()> {
         if self.compiler_file.is_empty() {
             self.compiler_file.push_str("gcc");
         }
@@ -52,15 +54,15 @@ impl Compiler {
         Ok(())
     }    
     
-    pub fn hack(&self) -> io::Result<()> {
+    pub fn hack(&self) -> Result<()> {
         self.__hack(true)
     }
 
-    pub fn unhack(&self) -> io::Result<()> {
+    pub fn unhack(&self) -> Result<()> {
         self.__hack(false)
     }
 
-    pub fn check_version(&self, cache_dir: &str, debug_info: &str) -> io::Result<()> {
+    pub fn check_version(&self, cache_dir: &str, debug_info: &str) -> Result<()> {
         let tmp_dir = cache_dir.to_string() + "/test";
         fs::create_dir(&tmp_dir).unwrap();
         let test = tmp_dir.clone() + "/test.c";
@@ -73,7 +75,7 @@ impl Compiler {
                             .output()?;
 
         if !result.status.success(){
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("compiler build test error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
+            return Err(Error::Compiler(format!("compiler build test error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
         }
 
         let dwarf = Dwarf::new();
@@ -98,18 +100,18 @@ impl Compiler {
 
 
         if gcc_version_arr.len() < 3 || system_gcc_version_arr.len() < 3 || gcc_version_arr[2] != system_gcc_version_arr[2] {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("compiler version is different\n       debug_info compiler_version: {}\n       system compiler_version: {}", &gcc_version, &system_gcc_version)));
+            return Err(Error::Compiler(format!("compiler version is different\n       debug_info compiler_version: {}\n       system compiler_version: {}", &gcc_version, &system_gcc_version)));
         }
         Ok(())
     }
 
-    pub fn linker(&self, dir: &str, output_file: &str) -> io::Result<()> {
+    pub fn linker(&self, dir: &str, output_file: &str) -> Result<()> {
         let arr = walkdir::WalkDir::new(dir).into_iter()
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().is_file())
                     .collect::<Vec<_>>();
         if arr.is_empty() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, "no functional changes found"));
+            return Err(Error::Compiler(format!("no functional changes found")));
         }
 
         let mut build_cmd = Command::new(&self.linker_file);
@@ -121,14 +123,14 @@ impl Compiler {
         }
         let result = build_cmd.output()?;
         if !result.status.success(){
-                return Err(io::Error::new(io::ErrorKind::NotFound, format!("link obj error {}: {:?}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
+                return Err(Error::Compiler(format!("link obj error {}: {:?}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
         }
         Ok(())
     }
 }
 
 impl Compiler {
-    fn __hack(&self, register: bool) -> io::Result<()> {
+    fn __hack(&self, register: bool) -> Result<()> {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
         let compiler_str = CString::new(self.compiler_file.clone()).unwrap();
         let assembler_str = CString::new(self.as_file.clone()).unwrap();
@@ -136,29 +138,29 @@ impl Compiler {
         unsafe{
             let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
             if fd < 0 {
-                return Err(io::Error::new(io::ErrorKind::NotFound, format!("open {} error", format!("/dev/{}", UPATCH_DEV_NAME))));
+                return Err(Error::Mod(format!("open {} error", format!("/dev/{}", UPATCH_DEV_NAME))));
             }
             if register {
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
                     libc::close(fd);
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("hack {} error", &self.compiler_file)));
+                    return Err(Error::Mod(format!("hack {} error", &self.compiler_file)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
                     libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                     libc::close(fd);
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("hack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("hack {} error", &self.as_file)));
                 }
             }
             else{
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("unhack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("unhack {} error", &self.as_file)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("unhack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("unhack {} error", &self.as_file)));
                 }
             }
             libc::close(fd);

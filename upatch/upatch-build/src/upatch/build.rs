@@ -7,10 +7,12 @@ use std::io::{self, Read};
 
 use walkdir::WalkDir;
 
-use crate::arg::Arg;
+use super::Arg;
 use crate::dwarf::{Dwarf, DwarfCompileUnit};
 use super::Compiler;
 use super::Project;
+use super::Result;
+use super::Error;
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -29,7 +31,7 @@ pub struct UpatchBuild {
 }
 
 impl UpatchBuild {
-    pub fn new(args: Arg) -> Self {
+    pub fn new() -> Self {
         #![allow(deprecated)]
         let base = String::from(env::home_dir().unwrap().to_str().unwrap()); // home_dir() don't support BSD system
         let cache_dir = base.clone() + "/.upatch";
@@ -43,12 +45,14 @@ impl UpatchBuild {
             patch_dir,
             output_dir,
             log_file,
-            args,
+            args: Arg::new(),
             tool_file: String::new(),
         }
     }
 
-    pub fn run(&mut self) -> io::Result<()> {
+    pub fn run(&mut self) -> Result<()> {
+        self.args.read()?;
+
         // create .upatch directory
         self.create_dir()?;
 
@@ -122,7 +126,7 @@ impl UpatchBuild {
 }
 
 impl UpatchBuild {
-    fn create_dir(&self) -> io::Result<()> {
+    fn create_dir(&self) -> Result<()> {
         if Path::new(&self.cache_dir).is_dir() {
             fs::remove_dir_all(self.cache_dir.clone())?;
         }
@@ -135,17 +139,17 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn check_mod(&self) -> io::Result<()> {
+    fn check_mod(&self) -> Result<()> {
         let mut file = File::open(SYSTEM_MOUDLES)?;
         let mut contents = String::new();
         file.read_to_string(&mut contents)?;
         match contents.find(UPATCH_DEV_NAME) {
             Some(_) => Ok(()),
-            None => Err(io::Error::new(io::ErrorKind::NotFound, "can't found upatch mod in system")),
+            None => Err(Error::Mod(format!("can't found upatch mod in system"))),
         }
     }
 
-    fn correlate_obj(&self, dwarf: &Dwarf, comp_dir: &str, dir: &str, map: &mut HashMap<String, String>) -> io::Result<()> {
+    fn correlate_obj(&self, dwarf: &Dwarf, comp_dir: &str, dir: &str, map: &mut HashMap<String, String>) -> Result<()> {
         let arr = WalkDir::new(dir).into_iter()
                 .filter_map(|e| e.ok())
                 .filter(|e| e.path().is_file())
@@ -160,7 +164,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn correlate_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> io::Result<()> {
+    fn correlate_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> Result<()> {
         // TODO can print changed function
         for path in binary_obj {
             let source_name = path.get_source();
@@ -175,7 +179,7 @@ impl UpatchBuild {
                                         .stderr(OpenOptions::new().append(true).write(true).open(&self.log_file)?)
                                         .output()?;
                             if !output.status.success(){
-                                return Err(io::Error::new(io::ErrorKind::NotFound, format!("{}: please look {} for detail.", output.status, &self.log_file)));
+                                return Err(Error::Diff(format!("{}: please look {} for detail.", output.status, &self.log_file)));
                             }
                         },
                         None => { fs::copy(&patch, output_dir)?; },
@@ -187,7 +191,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn search_tool(&mut self) -> io::Result<()> {
+    fn search_tool(&mut self) -> Result<()> {
         let arr = WalkDir::new("../").into_iter()
                     .filter_map(|e| e.ok())
                     .filter(|e| e.path().is_file() && (e.path().file_name() == Some(OsStr::new(SUPPORT_TOOL))))
@@ -197,12 +201,12 @@ impl UpatchBuild {
                 let mut path_str = String::from_utf8(Command::new("which").arg(SUPPORT_TOOL).output()?.stdout).unwrap();
                 path_str.pop();
                 if path_str.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", SUPPORT_TOOL)));
+                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", SUPPORT_TOOL)).into());
                 }
                 self.tool_file.push_str(&path_str);
             },
             1 => self.tool_file.push_str(arr[0].path().to_str().unwrap_or_default()),
-            _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("../ have too many {}", SUPPORT_TOOL))),
+            _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("../ have too many {}", SUPPORT_TOOL)).into()),
         };
         Ok(())
     }

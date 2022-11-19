@@ -1,21 +1,16 @@
 use std::process::exit;
 use upatch_build::upatch::UpatchBuild;
-use upatch_build::arg::Arg;
 
 fn main() {
-    let mut args = Arg::new();
-    args.read();
-
-    let mut upatch = UpatchBuild::new(args);
-    // TODO build UpatchError
+    let mut upatch = UpatchBuild::new();
     match upatch.run(){
-        Ok(()) => {
+        Ok(_) => {
             println!("SUCCESS!");
             exit(0);
         },
         Err(e) => {
-            eprintln!("ERROR: {}", e);
-            exit(-1);
+            eprintln!("ERROR {}: {}", e.code(), e);
+            exit(e.code());
         },
     }
 }
