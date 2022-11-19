@@ -10,6 +10,12 @@ pub enum PackageType {
     BinaryPackage,
 }
 
+impl std::fmt::Display for PackageType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
+}
+
 #[derive(Debug)]
 pub struct PackageInfo {
     name:    String,
@@ -24,16 +30,8 @@ impl PackageInfo {
         &self.name
     }
 
-    pub fn set_name(&mut self, value: String) {
-        self.name = value;
-    }
-
     pub fn get_version(&self) -> &str {
         &self.version
-    }
-
-    pub fn set_version(&mut self, value: String) {
-        self.version = value;
     }
 
     pub fn get_release(&self) -> &str {
@@ -48,29 +46,17 @@ impl PackageInfo {
         &self.license
     }
 
-    pub fn set_license(&mut self, value: String) {
-        self.license = value;
-    }
-
     pub fn get_type(&self) -> PackageType {
         self.kind
-    }
-
-    pub fn set_type(&mut self, value: PackageType) {
-        self.kind = value;
     }
 }
 
 impl PackageInfo {
-    pub fn read_from_package(pkg_path: &str) -> std::io::Result<Self> {
-        RpmHelper::query_package_info(
+    pub fn parse_from(pkg_path: &str) -> std::io::Result<Self> {
+        Ok(RpmHelper::query_package_info(
             pkg_path,
-            "%{NAME}-%{VERSION}-%{RELEASE}-%{LICENSE}-%{SOURCERPM}"
-        )?.parse()
-    }
-
-    pub fn is_kernel_package(&self) -> bool {
-        self.get_name() == KERNEL_PKG_NAME
+            "%{NAME}|%{VERSION}|%{RELEASE}|%{LICENSE}|%{SOURCERPM}"
+        )?.parse::<PackageInfo>()?)
     }
 }
 
@@ -78,7 +64,7 @@ impl std::str::FromStr for PackageInfo {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let pkg_info = s.split(PKG_NAME_SPLITER).collect::<Vec<&str>>();
+        let pkg_info = s.split('|').collect::<Vec<&str>>();
         if pkg_info.len() < 5 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -98,5 +84,17 @@ impl std::str::FromStr for PackageInfo {
         };
 
         Ok(Self { name, version, release, license, kind })
+    }
+}
+
+impl std::fmt::Display for PackageInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("name:    {}\n", self.get_name()))?;
+        f.write_fmt(format_args!("type:    {}\n", self.get_type()))?;
+        f.write_fmt(format_args!("version: {}\n", self.get_version()))?;
+        f.write_fmt(format_args!("release: {}\n", self.get_release()))?;
+        f.write_fmt(format_args!("license: {}",   self.get_license()))?;
+
+        Ok(())
     }
 }

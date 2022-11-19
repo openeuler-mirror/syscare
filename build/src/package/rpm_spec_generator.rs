@@ -17,8 +17,8 @@ impl RpmSpecGenerator {
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         let patch_name = Self::get_patch_name(patch_info);
         match patch_info.get_target() {
-            Some(target_name) => format!("{}-{}-{}", target_name, PKG_FLAG_PATCH_BINARY_PKG, patch_name),
-            None              => format!("{}-{}",    PKG_FLAG_PATCH_BINARY_PKG, patch_name),
+            Some(target_name) => format!("{}-{}-{}", target_name, PKG_FLAG_PATCH_PKG, patch_name),
+            None              => format!("{}-{}",    PKG_FLAG_PATCH_PKG, patch_name),
         }
     }
 

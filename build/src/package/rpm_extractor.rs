@@ -1,21 +1,25 @@
 use crate::constants::*;
-use crate::util::fs;
 
-use super::rpm_buildroot::RpmBuildRoot;
+use super::{PackageInfo, PackageType, RpmBuilder, RpmHelper};
 
 pub struct RpmExtractor;
 
 impl RpmExtractor {
-    fn install_package(pkg_path: &str, root_path: &str) -> std::io::Result<()> {
+    fn install_package(pkg_path: &str, output_dir: &str) -> std::io::Result<()> {
         let exit_status = RPM.execvp([
             "--install",
             "--nodeps",
+            "--nofiledigest",
+            "--nocontexts",
+            "--nocaps",
+            "--noscripts",
+            "--notriggers",
             "--allfiles",
-            "--root", root_path,
+            "--root", output_dir,
             pkg_path
         ])?;
-        let exit_code = exit_status.exit_code();
 
+        let exit_code = exit_status.exit_code();
         if exit_code != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
@@ -26,36 +30,22 @@ impl RpmExtractor {
         Ok(())
     }
 
-    fn patch_package_source(build_root: &RpmBuildRoot) -> std::io::Result<()> {
-        let spec_file_path = build_root.find_spec_file()?;
-        let exit_status = RPM_BUILD.execvp([
-            "--define", &format!("_topdir {}", build_root),
-            "-bp", &spec_file_path
-        ])?;
-
-        let exit_code = exit_status.exit_code();
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Process '{}' exited unsuccessfully, exit code: {}", RPM_BUILD, exit_code),
-            ));
-        }
-
-        Ok(())
+    fn apply_patch(output_dir: &str) -> std::io::Result<()> {
+        RpmBuilder::new(
+            RpmHelper::find_build_root(
+                output_dir
+            )?
+        ).build_prepare()
     }
 
-    pub fn extract_package(pkg_path: &str, output_dir: &str) -> std::io::Result<RpmBuildRoot> {
-        fs::check_file(pkg_path)?;
-        fs::check_dir(output_dir)?;
-
+    pub fn extract_package(pkg_path: &str, output_dir: &str) -> std::io::Result<PackageInfo> {
         Self::install_package(pkg_path, output_dir)?;
 
-        let rpm_buildroot = RpmBuildRoot::new(&fs::stringtify(
-            fs::find_directory(output_dir, "rpmbuild", false, true)?
-        ));
+        let pkg_info = PackageInfo::parse_from(pkg_path)?;
+        if pkg_info.get_type() == PackageType::SourcePackage {
+            Self::apply_patch(output_dir)?;
+        }
 
-        Self::patch_package_source(&rpm_buildroot)?;
-
-        Ok(rpm_buildroot)
+        Ok(pkg_info)
     }
 }
