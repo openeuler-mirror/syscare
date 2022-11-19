@@ -23,72 +23,84 @@ impl PatchBuildCLI {
         }
     }
 
+    fn check_input_arguments(&self) -> std::io::Result<()> {
+        let args = &self.cli_args;
+
+        if args.name.contains('-') {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Patch name should not contain '-' character"),
+            ));
+        }
+
+        fs::check_file(&args.source)?;
+        fs::check_file(&args.debuginfo)?;
+        fs::check_dir(&args.work_dir)?;
+        fs::check_dir(&args.output_dir)?;
+        for patch in &args.patches {
+            fs::check_file(patch.as_str())?;
+        }
+
+        Ok(())
+    }
+
     fn canonicalize_arguments(&mut self) -> std::io::Result<()> {
         let args = &mut self.cli_args;
 
-        fs::check_file(&args.source)?;
-        args.source = fs::stringtify(fs::realpath(&args.source)?);
-
-        fs::check_file(&args.debuginfo)?;
-        args.debuginfo = fs::stringtify(fs::realpath(&args.debuginfo)?);
-
-        if let Some(pkg_path) = &args.binary {
-            fs::check_file(&args.source)?;
-            args.binary = Some(fs::stringtify(fs::realpath(pkg_path)?));
-        }
-
-        fs::check_dir(&args.work_dir)?;
-        args.work_dir = fs::stringtify(fs::realpath(&args.work_dir)?);
-
-        fs::check_dir(&args.output_dir)?;
+        args.source     = fs::stringtify(fs::realpath(&args.source)?);
+        args.debuginfo  = fs::stringtify(fs::realpath(&args.debuginfo)?);
+        args.work_dir   = fs::stringtify(fs::realpath(&args.work_dir)?);
         args.output_dir = fs::stringtify(fs::realpath(&args.output_dir)?);
-
         for patch in &mut args.patches {
-            fs::check_file(patch.as_str())?;
             *patch = fs::stringtify(fs::realpath(patch.as_str())?);
         }
 
         Ok(())
     }
 
-    fn extract_source_package(&self) -> std::io::Result<PackageInfo> {
+    fn extract_packages(&self) -> std::io::Result<PackageInfo> {
         println!("Extracting source package");
-
-        let pkg_path   = &self.cli_args.source;
-        let output_dir = self.work_dir.package_root().source_pkg_dir();
-
-        let pkg_info = RpmExtractor::extract_package(pkg_path, output_dir)?;
-        if pkg_info.get_type() != PackageType::SourcePackage {
+        let src_pkg_info = RpmExtractor::extract_package(
+            &self.cli_args.source,
+            self.work_dir.package_root().source_pkg_dir(),
+        )?;
+        if src_pkg_info.get_type() != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a source package", pkg_path),
+                format!("File '{}' is not a source package", src_pkg_info),
             ));
         }
-
         println!("------------------------------");
-        println!("{}", pkg_info);
+        println!("{}", src_pkg_info);
         println!("------------------------------\n");
-        Ok(pkg_info)
-    }
 
-    fn extract_debug_package(&self) -> std::io::Result<()> {
         println!("Extracting debuginfo package");
-
-        let pkg_path   = &self.cli_args.debuginfo;
-        let output_dir = self.work_dir.package_root().debug_pkg_dir();
-
-        let pkg_info = RpmExtractor::extract_package(pkg_path, output_dir)?;
-        if pkg_info.get_type() != PackageType::BinaryPackage {
+        let dbg_pkg_info = RpmExtractor::extract_package(
+            &self.cli_args.debuginfo,
+            self.work_dir.package_root().debug_pkg_dir()
+        )?;
+        if dbg_pkg_info.get_type() != PackageType::BinaryPackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a debuginfo package", pkg_path),
+                format!("File '{}' is not a debuginfo package", dbg_pkg_info),
+            ));
+        }
+        println!("------------------------------");
+        println!("{}", dbg_pkg_info);
+        println!("------------------------------\n");
+
+        let src_pkg_name = src_pkg_info.get_name();
+        let src_pkg_ver  = src_pkg_info.get_version();
+        let dbg_pkg_name = dbg_pkg_info.get_name();
+        let dbg_pkg_ver  = dbg_pkg_info.get_version();
+        if !dbg_pkg_name.contains(src_pkg_name) || (src_pkg_ver != dbg_pkg_ver) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Debuginfo package does not match the source package"),
             ));
         }
 
-        println!("------------------------------");
-        println!("{}", pkg_info);
-        println!("------------------------------\n");
-        Ok(())
+        Ok(src_pkg_info)
     }
 
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
@@ -232,17 +244,17 @@ impl PatchBuildCLI {
     }
 
     pub fn run(&mut self) {
+        self.check_input_arguments()
+            .expect("Check arguments failed");
+
         self.canonicalize_arguments()
             .expect("Check arguments failed");
 
         self.work_dir.create(&self.cli_args.work_dir)
             .expect("Create working directory failed");
 
-        let pkg_info = self.extract_source_package()
-            .expect("Extract source package failed");
-
-        self.extract_debug_package()
-            .expect("Extract source package failed");
+        let pkg_info = self.extract_packages()
+            .expect("Extract packages failed");
 
         self.complete_build_arguments(&pkg_info)
             .expect("Complete build arguments failed");
