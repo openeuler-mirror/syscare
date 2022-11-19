@@ -37,7 +37,7 @@ impl RpmBuilder {
         )?;
         fs::write_string_to_file(
             target_file_path,
-            patch_info.get_target().unwrap().to_string().as_str()
+            patch_info.get_target().to_string().as_str()
         )?;
 
         Ok(())

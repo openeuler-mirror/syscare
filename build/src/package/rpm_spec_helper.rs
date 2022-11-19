@@ -15,7 +15,7 @@ impl RpmSpecHelper {
         let (line_num, orig_tag) = release_tag;
 
         let patch  = patch_info.get_patch();
-        let target = patch_info.get_target().unwrap();
+        let target = patch_info.get_target();
 
         let tag_name  = orig_tag.get_name().to_string();
         let tag_value = format!("{}.{}.{}.{}.{}",

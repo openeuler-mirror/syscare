@@ -176,12 +176,13 @@ impl PatchFile {
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct PatchInfo {
-    patch:      PatchName,
-    summary:    String,
-    patch_type: PatchType,
-    license:    String,
-    target:     Option<PatchName>,
-    file_list:  Vec<PatchFile>,
+    patch:           PatchName,
+    summary:         String,
+    patch_type:      PatchType,
+    license:         String,
+    target:          PatchName,
+    target_elf_name: String,
+    file_list:       Vec<PatchFile>,
 }
 
 impl PatchInfo {
@@ -201,8 +202,12 @@ impl PatchInfo {
         &self.license
     }
 
-    pub fn get_target(&self) -> Option<&PatchName> {
-        self.target.as_ref()
+    pub fn get_target(&self) -> &PatchName {
+        &self.target
+    }
+
+    pub fn get_target_elf_name(&self) -> &str {
+        &self.target_elf_name
     }
 
     pub fn get_file_list(&self) -> &[PatchFile] {
@@ -231,17 +236,23 @@ impl PatchInfo {
     }
 
     fn parse_license(args: &CliArguments) -> String {
-        let license: Option<&str> = args.target_license.as_deref();
-        license.unwrap_or(PATCH_UNDEFINED_VALUE).to_owned()
+        args.target_license.as_ref()
+            .expect("Parse target license failed")
+            .to_owned()
     }
 
-    fn parse_target(args: &CliArguments) -> Option<PatchName> {
-        match (args.target_name.clone(), args.target_version.clone(), args.target_release.clone()) {
-            (Some(name), Some(version), Some(release)) => {
-                Some(PatchName { name, version, release })
-            },
-            _ => None
+    fn parse_target(args: &CliArguments) -> PatchName {
+        PatchName {
+            name:    args.target_name.as_ref().expect("Parse target name failed").to_owned(),
+            version: args.target_version.as_ref().expect("Parse target version failed").to_owned(),
+            release: args.target_release.as_ref().expect("Parse target release failed").to_owned(),
         }
+    }
+
+    fn parse_target_elf_name(args: &CliArguments) -> String {
+        args.target_elf_name.as_ref()
+            .expect("Parse target elf name failed")
+            .to_owned()
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
@@ -258,29 +269,27 @@ impl PatchInfo {
 
     pub fn parse_from(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
         Ok(PatchInfo {
-            patch:      Self::parse_patch(args)?,
-            patch_type: Self::parse_patch_type(pkg_info),
-            target:     Self::parse_target(args),
-            license:    Self::parse_license(args),
-            summary:    Self::parse_summary(args),
-            file_list:  Self::parse_file_list(args)?
+            patch:           Self::parse_patch(args)?,
+            patch_type:      Self::parse_patch_type(pkg_info),
+            target:          Self::parse_target(args),
+            target_elf_name: Self::parse_target_elf_name(args),
+            license:         Self::parse_license(args),
+            summary:         Self::parse_summary(args),
+            file_list:       Self::parse_file_list(args)?
         })
     }
 }
 
 impl std::fmt::Display for PatchInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let patch_target = self.get_target()
-            .map(PatchName::to_string)
-            .unwrap_or(PATCH_UNDEFINED_VALUE.to_string());
-
-        f.write_fmt(format_args!("name:    {}\n", self.get_patch().get_name()))?;
-        f.write_fmt(format_args!("summary: {}\n", self.get_summary()))?;
-        f.write_fmt(format_args!("type:    {}\n", self.get_patch_type()))?;
-        f.write_fmt(format_args!("version: {}\n", self.get_patch().get_version()))?;
-        f.write_fmt(format_args!("release: {}\n", self.get_patch().get_release()))?;
-        f.write_fmt(format_args!("license: {}\n", self.get_license()))?;
-        f.write_fmt(format_args!("target:  {}\n", patch_target))?;
+        f.write_fmt(format_args!("name:     {}\n", self.get_patch().get_name()))?;
+        f.write_fmt(format_args!("summary:  {}\n", self.get_summary()))?;
+        f.write_fmt(format_args!("type:     {}\n", self.get_patch_type()))?;
+        f.write_fmt(format_args!("version:  {}\n", self.get_patch().get_version()))?;
+        f.write_fmt(format_args!("release:  {}\n", self.get_patch().get_release()))?;
+        f.write_fmt(format_args!("license:  {}\n", self.get_license()))?;
+        f.write_fmt(format_args!("target:   {}\n", self.get_target()))?;
+        f.write_fmt(format_args!("elf_name: {}\n", self.get_target_elf_name()))?;
         f.write_str("\npatch list:")?;
         for patch_file in self.get_file_list() {
             f.write_fmt(format_args!("\n{} {}", patch_file.get_name(), patch_file.get_digest()))?;

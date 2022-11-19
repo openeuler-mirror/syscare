@@ -15,18 +15,21 @@ impl RpmSpecGenerator {
 
     #[inline(always)]
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
-        let patch_name = Self::get_patch_name(patch_info);
-        match patch_info.get_target() {
-            Some(target_name) => format!("{}-{}-{}", target_name, PKG_FLAG_PATCH_PKG, patch_name),
-            None              => format!("{}-{}",    PKG_FLAG_PATCH_PKG, patch_name),
-        }
+        let patch_target = patch_info.get_target();
+        let patch_name   = Self::get_patch_name(patch_info);
+
+        format!("{}-{}-{}", patch_target, PKG_FLAG_PATCH_PKG, patch_name)
     }
 
     #[inline(always)]
-    fn parse_build_requires(patch_info: &PatchInfo) -> Option<String> {
-        patch_info.get_target().map(|version| {
-            format!("{} = {}-{}", version.get_name(), version.get_version(), version.get_release())
-        })
+    fn parse_build_requires(patch_info: &PatchInfo) -> String {
+        let patch_target = patch_info.get_target();
+
+        format!("{} = {}-{}",
+            patch_target.get_name(),
+            patch_target.get_version(),
+            patch_target.get_release()
+        )
     }
 
     #[inline(always)]
@@ -41,15 +44,13 @@ impl RpmSpecGenerator {
             .collect::<Vec<_>>();
         let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::get_patch_name(patch_info));
 
-        writeln!(writer, "Name:    {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "Version: {}", patch_info.get_patch().get_version())?;
-        writeln!(writer, "Release: {}", patch_info.get_patch().get_release())?;
-        writeln!(writer, "Group:   {}", PKG_SPEC_TAG_VALUE_GROUP)?;
-        writeln!(writer, "License: {}", patch_info.get_license())?;
-        writeln!(writer, "Summary: {}", patch_info.get_summary())?;
-        if let Some(requirement) = Self::parse_build_requires(patch_info) {
-            writeln!(writer, "Requires: {}", requirement)?;
-        }
+        writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
+        writeln!(writer, "Version:  {}", patch_info.get_patch().get_version())?;
+        writeln!(writer, "Release:  {}", patch_info.get_patch().get_release())?;
+        writeln!(writer, "Group:    {}", PKG_SPEC_TAG_VALUE_GROUP)?;
+        writeln!(writer, "License:  {}", patch_info.get_license())?;
+        writeln!(writer, "Summary:  {}", patch_info.get_summary())?;
+        writeln!(writer, "Requires: {}", Self::parse_build_requires(patch_info))?;
         let mut file_index = 0usize;
         for file_name in &pkg_file_list {
             writeln!(writer, "Source{}: {}", file_index, file_name)?;
