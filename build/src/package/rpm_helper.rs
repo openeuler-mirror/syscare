@@ -46,7 +46,7 @@ impl RpmHelper {
 
     pub fn find_source_directory(directory: &str, patch_info: &PatchInfo) -> std::io::Result<String> {
         let search_name = match patch_info.get_patch_type() {
-            PatchType::UserPatch   => patch_info.get_patch().get_name(),
+            PatchType::UserPatch   => patch_info.get_target().get_name(),
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 
