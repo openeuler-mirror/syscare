@@ -2,7 +2,7 @@ use crate::cmd::ExternCommand;
 
 // CLI defaults
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
-pub const CLI_DEFAULT_PATCH_SUMMARY:       &str = "Syscare Patch";
+pub const CLI_DEFAULT_PATCH_SUMMARY:       &str = "syscare patch";
 pub const CLI_DEFAULT_WORK_DIR:            &str = ".";
 pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
@@ -15,21 +15,19 @@ pub const KPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/kpatch-buil
 pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/upatch-build");
 
 // Patch
-pub const PATCH_NAME_SPLITER:    char  = '-';
 pub const PATCH_FILE_EXTENSION:  &str  = "patch";
 pub const PATCH_FILE_PERMISSION: &str  = "640";
 pub const PATCH_DIR_PERMISSION:  &str  = "750";
 pub const PATCH_INSTALL_PATH:    &str  = "/usr/lib/syscare/patches";
-pub const PATCH_UNDEFINED_VALUE: &str  = "Undefined";
+pub const PATCH_UNDEFINED_VALUE: &str  = "undefined";
 pub const PATCH_INFO_FILE_NAME:  &str  = "patch_info";
 pub const PATCH_VERSION_DIGITS:  usize = 8;
 
 // Package
-pub const PKG_NAME_SPLITER:                 char = '-';
+pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
 pub const PKG_FILE_EXTENSION:               &str = "rpm";
+pub const PKG_FLAG_PATCH_PKG:               &str = "patch";
 pub const PKG_FLAG_SOURCE_PKG:              &str = "(none)";
-pub const PKG_FLAG_PATCH_BINARY_PKG:        &str = "patch";
-pub const PKG_FLAG_PATCHED_SOURCE_PKG:      &str = "patched";
 pub const PKG_PATCH_VERSION_FILE_NAME:      &str = "syscare-patch-version";
 pub const PKG_PATCH_TARGET_FILE_NAME:       &str = "syscare-patch-target";
 pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";
