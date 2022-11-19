@@ -32,19 +32,12 @@ pub struct UpatchBuild {
 
 impl UpatchBuild {
     pub fn new() -> Self {
-        #![allow(deprecated)]
-        let base = String::from(env::home_dir().unwrap().to_str().unwrap()); // home_dir() don't support BSD system
-        let cache_dir = base.clone() + "/.upatch";
-        let source_dir = cache_dir.clone() + "/source";
-        let patch_dir = cache_dir.clone() + "/patch";
-        let output_dir = cache_dir.clone() + "/output";
-        let log_file = cache_dir.clone() + "/buildlog";
         Self {
-            cache_dir,
-            source_dir,
-            patch_dir,
-            output_dir,
-            log_file,
+            cache_dir: String::new(),
+            source_dir: String::new(),
+            patch_dir: String::new(),
+            output_dir: String::new(),
+            log_file: String::new(),
             args: Arg::new(),
             tool_file: String::new(),
         }
@@ -56,8 +49,11 @@ impl UpatchBuild {
         // create .upatch directory
         self.create_dir()?;
 
-        if self.args.output_file.is_empty() {
-            self.args.output_file.push_str(&(self.cache_dir.clone() + "/result"));
+        if self.args.patch_name.is_empty() {
+            self.args.patch_name.push_str(&self.args.elf_name);
+        }
+        if self.args.output.is_empty() {
+            self.args.output.push_str(&self.cache_dir);
         }
 
         // check mod
@@ -69,7 +65,9 @@ impl UpatchBuild {
         // check compiler
         let mut compiler = Compiler::new(self.args.compiler_file.clone());
         compiler.analyze()?;
-        compiler.check_version(&self.cache_dir, &self.args.debug_info)?;
+        if !self.args.skip_compiler_check {
+            compiler.check_version(&self.cache_dir, &self.args.debug_info)?;
+        }
 
         // copy source
         let dest = Path::new(&self.cache_dir);
@@ -82,11 +80,9 @@ impl UpatchBuild {
         compiler.hack()?;
 
         // build source
-        let build_file = &Path::new(&self.args.build_file).file_name().unwrap().to_str().unwrap();
-
         println!("Building original {}", project_name.to_str().unwrap());
-        let project = Project::new(dest.to_str().unwrap().to_string(), build_file.to_string());
-        project.build(CMD_SOURCE_ENTER, &self.source_dir)?;
+        let project = Project::new(dest.to_str().unwrap().to_string(), self.args.build_command.clone(), self.args.rpmbuild);
+        project.build(CMD_SOURCE_ENTER, &self.source_dir, false)?;
 
         // build patch
         for patch in &self.args.diff_file {
@@ -95,7 +91,7 @@ impl UpatchBuild {
         }
 
         println!("Building patched {}", project_name.to_str().unwrap());
-        project.build(CMD_PATCHED_ENTER, &self.patch_dir)?;
+        project.build(CMD_PATCHED_ENTER, &self.patch_dir, true)?;
 
         // unhack compiler
         println!("Unhacking compiler");
@@ -111,22 +107,36 @@ impl UpatchBuild {
         self.correlate_obj(&dwarf, dest.to_str().unwrap(), &self.patch_dir, &mut patch_obj)?;
 
         // choose the binary's obj to create upatch file
-        let binary = &Path::new(&self.args.debug_info).file_name().unwrap().to_str().unwrap();
-        let binary_obj = dwarf.file_in_binary(dest.to_str().unwrap().to_string(), binary.to_string())?;
+        let binary_obj = dwarf.file_in_binary(dest.to_str().unwrap().to_string(), self.args.elf_name.clone())?;
         self.correlate_diff(&source_obj, &patch_obj, &binary_obj)?;
 
         // clear source
         fs::remove_dir_all(&dest)?;
 
         // ld patchs
-        compiler.linker(&self.output_dir, &self.args.output_file)?;
-        println!("Building patch: {}", &self.args.output_file);
+        let output_file = &format!("{}/{}", &self.args.output, &self.args.patch_name);
+        compiler.linker(&self.output_dir, output_file)?;
+        println!("Building patch: {}", output_file);
         Ok(())
     }
 }
 
 impl UpatchBuild {
-    fn create_dir(&self) -> Result<()> {
+    fn create_dir(&mut self) -> Result<()> {
+        #![allow(deprecated)]
+        if self.args.work_dir.is_empty(){
+            // home_dir() don't support BSD system
+            self.cache_dir.push_str(&format!("{}/{}", env::home_dir().unwrap().to_str().unwrap(), ".upatch"));
+        }
+        else{
+            self.cache_dir.push_str(&self.args.work_dir);
+        }
+
+        self.source_dir.push_str(&format!("{}/{}", &self.cache_dir, "source"));
+        self.patch_dir.push_str(&format!("{}/{}", &self.cache_dir, "patch"));
+        self.output_dir.push_str(&format!("{}/{}", &self.cache_dir, "output"));
+        self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "buildlog"));
+
         if Path::new(&self.cache_dir).is_dir() {
             fs::remove_dir_all(self.cache_dir.clone())?;
         }
