@@ -1,11 +1,22 @@
+# Direction
+build/target/
+
 # Prerequisites
 *.d
+*.rpm
+*.log
+*.lock
 
 # Compiled Object files
 *.slo
 *.lo
 *.o
 *.obj
+*.cmd
+*.ko
+*.mod.c
+*.symvers
+*.order
 
 # Precompiled Headers
 *.gch
