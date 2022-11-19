@@ -3,22 +3,20 @@ use clap::Parser;
 use crate::constants::*;
 use crate::util::sys;
 
-use super::CliPath;
-
 #[derive(Parser, Debug)]
-#[command(author, version, about="Syscare patch build utility")]
+#[command(author, about="Syscare patch build utility")]
 pub struct CliArguments {
     /// Patch name
     #[arg(short='n', long)]
-    pub patch_name: String,
+    pub name: String,
 
     /// Patch version
     #[arg(long, default_value=CLI_DEFAULT_PATCH_VERSION)]
-    pub patch_version: String,
+    pub version: String,
 
     /// Patch summary
     #[arg(long, default_value=CLI_DEFAULT_PATCH_SUMMARY)]
-    pub patch_summary: String,
+    pub summary: String,
 
     /// Patch target name
     #[arg(long)]
@@ -32,17 +30,25 @@ pub struct CliArguments {
     #[arg(long)]
     pub target_release: Option<String>,
 
+    /// Patch target executable name
+    #[arg(short, long)]
+    pub target_elf_name: Option<String>,
+
     /// Patch target license
     #[arg(long)]
     pub target_license: Option<String>,
 
-    /// Source directory or source package
+    /// source package
     #[arg(short, long)]
-    pub source: CliPath,
+    pub source: String,
 
-    /// Debug info (vmlinux for kernel)
+    /// Debuginfo package
     #[arg(short, long)]
-    pub debug_info: Option<String>,
+    pub debuginfo: String,
+
+    /// Binary package
+    #[arg(short, long)]
+    pub binary: Option<String>,
 
     /// Working directory
     #[arg(long, default_value=CLI_DEFAULT_WORK_DIR)]
@@ -52,29 +58,9 @@ pub struct CliArguments {
     #[arg(short, long, default_value=CLI_DEFAULT_OUTPUT_DIR)]
     pub output_dir: String,
 
-    /// Kernel make config file
-    #[arg(short, long)]
-    pub kconfig: Option<String>,
-
     /// Kernel make jobs
     #[arg(long, value_name="N", default_value=Self::get_default_kjobs())]
     pub kjobs: usize,
-
-    // /// Kernel make targets, split by ','
-    // #[arg(long, value_delimiter=',')]
-    // pub ktarget: Option<Vec<String>>,
-
-    // /// Kernel module make directory
-    // #[arg(long)]
-    // pub kmod_dir: Option<String>,
-
-    // /// Kernel module make flags
-    // #[arg(long)]
-    // pub kmod_flag: Option<String>,
-
-    /// User build command
-    #[arg(short, long)]
-    pub build_entry: Option<String>,
 
     /// Skip compiler version check (not recommended)
     #[arg(long, default_value=CLI_DEFAULT_SKIP_COMPILER_CHECK)]
