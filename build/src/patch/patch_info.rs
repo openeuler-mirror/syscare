@@ -5,6 +5,7 @@ use std::sync::Mutex;
 use lazy_static::*;
 
 use crate::constants::*;
+use crate::package::PackageInfo;
 use crate::util::fs;
 
 use crate::cli::CliArguments;
@@ -41,7 +42,7 @@ impl std::str::FromStr for PatchName {
     type Err = std::io::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let str_slice = s.split(PKG_NAME_SPLITER).collect::<Vec<&str>>();
+        let str_slice = s.split('-').collect::<Vec<&str>>();
         if str_slice.len() != 3 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
@@ -129,7 +130,7 @@ impl PatchFile {
 
     pub fn validate_naming_rule(file_name: &str) -> bool {
         // Patch file naming rule: ${patch_id}-${patch_name}.patch
-        let file_name_slice = file_name.split(PATCH_NAME_SPLITER).collect::<Vec<_>>();
+        let file_name_slice = file_name.split('-').collect::<Vec<_>>();
         if file_name_slice.len() < 2 {
             return false;
         }
@@ -176,10 +177,10 @@ impl PatchFile {
 #[derive(Debug)]
 pub struct PatchInfo {
     patch:      PatchName,
-    patch_type: PatchType,
-    target:     Option<PatchName>,
-    license:    String,
     summary:    String,
+    patch_type: PatchType,
+    license:    String,
+    target:     Option<PatchName>,
     file_list:  Vec<PatchFile>,
 }
 
@@ -188,8 +189,16 @@ impl PatchInfo {
         &self.patch
     }
 
+    pub fn get_summary(&self) -> &str {
+        &self.summary
+    }
+
     pub fn get_patch_type(&self) -> PatchType {
         self.patch_type
+    }
+
+    pub fn get_license(&self) -> &str {
+        &self.license
     }
 
     pub fn get_target(&self) -> Option<&PatchName> {
@@ -199,37 +208,31 @@ impl PatchInfo {
     pub fn get_file_list(&self) -> &[PatchFile] {
         self.file_list.as_slice()
     }
-
-    pub fn get_license(&self) -> &str {
-        &self.license
-    }
-
-    pub fn get_summary(&self) -> &str {
-        &self.summary
-    }
 }
 
 impl PatchInfo {
     fn parse_patch(args: &CliArguments) -> std::io::Result<PatchName> {
         Ok(PatchName {
-            name:    args.patch_name.to_owned(),
-            version: args.patch_version.to_owned(),
+            name:    args.name.to_owned(),
+            version: args.version.to_owned(),
             release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
         })
     }
 
-    fn parse_patch_type(args: &CliArguments) -> PatchType {
-        let find_result = fs::find_file(
-            args.source.to_string(),
-            KERNEL_SOURCE_DIR_FLAG,
-            false,
-            false,
-        );
+    fn parse_summary(args: &CliArguments) -> String {
+        args.summary.to_owned()
+    }
 
-        match find_result.is_ok() {
+    fn parse_patch_type(pkg_info: &PackageInfo) -> PatchType {
+        match pkg_info.get_name() == KERNEL_PKG_NAME {
             true  => PatchType::KernelPatch,
             false => PatchType::UserPatch,
         }
+    }
+
+    fn parse_license(args: &CliArguments) -> String {
+        let license: Option<&str> = args.target_license.as_deref();
+        license.unwrap_or(PATCH_UNDEFINED_VALUE).to_owned()
     }
 
     fn parse_target(args: &CliArguments) -> Option<PatchName> {
@@ -239,15 +242,6 @@ impl PatchInfo {
             },
             _ => None
         }
-    }
-
-    fn parse_license(args: &CliArguments) -> String {
-        let license: Option<&str> = args.target_license.as_deref();
-        license.unwrap_or(PATCH_UNDEFINED_VALUE).to_owned()
-    }
-
-    fn parse_summary(args: &CliArguments) -> String {
-        args.patch_summary.to_owned()
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
@@ -261,6 +255,17 @@ impl PatchInfo {
 
         Ok(patch_file_list)
     }
+
+    pub fn parse_from(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
+        Ok(PatchInfo {
+            patch:      Self::parse_patch(args)?,
+            patch_type: Self::parse_patch_type(pkg_info),
+            target:     Self::parse_target(args),
+            license:    Self::parse_license(args),
+            summary:    Self::parse_summary(args),
+            file_list:  Self::parse_file_list(args)?
+        })
+    }
 }
 
 impl std::fmt::Display for PatchInfo {
@@ -269,8 +274,8 @@ impl std::fmt::Display for PatchInfo {
             .map(PatchName::to_string)
             .unwrap_or(PATCH_UNDEFINED_VALUE.to_string());
 
-        f.write_fmt(format_args!("{}\n\n",        self.get_summary()))?;
         f.write_fmt(format_args!("name:    {}\n", self.get_patch().get_name()))?;
+        f.write_fmt(format_args!("summary: {}\n", self.get_summary()))?;
         f.write_fmt(format_args!("type:    {}\n", self.get_patch_type()))?;
         f.write_fmt(format_args!("version: {}\n", self.get_patch().get_version()))?;
         f.write_fmt(format_args!("release: {}\n", self.get_patch().get_release()))?;
@@ -282,20 +287,5 @@ impl std::fmt::Display for PatchInfo {
         }
 
         Ok(())
-    }
-}
-
-impl TryFrom<&CliArguments> for PatchInfo {
-    type Error = std::io::Error;
-
-    fn try_from(args: &CliArguments) -> Result<Self, Self::Error> {
-        Ok(PatchInfo {
-            patch:      Self::parse_patch(args)?,
-            patch_type: Self::parse_patch_type(args),
-            target:     Self::parse_target(args),
-            license:    Self::parse_license(args),
-            summary:    Self::parse_summary(args),
-            file_list:  Self::parse_file_list(args)?
-        })
     }
 }
