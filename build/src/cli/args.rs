@@ -46,10 +46,6 @@ pub struct CliArguments {
     #[arg(short, long)]
     pub debuginfo: String,
 
-    /// Binary package
-    #[arg(short, long)]
-    pub binary: Option<String>,
-
     /// Working directory
     #[arg(long, default_value=CLI_DEFAULT_WORK_DIR)]
     pub work_dir: String,

@@ -91,27 +91,6 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn extract_binary_package(&self) -> std::io::Result<()> {
-        if let Some(pkg_path) = &self.cli_args.binary {
-            println!("Extracting binary package");
-
-            let output_dir = self.work_dir.package_root().binary_pkg_dir();
-
-            let pkg_info = RpmExtractor::extract_package(pkg_path, output_dir)?;
-            if pkg_info.get_type() != PackageType::BinaryPackage {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("File '{}' is not a binary package", pkg_path),
-                ));
-            }
-
-            println!("------------------------------");
-            println!("{}", pkg_info);
-            println!("------------------------------\n");
-        }
-        Ok(())
-    }
-
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
         println!("Collecting patch info");
 
@@ -125,9 +104,14 @@ impl PatchBuildCLI {
 
     fn complete_build_arguments(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
         let mut args = &mut self.cli_args;
-        let source_pkg_dir = self.work_dir.package_root().source_pkg_dir();
+
+        // If the source package is kernel, append target elf name 'vmlinux' to arguments
+        if pkg_info.get_name() == KERNEL_PKG_NAME {
+            args.target_elf_name.get_or_insert(KERNEL_FILE_NAME.to_owned());
+        }
 
         // Find source directory from extracted package root
+        let source_pkg_dir = self.work_dir.package_root().source_pkg_dir();
         let pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let pkg_source_dir = pkg_build_root.sources_dir();
 
@@ -180,29 +164,24 @@ impl PatchBuildCLI {
     fn check_build_arguments(&self) -> std::io::Result<()> {
         let args = &self.cli_args;
 
-        match args.target_name {
-            Some(_) => {
-                if args.target_version.is_none() {
-                    eprintln!("Warning: Patch target version is not set");
-                }
-                if args.target_release.is_none() {
-                    eprintln!("Warning: Patch target release is not set");
-                }
-            }
-            None => {
-                eprintln!("Warning: Patch target name is not set");
-                if args.target_version.is_some() {
-                    eprintln!("Warning: Ignored patch target version");
-                }
-                if args.target_release.is_some() {
-                    eprintln!("Warning: Ignored patch target release");
-                }
-            }
+        if args.target_name.is_none() || args.target_version.is_none() || args.target_release.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Patch target info is not complete"),
+            ));
+        }
+
+        if args.target_elf_name.is_none() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Patch target elf name is empty"),
+            ));
         }
 
         if args.target_license.is_none() {
             eprintln!("Warning: Patch target license is not set");
         }
+
         if args.skip_compiler_check {
             eprintln!("Warning: Skipped compiler version check");
         }
@@ -265,17 +244,14 @@ impl PatchBuildCLI {
         self.extract_debug_package()
             .expect("Extract source package failed");
 
-        self.extract_binary_package()
-            .expect("Extract source package failed");
-
         self.complete_build_arguments(&pkg_info)
             .expect("Complete build arguments failed");
 
-        let patch_info = self.collect_patch_info(&pkg_info)
-            .expect("Collect patch info failed");
-
         self.check_build_arguments()
             .expect("Check build arguments failed");
+
+        let patch_info = self.collect_patch_info(&pkg_info)
+            .expect("Collect patch info failed");
 
         self.build_patch_package(&patch_info)
             .expect("Build patch package failed");
