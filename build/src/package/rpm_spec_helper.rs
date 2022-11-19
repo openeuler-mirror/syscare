@@ -100,7 +100,7 @@ impl RpmSpecHelper {
             }
 
             // Add parsed source tag into the btree set
-            if let Some(tag) = RpmSpecParser::parse_parse_id_tag(&current_line, PKG_SPEC_TAG_NAME_SOURCE) {
+            if let Some(tag) = RpmSpecParser::parse_id_tag(&current_line, PKG_SPEC_TAG_NAME_SOURCE) {
                 source_tags.insert(tag);
                 current_line_num += 1;
                 continue;

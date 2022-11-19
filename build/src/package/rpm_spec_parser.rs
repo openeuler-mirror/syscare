@@ -93,30 +93,29 @@ impl RpmSpecParser {
         Some(RpmSpecTag::new_tag(tag_name, tag_value))
     }
 
-    pub fn parse_parse_id_tag(line: &str, tag_prefix: &str) -> Option<RpmSpecTag> {
+    pub fn parse_id_tag(line: &str, tag_prefix: &str) -> Option<RpmSpecTag> {
         if !line.contains(tag_prefix) {
             return None;
         }
 
-        let tag_info = line.split(PKG_SPEC_TAG_SPLITER).collect::<Vec<&str>>();
-        if tag_info.len() != 2 {
-            return None;
-        }
+        line.find(PKG_SPEC_TAG_SPLITER).and_then(|spliter_index| {
+            let full_tag_name  = line[..spliter_index].trim().to_string();
+            let full_tag_value = line[spliter_index + 1..].trim().to_string();
 
-        let full_tag_name = tag_info[0].trim().to_owned();
-        let source_id_idx = tag_prefix.len();
+            let tag_prefix_len = tag_prefix.len();
+            let full_tag_len   = full_tag_name.len();
+            if full_tag_len <= tag_prefix_len {
+                return None;
+            }
 
-        if full_tag_name.len() < source_id_idx {
-            return None;
-        }
+            let tag_name = tag_prefix.to_owned();
+            let tag_id   = match full_tag_name[tag_prefix_len..].parse::<usize>() {
+                Ok(id) => id,
+                Err(_) => return None,
+            };
+            let tag_value = full_tag_value.trim().to_string();
 
-        let tag_name = tag_prefix.to_owned();
-        let tag_id   = match full_tag_name[source_id_idx..].parse::<usize>() {
-            Ok(id) => id,
-            Err(_) => return None,
-        };
-        let tag_value = tag_info[1].trim().to_owned();
-
-        Some(RpmSpecTag::new_id_tag(tag_name, tag_id, tag_value))
+            return Some(RpmSpecTag::new_id_tag(tag_name, tag_id, tag_value));
+        })
     }
 }
