@@ -7,7 +7,6 @@ use std::ffi::OsStr;
 use lazy_static::*;
 
 use crate::util::sys;
-use crate::util::fs;
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -103,8 +102,6 @@ impl<'a> ExternCommand<'a> {
         I: IntoIterator<Item = S>,
         S: AsRef<OsStr>,
     {
-        fs::check_file(self.path)?;
-
         let mut command = Command::new(self.path);
         command.args(arg_list);
 
@@ -119,8 +116,6 @@ impl<'a> ExternCommand<'a> {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        fs::check_file(self.path)?;
-
         let mut command = Command::new(self.path);
         command.args(arg_list);
         command.envs(env_list);

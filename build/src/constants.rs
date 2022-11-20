@@ -8,11 +8,11 @@ pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
 
 // External commands
-pub const MAKE:         ExternCommand = ExternCommand::new("/usr/bin/make");
-pub const RPM:          ExternCommand = ExternCommand::new("/usr/bin/rpm");
-pub const RPM_BUILD:    ExternCommand = ExternCommand::new("/usr/bin/rpmbuild");
-pub const KPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/kpatch-build");
-pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/bin/upatch-build");
+pub const MAKE:         ExternCommand = ExternCommand::new("make");
+pub const RPM:          ExternCommand = ExternCommand::new("rpm");
+pub const RPM_BUILD:    ExternCommand = ExternCommand::new("rpmbuild");
+pub const KPATCH_BUILD: ExternCommand = ExternCommand::new("kpatch-build");
+pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-build");
 
 // Patch
 pub const PATCH_FILE_EXTENSION:  &str  = "patch";
