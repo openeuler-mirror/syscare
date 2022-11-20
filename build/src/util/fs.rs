@@ -6,10 +6,6 @@ use std::io::{BufRead, BufReader, Write, BufWriter};
 use sha2::Digest;
 use sha2::Sha256;
 
-pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
-    format!("{}", path.as_ref().display())
-}
-
 pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let path_ref = path.as_ref();
     if !path_ref.exists() {
@@ -272,6 +268,10 @@ pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     }
 }
 
+pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
+    format!("{}", path.as_ref().display())
+}
+
 pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     path.as_ref().canonicalize()
 }
@@ -279,11 +279,14 @@ pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
 pub fn read_file_to_string<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     self::check_file(file_path.as_ref())?;
 
-    let str = std::io::read_to_string(
-        std::fs::File::open(file_path)?
-    )?;
+    let file = std::fs::File::open(file_path)?;
 
-    Ok(str.trim().to_owned())
+    let mut file_content = String::new();
+    for read_line in BufReader::new(file).lines() {
+        file_content.push_str(read_line?.as_str());
+    }
+
+    Ok(file_content.trim().to_owned())
 }
 
 pub fn write_string_to_file<P: AsRef<Path>>(file_path: P, str: &str) -> std::io::Result<()> {
