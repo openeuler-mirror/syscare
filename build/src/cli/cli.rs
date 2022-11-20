@@ -23,8 +23,8 @@ impl PatchBuildCLI {
         }
     }
 
-    fn check_input_arguments(&self) -> std::io::Result<()> {
-        let args = &self.cli_args;
+    fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
+        let args = &mut self.cli_args;
 
         if args.name.contains('-') {
             return Err(std::io::Error::new(
@@ -33,25 +33,35 @@ impl PatchBuildCLI {
             ));
         }
 
-        fs::check_file(&args.source)?;
-        fs::check_file(&args.debuginfo)?;
-        fs::check_dir(&args.work_dir)?;
-        fs::check_dir(&args.output_dir)?;
-        for patch in &args.patches {
-            fs::check_file(patch.as_str())?;
+        if fs::file_ext(&args.source)? != PKG_FILE_EXTENSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Source should be rpm package"),
+            ));
         }
+        args.source = fs::stringtify(fs::realpath(&args.source)?);
 
-        Ok(())
-    }
+        if fs::file_ext(&args.debuginfo)? != PKG_FILE_EXTENSION {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Debuginfo should be rpm package"),
+            ));
+        }
+        args.debuginfo = fs::stringtify(fs::realpath(&args.debuginfo)?);
 
-    fn canonicalize_arguments(&mut self) -> std::io::Result<()> {
-        let args = &mut self.cli_args;
+        fs::check_dir(&args.work_dir)?;
+        args.work_dir = fs::stringtify(fs::realpath(&args.work_dir)?);
 
-        args.source     = fs::stringtify(fs::realpath(&args.source)?);
-        args.debuginfo  = fs::stringtify(fs::realpath(&args.debuginfo)?);
-        args.work_dir   = fs::stringtify(fs::realpath(&args.work_dir)?);
+        fs::check_dir(&args.output_dir)?;
         args.output_dir = fs::stringtify(fs::realpath(&args.output_dir)?);
+
         for patch in &mut args.patches {
+            if fs::file_ext(patch.as_str())? != PATCH_FILE_EXTENSION {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Patches should be patch file"),
+                ));
+            }
             *patch = fs::stringtify(fs::realpath(patch.as_str())?);
         }
 
@@ -114,7 +124,7 @@ impl PatchBuildCLI {
         Ok(patch_info)
     }
 
-    fn complete_build_arguments(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
+    fn complete_build_args(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
         let mut args = &mut self.cli_args;
 
         // If the source package is kernel, append target elf name 'vmlinux' to arguments
@@ -173,7 +183,7 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn check_build_arguments(&self) -> std::io::Result<()> {
+    fn check_build_args(&self) -> std::io::Result<()> {
         let args = &self.cli_args;
 
         if args.target_name.is_none() || args.target_version.is_none() || args.target_release.is_none() {
@@ -244,10 +254,7 @@ impl PatchBuildCLI {
     }
 
     pub fn run(&mut self) {
-        self.check_input_arguments()
-            .expect("Check arguments failed");
-
-        self.canonicalize_arguments()
+        self.check_canonicalize_input_args()
             .expect("Check arguments failed");
 
         self.work_dir.create(&self.cli_args.work_dir)
@@ -256,10 +263,10 @@ impl PatchBuildCLI {
         let pkg_info = self.extract_packages()
             .expect("Extract packages failed");
 
-        self.complete_build_arguments(&pkg_info)
+        self.complete_build_args(&pkg_info)
             .expect("Complete build arguments failed");
 
-        self.check_build_arguments()
+        self.check_build_args()
             .expect("Check build arguments failed");
 
         let patch_info = self.collect_patch_info(&pkg_info)
