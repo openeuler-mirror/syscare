@@ -18,7 +18,8 @@ pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
 const CMD_SOURCE_ENTER: &str = "SE";
 const CMD_PATCHED_ENTER: &str = "PE";
-const SUPPORT_TOOL: &str = "create-diff-object";
+const SUPPORT_TOOL: &str = "upatch-diff";
+const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
 
 pub struct UpatchBuild {
     cache_dir: String,
@@ -207,13 +208,12 @@ impl UpatchBuild {
                     .filter(|e| e.path().is_file() && (e.path().file_name() == Some(OsStr::new(SUPPORT_TOOL))))
                     .collect::<Vec<_>>();
         match arr.len() {
-            0 => {        
-                let mut path_str = String::from_utf8(Command::new("which").arg(SUPPORT_TOOL).output()?.stdout).unwrap();
-                path_str.pop();
-                if path_str.is_empty() {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", SUPPORT_TOOL)).into());
+            0 => {
+                let system_tool_str = format!("{}/{}", SYSTEM_TOOL_DIR, SUPPORT_TOOL);
+                if !Path::new(&system_tool_str).is_file() {
+                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", &system_tool_str)).into());
                 }
-                self.tool_file.push_str(&path_str);
+                self.tool_file.push_str(&system_tool_str);
             },
             1 => self.tool_file.push_str(arr[0].path().to_str().unwrap_or_default()),
             _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("../ have too many {}", SUPPORT_TOOL)).into()),

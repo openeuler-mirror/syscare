@@ -15,7 +15,7 @@ file(GLOB HOST_SRC_FILES
     *.c
 )
 
-add_executable(create-diff-object ${HOST_SRC_FILES})
-target_link_libraries(create-diff-object elf)
+add_executable(upatch-diff ${HOST_SRC_FILES})
+target_link_libraries(upatch-diff elf)
 
-install(TARGETS create-diff-object DESTINATION ${UPATCH_INSTALL_DIR})
+install(TARGETS upatch-diff DESTINATION ${UPATCH_INSTALL_DIR})
