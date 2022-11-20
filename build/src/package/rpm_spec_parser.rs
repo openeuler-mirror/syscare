@@ -1,5 +1,3 @@
-use crate::constants::*;
-
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Debug)]
 pub struct SpecTag {
@@ -9,7 +7,7 @@ pub struct SpecTag {
 
 impl std::fmt::Display for SpecTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}{} {}", self.name, PKG_SPEC_TAG_SPLITER, self.value))
+        f.write_fmt(format_args!("{}: {}", self.name, self.value))
     }
 }
 
@@ -23,7 +21,7 @@ pub struct SpecIdTag {
 
 impl std::fmt::Display for SpecIdTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}{}{} {}", self.name, self.id, PKG_SPEC_TAG_SPLITER, self.value))
+        f.write_fmt(format_args!("{}{}: {}", self.name, self.id, self.value))
     }
 }
 
@@ -82,15 +80,12 @@ impl RpmSpecParser {
             return None;
         }
 
-        let tag_info = line.split(PKG_SPEC_TAG_SPLITER).collect::<Vec<&str>>();
-        if tag_info.len() != 2 {
-            return None;
-        }
+        line.find(':').and_then(|spliter_index| {
+            let tag_name  = line[..spliter_index].trim().to_string();
+            let tag_value = line[spliter_index + 1..].trim().to_string();
 
-        let tag_name  = tag_info[0].trim().to_owned();
-        let tag_value = tag_info[1].trim().to_owned();
-
-        Some(RpmSpecTag::new_tag(tag_name, tag_value))
+            return Some(RpmSpecTag::new_tag(tag_name, tag_value));
+        })
     }
 
     pub fn parse_id_tag(line: &str, tag_prefix: &str) -> Option<RpmSpecTag> {
@@ -98,7 +93,7 @@ impl RpmSpecParser {
             return None;
         }
 
-        line.find(PKG_SPEC_TAG_SPLITER).and_then(|spliter_index| {
+        line.find(':').and_then(|spliter_index| {
             let full_tag_name  = line[..spliter_index].trim().to_string();
             let full_tag_value = line[spliter_index + 1..].trim().to_string();
 
