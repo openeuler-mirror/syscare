@@ -253,32 +253,26 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    pub fn run(&mut self) {
-        self.check_canonicalize_input_args()
-            .expect("Check arguments failed");
+    pub fn run(&mut self) -> std::io::Result<()> {
+        self.check_canonicalize_input_args()?;
 
-        self.work_dir.create(&self.cli_args.work_dir)
-            .expect("Create working directory failed");
+        self.work_dir.create(&self.cli_args.work_dir)?;
 
-        let pkg_info = self.extract_packages()
-            .expect("Extract packages failed");
+        println!("==============================");
+        println!("Syscare patch build utility");
+        println!("==============================\n");
+        let pkg_info = self.extract_packages()?;
+        self.complete_build_args(&pkg_info)?;
 
-        self.complete_build_args(&pkg_info)
-            .expect("Complete build arguments failed");
+        self.check_build_args()?;
 
-        self.check_build_args()
-            .expect("Check build arguments failed");
-
-        let patch_info = self.collect_patch_info(&pkg_info)
-            .expect("Collect patch info failed");
-
-        self.build_patch_package(&patch_info)
-            .expect("Build patch package failed");
-
-        self.build_source_package(&patch_info)
-            .expect("Build source package failed");
+        let patch_info = self.collect_patch_info(&pkg_info)?;
+        self.build_patch_package(&patch_info)?;
+        self.build_source_package(&patch_info)?;
 
         self.work_dir.remove();
+
         println!("Done");
+        Ok(())
     }
 }

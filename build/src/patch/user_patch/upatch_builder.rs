@@ -77,7 +77,7 @@ impl PatchBuilder for UserPatchBuilder {
                 if exit_code != 0 {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::BrokenPipe,
-                        format!("Process '{}' exited unsuccessfully, exit code: {}", UPATCH_BUILD, exit_code),
+                        format!("Process '{}' exited unsuccessfully, exit_code={}", UPATCH_BUILD, exit_code),
                     ));
                 }
                 Ok(())
