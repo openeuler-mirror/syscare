@@ -30,20 +30,16 @@ impl RpmExtractor {
         Ok(())
     }
 
-    fn apply_patch(output_dir: &str) -> std::io::Result<()> {
-        RpmBuilder::new(
-            RpmHelper::find_build_root(
-                output_dir
-            )?
-        ).build_prepare()
-    }
-
     pub fn extract_package(pkg_path: &str, output_dir: &str) -> std::io::Result<PackageInfo> {
         Self::install_package(pkg_path, output_dir)?;
 
         let pkg_info = PackageInfo::parse_from(pkg_path)?;
         if pkg_info.get_type() == PackageType::SourcePackage {
-            Self::apply_patch(output_dir)?;
+            RpmBuilder::new(
+                RpmHelper::find_build_root(
+                    output_dir
+                )?
+            ).build_prepare()?;
         }
 
         Ok(pkg_info)
