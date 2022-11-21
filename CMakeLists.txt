@@ -5,3 +5,4 @@ project(syscare)
 
 add_subdirectory(upatch)
 add_subdirectory(build)
+add_subdirectory(manager)
