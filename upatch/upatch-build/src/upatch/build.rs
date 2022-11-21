@@ -71,10 +71,7 @@ impl UpatchBuild {
         }
 
         // copy source
-        let dest = Path::new(&self.cache_dir);
         let project_name = &Path::new(&self.args.source).file_name().unwrap();
-        let dest = dest.join(project_name);
-        copy_dir::copy_dir(&self.args.source, &dest)?;
 
         // hack compiler
         println!("Hacking compiler");
@@ -82,8 +79,8 @@ impl UpatchBuild {
 
         // build source
         println!("Building original {}", project_name.to_str().unwrap());
-        let project = Project::new(dest.to_str().unwrap().to_string(), self.args.build_command.clone(), self.args.rpmbuild);
-        project.build(CMD_SOURCE_ENTER, &self.source_dir, false)?;
+        let project = Project::new(self.args.source.clone());
+        project.build(CMD_SOURCE_ENTER, &self.source_dir, self.args.build_source_command.clone())?;
 
         // build patch
         for patch in &self.args.diff_file {
@@ -92,7 +89,7 @@ impl UpatchBuild {
         }
 
         println!("Building patched {}", project_name.to_str().unwrap());
-        project.build(CMD_PATCHED_ENTER, &self.patch_dir, true)?;
+        project.build(CMD_PATCHED_ENTER, &self.patch_dir, self.args.build_patch_command.clone())?;
 
         // unhack compiler
         println!("Unhacking compiler");
@@ -104,15 +101,12 @@ impl UpatchBuild {
         let mut patch_obj: HashMap<String, String> = HashMap::new();
         let dwarf = Dwarf::new();
 
-        self.correlate_obj(&dwarf, dest.to_str().unwrap(), &self.source_dir, &mut source_obj)?;
-        self.correlate_obj(&dwarf, dest.to_str().unwrap(), &self.patch_dir, &mut patch_obj)?;
+        self.correlate_obj(&dwarf, self.args.source.as_str(), &self.source_dir, &mut source_obj)?;
+        self.correlate_obj(&dwarf, self.args.source.as_str(), &self.patch_dir, &mut patch_obj)?;
 
         // choose the binary's obj to create upatch file
-        let binary_obj = dwarf.file_in_binary(dest.to_str().unwrap().to_string(), self.args.elf_name.clone())?;
+        let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
         self.correlate_diff(&source_obj, &patch_obj, &binary_obj)?;
-
-        // clear source
-        fs::remove_dir_all(&dest)?;
 
         // ld patchs
         let output_file = &format!("{}/{}", &self.args.output, &self.args.patch_name);
@@ -163,7 +157,7 @@ impl UpatchBuild {
     fn correlate_obj(&self, dwarf: &Dwarf, comp_dir: &str, dir: &str, map: &mut HashMap<String, String>) -> Result<()> {
         let arr = WalkDir::new(dir).into_iter()
                 .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file())
+                .filter(|e| e.path().is_file() && (stringtify(e.path().extension().unwrap_or_default()) == "o"))
                 .collect::<Vec<_>>();
         for obj in arr {       
             let name = obj.path().to_str().unwrap_or_default().to_string(); 
