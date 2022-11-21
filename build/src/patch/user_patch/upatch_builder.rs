@@ -19,12 +19,12 @@ impl UserPatchBuilder {
 
     fn parse_arg_list<'a>(&self, args: &'a UserPatchBuilderArguments) -> Vec<&'a str> {
         let mut arg_list = vec![
-            "--name",         args.name.as_str(),
-            "--workdir",      args.build_root.as_str(),
-            "--debugsource",  args.source_dir.as_str(),
-            "--debuginfo",    args.debuginfo.as_str(),
-            "--elfname",      args.elf_name.as_str(),
-            "--output",       args.output_dir.as_str(),
+            "--name",        args.name.as_str(),
+            "--workdir",     args.build_root.as_str(),
+            "--debugsource", args.source_dir.as_str(),
+            "--debuginfo",   args.debuginfo.as_str(),
+            "--elfname",     args.elf_name.as_str(),
+            "--output",      args.output_dir.as_str(),
             "--rpmbuild",
         ];
 
@@ -41,16 +41,16 @@ impl UserPatchBuilder {
 }
 
 impl PatchBuilderArgumentsParser for UserPatchBuilder {
-    fn parse_args(patch_info: &PatchInfo, work_dir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = work_dir.patch_root().build_root_dir();
-        let patch_output_dir = work_dir.patch_root().output_dir();
+    fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+        let patch_build_root = workdir.patch_root().build_root_dir();
+        let patch_output_dir = workdir.patch_root().output_dir();
 
-        let source_pkg_dir = work_dir.package_root().source_pkg_dir();
-        let debug_pkg_dir  = work_dir.package_root().debug_pkg_dir();
+        let source_pkg_dir = workdir.package_root().source_pkg_dir();
+        let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
 
         let source_build_dir = RpmHelper::find_build_root(source_pkg_dir)?;
-        let target_elf_name = args.target_elf_name.as_ref().expect("Target elf name is empty");
-        let debuginfo_file  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
+        let target_elf_name  = args.target_elf_name.as_ref().expect("Target elf name is empty");
+        let debuginfo_file   = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
 
         let builder_args = UserPatchBuilderArguments {
             name:                patch_info.get_patch().get_name().to_owned(),

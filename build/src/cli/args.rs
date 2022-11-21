@@ -47,12 +47,12 @@ pub struct CliArguments {
     pub debuginfo: String,
 
     /// Working directory
-    #[arg(long, default_value=CLI_DEFAULT_WORK_DIR)]
-    pub work_dir: String,
+    #[arg(long, default_value=CLI_DEFAULT_WORKDIR)]
+    pub workdir: String,
 
     /// Generated patch output directory
     #[arg(short, long, default_value=CLI_DEFAULT_OUTPUT_DIR)]
-    pub output_dir: String,
+    pub output: String,
 
     /// Kernel make jobs
     #[arg(long, value_name="N", default_value=Self::get_default_kjobs())]

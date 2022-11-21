@@ -8,5 +8,5 @@ pub trait PatchBuilder {
 }
 
 pub trait PatchBuilderArgumentsParser {
-    fn parse_args(patch_info: &PatchInfo, work_dir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments>;
+    fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments>;
 }

@@ -14,15 +14,15 @@ use super::args::CliArguments;
 use super::workdir::CliWorkDir;
 
 pub struct PatchBuildCLI {
-    work_dir: CliWorkDir,
-    cli_args: CliArguments,
+    workdir: CliWorkDir,
+    args:    CliArguments,
 }
 
 impl PatchBuildCLI {
     pub fn new() -> Self {
         Self {
-            work_dir: CliWorkDir::new(),
-            cli_args: CliArguments::new(),
+            workdir: CliWorkDir::new(),
+            args:    CliArguments::new(),
         }
     }
 
@@ -32,7 +32,7 @@ impl PatchBuildCLI {
         logger.set_print_level(LevelFilter::Info);
         logger.set_log_file(
             LevelFilter::Debug,
-            format!("{}/build.log", self.work_dir)
+            format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME)
         )?;
 
         Logger::init_logger(logger);
@@ -41,7 +41,7 @@ impl PatchBuildCLI {
     }
 
     fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
-        let args = &mut self.cli_args;
+        let args = &mut self.args;
 
         if args.name.contains('-') {
             return Err(std::io::Error::new(
@@ -66,11 +66,11 @@ impl PatchBuildCLI {
         }
         args.debuginfo = fs::stringtify(fs::realpath(&args.debuginfo)?);
 
-        fs::check_dir(&args.work_dir)?;
-        args.work_dir = fs::stringtify(fs::realpath(&args.work_dir)?);
+        fs::check_dir(&args.workdir)?;
+        args.workdir = fs::stringtify(fs::realpath(&args.workdir)?);
 
-        fs::check_dir(&args.output_dir)?;
-        args.output_dir = fs::stringtify(fs::realpath(&args.output_dir)?);
+        fs::check_dir(&args.output)?;
+        args.output = fs::stringtify(fs::realpath(&args.output)?);
 
         for patch in &mut args.patches {
             if fs::file_ext(patch.as_str())? != PATCH_FILE_EXTENSION {
@@ -88,8 +88,8 @@ impl PatchBuildCLI {
     fn extract_packages(&self) -> std::io::Result<PackageInfo> {
         info!("Extracting source package");
         let src_pkg_info = RpmExtractor::extract_package(
-            &self.cli_args.source,
-            self.work_dir.package_root().source_pkg_dir(),
+            &self.args.source,
+            self.workdir.package_root().source_pkg_dir(),
         )?;
         if src_pkg_info.get_type() != PackageType::SourcePackage {
             return Err(std::io::Error::new(
@@ -103,8 +103,8 @@ impl PatchBuildCLI {
 
         info!("Extracting debuginfo package");
         let dbg_pkg_info = RpmExtractor::extract_package(
-            &self.cli_args.debuginfo,
-            self.work_dir.package_root().debug_pkg_dir()
+            &self.args.debuginfo,
+            self.workdir.package_root().debug_pkg_dir()
         )?;
         if dbg_pkg_info.get_type() != PackageType::BinaryPackage {
             return Err(std::io::Error::new(
@@ -133,7 +133,7 @@ impl PatchBuildCLI {
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
         info!("Collecting patch info");
 
-        let patch_info = PatchInfo::parse_from(pkg_info, &self.cli_args)?;
+        let patch_info = PatchInfo::parse_from(pkg_info, &self.args)?;
 
         info!("------------------------------");
         info!("{}", patch_info);
@@ -142,7 +142,7 @@ impl PatchBuildCLI {
     }
 
     fn complete_build_args(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
-        let mut args = &mut self.cli_args;
+        let mut args = &mut self.args;
 
         // If the source package is kernel, append target elf name 'vmlinux' to arguments
         if pkg_info.get_name() == KERNEL_PKG_NAME {
@@ -150,7 +150,7 @@ impl PatchBuildCLI {
         }
 
         // Find source directory from extracted package root
-        let source_pkg_dir = self.work_dir.package_root().source_pkg_dir();
+        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
         let pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let pkg_source_dir = pkg_build_root.sources_dir();
 
@@ -201,7 +201,7 @@ impl PatchBuildCLI {
     }
 
     fn check_build_args(&self) -> std::io::Result<()> {
-        let args = &self.cli_args;
+        let args = &self.args;
 
         if args.target_name.is_none() || args.target_version.is_none() || args.target_release.is_none() {
             return Err(std::io::Error::new(
@@ -229,8 +229,8 @@ impl PatchBuildCLI {
     }
 
     fn build_source_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let source_pkg_dir = self.work_dir.package_root().source_pkg_dir();
-        let pkg_output_dir = &self.cli_args.output_dir;
+        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
+        let pkg_output_dir = &self.args.output;
 
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_spec_dir  = source_pkg_build_root.specs_dir();
@@ -248,16 +248,16 @@ impl PatchBuildCLI {
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let work_dir = &self.work_dir;
-        let cli_args = &self.cli_args;
+        let workdir = &self.workdir;
+        let args    = &self.args;
 
-        let patch_output_dir = self.work_dir.patch_root().output_dir();
-        let pkg_build_root   = self.work_dir.package_root().build_root();
-        let pkg_output_dir   = &cli_args.output_dir;
+        let patch_output_dir = self.workdir.patch_root().output_dir();
+        let pkg_build_root   = self.workdir.package_root().build_root();
+        let pkg_output_dir   = &args.output;
 
         info!("Building patch, this may take a while");
         let patch_builder = PatchBuilderFactory::get_builder(patch_info);
-        let builder_args  = PatchBuilderFactory::parse_args(patch_info, work_dir, cli_args)?;
+        let builder_args  = PatchBuilderFactory::parse_args(patch_info, workdir, args)?;
         patch_builder.build_patch(builder_args)?;
 
         info!("Building patch package");
@@ -293,7 +293,7 @@ impl PatchBuildCLI {
             return;
         }
 
-        self.work_dir.create(&self.cli_args.work_dir)
+        self.workdir.create(&self.args.workdir)
             .expect("Create working directory failed");
 
         self.init_logger().expect("Initialize logger failed");
@@ -303,6 +303,6 @@ impl PatchBuildCLI {
             return;
         }
 
-        self.work_dir.remove().ok();
+        self.workdir.remove().ok();
     }
 }

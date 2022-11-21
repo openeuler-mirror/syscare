@@ -13,15 +13,15 @@ impl CliWorkDir {
         Self { inner: None }
     }
 
-    pub fn create(&mut self, work_dir: &str) -> std::io::Result<()> {
+    pub fn create(&mut self, workdir: &str) -> std::io::Result<()> {
         let process_id   = sys::get_process_id();
         let process_name = sys::get_process_name();
 
-        let base_dir = format!("{}/{}.{}", work_dir, process_name, process_id);
-        let work_dir = WorkDir::new(base_dir);
-        work_dir.create_all()?;
+        let basedir = format!("{}/{}.{}", workdir, process_name, process_id);
+        let workdir = WorkDir::new(basedir);
+        workdir.create_all()?;
 
-        self.inner = Some(work_dir);
+        self.inner = Some(workdir);
         Ok(())
     }
 

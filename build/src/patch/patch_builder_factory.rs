@@ -16,10 +16,10 @@ impl PatchBuilderFactory {
         }
     }
 
-    pub fn parse_args(patch_info: &PatchInfo, work_dir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+    pub fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
         match patch_info.get_patch_type() {
-            PatchType::KernelPatch => KernelPatchBuilder::parse_args(patch_info, work_dir, args),
-            PatchType::UserPatch   => UserPatchBuilder::parse_args(patch_info, work_dir, args),
+            PatchType::KernelPatch => KernelPatchBuilder::parse_args(patch_info, workdir, args),
+            PatchType::UserPatch   => UserPatchBuilder::parse_args(patch_info, workdir, args),
         }
     }
 }

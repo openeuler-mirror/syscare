@@ -1,9 +1,12 @@
 use crate::cmd::ExternCommand;
 
+// Log
+pub const CLI_LOG_FILE_NAME: &str = "build.log";
+
 // CLI defaults
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
 pub const CLI_DEFAULT_PATCH_SUMMARY:       &str = "syscare patch";
-pub const CLI_DEFAULT_WORK_DIR:            &str = ".";
+pub const CLI_DEFAULT_WORKDIR:             &str = ".";
 pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
 

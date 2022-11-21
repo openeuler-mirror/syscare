@@ -47,12 +47,12 @@ impl KernelPatchBuilder {
 }
 
 impl PatchBuilderArgumentsParser for KernelPatchBuilder {
-    fn parse_args(patch_info: &PatchInfo, work_dir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = work_dir.patch_root().build_root_dir();
-        let patch_output_dir = work_dir.patch_root().output_dir();
+    fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+        let patch_build_root = workdir.patch_root().build_root_dir();
+        let patch_output_dir = workdir.patch_root().output_dir();
 
-        let source_pkg_dir = work_dir.package_root().source_pkg_dir();
-        let debug_pkg_dir  = work_dir.package_root().debug_pkg_dir();
+        let source_pkg_dir = workdir.package_root().source_pkg_dir();
+        let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
 
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_build_dir  = source_pkg_build_root.build_dir();
