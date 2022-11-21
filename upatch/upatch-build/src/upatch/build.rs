@@ -1,7 +1,6 @@
 use std::{path::Path, env};
 use std::process::Command;
 use std::collections::HashMap;
-use std::ffi::OsStr;
 use std::fs::{self, OpenOptions, File};
 use std::io::{self, Read};
 
@@ -13,6 +12,7 @@ use super::Compiler;
 use super::Project;
 use super::Result;
 use super::Error;
+use super::{stringtify, find_file};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -203,20 +203,15 @@ impl UpatchBuild {
     }
 
     fn search_tool(&mut self) -> Result<()> {
-        let arr = WalkDir::new("../").into_iter()
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_file() && (e.path().file_name() == Some(OsStr::new(SUPPORT_TOOL))))
-                    .collect::<Vec<_>>();
-        match arr.len() {
-            0 => {
+        match find_file("./", SUPPORT_TOOL, false, false) {
+            Err(_) => {
                 let system_tool_str = format!("{}/{}", SYSTEM_TOOL_DIR, SUPPORT_TOOL);
                 if !Path::new(&system_tool_str).is_file() {
                     return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", &system_tool_str)).into());
                 }
                 self.tool_file.push_str(&system_tool_str);
             },
-            1 => self.tool_file.push_str(arr[0].path().to_str().unwrap_or_default()),
-            _ => return Err(io::Error::new(io::ErrorKind::NotFound, format!("../ have too many {}", SUPPORT_TOOL)).into()),
+            Ok(path) => self.tool_file.push_str(stringtify(path).as_str()),
         };
         Ok(())
     }
