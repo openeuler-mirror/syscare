@@ -50,13 +50,25 @@ impl RpmHelper {
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 
-        let source_dir = fs::find_directory(
+        let find_source_result = fs::find_directory(
             directory,
             search_name,
             true,
             true
-        )?;
+        );
 
-        Ok(fs::stringtify(source_dir))
+        match find_source_result {
+            Ok(source_dir) => {
+                Ok(fs::stringtify(source_dir))
+            },
+            Err(_) => {
+                fs::find_directory(
+                    directory,
+                    "",
+                    true,
+                    true
+                ).map(fs::stringtify)
+            }
+        }
     }
 }
