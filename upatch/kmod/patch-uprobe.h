@@ -12,7 +12,6 @@
 
 #include <linux/uprobes.h>
 
-
 /* Common used functions for uprobe */
 
 /* We don't utilize filter now */

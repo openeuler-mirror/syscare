@@ -95,7 +95,7 @@ struct running_elf_info {
     /* load bias, used to handle ASLR */
     unsigned long load_bias;
     struct {
-		unsigned int sym, symstr;
+        unsigned int sym, symstr;
         unsigned int dynsym, dynsymstr;
         unsigned int reloplt;
 	} index;
@@ -133,14 +133,19 @@ struct upatch_entity {
     struct list_head module_list;
 };
 
-int upatch_attach(unsigned long, unsigned int);
-int upatch_remove(unsigned long, unsigned int);
-int upatch_load(struct file *, struct file *, struct upatch_load_info *);
-
+/* entity/module releated */
+struct upatch_entity *upatch_entity_get(struct inode *);
+void upatch_entity_try_remove(struct upatch_entity *);
+void upatch_update_entity_status(struct upatch_entity *, enum upatch_module_state);
 struct upatch_module *upatch_module_new(pid_t);
 struct upatch_module *upatch_module_get(struct upatch_entity *, pid_t);
 int upatch_module_insert(struct upatch_entity *, struct upatch_module *);
+void upatch_module_deallocate(struct upatch_module *);
 void upatch_module_remove(struct upatch_entity *, struct upatch_module *);
+
+/* management releated */
+int upatch_attach(const char *, const char *);
+int upatch_load(struct file *, struct file *, struct upatch_load_info *);
 
 #endif /* _UPATCH_PATCH_H */
 

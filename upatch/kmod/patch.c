@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2022 HUAWEI, Inc.
+ *
+ * Authors:
+ *   Longjun Luo <luolongjuna@gmail.com>
+ *
+ */
+
 #include <linux/printk.h>
 #include <linux/uprobes.h>
 #include <linux/binfmts.h> /* for MAX_ARG_STRLEN */
@@ -19,26 +28,26 @@ static LIST_HEAD(upatch_entity_list);
 
 static struct upatch_entity *__get_upatch_entity(struct inode *uinode)
 {
-    struct upatch_entity *ue;
-    list_for_each_entry(ue, &upatch_entity_list, list)
+    struct upatch_entity *entity;
+    list_for_each_entry(entity, &upatch_entity_list, list)
         /* binary / patch all can be the master key */
-        if (ue->binary == uinode || ue->patch == uinode)
-            return ue;
+        if (entity->binary == uinode || entity->patch == uinode)
+            return entity;
     return NULL;
 }
 
-static struct upatch_entity *get_upatch_entity(struct inode *uinode)
+struct upatch_entity *upatch_entity_get(struct inode *uinode)
 {
-    struct upatch_entity *ue;
+    struct upatch_entity *entity;
     mutex_lock(&upatch_entity_lock);
-    ue = __get_upatch_entity(uinode);
+    entity = __get_upatch_entity(uinode);
     mutex_unlock(&upatch_entity_lock);
-    return ue;
+    return entity;
 }
 
 static int __insert_upatch_entity(struct inode *binary, struct inode *patch)
 {
-    struct upatch_entity *ue;
+    struct upatch_entity *entity;
 
     if (!binary || !patch)
         return -EINVAL;
@@ -46,17 +55,17 @@ static int __insert_upatch_entity(struct inode *binary, struct inode *patch)
     if (__get_upatch_entity(binary))
         return 0;
     
-    ue = kzalloc(sizeof(*ue), GFP_KERNEL);
-    if (!ue)
+    entity = kzalloc(sizeof(*entity), GFP_KERNEL);
+    if (!entity)
         return -ENOMEM;
     
-    ue->binary = binary;
-    ue->patch = patch;
-    list_add(&ue->list, &upatch_entity_list);
-    mutex_init(&ue->offset_list_lock);
-    INIT_LIST_HEAD(&ue->offset_list);
-    mutex_init(&ue->module_list_lock);
-    INIT_LIST_HEAD(&ue->module_list);
+    entity->binary = binary;
+    entity->patch = patch;
+    list_add(&entity->list, &upatch_entity_list);
+    mutex_init(&entity->offset_list_lock);
+    INIT_LIST_HEAD(&entity->offset_list);
+    mutex_init(&entity->module_list_lock);
+    INIT_LIST_HEAD(&entity->module_list);
     return 0;
 }
 
@@ -70,7 +79,7 @@ static int insert_upatch_entity(struct inode *binary, struct inode *patch)
 }
 
 /* no check for offset */
-static int __insert_uprobe_offset(struct upatch_entity *ue, loff_t offset)
+static int __insert_uprobe_offset(struct upatch_entity *entity, loff_t offset)
 {
     struct uprobe_offset *uo;
 
@@ -79,16 +88,16 @@ static int __insert_uprobe_offset(struct upatch_entity *ue, loff_t offset)
         return -ENOMEM;
     
     uo->offset = offset;
-    list_add(&uo->list, &ue->offset_list);
+    list_add(&uo->list, &entity->offset_list);
     return 0;
 }
 
-static int insert_uprobe_offset(struct upatch_entity *ue, loff_t offset)
+static int insert_uprobe_offset(struct upatch_entity *entity, loff_t offset)
 {
     int ret;
-    mutex_lock(&ue->offset_list_lock);
-    ret = __insert_uprobe_offset(ue, offset);
-    mutex_unlock(&ue->offset_list_lock);
+    mutex_lock(&entity->offset_list_lock);
+    ret = __insert_uprobe_offset(entity, offset);
+    mutex_unlock(&entity->offset_list_lock);
     return ret;
 }
 
@@ -106,13 +115,13 @@ static bool check_upatch(Elf_Ehdr *ehdr)
     return true;
 }
 
-static int do_patch_load(struct upatch_entity *ue, struct file *binary_file,
+static int do_module_load(struct upatch_entity *entity, struct file *binary_file,
     struct upatch_load_info *info)
 {
     int ret;
     struct file *patch_file = NULL;
 
-    patch_file = d_open_inode(ue->patch);
+    patch_file = d_open_inode(entity->patch);
     if (!patch_file || IS_ERR(patch_file)) {
         pr_err("open patch inode failed \n");
         goto out;
@@ -125,27 +134,71 @@ out:
     return ret;
 }
 
-static int do_patch_active(struct upatch_entity *ue, struct pt_regs *regs)
+static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
 {
-    instruction_pointer_set(regs, 0x405000);
+    struct upatch_patch_func __user *upatch_funs;
+    unsigned int nums;
+    unsigned int i;
+    unsigned long pc;
+    bool set_pc = false;
+
+    nums = module->num_upatch_funcs;
+    upatch_funs = kzalloc(sizeof(struct upatch_patch_func) * module->num_upatch_funcs,
+        GFP_KERNEL);
+    if (!upatch_funs) {
+        pr_err("malloc upatch funcs failed \n");
+        return 0;
+    }
+
+    if (copy_from_user(upatch_funs, module->upatch_funs,
+        sizeof(struct upatch_patch_func) * module->num_upatch_funcs)) {
+        pr_err("copy from user failed \n");
+        kfree(upatch_funs);
+        return 0;
+    }
+
+    pc = instruction_pointer(regs);
+    for (i = 0; i < nums; i ++) {
+        if (pc == upatch_funs[i].old_addr) {
+            pc = upatch_funs[i].new_addr;
+            instruction_pointer_set(regs, pc);
+            pr_info("jmp to patched address 0x%lx \n", pc);
+            set_pc = true;
+            break;
+        }
+    }
+
+    if (!set_pc) {
+        pr_err("unable to activate the patch, no address found \n");
+        return 0;
+    }
+
     return UPROBE_ALTER_PC;
 }
 
-static int do_patch_create(struct upatch_entity *ue, struct file *binary_file,
-    struct upatch_load_info *info)
+static int do_module_create(struct upatch_entity *entity)
 {
     struct upatch_module *mod =
         upatch_module_new(task_pid_nr(current));
     if (!mod)
         return -ENOMEM;
-    return upatch_module_insert(ue, mod);
+    return upatch_module_insert(entity, mod);
+}
+
+static int do_module_remove(struct upatch_entity *entity,
+    struct upatch_module *module)
+{
+    upatch_module_deallocate(module);
+    upatch_module_remove(entity, module);
+    upatch_entity_try_remove(entity);
+    return 0;
 }
 
 static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *regs)
 {
     unsigned long pc;
     struct upatch_load_info info;
-    struct upatch_entity *ue;
+    struct upatch_entity *entity;
     struct file *binary_file = NULL;
     bool need_resolve = false;
     bool need_active = false;
@@ -165,20 +218,20 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
         goto out;
     }
 
-    ue = get_upatch_entity(file_inode(binary_file));
-    if (!ue) {
+    entity = upatch_entity_get(file_inode(binary_file));
+    if (!entity) {
         pr_err("How can you be here without attach ? \n");
         goto out;
     }
 
     /* TODO: sync between different threads */
-    upatch_mod = upatch_module_get(ue, pid);
-    if (!upatch_mod && do_patch_create(ue, binary_file, &info)) {
+    upatch_mod = upatch_module_get(entity, pid);
+    if (!upatch_mod && do_module_create(entity)) {
         pr_err("create module failed \n");
         goto out;
     }
 
-    upatch_mod = upatch_module_get(ue, pid);
+    upatch_mod = upatch_module_get(entity, pid);
     if (!upatch_mod) {
         pr_err("no patch module found \n");
         goto out;
@@ -199,20 +252,20 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
             need_resolve = true;
         break;
     case UPATCH_STATE_REMOVED:
-            /* TODO: do remove work here */
+        do_module_remove(entity, upatch_mod);
         goto out;
     default:
         pr_err("invalid upatch status \n");
         break;
     }
 
-    if (need_resolve && do_patch_load(ue, binary_file, &info)) {
+    if (need_resolve && do_module_load(entity, binary_file, &info)) {
         pr_err("load patch failed \n");
         goto out;
     }
 
     if (need_active) {
-        ret = do_patch_active(ue, regs);
+        ret = do_module_active(upatch_mod, regs);
         goto out;
     }  
 
@@ -228,27 +281,6 @@ static struct uprobe_consumer patch_consumber = {
     .filter = uprobe_default_filter,
 };
 
-static void remove_upatch_entity(struct upatch_entity *ue)
-{
-    struct uprobe_offset *uo, *tmp;
-    if (!ue)
-        return;
-    
-    mutex_lock(&ue->offset_list_lock);
-    list_for_each_entry_safe(uo, tmp, &ue->offset_list, list) {
-        pr_info("unregister for offset 0x%llx\n", uo->offset);
-        uprobe_unregister(ue->binary, uo->offset, &patch_consumber);
-        list_del(&uo->list);
-        kfree(uo);
-    }
-    mutex_unlock(&ue->offset_list_lock);
-
-    mutex_lock(&upatch_entity_lock);
-    list_del(&ue->list);
-    kfree(ue);
-    mutex_unlock(&upatch_entity_lock);
-}
-
 /*
  * shoule we check if it is the entry of the function ?
  */
@@ -256,14 +288,14 @@ static int register_patch_uprobe(struct file *binary_file, loff_t offset)
 {
     int ret;
     struct inode *inode;
-    struct upatch_entity *ue;
+    struct upatch_entity *entity;
 
     inode = file_inode(binary_file);
-    ue = get_upatch_entity(inode);
-    if (!ue)
+    entity = upatch_entity_get(inode);
+    if (!entity)
         return -ENOENT;
 
-    ret = insert_uprobe_offset(ue, offset);
+    ret = insert_uprobe_offset(entity, offset);
     if (ret)
         return ret;
 
@@ -280,6 +312,40 @@ out:
     if (binary_file != NULL)
         fput(binary_file);
     return ret;
+}
+
+void upatch_entity_try_remove(struct upatch_entity *entity)
+{
+    bool has_mods = false;
+    struct uprobe_offset *uprobe_offset, *tmp;
+
+    if (!entity)
+        return;
+
+    mutex_lock(&entity->module_list_lock);
+    if (!list_empty(&entity->module_list))
+        has_mods = true;
+    mutex_unlock(&entity->module_list_lock);
+
+    if (has_mods) {
+        pr_info("entity still has modules \n");
+        return;
+    }
+
+    pr_info("start to remove entity \n");
+    mutex_lock(&entity->offset_list_lock);
+    list_for_each_entry_safe(uprobe_offset, tmp, &entity->offset_list, list) {
+        pr_info("unregister for offset 0x%llx\n", uprobe_offset->offset);
+        uprobe_unregister(entity->binary, uprobe_offset->offset, &patch_consumber);
+        list_del(&uprobe_offset->list);
+        kfree(uprobe_offset);
+    }
+    mutex_unlock(&entity->offset_list_lock);
+
+    mutex_lock(&upatch_entity_lock);
+    list_del(&entity->list);
+    kfree(entity);
+    mutex_unlock(&upatch_entity_lock);
 }
 
 /*
@@ -356,7 +422,7 @@ out:
  * 1. handle SHN_LORESERVE
  * 2. check elf arch and abi
  */
-static int attach_upatch(unsigned int cmd, const char *binary, const char *patch)
+int upatch_attach(const char *binary, const char *patch)
 {
     int ret = 0;
     int index;
@@ -377,7 +443,7 @@ static int attach_upatch(unsigned int cmd, const char *binary, const char *patch
         goto out;
     }
 
-    entity = get_upatch_entity(file_inode(binary_file));
+    entity = upatch_entity_get(file_inode(binary_file));
     if (entity) {
         ret = -EPERM;
         pr_err("duplicated install upatch action \n");
@@ -470,85 +536,13 @@ out:
     return ret;
 }
 
-int upatch_attach(unsigned long user_addr, unsigned int cmd)
+void upatch_update_entity_status(struct upatch_entity *entity,
+    enum upatch_module_state status)
 {
-    int ret;
-    struct upatch_conmsg conmsg;
-    char *binary = NULL;
-    char *patch = NULL;
-
-    patch = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!patch) {
-        ret = -ENOMEM;
-        goto out;
+    struct upatch_module *um;
+    mutex_lock(&entity->module_list_lock);
+    list_for_each_entry(um, &entity->module_list, list) {
+        um->set_state = status;
     }
-
-    binary = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!binary) {
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    if (copy_from_user(&conmsg, (const void __user *)user_addr, sizeof(struct upatch_conmsg))) {
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    ret = copy_para_from_user((unsigned long)conmsg.binary, binary, PATH_MAX);
-    if (ret)
-        goto out;
-
-    ret = copy_para_from_user((unsigned long)conmsg.patch, patch, PATH_MAX);
-    if (ret)
-        goto out;
-
-    pr_info("patch %s with %s \n", binary, patch);
-
-    ret = attach_upatch(cmd, binary, patch);
-    if (ret)
-        goto out;
-
-    ret = 0;
-out:
-    if (binary)
-        kfree(binary);
-    if (patch)
-        kfree(patch);
-    return ret;
+    mutex_unlock(&entity->module_list_lock);
 }
-
-int upatch_remove(unsigned long user_addr, unsigned int cmd)
-{
-    int ret;
-    char *patch = NULL;
-    struct file *patch_file = NULL;
-
-    patch = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!patch) {
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    ret = copy_para_from_user(user_addr, patch, PATH_MAX);
-    if (ret)
-        goto out;
-    
-    patch_file = filp_open(patch, O_RDONLY, 0);
-    if (IS_ERR(patch_file)) {
-        ret = PTR_ERR(patch_file);
-        pr_err("open patch failed - %d \n", ret);
-        goto out;
-    }
-    
-    remove_upatch_entity(get_upatch_entity(file_inode(patch_file)));
-
-    ret = 0;
-out:
-    if (patch_file && !IS_ERR(patch_file))
-        fput(patch_file);
-    if (patch)
-        kfree(patch);
-    return ret;
-}
-
-

@@ -10,11 +10,13 @@
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/miscdevice.h>
+#include <linux/file.h>
 #include <linux/fs.h>
 
 #include "kmod.h"
 #include "patch.h"
 #include "compiler.h"
+#include "common.h"
 
 static int upatch_open(struct inode *inode, struct file *file)
 {
@@ -38,6 +40,96 @@ static ssize_t upatch_write(struct file *filp, const char __user *ubuf,
     return 0;
 }
 
+static int update_status(unsigned long user_addr,
+    enum upatch_module_state status)
+{
+    int ret;
+    struct upatch_entity *entity;
+    char *elf_path = NULL;
+    struct file *elf_file = NULL;
+
+    elf_path = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!elf_path) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    ret = copy_para_from_user(user_addr, elf_path, PATH_MAX);
+    if (ret)
+        goto out;
+
+    elf_file = filp_open(elf_path, O_RDONLY, 0);
+    if (IS_ERR(elf_file)) {
+        ret = PTR_ERR(elf_file);
+        pr_err("open cmd file failed - %d \n", ret);
+        goto out;
+    }
+
+    entity = upatch_entity_get(file_inode(elf_file));
+    if (!entity) {
+        pr_err("no entity found \n");
+        ret = -EPERM;
+        goto out;
+    }
+
+    upatch_update_entity_status(entity, status);
+
+    ret = 0;
+out:
+    if (elf_file && !IS_ERR(elf_file))
+        fput(elf_file);
+    if (elf_path)
+        kfree(elf_path);
+    return ret;
+}
+
+int attach_upatch(unsigned long user_addr)
+{
+    int ret;
+    struct upatch_conmsg conmsg;
+    char *binary = NULL;
+    char *patch = NULL;
+
+    patch = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!patch) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    binary = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!binary) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    if (copy_from_user(&conmsg, (const void __user *)user_addr, sizeof(struct upatch_conmsg))) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    ret = copy_para_from_user((unsigned long)conmsg.binary, binary, PATH_MAX);
+    if (ret)
+        goto out;
+
+    ret = copy_para_from_user((unsigned long)conmsg.patch, patch, PATH_MAX);
+    if (ret)
+        goto out;
+
+    pr_info("patch %s with %s \n", binary, patch);
+
+    ret = upatch_attach(binary, patch);
+    if (ret)
+        goto out;
+
+    ret = 0;
+out:
+    if (binary)
+        kfree(binary);
+    if (patch)
+        kfree(patch);
+    return ret;
+}
+
 static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
     if (_IOC_TYPE(cmd) != UPATCH_IOCTL_MAGIC)
@@ -49,14 +141,14 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case UPATCH_REGISTER_ASSEMBLER:
     case UPATCH_UNREGISTER_ASSEMBLER:
         return handle_compiler_cmd(arg, cmd);
-    case UPATCH_INSTALL_PATCH:
-        return upatch_attach(arg, cmd);
-    // case UPATCH_UNINSTALL_PATCH:
-    // case UPATCH_APPLY_PATCH:
+    case UPATCH_ATTACH_PATCH:
+        return attach_upatch(arg);
     case UPATCH_REMOVE_PATCH:
-        return upatch_remove(arg, cmd);
-    // case UPATCH_ACTIVE_PATCH:
-    // case UPATCH_DEACTIVE_PATCH:
+        return update_status(arg, UPATCH_STATE_REMOVED);
+    case UPATCH_ACTIVE_PATCH:
+        return update_status(arg, UPATCH_STATE_ACTIVED);
+    case UPATCH_DEACTIVE_PATCH:
+        return update_status(arg, UPATCH_STATE_RESOLVED);
     default:
         return -ENOTTY;
     }

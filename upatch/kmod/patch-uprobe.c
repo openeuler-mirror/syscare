@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2022 HUAWEI, Inc.
+ *
+ * Authors:
+ *   Longjun Luo <luolongjuna@gmail.com>
+ *
+ */
+
 #include <linux/fs.h>
 #include <linux/elf.h>
 #include <linux/slab.h>
@@ -54,3 +63,4 @@ out:
         kfree(phdr);
     return min_addr;
 }
+

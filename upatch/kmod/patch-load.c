@@ -1,3 +1,12 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2022 HUAWEI, Inc.
+ *
+ * Authors:
+ *   Longjun Luo <luolongjuna@gmail.com>
+ *
+ */
+
 #include <linux/fs.h>
 #include <linux/elf.h>
 #include <linux/list.h>
@@ -349,7 +358,7 @@ int upatch_module_memfree(struct upatch_module_layout *layout)
     return __upatch_module_memfree(layout->base, layout->size);
 }
 
-void upatch_module_deallocate(struct upatch_module *mod, struct upatch_load_info *info)
+void upatch_module_deallocate(struct upatch_module *mod)
 {
     if (mod->init_layout.base)
         upatch_module_memfree(&mod->init_layout);
@@ -526,9 +535,12 @@ static int find_upatch_module_sections(struct upatch_module *mod, struct upatch_
 {
     mod->syms = section_objs(info, ".symtab",
 				 sizeof(*mod->syms), &mod->num_syms);
+    pr_info("sym is at 0x%lx \n", (unsigned long)mod->syms);
     mod->upatch_funs = section_objs(info, ".upatch.funcs",
 				 sizeof(*mod->syms), &mod->num_upatch_funcs);
+    pr_info("upatch_funs is at 0x%lx \n", (unsigned long)mod->upatch_funs);
     mod->strtab = section_addr(info, ".strtab");
+    pr_info("strtab is at 0x%lx \n", (unsigned long)mod->strtab);
     return 0;
 }
 
@@ -1014,7 +1026,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
 
     goto free_hdr;
 free_module:
-    upatch_module_deallocate(mod, info);
+    upatch_module_deallocate(mod);
 free_hdr:
     load_info_clear(info);
     return err;
