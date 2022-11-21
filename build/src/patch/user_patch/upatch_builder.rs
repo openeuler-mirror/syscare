@@ -19,13 +19,14 @@ impl UserPatchBuilder {
 
     fn parse_arg_list<'a>(&self, args: &'a UserPatchBuilderArguments) -> Vec<&'a str> {
         let mut arg_list = vec![
-            "--name",        args.name.as_str(),
-            "--workdir",     args.build_root.as_str(),
-            "--debugsource", args.source_dir.as_str(),
-            "--debuginfo",   args.debuginfo.as_str(),
-            "--elfname",     args.elf_name.as_str(),
-            "--output",      args.output_dir.as_str(),
-            "--rpmbuild",
+            "--name",             args.name.as_str(),
+            "--work-dir",         args.build_root.as_str(),
+            "--debug-source",     args.source_dir.as_str(),
+            "--build-source-cmd", args.build_source_cmd.as_str(),
+            "--build-patch-cmd",  args.build_patch_cmd.as_str(),
+            "--debug-info",       args.debuginfo.as_str(),
+            "--elf-name",         args.elf_name.as_str(),
+            "--output-dir",       args.output_dir.as_str(),
         ];
 
         if args.skip_compiler_check {
@@ -48,19 +49,30 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let source_pkg_dir = workdir.package_root().source_pkg_dir();
         let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
 
-        let source_build_dir = RpmHelper::find_build_root(source_pkg_dir)?;
-        let target_elf_name  = args.target_elfname.as_ref().expect("Target elf name is empty");
-        let debuginfo_file   = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
+        let pkg_root = RpmHelper::find_build_root(source_pkg_dir)?;
+        let pkg_build_dir = pkg_root.build_dir();
+        let pkg_specs_dir = pkg_root.specs_dir();
+
+        let target_elf_name = args.target_elfname.as_ref().expect("Target elf name is empty");
+        let debuginfo_file  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
+
+        let patch_source_dir = RpmHelper::find_source_directory(pkg_build_dir, patch_info)?;
+        let spec_file_path   = RpmHelper::find_spec_file(pkg_specs_dir)?;
+
+        let build_original_cmd = format!("{} --define '_topdir {}' -bb {}", RPM_BUILD, pkg_root, spec_file_path);
+        let build_patched_cmd  = format!("{} --define '_topdir {}' -bb --noprep {}", RPM_BUILD, pkg_root, spec_file_path);
 
         let builder_args = UserPatchBuilderArguments {
-            name:                patch_info.get_patch().get_name().to_owned(),
-            build_root:          patch_build_root.to_owned(),
-            source_dir:          source_build_dir.to_string(),
-            elf_name:            target_elf_name.to_owned(),
-            debuginfo:           debuginfo_file,
-            output_dir:          patch_output_dir.to_owned(),
-            skip_compiler_check: args.skip_compiler_check,
-            patch_list:          patch_info.get_file_list().to_owned(),
+            name:                 patch_info.get_patch().get_name().to_owned(),
+            build_root:           patch_build_root.to_owned(),
+            source_dir:           patch_source_dir,
+            elf_name:             target_elf_name.to_owned(),
+            debuginfo:            debuginfo_file,
+            output_dir:           patch_output_dir.to_owned(),
+            build_source_cmd:     build_original_cmd,
+            build_patch_cmd:      build_patched_cmd,
+            skip_compiler_check:  args.skip_compiler_check,
+            patch_list:           patch_info.get_file_list().to_owned(),
         };
 
         Ok(PatchBuilderArguments::UserPatch(builder_args))
