@@ -1,5 +1,6 @@
 pub mod constants;
 pub mod util;
+pub mod log;
 pub mod cmd;
 pub mod patch;
 pub mod package;
