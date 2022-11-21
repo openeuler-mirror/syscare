@@ -32,7 +32,7 @@ pub struct CliArguments {
 
     /// Patch target executable name
     #[arg(short, long)]
-    pub target_elf_name: Option<String>,
+    pub target_elfname: Option<String>,
 
     /// Patch target license
     #[arg(long)]

@@ -146,7 +146,7 @@ impl PatchBuildCLI {
 
         // If the source package is kernel, append target elf name 'vmlinux' to arguments
         if pkg_info.get_name() == KERNEL_PKG_NAME {
-            args.target_elf_name.get_or_insert(KERNEL_ELF_NAME.to_owned());
+            args.target_elfname.get_or_insert(KERNEL_ELF_NAME.to_owned());
         }
 
         // Find source directory from extracted package root
@@ -210,7 +210,7 @@ impl PatchBuildCLI {
             ));
         }
 
-        if args.target_elf_name.is_none() {
+        if args.target_elfname.is_none() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch target elf name is empty"),

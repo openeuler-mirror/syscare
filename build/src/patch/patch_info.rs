@@ -251,7 +251,7 @@ impl PatchInfo {
     }
 
     fn parse_target_elf_name(args: &CliArguments) -> String {
-        args.target_elf_name.as_ref()
+        args.target_elfname.as_ref()
             .expect("Parse target elf name failed")
             .to_owned()
     }

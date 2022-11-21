@@ -49,7 +49,7 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
 
         let source_build_dir = RpmHelper::find_build_root(source_pkg_dir)?;
-        let target_elf_name  = args.target_elf_name.as_ref().expect("Target elf name is empty");
+        let target_elf_name  = args.target_elfname.as_ref().expect("Target elf name is empty");
         let debuginfo_file   = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
 
         let builder_args = UserPatchBuilderArguments {
