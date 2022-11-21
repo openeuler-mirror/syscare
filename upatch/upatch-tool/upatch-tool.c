@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
+#include <error.h>
 #include <argp.h>
 #include <stdbool.h>
 #include <fcntl.h>
@@ -106,6 +107,34 @@ static void show_program_info(struct arguments *arguments)
     printf("patch file: %s\n", arguments->upatch.patch);
 }
 
+void active(int upatch_fd, const char *file){
+    int ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
+    if (ret < 0) {
+        error(ret, 0, "ERROR: active \n ");
+    }
+}
+
+void deactive(int upatch_fd, const char *file){
+    int ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
+    if (ret < 0) {
+        error(ret, 0, "ERROR: deactive \n ");
+    }
+}
+
+void install(int upatch_fd, struct upatch_conmsg* upatch){
+    int ret = ioctl(upatch_fd, UPATCH_ATTACH_PATCH, upatch);
+    if (ret < 0) {
+        error(ret, 0, "ERROR: install \n ");
+    }
+}
+
+void uninstall(int upatch_fd, const char *file){
+    int ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
+    if (ret < 0) {
+        error(ret, 0, "ERROR: uninstall \n ");
+    }
+}
+
 int main(int argc, char*argv[])
 {
     struct arguments arguments;
@@ -118,39 +147,36 @@ int main(int argc, char*argv[])
 
     snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
     ret = open(path, O_RDWR);
-    if (ret < 0) {
-        printf("open failed - %d \n", ret);
-        return ret;
+    if (ret < 0){
+        error(ret, 0, "ERROR: open failed - %s \n ", path);
     }
 
     const char* file = (arguments.upatch.binary == NULL) ? arguments.upatch.patch : arguments.upatch.binary;
 
     switch (arguments.cmd) {
         case ACTIVE:
-            ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
+            active(upatch_fd, file);
             break;
         case DEACTIVE:
-            ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
+            deactive(upatch_fd, file);
             break;
         case INSTALL:
-            ret = ioctl(upatch_fd, UPATCH_INSTALL_PATCH, &arguments.upatch);
+            install(upatch_fd, &arguments.upatch);
             break;
         case UNINSTALL:
-            ret = ioctl(upatch_fd, UPATCH_UNINSTALL_PATCH, file);
+            uninstall(upatch_fd, file);
             break;
         case APPLY:
-            ret = ioctl(upatch_fd, UPATCH_APPLY_PATCH, &arguments.upatch);
+            install(upatch_fd, &arguments.upatch);
+            active(upatch_fd, file);
             break;
         case REMOVE:
-            ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
+            uninstall(upatch_fd, file);
+            deactive(upatch_fd, file);
             break;
         default:
             ret = -1;
             break;
-    }
-
-    if (ret < 0) {
-        printf("ERROR - %d \n", ret);
     }
 
     return ret;
