@@ -25,10 +25,12 @@ impl CliWorkDir {
         Ok(())
     }
 
-    pub fn remove(&mut self) {
+    pub fn remove(&mut self) -> std::io::Result<()> {
         if let Some(inner) = self.inner.take() {
-            inner.remove_all().ok();
+            inner.remove_all()?;
         }
+
+        Ok(())
     }
 }
 
@@ -37,5 +39,11 @@ impl Deref for CliWorkDir {
 
     fn deref(&self) -> &Self::Target {
         self.inner.as_ref().expect("Working directory is not exist")
+    }
+}
+
+impl std::fmt::Display for CliWorkDir {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.deref()))
     }
 }

@@ -1,12 +1,8 @@
-use std::fs::File;
 use std::process::{Command, Stdio};
-use std::io::{BufRead, BufReader, Write, LineWriter};
-use std::sync::{Mutex, MutexGuard};
+use std::io::{BufRead, BufReader};
 use std::ffi::OsStr;
 
-use lazy_static::*;
-
-use crate::util::sys;
+use crate::log::debug;
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -37,23 +33,6 @@ pub struct ExternCommand<'a> {
 
 impl ExternCommand<'_> {
     #[inline(always)]
-    fn get_log_writer<'a>(&self) -> MutexGuard<'a, impl Write> {
-        lazy_static! {
-            static ref LOG_FILE_PATH: String = format!("./{}.{}.log", sys::get_process_name(), sys::get_process_id());
-            static ref LOG_WRITER: Mutex<LineWriter<File>> = Mutex::new(LineWriter::new(
-                std::fs::OpenOptions::new()
-                    .create(true)
-                    .truncate(true)
-                    .write(true)
-                    .open(LOG_FILE_PATH.as_str())
-                    .expect("Cannot access log file")
-            ));
-        }
-
-        LOG_WRITER.lock().expect("Lock posioned")
-    }
-
-    #[inline(always)]
     fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
@@ -65,24 +44,23 @@ impl ExternCommand<'_> {
 
         let process_name = self.path;
         let process_id = child_process.id();
-        let mut writer = self.get_log_writer();
-        writeln!(writer, "Executing '{}' ({}):", process_name, process_id)?;
+
+        debug!("Executing '{}' ({}):", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
         for read_line in BufReader::new(process_stdout).lines() {
             last_stdout = read_line?;
-            writeln!(writer, "{}", last_stdout)?;
+            debug!("{}", last_stdout);
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
         for read_line in BufReader::new(process_stderr).lines() {
             last_stderr = read_line?;
-            writeln!(writer, "{}", last_stderr)?;
+            debug!("{}", last_stderr);
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        writeln!(writer, "Process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code)?;
-        writeln!(writer)?;
+        debug!("Process '{}' ({}) exited, exit_code={}\n", process_name, process_id, exit_code);
 
         Ok(ExternCommandExitStatus {
             exit_code,

@@ -4,6 +4,9 @@ use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 use crate::patch::{PatchInfo, PatchName};
 use crate::patch::{PatchHelper, PatchBuilderFactory};
 
+use crate::log::{Logger, LevelFilter};
+use crate::log::{info, warn, error};
+
 use crate::constants::*;
 use crate::util::fs;
 
@@ -21,6 +24,20 @@ impl PatchBuildCLI {
             work_dir: CliWorkDir::new(),
             cli_args: CliArguments::new(),
         }
+    }
+
+    fn init_logger(&self) -> std::io::Result<()> {
+        let mut logger = Logger::new();
+
+        logger.set_print_level(LevelFilter::Info);
+        logger.set_log_file(
+            LevelFilter::Debug,
+            format!("{}/build.log", self.work_dir)
+        )?;
+
+        Logger::init_logger(logger);
+
+        Ok(())
     }
 
     fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
@@ -69,7 +86,7 @@ impl PatchBuildCLI {
     }
 
     fn extract_packages(&self) -> std::io::Result<PackageInfo> {
-        println!("Extracting source package");
+        info!("Extracting source package");
         let src_pkg_info = RpmExtractor::extract_package(
             &self.cli_args.source,
             self.work_dir.package_root().source_pkg_dir(),
@@ -80,11 +97,11 @@ impl PatchBuildCLI {
                 format!("File '{}' is not a source package", src_pkg_info),
             ));
         }
-        println!("------------------------------");
-        println!("{}", src_pkg_info);
-        println!("------------------------------\n");
+        info!("------------------------------");
+        info!("{}", src_pkg_info);
+        info!("------------------------------\n");
 
-        println!("Extracting debuginfo package");
+        info!("Extracting debuginfo package");
         let dbg_pkg_info = RpmExtractor::extract_package(
             &self.cli_args.debuginfo,
             self.work_dir.package_root().debug_pkg_dir()
@@ -95,9 +112,9 @@ impl PatchBuildCLI {
                 format!("File '{}' is not a debuginfo package", dbg_pkg_info),
             ));
         }
-        println!("------------------------------");
-        println!("{}", dbg_pkg_info);
-        println!("------------------------------\n");
+        info!("------------------------------");
+        info!("{}", dbg_pkg_info);
+        info!("------------------------------\n");
 
         let src_pkg_name = src_pkg_info.get_name();
         let src_pkg_ver  = src_pkg_info.get_version();
@@ -114,13 +131,13 @@ impl PatchBuildCLI {
     }
 
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
-        println!("Collecting patch info");
+        info!("Collecting patch info");
 
         let patch_info = PatchInfo::parse_from(pkg_info, &self.cli_args)?;
 
-        println!("------------------------------");
-        println!("{}", patch_info);
-        println!("------------------------------\n");
+        info!("------------------------------");
+        info!("{}", patch_info);
+        info!("------------------------------\n");
         Ok(patch_info)
     }
 
@@ -201,11 +218,11 @@ impl PatchBuildCLI {
         }
 
         if args.target_license.is_none() {
-            eprintln!("Warning: Patch target license is not set");
+            warn!("Warning: Patch target license is not set");
         }
 
         if args.skip_compiler_check {
-            eprintln!("Warning: Skipped compiler version check");
+            warn!("Warning: Skipped compiler version check");
         }
 
         Ok(())
@@ -221,7 +238,7 @@ impl PatchBuildCLI {
         let spec_file_path = RpmHelper::find_spec_file(source_pkg_spec_dir)?;
         RpmSpecHelper::modify_spec_file_by_patches(&spec_file_path, patch_info)?;
 
-        println!("Building source package");
+        info!("Building source package");
         let rpm_builder = RpmBuilder::new(source_pkg_build_root);
         rpm_builder.copy_patch_file_to_source(patch_info)?;
         rpm_builder.write_patch_target_info_to_source(patch_info)?;
@@ -238,12 +255,12 @@ impl PatchBuildCLI {
         let pkg_build_root   = self.work_dir.package_root().build_root();
         let pkg_output_dir   = &cli_args.output_dir;
 
-        println!("Building patch, this may take a while");
+        info!("Building patch, this may take a while");
         let patch_builder = PatchBuilderFactory::get_builder(patch_info);
         let builder_args  = PatchBuilderFactory::parse_args(patch_info, work_dir, cli_args)?;
         patch_builder.build_patch(builder_args)?;
 
-        println!("Building patch package");
+        info!("Building patch package");
         let rpm_builder = RpmBuilder::new(pkg_build_root.to_owned());
         rpm_builder.copy_all_files_to_source(patch_output_dir)?;
         rpm_builder.write_patch_info_to_source(patch_info)?;
@@ -253,14 +270,10 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    pub fn run(&mut self) -> std::io::Result<()> {
-        self.check_canonicalize_input_args()?;
-
-        self.work_dir.create(&self.cli_args.work_dir)?;
-
-        println!("==============================");
-        println!("Syscare patch build utility");
-        println!("==============================\n");
+    pub fn main_process(&mut self) -> std::io::Result<()> {
+        info!("==============================");
+        info!("Syscare patch build utility");
+        info!("==============================\n");
         let pkg_info = self.extract_packages()?;
         self.complete_build_args(&pkg_info)?;
 
@@ -270,9 +283,26 @@ impl PatchBuildCLI {
         self.build_patch_package(&patch_info)?;
         self.build_source_package(&patch_info)?;
 
-        self.work_dir.remove();
-
-        println!("Done");
+        info!("Done");
         Ok(())
+    }
+
+    pub fn run(&mut self) {
+        if let Err(e) = self.check_canonicalize_input_args() {
+            eprintln!("Error: {}", e);
+            return;
+        }
+
+        self.work_dir.create(&self.cli_args.work_dir)
+            .expect("Create working directory failed");
+
+        self.init_logger().expect("Initialize logger failed");
+
+        if let Err(e) = self.main_process() {
+            error!("{}", e);
+            return;
+        }
+
+        self.work_dir.remove().ok();
     }
 }
