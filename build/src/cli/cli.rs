@@ -272,7 +272,7 @@ impl PatchBuildCLI {
 
     pub fn main_process(&mut self) -> std::io::Result<()> {
         info!("==============================");
-        info!("Syscare patch build utility");
+        info!("{}", CLI_DESCRIPTION);
         info!("==============================\n");
         let pkg_info = self.extract_packages()?;
         self.complete_build_args(&pkg_info)?;

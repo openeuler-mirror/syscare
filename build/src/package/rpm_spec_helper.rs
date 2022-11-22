@@ -20,7 +20,7 @@ impl RpmSpecHelper {
         let tag_name  = orig_tag.get_name().to_string();
         let tag_value = format!("{}.{}.{}.{}.{}",
             target.get_release(),
-            PKG_FLAG_PATCH_PKG,
+            PKG_FLAG_PATCH_BIN_FLAG,
             patch.get_name(),
             patch.get_version(),
             patch.get_release()

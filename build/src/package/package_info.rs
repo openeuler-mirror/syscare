@@ -78,7 +78,7 @@ impl std::str::FromStr for PackageInfo {
         let license    = pkg_info[3].to_owned();
         let source_rpm = pkg_info[4].to_owned();
 
-        let kind = match source_rpm == PKG_FLAG_SOURCE_PKG {
+        let kind = match source_rpm == PKG_FLAG_NO_SOURCE_PKG {
             true  => PackageType::SourcePackage,
             false => PackageType::BinaryPackage,
         };

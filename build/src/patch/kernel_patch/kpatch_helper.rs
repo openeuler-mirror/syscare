@@ -35,7 +35,7 @@ impl KernelPatchHelper {
     pub fn find_vmlinux_file(directory: &str) -> std::io::Result<String> {
         let vmlinux_file_path = fs::find_file(
             directory,
-            KERNEL_ELF_NAME,
+            KERNEL_VMLINUX_FILE,
             false,
             true
         )?;

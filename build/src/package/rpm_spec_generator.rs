@@ -18,7 +18,7 @@ impl RpmSpecGenerator {
         let patch_target = patch_info.get_target();
         let patch_name   = Self::get_patch_name(patch_info);
 
-        format!("{}-{}-{}", PKG_FLAG_PATCH_PKG, patch_target, patch_name)
+        format!("{}-{}-{}", PKG_FLAG_PATCHED_SRC_PKG, patch_target, patch_name)
     }
 
     #[inline(always)]

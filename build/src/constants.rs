@@ -1,9 +1,9 @@
 use crate::cmd::ExternCommand;
 
-// Log
-pub const CLI_LOG_FILE_NAME: &str = "build.log";
-
-// CLI defaults
+// CLI Strings
+pub const CLI_BIN_NAME:                    &str = "syscare build";
+pub const CLI_DESCRIPTION:                 &str = "syscare patch build utility";
+pub const CLI_LOG_FILE_NAME:               &str = "build.log";
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
 pub const CLI_DEFAULT_PATCH_SUMMARY:       &str = "syscare patch";
 pub const CLI_DEFAULT_WORKDIR:             &str = ".";
@@ -28,8 +28,9 @@ pub const PATCH_VERSION_DIGITS:  usize = 8;
 // Package
 pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
 pub const PKG_FILE_EXTENSION:               &str = "rpm";
-pub const PKG_FLAG_PATCH_PKG:               &str = "patch";
-pub const PKG_FLAG_SOURCE_PKG:              &str = "(none)";
+pub const PKG_FLAG_PATCH_BIN_FLAG:          &str = "patch";
+pub const PKG_FLAG_PATCHED_SRC_PKG:         &str = "patched";
+pub const PKG_FLAG_NO_SOURCE_PKG:           &str = "(none)";
 pub const PKG_PATCH_VERSION_FILE_NAME:      &str = "syscare-patch-version";
 pub const PKG_PATCH_TARGET_FILE_NAME:       &str = "syscare-patch-target";
 pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";
@@ -43,4 +44,5 @@ pub const KERNEL_PKG_NAME:          &str = "kernel";
 pub const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 pub const KERNEL_CONFIG_NAME:       &str = ".config";
 pub const KERNEL_DEFCONFIG_NAME:    &str = "openeuler_defconfig";
-pub const KERNEL_ELF_NAME:          &str = "vmlinux";
+pub const KERNEL_VMLINUX_FILE:      &str = "vmlinux";
+pub const KERNEL_ELF_NAME:          &str = "kernel";
