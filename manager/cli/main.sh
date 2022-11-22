@@ -1,49 +1,14 @@
 #!/bin/bash
-#SPDX-License-Identifier: mulan ??
+#SPDX-License-Identifier: Mulan-PSL2.0
+
+set -e
 
 PATCHESDIR="/usr/lib/syscare/patches"
+PATCH_BUILD_CMD="/usr/libexec/syscare/syscare-build"
 
-# TODO: auto add rpm funcion
-<<EOF
-install_rpm() {
-	#check kernel version x86??
-	local kernel_version =`uname -r`  
-	#load patch version
-	yum list |grep  ${kernel_version%.*}
-	if [echo $? -eq 0]; then 
-		yum install ${kernel_version%.*}.src.rpm
-	else
-		echo "the ${kernel_version%.*}.rpm is not found"
-		return
-	fi
-	#install patch rpm
-	rpm -ivh ${kernel_version%.*}.rpm
-
-}
-
-remove_rpm() {
-	read -p "Please enter the Y/N:" para
-	case $para in
-		[yY])
-			echo "entered Y"
-			dnf erase `rpm -q --whatprovides /usr/lib/syscare/patches/$PATCHNAME`
-			;;
-		[nN])
-			echo "entered N"
-			;;
-		*)
-			echo "Invalid input ..."
-		read -p "Please enter any key to exit" exit
-		exit 1
-esac
-
-	#dnf erase `rpm -q --whatprovides /usr/lib/syscare/patches/$PATCHNAME`
-}
-EOF
-
-check_patches_dir() {
+function check_patches_dir() {
 	local count=`ls $PATCHESDIR|wc -w`
-	
+
 	if [ "$count" > 0 ]; then
 		return 0
 	fi
@@ -51,7 +16,7 @@ check_patches_dir() {
 	return 1
 }
 
-patch_is_syscare() {
+function patch_is_syscare() {
 	files=$(ls $PATCHESDIR)
 	#patch name is exist return 0
 	for filename in $files; do
@@ -63,10 +28,10 @@ patch_is_syscare() {
 		fi
 	done
 	echo "$PATCHNAME is not syscare patch!"
- 	return 1		
+ 	return 1
 }
 
-check_patch_type() {
+function check_patch_type() {
 	patch_type=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "type" | awk -F ':' '{print $2}' | xargs echo -n`
 	if [ "${patch_type}" == "KernelPatch" ]; then
 	#if [${patch_type} == "KernelPatch"]; then
@@ -75,7 +40,7 @@ check_patch_type() {
 	return 1
 }
 
-check_version() {
+function check_version() {
 	local kv=`uname -r`
 	kernel_version="kernel-"${kv%.*}
 	patch_version=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n`
@@ -86,7 +51,7 @@ check_version() {
 	return 0
 }
 
-check_patched() {
+function check_patched() {
 	lsmod | grep $PATCHNAME > /dev/null
 
 	if [ `echo $?` -eq 0 ]; then
@@ -97,16 +62,20 @@ check_patched() {
 
 }
 
-get_binary() {
+function get_binary() {
 	package_name=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n`
 	echo `rpm -ql $package_name |grep "\/$package_name$"  | xargs file | grep ELF | awk  -F: '{print $1}'`
 }
 
-apply_patch() {
+function build_patch() {
+	$PATCH_BUILD_CMD $@
+}
+
+function apply_patch() {
 	patch_is_syscare || return 1
 	check_version || return 1
 	check_patched && return 0
-	
+
 	if  (check_patch_type 0) ; then
 		insmod $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
 		echo "ok"
@@ -116,11 +85,9 @@ apply_patch() {
 	else
 		upatch-tool apply -b $(get_binary) -p $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
 	fi
-#EOF
 }
 
-remove_patch() {
-	#判断模块是否存在??
+function remove_patch() {
         patch_is_syscare || return 1
 	check_version || return 1
 
@@ -129,7 +96,7 @@ remove_patch() {
 		if [ `cat $patch_file` -eq 1 ]; then
 			echo "patch is in use"
 	       		return
-	 	else		
+	 	else
 			rmmod $PATCHNAME
 			echo "ok"
 			return
@@ -139,13 +106,13 @@ remove_patch() {
 	fi
 }
 
-active_patch() {
+function active_patch() {
         patch_is_syscare || return 1
 	check_version || return 1
 
 	#判断是否已经是1
 	local patch_file=/sys/kernel/livepatch/$PATCHNAME/enabled
-	
+
 	if check_patch_type 0 ; then
 		if [ `cat $patch_file` -eq 1 ] ; then
 			echo "ok"
@@ -160,12 +127,12 @@ active_patch() {
 	fi
 }
 
-deactive_patch() {
+function deactive_patch() {
         patch_is_syscare || return 1
 	check_version || return 1
-	
+
 	local patch_file=/sys/kernel/livepatch/$PATCHNAME/enabled
-	
+
 	if check_patch_type 0 ; then
 		if [ `cat $patch_file` -eq 0 ] ; then
 			echo "ok"
@@ -180,7 +147,7 @@ deactive_patch() {
 	fi
 }
 
-file_list() {
+function file_list() {
         if (patch_is_syscare 1) && (check_version 1) ; then
                 return
         fi
@@ -188,7 +155,7 @@ file_list() {
 	echo `cat $PATCHESDIR/$PATCHNAME/patch_info | grep "patch list" | awk -F ':' '{print $2}' | xargs echo -n`
 }
 
-patch_list() {
+function patch_list() {
 	files=$(ls $PATCHESDIR)
 	if [[ $files = "" ]]; then
 		echo "no patch"
@@ -198,10 +165,9 @@ patch_list() {
 	for file in $files;do
 		echo "$file"
 	done
-	
 }
 
-patch_status() {
+function patch_status() {
 	patch_is_syscare || return 1
 	check_version || return 1
 
@@ -210,68 +176,63 @@ patch_status() {
 		return
 	fi
 	echo "$PATCHNAME DEACTIVE"
-	return	
+	return
 }
 
-usage() {
-	echo "usage: syscare <command> [<args>]" >&2
-	echo "	apply <patch-name>	apply patch into the running kernel or process" >&2
-	echo "	active <patch-name>	activate patch into the running kernel or process" >&2
-	echo "	deactive <patch-name>	deactive patch" >&2
-	echo "	remove <patch-name>	remove the patch in kernel or process" >&2
-	echo "	list			query local patched list"
-	echo "	-h, --help	show this help message" >&2
+function usage() {
+	echo -e "\033[1;4mUsage:\033[0m \033[1msyscare\033[0m <command> [<args>]" >&2
+	echo "  "
+	echo -e "\033[1;4mCommand:\033[0m"
+	echo -e "  \033[1mapply\033[0m <patch-name>              Apply patch into the running kernel or process" >&2
+	echo -e "  \033[1mactive\033[0m <patch-name>             Activate patch into the running kernel or process" >&2
+	echo -e "  \033[1mdeactive\033[0m <patch-name>           Deactive patch" >&2
+	echo -e "  \033[1mremove\033[0m <patch-name>             Remove the patch in kernel or process" >&2
+	echo -e "  \033[1mlist\033[0m                            Query local patched list"
+	echo -e "  \033[1m-h, --help\033[0m                      Show this help message" >&2
+	echo "  "
+	echo -e "  \033[1mbuild\033[0m                           Build patch, more details:"
+	$PATCH_BUILD_CMD --help
 }
 
-#while [[ $# -gt 0]];do
-if [[ $# -gt 4 ]]; then
-	echo "parameter more than 3"
-	return 1
+if [[ $# -lt 1 ]]; then
+	echo "need parameters"
+	usage
+	exit 1
 fi
 
-while [[ $# -gt 0 ]]; do
-	case "$1" in
-		help	|--help)
-			usage
-			exit 0
-			;;
-		apply	|--apply-patch)
-			PATCHNAME="$2"
-			apply_patch
-			shift
-			;;
-		active	|--active-patch)
-			PATCHNAME="$2"
-			active_patch
-			shift
-			;;
-		deactive	|--deactive-patch)
-			PATCHNAME="$2"
-			deactive_patch
-			shift
-			;;
-		remove	|--remove-patch)
-			PATCHNAME="$2"
-			remove_patch
-			shift
-			;;
-		list	|--all-patch)
-			patch_list
-			shift
-			;;
-		status	|--patch-status)
-			PATCHNAME=$2
-			patch_status
-			shift
-			;;
-		#TODO: auto add RPM func
-		#installrpm |--install-patch-rpm)
-		#	install_rpm
-		#	shift
-		#	;;
-		*)
-			echo "command not found"
-			break
-	esac
-	shift
-done
+case "$1" in
+	help	|-h	|--help)
+		usage
+		exit 0
+		;;
+	build	|--build-patch)
+		shift
+		build_patch $@
+		;;
+	apply	|--apply-patch)
+		PATCHNAME="$2"
+		apply_patch
+		;;
+	active	|--active-patch)
+		PATCHNAME="$2"
+		active_patch
+		;;
+	deactive	|--deactive-patch)
+		PATCHNAME="$2"
+		deactive_patch
+		;;
+	remove	|--remove-patch)
+		PATCHNAME="$2"
+		remove_patch
+		;;
+	list	|--all-patch)
+		patch_list
+		;;
+	status	|--patch-status)
+		PATCHNAME=$2
+		patch_status
+		;;
+	*)
+		echo "command not found"
+		break
+esac
