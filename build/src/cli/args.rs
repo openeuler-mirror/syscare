@@ -22,6 +22,10 @@ pub struct CliArguments {
     #[arg(long)]
     pub target_name: Option<String>,
 
+    /// Patch target executable name
+    #[arg(short, long)]
+    pub target_elfname: Option<String>,
+
     /// Patch target version
     #[arg(long)]
     pub target_version: Option<String>,
@@ -29,10 +33,6 @@ pub struct CliArguments {
     /// Patch target release
     #[arg(long)]
     pub target_release: Option<String>,
-
-    /// Patch target executable name
-    #[arg(short, long)]
-    pub target_elfname: Option<String>,
 
     /// Patch target license
     #[arg(long)]

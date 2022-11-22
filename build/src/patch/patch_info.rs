@@ -284,13 +284,13 @@ impl PatchInfo {
 impl std::fmt::Display for PatchInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("name:     {}\n", self.get_patch().get_name()))?;
-        f.write_fmt(format_args!("summary:  {}\n", self.get_summary()))?;
         f.write_fmt(format_args!("type:     {}\n", self.get_patch_type()))?;
-        f.write_fmt(format_args!("version:  {}\n", self.get_patch().get_version()))?;
-        f.write_fmt(format_args!("release:  {}\n", self.get_patch().get_release()))?;
-        f.write_fmt(format_args!("license:  {}\n", self.get_license()))?;
         f.write_fmt(format_args!("target:   {}\n", self.get_target()))?;
         f.write_fmt(format_args!("elf_name: {}\n", self.get_target_elf_name()))?;
+        f.write_fmt(format_args!("license:  {}\n", self.get_license()))?;
+        f.write_fmt(format_args!("version:  {}\n", self.get_patch().get_version()))?;
+        f.write_fmt(format_args!("release:  {}\n", self.get_patch().get_release()))?;
+        f.write_fmt(format_args!("summary:  {}\n", self.get_summary()))?;
         f.write_str("\npatch list:")?;
         for patch_file in self.get_file_list() {
             f.write_fmt(format_args!("\n{} {}", patch_file.get_name(), patch_file.get_digest()))?;
