@@ -309,8 +309,7 @@ static void layout_jmptable(struct upatch_module *mod, struct upatch_load_info *
         + info->jmp_max_entry * sizeof(struct upatch_jmp_table_entry);
 }
 
-/* TODO: lock for mm */
-unsigned long get_upatch_pole(unsigned long hint, unsigned long size)
+unsigned long get_upatch_hole(unsigned long hint, unsigned long size)
 {
     unsigned long range;
     unsigned search = hint;
@@ -329,19 +328,28 @@ unsigned long get_upatch_pole(unsigned long hint, unsigned long size)
 static void __user *__upatch_module_alloc(unsigned long hint, unsigned long size)
 {
     unsigned long mem_addr;
-    unsigned long addr = get_upatch_pole(hint, size);
-    if (!addr)
-        return NULL;
+    unsigned long patch_hole_addr;
 
-    mem_addr = vm_mmap(NULL, addr, size,
+    mem_addr = 0;
+    if (mmap_write_lock_killable(current->mm))
+        goto err_out;
+
+    patch_hole_addr = get_upatch_hole(hint, size);
+    if (!patch_hole_addr)
+        goto err_out;
+
+    mem_addr = vm_mmap(NULL, patch_hole_addr, size,
         PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_ANONYMOUS | MAP_PRIVATE, 0);
-    if (mem_addr != addr) {
-        pr_err("find wrong place 0x%lx <- 0x%lx \n", mem_addr, addr);
+    if (mem_addr != patch_hole_addr) {
+        pr_err("find wrong place 0x%lx <- 0x%lx \n", mem_addr, patch_hole_addr);
         vm_munmap(mem_addr, size);
-        return NULL;
+        mem_addr = 0;
+        goto err_out;
     }
 
+err_out:
+    mmap_write_unlock(current->mm);
     return (void *)mem_addr;
 }
 
