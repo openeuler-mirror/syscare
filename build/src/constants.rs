@@ -28,11 +28,11 @@ pub const PATCH_VERSION_DIGITS:  usize = 8;
 // Package
 pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
 pub const PKG_FILE_EXTENSION:               &str = "rpm";
-pub const PKG_FLAG_PATCH_BIN_FLAG:          &str = "patch";
-pub const PKG_FLAG_PATCHED_SRC_PKG:         &str = "patched";
+pub const PKG_FLAG_PATCH_BINARY:            &str = "patch";
+pub const PKG_FLAG_PATCHED_SOURCE:          &str = "patched";
 pub const PKG_FLAG_NO_SOURCE_PKG:           &str = "(none)";
-pub const PKG_PATCH_VERSION_FILE_NAME:      &str = "syscare-patch-version";
-pub const PKG_PATCH_TARGET_FILE_NAME:       &str = "syscare-patch-target";
+pub const PKG_VERSION_FILE_NAME:            &str = "syscare-patch-version";
+pub const PKG_TARGET_FILE_NAME:             &str = "syscare-patch-target";
 pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";
 pub const PKG_SPEC_TAG_NAME_RELEASE:        &str = "Release:";
 pub const PKG_SPEC_TAG_NAME_SOURCE:         &str = "Source";

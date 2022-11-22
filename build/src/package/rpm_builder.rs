@@ -28,8 +28,8 @@ impl RpmBuilder {
 
     pub fn write_patch_target_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         let rpm_source_dir = self.build_root.sources_dir();
-        let version_file_path = format!("{}/{}", rpm_source_dir, PKG_PATCH_VERSION_FILE_NAME);
-        let target_file_path  = format!("{}/{}", rpm_source_dir, PKG_PATCH_TARGET_FILE_NAME);
+        let version_file_path = format!("{}/{}", rpm_source_dir, PKG_VERSION_FILE_NAME);
+        let target_file_path  = format!("{}/{}", rpm_source_dir, PKG_TARGET_FILE_NAME);
 
         fs::write_string_to_file(
             version_file_path,

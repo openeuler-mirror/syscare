@@ -155,7 +155,7 @@ impl PatchBuildCLI {
         let pkg_source_dir = pkg_build_root.sources_dir();
 
         // Collect patch version info from patched source package
-        let patch_version_file = fs::find_file(pkg_source_dir, PKG_PATCH_VERSION_FILE_NAME, false, false);
+        let patch_version_file = fs::find_file(pkg_source_dir, PKG_VERSION_FILE_NAME, false, false);
         if let Ok(file_path) = &patch_version_file {
             let arg_version = args.version.parse::<u32>();
             let pkg_version = fs::read_file_to_string(file_path)?.parse::<u32>();
@@ -169,7 +169,7 @@ impl PatchBuildCLI {
         }
 
         // Collect patch target info from patched source package
-        let patch_target_file = fs::find_file(pkg_source_dir, PKG_PATCH_TARGET_FILE_NAME, false, false);
+        let patch_target_file = fs::find_file(pkg_source_dir, PKG_TARGET_FILE_NAME, false, false);
         match &patch_target_file {
             Ok(file_path) => {
                 let patch_target_name = fs::read_file_to_string(file_path)?.parse::<PatchName>()?;

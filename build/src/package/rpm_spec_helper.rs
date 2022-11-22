@@ -20,7 +20,7 @@ impl RpmSpecHelper {
         let tag_name  = orig_tag.get_name().to_string();
         let tag_value = format!("{}.{}.{}.{}.{}",
             target.get_release(),
-            PKG_FLAG_PATCH_BIN_FLAG,
+            PKG_FLAG_PATCHED_SOURCE,
             patch.get_name(),
             patch.get_version(),
             patch.get_release()
@@ -63,14 +63,14 @@ impl RpmSpecHelper {
             source_tag_list.push(RpmSpecTag::new_id_tag(
                 tag_name.to_owned(),
                 tag_id,
-                PKG_PATCH_VERSION_FILE_NAME.to_owned()
+                PKG_VERSION_FILE_NAME.to_owned()
             ));
             tag_id += 1;
 
             source_tag_list.push(RpmSpecTag::new_id_tag(
                 tag_name.to_owned(),
                 tag_id,
-                PKG_PATCH_TARGET_FILE_NAME.to_owned()
+                PKG_TARGET_FILE_NAME.to_owned()
             ));
         }
 
