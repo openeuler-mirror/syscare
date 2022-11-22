@@ -113,28 +113,28 @@ static void show_program_info(struct arguments *arguments)
 void active(int upatch_fd, const char *file){
     int ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
     if (ret < 0) {
-        error(ret, 0, "ERROR - %d: active", errno);
+        error(errno, 0, "ERROR - %d: active", errno);
     }
 }
 
 void deactive(int upatch_fd, const char *file){
     int ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
     if (ret < 0) {
-        error(ret, 0, "ERROR - %d: deactive", errno);
+        error(errno, 0, "ERROR - %d: deactive", errno);
     }
 }
 
 void install(int upatch_fd, struct upatch_conmsg* upatch){
     int ret = ioctl(upatch_fd, UPATCH_ATTACH_PATCH, upatch);
     if (ret < 0) {
-        error(ret, 0, "ERROR - %d: install", errno);
+        error(errno, 0, "ERROR - %d: install", errno);
     }
 }
 
 void uninstall(int upatch_fd, const char *file){
     int ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
     if (ret < 0) {
-        error(ret, 0, "ERROR - %d: uninstall", errno);
+        error(errno, 0, "ERROR - %d: uninstall", errno);
     }
 }
 
@@ -143,17 +143,15 @@ int main(int argc, char*argv[])
     struct arguments arguments;
     char path[PATH_MAX];
     int upatch_fd;
-    int ret;
 
     memset(&arguments, 0, sizeof(arguments));
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 
     snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
-    ret = open(path, O_RDWR);
-    if (ret < 0){
-        error(ret, 0, "ERROR: open failed - %s \n ", path);
+    upatch_fd = open(path, O_RDWR);
+    if (upatch_fd < 0){
+        error(errno, 0, "ERROR - %d: open failed %s", errno, path);
     }
-    upatch_fd = ret;
 
     const char* file = (arguments.upatch.binary == NULL) ? arguments.upatch.patch : arguments.upatch.binary;
 
@@ -179,9 +177,9 @@ int main(int argc, char*argv[])
             uninstall(upatch_fd, file);
             break;
         default:
-            ret = -1;
+            error(-1, 0, "ERROR - -1: no this cmd");
             break;
     }
 
-    return ret;
+    return 0;
 }
