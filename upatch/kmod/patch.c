@@ -182,6 +182,7 @@ static int do_module_create(struct upatch_entity *entity)
         upatch_module_new(task_pid_nr(current));
     if (!mod)
         return -ENOMEM;
+    mod->set_state = entity->entity_status;
     return upatch_module_insert(entity, mod);
 }
 
@@ -541,6 +542,7 @@ void upatch_update_entity_status(struct upatch_entity *entity,
 {
     struct upatch_module *um;
     mutex_lock(&entity->module_list_lock);
+    entity->entity_status = status;
     list_for_each_entry(um, &entity->module_list, list) {
         um->set_state = status;
     }

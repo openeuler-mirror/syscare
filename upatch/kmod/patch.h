@@ -126,6 +126,8 @@ struct uprobe_offset {
 struct upatch_entity {
     struct inode *binary;
     struct inode *patch;
+    /* used for moudle create */
+    enum upatch_module_state entity_status;
     struct list_head list;
     struct mutex offset_list_lock;
     struct list_head offset_list;
