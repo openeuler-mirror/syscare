@@ -186,6 +186,7 @@ static int do_module_create(struct upatch_entity *entity)
     return upatch_module_insert(entity, mod);
 }
 
+/* TODO: check modules that doesn't live anymore */
 static int do_module_remove(struct upatch_entity *entity,
     struct upatch_module *module)
 {
@@ -444,10 +445,11 @@ int upatch_attach(const char *binary, const char *patch)
         goto out;
     }
 
+    /* TODO: update status if found */
     entity = upatch_entity_get(file_inode(binary_file));
     if (entity) {
-        ret = -EPERM;
-        pr_err("duplicated install upatch action \n");
+        ret = 0;
+        upatch_update_entity_status(entity, UPATCH_STATE_RESOLVED);
         goto out;
     }
 
