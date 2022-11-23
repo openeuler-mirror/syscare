@@ -9,12 +9,18 @@
 
 
 #### 安装教程
+依赖安装：
+```
+1.yum install -y kernel-source-`uname -r` kernel-debuginfo-`uname -r` kernel-devel-`uname -r` 
+2.yum install -y elfutils-libelf-devel openssl-devel dwarves python3-devel rpm-build bison cmake make gcc g++
+```
 
-源代码安装：
+源代码编译安装：
+```
 1.  git clone https://gitee.com/openeuler/syscare.git
 2.  cd syscare & make rpm
 3.  rpm -ivh syscare-<version>.rpm
-4.  enjoy the tool.
+```
 
 二进制安装：
 1. 正确配置dfn/yum仓库文件；
@@ -23,11 +29,47 @@
 
 #### 使用说明
 
-1.  syscare build <system package>.src.rpm xxxx.patch
-2.  syscare apply <system pacakge>-patch.rpm
-3.  syscare active <system package>
-4.  syscare deactive <system packge>
-5.  syscare remove <system package>
+```
+1.  syscare build --help	具体参数见build/README.md
+2.  syscare apply patch-name
+3.  syscare active patch-name
+4.  syscare deactive patch-name
+5.  syscare remove patch-name
+```
+
+#### 示例
+
+####源码编译
+
+
+####补丁制作
+内核补丁制作：
+	syscare build --patch-name test --source ./kernel-xxxx.oexx.src.rpm --debug-info ./vmlinux ./test.patch
+用户态补丁制作：
+	syscare build --patch-name redis-test --source ./redis-xxx.rpm --target redis-server --debug-info ./redis ./redis-test.patch
+
+####补丁管理
+```
+1.补丁安装
+syscare apply test
+
+2.补丁激活：
+syscare active test
+
+3.补丁去激活：
+syscarae deactive test
+
+4.补丁卸载/移除：
+syscare remove test
+补丁只有在deactive的状态才能移除
+
+5.补丁状态查询：
+syscare status test
+
+6.查询syscare所有补丁：
+syscare patch list
+
+```
 
 #### 参与贡献
 
@@ -38,11 +80,3 @@
 5.  新建 Pull Request
 
 
-#### 特技
-
-1.  使用 Readme\_XXX.md 来支持不同的语言，例如 Readme\_en.md, Readme\_zh.md
-2.  Gitee 官方博客 [blog.gitee.com](https://blog.gitee.com)
-3.  你可以 [https://gitee.com/explore](https://gitee.com/explore) 这个地址来了解 Gitee 上的优秀开源项目
-4.  [GVP](https://gitee.com/gvp) 全称是 Gitee 最有价值开源项目，是综合评定出的优秀开源项目
-5.  Gitee 官方提供的使用手册 [https://gitee.com/help](https://gitee.com/help)
-6.  Gitee 封面人物是一档用来展示 Gitee 会员风采的栏目 [https://gitee.com/gitee-stars/](https://gitee.com/gitee-stars/)
