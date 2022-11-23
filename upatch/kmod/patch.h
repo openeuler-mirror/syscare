@@ -27,11 +27,11 @@
  *      Actived: jmp instructions works (release hack) --> wait for futher command + safety check
  *      Unactived: no jmp instructions (re-gain hack) --> register again ?
  *      Removed: unregister the uprobe handler -> actived threads will be restored?
- * 
+ *
  *      used for the binary: apply / remove
  *      middle status: mmap
  *      used for the thread: actived / unactived
- *      
+ *
  *      limit: self-modifications for funcs are forbidden.
  */
 
@@ -150,5 +150,3 @@ int upatch_attach(const char *, const char *);
 int upatch_load(struct file *, struct file *, struct upatch_load_info *);
 
 #endif /* _UPATCH_PATCH_H */
-
-

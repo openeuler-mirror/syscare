@@ -37,13 +37,13 @@ static int patch_header_check(struct upatch_load_info *info)
 {
     if (info->len < sizeof(*(info->hdr)))
         return -ENOEXEC;
-    
+
     if (memcmp(info->hdr->e_ident, ELFMAG, SELFMAG) != 0
         || info->hdr->e_type != ET_REL
         || !elf_check_arch(info->hdr)
         || info->hdr->e_shentsize != sizeof(Elf_Shdr))
         return -ENOEXEC;
-    
+
     if (info->hdr->e_shoff >= info->len
 	    || (info->hdr->e_shnum * sizeof(Elf_Shdr) >
 		info->len - info->hdr->e_shoff))
@@ -58,7 +58,7 @@ __upatch_module_get(struct upatch_entity *entity, pid_t pid)
     list_for_each_entry(um, &entity->module_list, list) {
         if (um->pid == pid)
             return um;
-    }  
+    }
     return NULL;
 }
 
@@ -213,7 +213,7 @@ static void layout_sections(struct upatch_module *mod, struct upatch_load_info *
 
     for (i = 0; i < info->hdr->e_shnum; i++)
 		info->sechdrs[i].sh_entsize = ~0UL;
-    
+
     pr_debug("upatch section allocation order: \n");
     for (m = 0; m < ARRAY_SIZE(masks); ++m) {
         for (i = 0; i < info->hdr->e_shnum; ++i) {
@@ -232,7 +232,7 @@ static void layout_sections(struct upatch_module *mod, struct upatch_load_info *
                 mod->core_layout.text_size = mod->core_layout.size;
                 pr_info("text size is 0x%x \n", mod->core_layout.size);
                 break;
-            case 1: /* RO: text and ro-data */ 
+            case 1: /* RO: text and ro-data */
                 mod->core_layout.ro_size = mod->core_layout.size;
                 pr_info("read only size is 0x%x \n", mod->core_layout.size);
                 break;
@@ -374,15 +374,15 @@ static int upatch_module_alloc(struct upatch_load_info *info,
     layout->base = __upatch_module_alloc(info->running_elf.load_min, layout->size);
     if (!layout->base)
         return -ENOMEM;
-    
+
     if ((unsigned long)layout->base - info->running_elf.load_min >= user_limit) {
         pr_err("out of range limit \n");
         __upatch_module_memfree(layout->base, layout->size);
         return -ENOMEM;
     }
-    
+
     pr_info("upatch module at 0x%lx \n", (unsigned long)layout->base);
-    
+
     layout->kbase = vmalloc(layout->size);
     if (!layout->kbase) {
         __upatch_module_memfree(layout->base, layout->size);
@@ -546,7 +546,7 @@ static int find_upatch_module_sections(struct upatch_module *mod, struct upatch_
 
 static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr)
 {
-    struct upatch_jmp_table_entry *table = 
+    struct upatch_jmp_table_entry *table =
         info->mod->core_layout.kbase + info->jmp_offs;
     unsigned int index = info->jmp_cur_entry;
     if (index >= info->jmp_max_entry) {
@@ -597,9 +597,9 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
      *      2) only support existed symbols
      * 3. read symbol from library, combined with load_bias, calculate it directly
      *    and then worked with jmp table.
-     * 
+     *
      * Currently, we choose approach 2.
-     *     
+     *
      */
     /* .rela.plt is relocations for .dynsym */
     sechdr = &elf_info->sechdrs[elf_info->index.dynsym];
@@ -701,12 +701,12 @@ int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
 
     pr_debug("Applying relocate section %u to %u\n",
 	       relsec, sechdrs[relsec].sh_info);
-    
+
     for (i = 0; i < sechdrs[relsec].sh_size / sizeof(*rel); i++) {
         /* This is where to make the change, calculate it from kernel address */
         loc = (void *)sechdrs[sechdrs[relsec].sh_info].sh_addr
 			+ rel[i].r_offset;
-        
+
         real_loc = (void *)sechdrs[sechdrs[relsec].sh_info].sh_addralign
 			+ rel[i].r_offset;
 
@@ -714,7 +714,7 @@ int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
 		   undefined symbols have been resolved. */
 		sym = (Elf64_Sym *)sechdrs[symindex].sh_addr
 			+ ELF64_R_SYM(rel[i].r_info);
-        
+
         pr_debug("type %d st_value %Lx r_addend %Lx loc %Lx\n",
 		       (int)ELF64_R_TYPE(rel[i].r_info),
 		       sym->st_value, rel[i].r_addend, (u64)loc);
@@ -793,7 +793,7 @@ static int apply_relocations(struct upatch_module *mod, struct upatch_load_info 
 		/* Don't bother with non-allocated sections */
 		if (!(info->sechdrs[infosec].sh_flags & SHF_ALLOC))
 			continue;
-        
+
         if (info->sechdrs[i].sh_type == SHT_REL) {
             pr_err("do rel relocations for %s \n", name);
             return -EPERM;
@@ -829,7 +829,7 @@ static int post_relocation(struct upatch_module *mod, struct upatch_load_info *i
     ret = move_to_user(&mod->init_layout);
     if (ret)
         return ret;
-    
+
     return 0;
 }
 
@@ -954,7 +954,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     err = load_binary_syms(binary_file, &info->running_elf);
     if (err)
         goto free_hdr;
-    
+
     info->running_elf.load_info = info;
 
     info->len = i_size_read(file_inode(patch_file));
@@ -982,12 +982,12 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     err = setup_load_info(info);
     if (err)
         goto free_hdr;
-    
+
     /* update section address */
     err = rewrite_section_headers(info);
     if (err)
         goto free_hdr;
-    
+
     mod = layout_and_allocate(info);
     if (IS_ERR(mod)) {
         err = PTR_ERR(mod);
@@ -997,25 +997,25 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     err = add_upatch_unformed_mod(mod);
     if (err)
         goto free_module;
-    
+
     /* after this step, everything should be in its final step */
     err = find_upatch_module_sections(mod, info);
     if (err)
         goto free_module;
-    
+
     /* Fix up syms, so that st_value is a pointer to location. */
     err = simplify_symbols(mod, info);
     if (err < 0)
         goto free_module;
-    
+
     err = apply_relocations(mod, info);
     if (err < 0)
         goto free_module;
-    
+
     err = post_relocation(mod, info);
     if (err < 0)
         goto free_module;
-    
+
     err = complete_formation(mod, info);
     if (err < 0)
         goto free_module;

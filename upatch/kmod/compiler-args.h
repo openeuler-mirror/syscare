@@ -42,5 +42,3 @@ int compiler_args_handler(struct compiler_step *step, struct pt_regs *regs,
     char __user *cmd_addr);
 
 #endif /* _UPATCH_COMPILER_ARGS_H */
-
-

@@ -30,5 +30,3 @@ static bool inline streql(const char *a, const char *b)
 }
 
 #endif /* _UPATCH_COMMON_H */
-
-

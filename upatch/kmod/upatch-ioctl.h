@@ -44,5 +44,3 @@ struct upatch_conmsg {
 #define UPATCH_DEACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x8, const char *)
 
 #endif /* _UPATCH_IOCTL_H */
-
-

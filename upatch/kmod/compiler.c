@@ -157,14 +157,14 @@ static int generate_file_name(char *buf, int buf_len)
 
     if (!buf || buf_len < FILENAME_ID_LEN)
         return -EINVAL;
-    
+
     spin_lock(&filename_lock);
     filename_id ++;
     id = filename_id;
     spin_unlock(&filename_lock);
 
     snprintf(buf, buf_len, "%ld", id);
-    
+
     len = strlen(buf);
     buf[len] = '.';
     buf[len + 1] = 'o';
@@ -314,7 +314,7 @@ static int obtain_parameter_addr(char __user **pointer_array, char *name,
 
     if (addr)
         *addr = 0;
-    
+
     if (next_addr)
         *next_addr = 0;
 
@@ -453,7 +453,7 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
     out_dir = kmalloc(PATH_MAX, GFP_KERNEL);
     if (!out_dir)
         goto out;
-    
+
     ret = copy_para_from_user((unsigned long)((char *)dir_addr + ASSEMBLER_DIR_ENV_LEN + 1),
         out_dir, PATH_MAX);
     if (ret)
@@ -542,7 +542,7 @@ static int uprobe_compiler_handler(struct uprobe_consumer *self, struct pt_regs 
 
     if (!envp)
         return 0;
-    
+
     cs = check_env_for_step(envp, &cmd_addr);
     if (!cs) {
         pr_debug("no upatch cmd found \n");
@@ -735,9 +735,9 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
     ret = copy_para_from_user(user_addr, path, PATH_MAX);
     if (ret)
         goto out;
-    
+
     ep = get_elf_path(cmd, path);
-    
+
     switch (cmd)
     {
     case UPATCH_REGISTER_COMPILER:
@@ -819,5 +819,3 @@ void __exit compiler_hack_exit(void)
     clear_assembler_path();
     clear_compiler_step();
 }
-
-

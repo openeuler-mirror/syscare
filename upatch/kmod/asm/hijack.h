@@ -18,5 +18,3 @@ extern int run_execve_syscall(struct pt_regs *regs, const char __user *pathname,
 extern int run_exit_syscall(struct pt_regs *regs, int exit_val);
 
 #endif /* _UPATCH_HIJACK_H */
-
-

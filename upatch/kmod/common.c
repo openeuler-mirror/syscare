@@ -29,7 +29,7 @@ inline int copy_para_from_user(unsigned long addr, char *buf, size_t buf_len)
 
     if (copy_from_user(buf, (void __user *)addr, len))
         return -ENOMEM;
-    
+
     return 0;
 }
 
@@ -84,4 +84,3 @@ out_unlock:
     // spin_unlock_irqrestore(&inode->i_lock, flags);
     return d_file;
 }
-

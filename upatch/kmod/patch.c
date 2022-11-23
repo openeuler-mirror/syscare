@@ -51,14 +51,14 @@ static int __insert_upatch_entity(struct inode *binary, struct inode *patch)
 
     if (!binary || !patch)
         return -EINVAL;
-    
+
     if (__get_upatch_entity(binary))
         return 0;
-    
+
     entity = kzalloc(sizeof(*entity), GFP_KERNEL);
     if (!entity)
         return -ENOMEM;
-    
+
     entity->binary = binary;
     entity->patch = patch;
     list_add(&entity->list, &upatch_entity_list);
@@ -86,7 +86,7 @@ static int __insert_uprobe_offset(struct upatch_entity *entity, loff_t offset)
     uo = kzalloc(sizeof(*uo), GFP_KERNEL);
     if (!uo)
         return -ENOMEM;
-    
+
     uo->offset = offset;
     list_add(&uo->list, &entity->offset_list);
     return 0;
@@ -105,13 +105,13 @@ static bool check_upatch(Elf_Ehdr *ehdr)
 {
     if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0)
         return false;
-    
+
     if (ehdr->e_type != ET_REL)
         return false;
-    
+
     if (ehdr->e_shentsize != sizeof(Elf_Shdr))
         return false;
-    
+
     return true;
 }
 
@@ -206,7 +206,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     struct upatch_module *upatch_mod = NULL;
     pid_t pid = task_pid_nr(current);
     int ret = 0;
-    
+
     pc = instruction_pointer(regs);
     pr_info("patch handler works in 0x%lx \n", pc);
 
@@ -268,7 +268,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     if (need_active) {
         ret = do_module_active(upatch_mod, regs);
         goto out;
-    }  
+    }
 
 out:
     if (binary_file)
@@ -351,7 +351,7 @@ void upatch_entity_try_remove(struct upatch_entity *entity)
 
 /*
  * find valid entry points for applying patch.
- * no matter which point hits, it will active the whole patch. 
+ * no matter which point hits, it will active the whole patch.
  */
 static int handle_upatch_funcs(struct file *binary_file, struct file *patch_file,
     Elf_Shdr *upatch_shdr)

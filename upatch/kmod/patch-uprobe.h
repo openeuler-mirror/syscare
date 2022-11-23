@@ -24,5 +24,3 @@ static inline bool uprobe_default_filter(struct uprobe_consumer *self,
 elf_addr_t calculate_load_address(struct file *, bool);
 
 #endif /* _UPATCH_UPROBE_H */
-
-

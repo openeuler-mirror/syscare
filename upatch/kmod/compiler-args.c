@@ -62,10 +62,10 @@ static int copy_between_user_ul(char __user **dst_addr, char __user **src_addr)
 
     if (get_user(arg, src_addr))
         return -EFAULT;
-    
+
     if (put_user(arg, dst_addr))
         return -EFAULT;
-    
+
     return 0;
 }
 

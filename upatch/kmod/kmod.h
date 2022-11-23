@@ -16,5 +16,3 @@
 #include "upatch-ioctl.h"
 
 #endif /* _UPATCH_KMOD_H */
-
-
