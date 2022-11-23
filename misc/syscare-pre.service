@@ -1,0 +1,12 @@
+[Unit]
+Description=Prepare for syscare service
+Requires=local-fs.target
+After=local-fs.target
+Before=syscare-restore.service
+
+[Service]
+ExecStart=modprobe upatch
+User=root
+Group=root
+Type=oneshot
+RemainAfterExit=yes
