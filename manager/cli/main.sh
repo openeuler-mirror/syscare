@@ -12,6 +12,8 @@ PATCH_LIST=""
 PATCH_NAME=""
 PATCH_TYPE=""
 ELF_PATH=""
+KPATCH_MODULE_NAME=""
+KPATCH_STATE_FILE=""
 
 function check_root_user() {
 	if [ "$(whoami)" == "root" ]; then
@@ -137,7 +139,7 @@ function get_patch_elf_path() {
 	echo $(rpm -ql "${package_name}" | grep "\/${binary_name}$" | xargs file | grep ELF | awk  -F: '{print $1}')
 }
 
-function check_version() {
+function check_kversion() {
 	[ "${PATCH_TYPE}" == "kernel" ] || return 0
 
 	local kv=$(uname -r)
@@ -151,8 +153,8 @@ function check_version() {
 	return 0
 }
 
-function check_patched() {
-	lsmod | grep "${PATCH_NAME}" > /dev/null
+function check_kpatched() {
+	lsmod | grep -q -w "${KPATCH_MODULE_NAME}" > /dev/null
 
 	if [ $? -eq 0 ]; then
 		return 0
@@ -166,14 +168,11 @@ function build_patch() {
 
 function apply_patch() {
 	is_patch_exist "${PATCH_NAME}" || return 1
-	#	check_version || return 1
-	#	check_patched && return 0
 
 	if  [ "${PATCH_TYPE}" == "kernel" ] ; then
-		insmod "${PATCH_ROOT}/${PATCH_NAME}.ko"
+		check_kpatched || insmod "${PATCH_ROOT}/${PATCH_NAME}.ko"
+		active_patch
 		return
-		#if [echo $? -eq 0]
-		#modprobe ${PATCH_NAME}
 	else
 		"${UPATCH_TOOL}" apply -b "${ELF_PATH}" -p "${PATCH_ROOT}/${PATCH_NAME}"
 	fi
@@ -181,11 +180,13 @@ function apply_patch() {
 
 function remove_patch() {
 	is_patch_exist "${PATCH_NAME}" || return 1
-	check_version || return 1
 
-	local patch_file="/sys/kernel/livepatch/${PATCH_NAME}/enabled"
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
-		if [ $(cat "${patch_file}") -eq 1 ]; then
+		check_kversion || return 1
+
+		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+
+		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ]; then
 			echo "patch is in use"
 			return
 	 	else
@@ -199,16 +200,15 @@ function remove_patch() {
 
 function active_patch() {
 	is_patch_exist "${PATCH_NAME}" || return 1
-	check_version || return 1
-
-	#判断是否已经是1
-	local patch_file="/sys/kernel/livepatch/${PATCH_NAME}/enabled"
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
-		if [ $(cat "${patch_file}") -eq 1 ] ; then
+		check_kversion || return 1
+		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+
+		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ] ; then
 			return
 		else
-			echo 1 > "${patch_file}"
+			echo 1 > "${KPATCH_STATE_FILE}"
 			return
 		fi
 	else
@@ -218,15 +218,15 @@ function active_patch() {
 
 function deactive_patch() {
 	is_patch_exist "${PATCH_NAME}" || return 1
-	check_version || return 1
-
-	local patch_file="/sys/kernel/livepatch/${PATCH_NAME}/enabled"
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
-		if [ $(cat "${patch_file}") -eq 0 ] ; then
+		check_kversion || return 1
+		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+
+		if [ $(cat "${KPATCH_STATE_FILE}") -eq 0 ] ; then
 			return
 		else
-			echo 0 > "${patch_file}"
+			echo 0 > "${KPATCH_STATE_FILE}"
 			return
 		fi
 	else
@@ -238,17 +238,16 @@ function patch_status() {
 	local patch_name="$1"
 	local patch_type=$(get_patch_type "${patch_name}")
 
+	initialize_patch_info ${patch_name}
 	is_patch_exist "${patch_name}" || return 1
 
 	if [ "${patch_type}" == "kernel" ]; then
-		local kernel_state_file="/sys/kernel/livepatch/${patch_name}/enabled"
-
-		if [ ! -f "${kernel_state_file}" ]; then
+		if [ ! -f "${KPATCH_STATE_FILE}" ]; then
 			echo "DEACTIVE"
 			return
 		fi
 
-		if [ $(cat "${kernel_state_file}") -eq 1 ]; then
+		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ]; then
 			echo "ACTIVE"
 		else
 			echo "DEACTIVE"
@@ -291,6 +290,10 @@ function initialize_patch_info() {
 	PATCH_ROOT=$(get_patch_root_by_patch_name "${patch_name}")
 	PATCH_TYPE=$(get_patch_type "${patch_name}")
 	ELF_PATH=$(get_patch_elf_path "${patch_name}")
+	if [ "${PATCH_TYPE}" == "kernel" ]; then
+		KPATCH_MODULE_NAME="${PATCH_NAME//-/_}"
+		KPATCH_STATE_FILE="/sys/kernel/livepatch/${KPATCH_MODULE_NAME}/enabled"
+	fi
 }
 
 function main() {
