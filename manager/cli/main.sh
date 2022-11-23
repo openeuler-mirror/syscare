@@ -5,11 +5,15 @@ set -e
 
 PATCHESDIR="/usr/lib/syscare/patches"
 PATCH_BUILD_CMD="/usr/libexec/syscare/syscare-build"
+UPATCH_TOOL="/usr/libexec/syscare/upatch-tool"
+PATCH_TYPE="kernel"
+ELF_PATH=""
+PATCHNAME=""
 
 function check_patches_dir() {
-	local count=`ls $PATCHESDIR|wc -w`
+	local count=$(ls $PATCHESDIR|wc -w)
 
-	if [ "$count" > 0 ]; then
+	if [ "$count" -gt 0 ]; then
 		return 0
 	fi
 	#syscare patches is empty
@@ -20,7 +24,7 @@ function patch_is_syscare() {
 	files=$(ls $PATCHESDIR)
 	#patch name is exist return 0
 	for filename in $files; do
-		if [[ "$PATCHNAME" = "$filename" ]]; then
+		if [ "$PATCHNAME" == "$filename" ]; then
 			if check_patches_dir == 0 ; then
 				#echo "There is no patch!"
 				return 0
@@ -31,23 +35,39 @@ function patch_is_syscare() {
  	return 1
 }
 
-function check_patch_type() {
-	patch_type=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "type" | awk -F ':' '{print $2}' | xargs echo -n`
+function get_patch_type() {
+	local patch_type=$(cat $PATCHESDIR/$PATCHNAME/patch_info | grep "type" | awk -F ':' '{print $2}' | xargs echo -n)
 	if [ "${patch_type}" == "KernelPatch" ]; then
-	#if [${patch_type} == "KernelPatch"]; then
-		return 0
+		PATCH_TYPE="kernel"
+	else
+		PATCH_TYPE="user"
 	fi
-	return 1
+}
+
+function get_binary() {
+	[ "$PATCH_TYPE" == "kernel" ] && return
+
+	local package_name=$(cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n)
+	local binary_name=$(cat $PATCHESDIR/$PATCHNAME/patch_info | grep "elf_name" | awk -F ':' '{print $2}' | xargs echo -n)
+	ELF_PATH=$(rpm -ql $package_name |grep "\/$binary_name$"  | xargs file | grep ELF | awk  -F: '{print $1}')
+}
+
+function prepare_patchinfo {
+	get_patch_type
+	get_binary
 }
 
 function check_version() {
-	local kv=`uname -r`
-	kernel_version="kernel-"${kv%.*}
-	patch_version=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n`
-	if [[ "$kernel_version" != "$patch_version" ]]; then
-		echo "patch versio is mismatch patch version"
+	[ "$PATCH_TYPE" == "kernel" ] || return 0
+
+	local kv=$(uname -r)
+	local kernel_version="kernel-"${kv%.*}
+	local patch_version=$(cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n)
+	if [ "$kernel_version" != "$patch_version" ]; then
+		echo "Patch version mismatches with patch version."
 		return 1
 	fi
+
 	return 0
 }
 
@@ -55,16 +75,10 @@ function check_patched() {
 	lsmod | grep $PATCHNAME > /dev/null
 
 	if [ `echo $?` -eq 0 ]; then
-		echo "ok"
 		return 0
 	fi
 	return 1
 
-}
-
-function get_binary() {
-	package_name=`cat $PATCHESDIR/$PATCHNAME/patch_info | grep "target" | awk -F ':' '{print $2}' | xargs echo -n`
-	echo `rpm -ql $package_name |grep "\/$package_name$"  | xargs file | grep ELF | awk  -F: '{print $1}'`
 }
 
 function build_patch() {
@@ -73,17 +87,16 @@ function build_patch() {
 
 function apply_patch() {
 	patch_is_syscare || return 1
-	check_version || return 1
-	check_patched && return 0
+#	check_version || return 1
+#	check_patched && return 0
 
-	if  (check_patch_type 0) ; then
+	if  [ "$PATCH_TYPE" == "kernel" ] ; then
 		insmod $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
-		echo "ok"
 		return
 		#if [echo $? -eq 0]
 		#modprobe $PATCHNAME
 	else
-		upatch-tool apply -b $(get_binary) -p $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
+		${UPATCH_TOOL} apply -b "$ELF_PATH" -p $PATCHESDIR/$PATCHNAME/$PATCHNAME
 	fi
 }
 
@@ -92,17 +105,16 @@ function remove_patch() {
 	check_version || return 1
 
 	local patch_file=/sys/kernel/livepatch/$PATCHNAME/enabled
-	if check_patch_type 0 ; then
-		if [ `cat $patch_file` -eq 1 ]; then
+	if [ "$PATCH_TYPE" == "kernel" ] ; then
+		if [ $(cat $patch_file) -eq 1 ]; then
 			echo "patch is in use"
 	       		return
 	 	else
 			rmmod $PATCHNAME
-			echo "ok"
 			return
 		fi
 	else
-		upatch-tool remove -b $(get_binary) -p $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
+		${UPATCH_TOOL} remove -b "$ELF_PATH"
 	fi
 }
 
@@ -113,17 +125,15 @@ function active_patch() {
 	#判断是否已经是1
 	local patch_file=/sys/kernel/livepatch/$PATCHNAME/enabled
 
-	if check_patch_type 0 ; then
-		if [ `cat $patch_file` -eq 1 ] ; then
-			echo "ok"
+	if [ "$PATCH_TYPE" == "kernel" ] ; then
+		if [ $(cat $patch_file) -eq 1 ] ; then
 			return
 		else
 			echo 1 > $patch_file
-			echo "ok"
 			return
 		fi
 	else
-		upatch-tool deactive -b $(get_binary) -p $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
+		${UPATCH_TOOL} active -b "$ELF_PATH"
 	fi
 }
 
@@ -133,17 +143,15 @@ function deactive_patch() {
 
 	local patch_file=/sys/kernel/livepatch/$PATCHNAME/enabled
 
-	if check_patch_type 0 ; then
-		if [ `cat $patch_file` -eq 0 ] ; then
-			echo "ok"
+	if [ "$PATCH_TYPE" == "kernel" ] ; then
+		if [ $(cat $patch_file) -eq 0 ] ; then
 			return
 		else
 			echo 0 > $patch_file
-			echo "ok"
 			return
 		fi
 	else
-		upatch-tool deactive -b $(get_binary) -p $PATCHESDIR/$PATCHNAME/$PATCHNAME.ko
+		${UPATCH_TOOL} deactive -b "$ELF_PATH"
 	fi
 }
 
@@ -152,7 +160,7 @@ function file_list() {
                 return
         fi
 
-	echo `cat $PATCHESDIR/$PATCHNAME/patch_info | grep "patch list" | awk -F ':' '{print $2}' | xargs echo -n`
+	echo $(cat $PATCHESDIR/$PATCHNAME/patch_info | grep "patch list" | awk -F ':' '{print $2}' | xargs echo -n)
 }
 
 function patch_list() {
@@ -171,12 +179,25 @@ function patch_status() {
 	patch_is_syscare || return 1
 	check_version || return 1
 
-	if [ `cat /sys/kernel/livepatch/$PATCHNAME/enabled` -eq 1 ]; then
-		echo "$PATCHNAME ACTIVE"
+	if [ "$PATCH_TYPE" == "kernel" ]; then
+		local kernel_state_file="/sys/kernel/livepatch/$PATCHNAME/enabled"
+
+		if [ ! -f "${kernel_state_file}" ]; then
+			echo "$PATCHNAME DEACTIVE"
+			return
+		fi
+
+		if [ $(cat "$kernel_state_file") -eq 1 ]; then
+			echo "$PATCHNAME ACTIVE"
+			return
+		fi
+		echo "$PATCHNAME DEACTIVE"
 		return
 	fi
-	echo "$PATCHNAME DEACTIVE"
-	return
+
+	echo "Upatch is on processing.."
+
+	#TODO: add user patch
 }
 
 function usage() {
@@ -211,17 +232,21 @@ case "$1" in
 		;;
 	apply	|--apply-patch)
 		PATCHNAME="$2"
+		prepare_patchinfo
 		apply_patch
 		;;
 	active	|--active-patch)
 		PATCHNAME="$2"
+		prepare_patchinfo
 		active_patch
 		;;
 	deactive	|--deactive-patch)
 		PATCHNAME="$2"
+		prepare_patchinfo
 		deactive_patch
 		;;
 	remove	|--remove-patch)
+		prepare_patchinfo
 		PATCHNAME="$2"
 		remove_patch
 		;;
@@ -229,10 +254,11 @@ case "$1" in
 		patch_list
 		;;
 	status	|--patch-status)
+		prepare_patchinfo
 		PATCHNAME=$2
 		patch_status
 		;;
 	*)
-		echo "command not found"
+		echo "command not found, use --help to get usage."
 		break
 esac
