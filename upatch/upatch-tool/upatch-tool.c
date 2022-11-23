@@ -8,10 +8,11 @@
 
 #include <sys/ioctl.h>
 
+#include "upatch-manage.h"
 #include "upatch-ioctl.h"
 
-#define COMMAND_SIZE 7
-char* command[COMMAND_SIZE] = {"", "active", "deactive", "install", "uninstall", "apply", "remove"};
+#define COMMAND_SIZE 8
+char* command[COMMAND_SIZE] = {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info"};
 enum Command {
     DEFAULT,
     ACTIVE,
@@ -20,6 +21,7 @@ enum Command {
     UNINSTALL,
     APPLY,
     REMOVE,
+    INFO,
 };
 
 struct arguments {
@@ -29,7 +31,7 @@ struct arguments {
 };
 
 static struct argp_option options[] = {
-        {"cmd", 0, "command", 0, "active/deactive/install/uninstall/apply/remove"},
+        {"cmd", 0, "command", 0, "active/deactive/install/uninstall/apply/remove/info"},
         {"binary", 'b', "binary", 0, "Binary file"},
         {"patch", 'p', "patch", 0, "Patch file"},
         {NULL}
@@ -58,6 +60,7 @@ static error_t check_opt(struct argp_state *state)
         case DEACTIVE:
         case UNINSTALL:
         case REMOVE:
+        case INFO:
             if (arguments->upatch.binary == NULL && arguments->upatch.patch == NULL) {
                 argp_usage(state);
                 return ARGP_ERR_UNKNOWN;
@@ -110,32 +113,58 @@ static void show_program_info(struct arguments *arguments)
     printf("patch file: %s\n", arguments->upatch.patch);
 }
 
-void active(int upatch_fd, const char *file){
+void active(int upatch_fd, const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: active", errno);
     }
 }
 
-void deactive(int upatch_fd, const char *file){
+void deactive(int upatch_fd, const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: deactive", errno);
     }
 }
 
-void install(int upatch_fd, struct upatch_conmsg* upatch){
+void install(int upatch_fd, struct upatch_conmsg* upatch) {
     int ret = ioctl(upatch_fd, UPATCH_ATTACH_PATCH, upatch);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: install", errno);
     }
 }
 
-void uninstall(int upatch_fd, const char *file){
+void uninstall(int upatch_fd, const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: uninstall", errno);
     }
+}
+
+void info(int upatch_fd, const char *file) {
+    int ret = ioctl(upatch_fd, UPATCH_INFO_PATCH, file);
+    char *status;
+    if (ret < 0) {
+        error(errno, 0, "ERROR - %d: info", errno);
+    }
+    switch (ret)
+    {
+    case UPATCH_STATE_ATTACHED:
+        status = "installed";
+        break;
+    case UPATCH_STATE_RESOLVED:
+        status = "deactived";
+        break;
+    case UPATCH_STATE_ACTIVED:
+        status = "actived";
+        break;
+    case UPATCH_STATE_REMOVED:
+        status = "removed";
+        break;
+    default:
+        break;
+    }
+    printf("Status: %s \n", status);
 }
 
 int main(int argc, char*argv[])
@@ -175,6 +204,9 @@ int main(int argc, char*argv[])
         case REMOVE:
             deactive(upatch_fd, file);
             uninstall(upatch_fd, file);
+            break;
+        case INFO:
+            info(upatch_fd, file);
             break;
         default:
             error(-1, 0, "ERROR - -1: no this cmd");

@@ -15,6 +15,7 @@
 #include <asm/module.h>
 
 #include "upatch-patch.h"
+#include "upatch-manage.h"
 
 /*
  * When patch works, it will no longer be controlled by the uprobe.
@@ -37,13 +38,6 @@
 
 #define JMP_TABLE_MAX_ENTRY 100
 #define JMP_TABLE_JUMP  0x90900000000225ff /* jmp [rip+2]; nop; nop */
-
-enum upatch_module_state {
-	UPATCH_STATE_ATTACHED = 0x1, /* Attach patch to the binary */
-    UPATCH_STATE_RESOLVED, /* Resolve the patch */
-    UPATCH_STATE_ACTIVED, /* Activate the patch */
-    UPATCH_STATE_REMOVED, /* Remove the patch */
-};
 
 /* jmp table, solve limit for the jmp instruction */
 struct upatch_jmp_table_entry {

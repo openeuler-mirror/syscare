@@ -40,35 +40,45 @@ static ssize_t upatch_write(struct file *filp, const char __user *ubuf,
     return 0;
 }
 
-static int update_status(unsigned long user_addr,
-    enum upatch_module_state status)
+static struct file *open_user_path(unsigned long user_addr)
 {
-    int ret;
-    struct upatch_entity *entity;
     char *elf_path = NULL;
     struct file *elf_file = NULL;
 
     elf_path = kmalloc(PATH_MAX, GFP_KERNEL);
     if (!elf_path) {
-        ret = -ENOMEM;
         goto out;
     }
 
-    ret = copy_para_from_user(user_addr, elf_path, PATH_MAX);
-    if (ret)
+    if (copy_para_from_user(user_addr, elf_path, PATH_MAX))
         goto out;
 
     elf_file = filp_open(elf_path, O_RDONLY, 0);
-    if (IS_ERR(elf_file)) {
-        ret = PTR_ERR(elf_file);
-        pr_err("open cmd file failed - %d \n", ret);
+
+out:
+    if (elf_path)
+        kfree(elf_path);
+    return elf_file;
+}
+
+static int update_status(unsigned long user_addr,
+    enum upatch_module_state status)
+{
+    int ret;
+    struct upatch_entity *entity;
+    struct file *elf_file = NULL;
+
+    elf_file = open_user_path(user_addr);
+    if (!elf_file || IS_ERR(elf_file)) {
+        pr_err("open cmd file failed - %d \n", IS_ERR(elf_file));
+        ret = -ENOEXEC;
         goto out;
     }
 
     entity = upatch_entity_get(file_inode(elf_file));
     if (!entity) {
         pr_err("no entity found \n");
-        ret = -EPERM;
+        ret = -ENOENT;
         goto out;
     }
 
@@ -78,8 +88,34 @@ static int update_status(unsigned long user_addr,
 out:
     if (elf_file && !IS_ERR(elf_file))
         fput(elf_file);
-    if (elf_path)
-        kfree(elf_path);
+    return ret;
+}
+
+static int check_status(unsigned long user_addr)
+{
+    int ret;
+    struct upatch_entity *entity;
+    struct file *elf_file = NULL;
+
+    elf_file = open_user_path(user_addr);
+    if (!elf_file || IS_ERR(elf_file)) {
+        pr_err("open cmd file failed - %d \n", IS_ERR(elf_file));
+        ret = -ENOEXEC;
+        goto out;
+    }
+
+    entity = upatch_entity_get(file_inode(elf_file));
+    if (!entity) {
+        pr_err("no entity found \n");
+        ret = -ENOENT;
+        goto out;
+    }
+
+    ret = entity->entity_status;
+    pr_info("entity status is %d \n", ret);
+out:
+    if (elf_file && !IS_ERR(elf_file))
+        fput(elf_file);
     return ret;
 }
 
@@ -143,12 +179,14 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         return handle_compiler_cmd(arg, cmd);
     case UPATCH_ATTACH_PATCH:
         return attach_upatch(arg);
-    case UPATCH_REMOVE_PATCH:
-        return update_status(arg, UPATCH_STATE_REMOVED);
     case UPATCH_ACTIVE_PATCH:
         return update_status(arg, UPATCH_STATE_ACTIVED);
     case UPATCH_DEACTIVE_PATCH:
         return update_status(arg, UPATCH_STATE_RESOLVED);
+    case UPATCH_REMOVE_PATCH:
+        return update_status(arg, UPATCH_STATE_REMOVED);
+    case UPATCH_INFO_PATCH:
+        return check_status(arg);
     default:
         return -ENOTTY;
     }

@@ -43,4 +43,6 @@ struct upatch_conmsg {
 /* deactive the jmp instruction but do not remove */
 #define UPATCH_DEACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x8, const char *)
 
+#define UPATCH_INFO_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x9, const char *)
+
 #endif /* _UPATCH_IOCTL_H */
