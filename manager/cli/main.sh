@@ -7,9 +7,11 @@ readonly SCRIPT_NAME=$(basename "$0")
 readonly PATCH_INSTALL_DIR="/usr/lib/syscare/patches"
 readonly SYSCARE_PATCH_BUILD="/usr/libexec/syscare/syscare-build"
 readonly UPATCH_TOOL="/usr/libexec/syscare/upatch-tool"
+readonly RECORD_FILE="/usr/lib/syscare/patch-record"
 
 PATCH_LIST=""
 PATCH_NAME=""
+PATCH_PKG=""
 PATCH_TYPE=""
 ELF_PATH=""
 KPATCH_MODULE_NAME=""
@@ -69,13 +71,20 @@ function fetch_patch_list() {
 
 function is_patch_exist() {
 	local patch_name="$1"
+	local has_pkg_name=$(echo $1 | grep "/")
 
-	for patch_record in ${PATCH_LIST}; do
-		local record_patch_name=$(echo "${patch_record}" | awk -F ',' '{print $2}')
-		if [ "${record_patch_name}" == "${patch_name}" ]; then
+	if [ "${has_pkg_name}" == "" ];then
+		for patch_record in ${PATCH_LIST}; do
+			local record_patch_name=$(echo "${patch_record}" | awk -F ',' '{print $2}')
+			if [ "${record_patch_name}" == "${patch_name}" ]; then
+				return 0
+			fi
+		done
+	else
+		if [ -e "${PATCH_INSTALL_DIR}/${patch_name}" ];then
 			return 0
 		fi
-	done
+	fi
 
 	return 1
 }
@@ -105,15 +114,24 @@ function get_patch_root_by_pkg_name() {
 
 function get_patch_root_by_patch_name() {
 	local patch_name="$1"
+	local has_pkg_name=$(echo $1 | grep "/")
 
-	for patch_record in ${PATCH_LIST}; do
-		local name=$(echo "${patch_record}" | awk -F ',' '{print $2}')
-		local dir=$(echo "${patch_record}" | awk -F ',' '{print $3}')
+	if [ "${has_pkg_name}" == "" ];then
+		for patch_record in ${PATCH_LIST}; do
+			local name=$(echo "${patch_record}" | awk -F ',' '{print $2}')
+			local dir=$(echo "${patch_record}" | awk -F ',' '{print $3}')
 
-		if [ "${name}" == "${patch_name}" ]; then
+			if [ "${name}" == "${patch_name}" ]; then
+				echo "${dir}"
+				break
+			fi
+		done
+	else
+		local dir="${PATCH_INSTALL_DIR}/${patch_name}"
+		if [ -e "${dir}" ];then
 			echo "${dir}"
 		fi
-	done
+	fi
 }
 
 function get_patch_type() {
@@ -167,19 +185,26 @@ function build_patch() {
 }
 
 function apply_patch() {
-	is_patch_exist "${PATCH_NAME}" || return 1
+	is_patch_exist "${PATCH_PKG}/${PATCH_NAME}" || return 1
 
+	local patch_name=$(grep "name:${PATCH_PKG}/${PATCH_NAME} " ${RECORD_FILE} | awk '{print $1}' | awk -F: '{print $2}')
 	if  [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kpatched || insmod "${PATCH_ROOT}/${PATCH_NAME}.ko"
 		active_patch
+		if [[ "${PATCH_PKG}/${PATCH_NAME}" != "${patch_name}" ]]; then
+			echo "name:${PATCH_PKG}/${PATCH_NAME} isactive:1" >> ${RECORD_FILE}
+		fi
 		return
 	else
 		"${UPATCH_TOOL}" apply -b "${ELF_PATH}" -p "${PATCH_ROOT}/${PATCH_NAME}"
+		if [[ "${PATCH_PKG}/${PATCH_NAME}" != "${patch_name}" ]]; then
+			echo "name:${PATCH_PKG}/${PATCH_NAME} isactive:1" >> ${RECORD_FILE}
+		fi
 	fi
 }
 
 function remove_patch() {
-	is_patch_exist "${PATCH_NAME}" || return 1
+	is_patch_exist "${PATCH_PKG}/${PATCH_NAME}" || return 1
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
@@ -191,15 +216,17 @@ function remove_patch() {
 			return
 	 	else
 			rmmod "${PATCH_NAME}"
+			sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /d" ${RECORD_FILE}
 			return
 		fi
 	else
 		"${UPATCH_TOOL}" remove -b "${ELF_PATH}"
+		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /d" ${RECORD_FILE}
 	fi
 }
 
 function active_patch() {
-	is_patch_exist "${PATCH_NAME}" || return 1
+	is_patch_exist "${PATCH_PKG}/${PATCH_NAME}" || return 1
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
@@ -209,15 +236,17 @@ function active_patch() {
 			return
 		else
 			echo 1 > "${KPATCH_STATE_FILE}"
+			sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /c\name:${PATCH_PKG}\/${PATCH_NAME} isactive:1" ${RECORD_FILE}
 			return
 		fi
 	else
 		"${UPATCH_TOOL}" active -b "${ELF_PATH}"
+		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /c\name:${PATCH_PKG}\/${PATCH_NAME} isactive:1" ${RECORD_FILE}
 	fi
 }
 
 function deactive_patch() {
-	is_patch_exist "${PATCH_NAME}" || return 1
+	is_patch_exist "${PATCH_PKG}/${PATCH_NAME}" || return 1
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
@@ -227,10 +256,12 @@ function deactive_patch() {
 			return
 		else
 			echo 0 > "${KPATCH_STATE_FILE}"
+			sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /c\name:${PATCH_PKG}\/${PATCH_NAME} isactive:0" ${RECORD_FILE}
 			return
 		fi
 	else
 		"${UPATCH_TOOL}" deactive -b "$ELF_PATH"
+		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /c\name:${PATCH_PKG}\/${PATCH_NAME} isactive:0" ${RECORD_FILE}
 	fi
 }
 
@@ -285,13 +316,33 @@ function initialize_patch_list() {
 function initialize_patch_info() {
 	local patch_name="$1"
 	local patch_root=$(get_patch_root_by_patch_name "${patch_name}")
+	local has_pkg_name=$(echo $1 | grep "/")
+
+	if [ ! -e "${RECORD_FILE}" ]; then
+    	touch "${RECORD_FILE}"
+	fi
 
 	if [ ! -d "${patch_root}" ]; then
 		echo "${SCRIPT_NAME}: cannot find patch '${patch_name}'" >&2
 		return 1
 	fi
 
-	PATCH_NAME="${patch_name}"
+	if [ "${has_pkg_name}" == "" ];then
+		PATCH_NAME="${patch_name}"
+		for patch_record in ${PATCH_LIST}; do
+			local name=$(echo "${patch_record}" | awk -F ',' '{print $2}')
+			local pkg=$(echo "${patch_record}" | awk -F ',' '{print $1}')
+
+			if [ "${name}" == "${patch_name}" ]; then
+				PATCH_PKG="${pkg}"
+				break
+			fi
+		done
+	else
+		PATCH_NAME=$(echo "${patch_name}" | awk -F '/' '{print $2}')
+		PATCH_PKG=$(echo "${patch_name}" | awk -F '/' '{print $1}')
+	fi
+
 	PATCH_ROOT=$(get_patch_root_by_patch_name "${patch_name}")
 	PATCH_TYPE=$(get_patch_type "${patch_name}")
 	ELF_PATH=$(get_patch_elf_path "${patch_name}")
