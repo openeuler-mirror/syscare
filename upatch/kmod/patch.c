@@ -124,6 +124,7 @@ static int do_module_load(struct upatch_entity *entity, struct file *binary_file
     patch_file = d_open_inode(entity->patch);
     if (!patch_file || IS_ERR(patch_file)) {
         pr_err("open patch inode failed \n");
+        ret = -ENOEXEC;
         goto out;
     }
 

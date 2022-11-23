@@ -19,7 +19,7 @@ pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare
 
 // Patch
 pub const PATCH_FILE_EXTENSION:  &str  = "patch";
-pub const PATCH_FILE_PERMISSION: &str  = "640";
+pub const PATCH_FILE_PERMISSION: &str  = "660";
 pub const PATCH_DIR_PERMISSION:  &str  = "750";
 pub const PATCH_INSTALL_PATH:    &str  = "/usr/lib/syscare/patches";
 pub const PATCH_INFO_FILE_NAME:  &str  = "patch_info";
