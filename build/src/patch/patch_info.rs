@@ -178,11 +178,11 @@ impl PatchFile {
 #[derive(Debug)]
 pub struct PatchInfo {
     patch:           PatchName,
-    summary:         String,
     patch_type:      PatchType,
-    license:         String,
     target:          PatchName,
     target_elf_name: String,
+    license:         String,
+    description:     String,
     file_list:       Vec<PatchFile>,
 }
 
@@ -191,16 +191,8 @@ impl PatchInfo {
         &self.patch
     }
 
-    pub fn get_summary(&self) -> &str {
-        &self.summary
-    }
-
     pub fn get_patch_type(&self) -> PatchType {
         self.patch_type
-    }
-
-    pub fn get_license(&self) -> &str {
-        &self.license
     }
 
     pub fn get_target(&self) -> &PatchName {
@@ -209,6 +201,14 @@ impl PatchInfo {
 
     pub fn get_target_elf_name(&self) -> &str {
         &self.target_elf_name
+    }
+
+    pub fn get_license(&self) -> &str {
+        &self.license
+    }
+
+    pub fn get_description(&self) -> &str {
+        &self.description
     }
 
     pub fn get_file_list(&self) -> &[PatchFile] {
@@ -225,8 +225,8 @@ impl PatchInfo {
         })
     }
 
-    fn parse_summary(args: &CliArguments) -> String {
-        args.summary.to_owned()
+    fn parse_description(args: &CliArguments) -> String {
+        args.description.to_owned()
     }
 
     fn parse_patch_type(pkg_info: &PackageInfo) -> PatchType {
@@ -275,7 +275,7 @@ impl PatchInfo {
             target:          Self::parse_target(args),
             target_elf_name: Self::parse_target_elf_name(args),
             license:         Self::parse_license(args),
-            summary:         Self::parse_summary(args),
+            description:         Self::parse_description(args),
             file_list:       Self::parse_file_list(args)?
         })
     }
@@ -283,14 +283,14 @@ impl PatchInfo {
 
 impl std::fmt::Display for PatchInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("name:     {}\n", self.get_patch().get_name()))?;
-        f.write_fmt(format_args!("type:     {}\n", self.get_patch_type()))?;
-        f.write_fmt(format_args!("target:   {}\n", self.get_target()))?;
-        f.write_fmt(format_args!("elf_name: {}\n", self.get_target_elf_name()))?;
-        f.write_fmt(format_args!("license:  {}\n", self.get_license()))?;
-        f.write_fmt(format_args!("version:  {}\n", self.get_patch().get_version()))?;
-        f.write_fmt(format_args!("release:  {}\n", self.get_patch().get_release()))?;
-        f.write_fmt(format_args!("summary:  {}\n", self.get_summary()))?;
+        f.write_fmt(format_args!("name:        {}\n", self.get_patch().get_name()))?;
+        f.write_fmt(format_args!("type:        {}\n", self.get_patch_type()))?;
+        f.write_fmt(format_args!("target:      {}\n", self.get_target()))?;
+        f.write_fmt(format_args!("elf_name:    {}\n", self.get_target_elf_name()))?;
+        f.write_fmt(format_args!("license:     {}\n", self.get_license()))?;
+        f.write_fmt(format_args!("version:     {}\n", self.get_patch().get_version()))?;
+        f.write_fmt(format_args!("release:     {}\n", self.get_patch().get_release()))?;
+        f.write_fmt(format_args!("description: {}\n", self.get_description()))?;
         f.write_str("\npatch list:")?;
         for patch_file in self.get_file_list() {
             f.write_fmt(format_args!("\n{} {}", patch_file.get_name(), patch_file.get_digest()))?;
