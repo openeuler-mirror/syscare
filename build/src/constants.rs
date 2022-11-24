@@ -18,6 +18,7 @@ pub const KPATCH_BUILD: ExternCommand = ExternCommand::new("kpatch-build");
 pub const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-build");
 
 // Patch
+pub const PATCH_NAME_REGEX_STR:  &str  = r"^[\w_-]+$";
 pub const PATCH_FILE_EXTENSION:  &str  = "patch";
 pub const PATCH_FILE_PERMISSION: &str  = "660";
 pub const PATCH_DIR_PERMISSION:  &str  = "750";

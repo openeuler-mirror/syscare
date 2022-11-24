@@ -1,3 +1,6 @@
+use lazy_static::lazy_static;
+use regex::Regex;
+
 use crate::package::{PackageInfo, PackageType};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 
@@ -41,12 +44,16 @@ impl PatchBuildCLI {
     }
 
     fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
+        lazy_static! {
+            static ref PATCH_NAME_REGEX: Regex = Regex::new(PATCH_NAME_REGEX_STR).unwrap();
+        }
+
         let args = &mut self.args;
 
-        if args.name.contains('-') {
+        if !PATCH_NAME_REGEX.is_match(&args.name) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Patch name should not contain '-' character"),
+                format!("Patch name should not contain any special character except '_' & '-'"),
             ));
         }
 
