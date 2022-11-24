@@ -9,16 +9,18 @@ pub struct RpmSpecGenerator;
 
 impl RpmSpecGenerator {
     #[inline(always)]
-    fn get_patch_name(patch_info: &PatchInfo) -> &str {
-        patch_info.get_patch().get_name()
+    fn parse_pkg_name(patch_info: &PatchInfo) -> String {
+        format!("{}-{}-{}",
+            PKG_FLAG_PATCH_BINARY,
+            patch_info.get_target(),
+            patch_info.get_patch().get_name())
     }
 
     #[inline(always)]
-    fn parse_pkg_name(patch_info: &PatchInfo) -> String {
-        let patch_target = patch_info.get_target();
-        let patch_name   = Self::get_patch_name(patch_info);
-
-        format!("{}-{}-{}", PKG_FLAG_PATCH_BINARY, patch_target, patch_name)
+    fn parse_pkg_install_path(patch_info: &PatchInfo) -> String {
+        format!("{}/{}",
+            patch_info.get_target(),
+            patch_info.get_patch().get_name())
     }
 
     #[inline(always)]
@@ -42,7 +44,7 @@ impl RpmSpecGenerator {
             .map(fs::file_name)
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
-        let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::get_patch_name(patch_info));
+        let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::parse_pkg_install_path(patch_info));
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
         writeln!(writer, "Version:  {}", patch_info.get_patch().get_version())?;
@@ -90,8 +92,7 @@ impl RpmSpecGenerator {
         fs::check_dir(source_dir)?;
         fs::check_dir(output_dir)?;
 
-        let patch_name = Self::get_patch_name(patch_info);
-        let pkg_spec_path = format!("{}/{}.spec", output_dir, patch_name);
+        let pkg_spec_path = format!("{}/{}.spec", output_dir, Self::parse_pkg_name(patch_info));
         let writer = LineWriter::new(
             std::fs::File::create(&pkg_spec_path)?
         );
