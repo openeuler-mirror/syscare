@@ -18,58 +18,110 @@
 源代码编译安装：
 ```
 1.  git clone https://gitee.com/openeuler/syscare.git
-2.  cd syscare & make rpm
-3.  rpm -ivh syscare-<version>.rpm
+2.  cd syscare
+3.  mkdir tmp
+4.  cd tmp
+5.  cmake ..
+6.  make
+7.  make install 
 ```
+rpm安装：
+1.rpm -ivh syscare-<version>.rpm
 
 二进制安装：
-1. 正确配置dfn/yum仓库文件；
-2. dnf update & dnf install syscare
+1. 正确配置dfn/yum仓库文件.
+2. dnf update & dnf install syscare.
 3. enjoy the tool.
 
 #### 使用说明
 
+补丁制作
 ```
-1.  syscare build --help	具体参数见build/README.md
-2.  syscare apply patch-name
-3.  syscare active patch-name
-4.  syscare deactive patch-name
-5.  syscare remove patch-name
+syscare-build --name redis_cve_2021_32675 \
+        --source redis-6.2.5-1.src.rpm \
+        --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
+        --target-elfname redis-server \
+        --summary CVE-2021-32675 \
+        0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+```
+补丁制作详细参数见syscare/build/README.md
+
+补丁管理
+```
+1. 补丁安装
+syscare apply redis_cve_2021_32675
+
+2. 补丁激活：
+syscare active redis_cve_2021_32675
+
+3. 补丁去激活：
+syscarae deactive redis_cve_2021_32675
+
+4. 补丁卸载/移除：
+syscare remove redis_cve_2021_32675
+补丁只有在deactive的状态才能移除
+
+5. 补丁状态查询：
+syscare status redis_cve_2021_32675
+
+6. 查询syscare所有补丁：
+syscare patch list
+
 ```
 
 #### 示例
 
-####源码编译
-
-
-####补丁制作
+补丁制作
 内核补丁制作：
-	syscare build --patch-name test --source ./kernel-xxxx.oexx.src.rpm --debug-info ./vmlinux ./test.patch
-用户态补丁制作：
-	syscare build --patch-name redis-test --source ./redis-xxx.rpm --target redis-server --debug-info ./redis ./redis-test.patch
-
-####补丁管理
 ```
-1.补丁安装
+syscare-build --name redis_cve_2021_32675 \
+        --source redis-6.2.5-1.src.rpm \
+        --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
+        --target-elfname redis-server \
+        --summary CVE-2021-32675 \
+        0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+```
+
+补丁管理
+
+1. 补丁安装
 syscare apply test
 
-2.补丁激活：
+2. 补丁激活：
 syscare active test
 
-3.补丁去激活：
+3. 补丁去激活：
 syscarae deactive test
 
-4.补丁卸载/移除：
+4. 补丁卸载/移除：
 syscare remove test
 补丁只有在deactive的状态才能移除
 
-5.补丁状态查询：
+5. 补丁状态查询：
 syscare status test
 
-6.查询syscare所有补丁：
+6. 查询syscare所有补丁：
 syscare patch list
 
-```
+#### 约束限制
+1. 版本约束:
+
+内核版本：本期syscare仅支持openEuler22.03 LTS sp1
+
+2. 应用约束
+
+用户态补丁当前仅支持：redis、nginx、mysql
+ps:当前对LINE宏的处理需要对每个软件进行适配，当前仅考虑适配redis、nginx、mysql，其他未适配的软件可能会造成patch的size过大(后续会考虑引入参数支持用户自行适配)
+
+3. 语言约束
+
+原理上补丁制作在object file一级进行比较，与编程语言无关，当前仅测试了c语言
+
+4. 其他约束
+
+* 暂不支持交叉编译
+* 补丁管理操作需要root权限
+* 使用的debug信息格式必须为dwarf，且不支持g3等级的调式信息
 
 #### 参与贡献
 
