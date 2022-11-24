@@ -24,10 +24,12 @@ pub struct Arg {
 
 impl Arg {
     fn usage(&self) {
-        println!("Usage: {} FILE [options]", self.program);
+        println!("Usage: {} FILE [options] -s debug_source -b cmd -i debug_info -e elf_name patches", self.program);
         println!("      -h|--help:                  options message");
-        println!("      -w|--work-dir:              Specify work directory, suggest empty, will delete, default ~/.upatch/");
-        println!("      -s|--debug-source:          Specify source directory, suggest copy, will modify");
+        println!("      -w|--work-dir:              Specify work directory, default ~/.upatch/");
+        println!("                                  will delete the work_dir when building upatch, use a empty directory");
+        println!("      -s|--debug-source:          Specify source directory");
+        println!("                                  will modify the debug_source when building upatch, use a copy");
         println!("      -b|--build-source-cmd:      Specify build source command");
         println!("      -bp|--build-patch-cmd:      Specify build patched command, default --build-source-cmd");
         println!("      -i|--debug-info:            Specify debug info");

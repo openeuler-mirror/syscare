@@ -2,6 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
 const PKG_SPEC_FILE_EXTENSION: &str = "spec";
+const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
 
 pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
     format!("{}", path.as_ref().display())
@@ -140,31 +141,6 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
     Ok(file_list)
 }
 
-pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
-    for file in self::list_all_files(search_path, recursive)? {
-        if let Ok(curr_file_name) = self::file_name(file.as_path()) {
-            if curr_file_name == file_name {
-                return Ok(file);
-            }
-            if fuzz && curr_file_name.contains(file_name) {
-                return Ok(file);
-            }
-        }
-    }
-
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        match fuzz {
-            true  => format!("Cannot find file '*{}*' in '{}'", file_name, search_path.display()),
-            false => format!("Cannot find file '{}' in '{}'",   file_name, search_path.display()),
-        }
-    ))
-}
-
 pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<PathBuf> {
     let search_path = directory.as_ref();
 
@@ -196,4 +172,21 @@ pub fn find_spec_file(directory: &str) -> std::io::Result<String> {
     )?;
 
     Ok(stringtify(spec_file))
+}
+
+pub fn search_tool(tool_name: &str) -> std::io::Result<String> {
+    let current_tool = format!("./{}", tool_name);
+    match Path::new(&current_tool).is_file() {
+        false => {
+            let system_tool = format!("{}/{}", SYSTEM_TOOL_DIR, tool_name);
+            if !Path::new(&system_tool).is_file() {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("Cannot tools '{}' file in '{}'", tool_name, SYSTEM_TOOL_DIR)
+                ));
+            }
+            Ok(system_tool.to_string())
+        },
+        true => Ok(current_tool.to_string()),
+    }
 }

@@ -2,7 +2,7 @@ use std::{path::Path, env};
 use std::process::Command;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions, File};
-use std::io::{self, Read};
+use std::io::Read;
 
 use walkdir::WalkDir;
 
@@ -12,14 +12,14 @@ use super::Compiler;
 use super::Project;
 use super::Result;
 use super::Error;
-use super::{stringtify, find_file};
+use super::{stringtify, search_tool};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
 const CMD_SOURCE_ENTER: &str = "SE";
 const CMD_PATCHED_ENTER: &str = "PE";
-const SUPPORT_TOOL: &str = "upatch-diff";
-const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
+const SUPPORT_DIFF: &str = "upatch-diff";
+const SUPPORT_TOOL: &str = "upatch-tool";
 
 pub struct UpatchBuild {
     cache_dir: String,
@@ -28,6 +28,7 @@ pub struct UpatchBuild {
     output_dir: String,
     log_file: String,
     args: Arg,
+    diff_file: String,
     tool_file: String,
 }
 
@@ -40,6 +41,7 @@ impl UpatchBuild {
             output_dir: String::new(),
             log_file: String::new(),
             args: Arg::new(),
+            diff_file: String::new(),
             tool_file: String::new(),
         }
     }
@@ -60,8 +62,9 @@ impl UpatchBuild {
         // check mod
         self.check_mod()?;
 
-        // find create-diff-object
-        self.search_tool()?;
+        // find upatch-diff and upatch-tool
+        self.diff_file = search_tool(SUPPORT_DIFF)?;
+        self.tool_file = search_tool(SUPPORT_TOOL)?;
 
         // check compiler
         let mut compiler = Compiler::new(self.args.compiler_file.clone());
@@ -106,12 +109,13 @@ impl UpatchBuild {
 
         // choose the binary's obj to create upatch file
         let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
-        self.correlate_diff(&source_obj, &patch_obj, &binary_obj)?;
+        self.upatch_diff(&source_obj, &patch_obj, &binary_obj)?;
 
         // ld patchs
-        let output_file = &format!("{}/{}", &self.args.output, &self.args.patch_name);
-        compiler.linker(&self.output_dir, output_file)?;
-        println!("Building patch: {}", output_file);
+        let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
+        compiler.linker(&self.output_dir, &output_file)?;
+        self.upatch_tool(&output_file)?;
+        println!("Building patch: {}", &output_file);
         Ok(())
     }
 }
@@ -169,7 +173,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn correlate_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> Result<()> {
+    fn upatch_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> Result<()> {
         // TODO can print changed function
         for path in binary_obj {
             let source_name = path.get_source();
@@ -178,8 +182,8 @@ impl UpatchBuild {
                     let output_dir =  self.output_dir.clone() + "/" + Path::new(patch).file_name().unwrap().to_str().unwrap();
                     match &source_obj.get(&source_name) {
                         Some(source) => {
-                            let output = Command::new(&self.tool_file)
-                                        .args(["-s", &source, "-p", &patch, "-o", &output_dir, "-r", &self.args.debug_info])
+                            let output = Command::new(&self.diff_file)
+                                        .args(["-s", &source, "-p", &patch, "-o", &output_dir, "-r", &self.args.debug_info, "-d"])
                                         .stdout(OpenOptions::new().append(true).write(true).open(&self.log_file)?)
                                         .stderr(OpenOptions::new().append(true).write(true).open(&self.log_file)?)
                                         .output()?;
@@ -196,17 +200,13 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn search_tool(&mut self) -> Result<()> {
-        match find_file("./", SUPPORT_TOOL, false, false) {
-            Err(_) => {
-                let system_tool_str = format!("{}/{}", SYSTEM_TOOL_DIR, SUPPORT_TOOL);
-                if !Path::new(&system_tool_str).is_file() {
-                    return Err(io::Error::new(io::ErrorKind::NotFound, format!("can't find supporting tools: {}", &system_tool_str)).into());
-                }
-                self.tool_file.push_str(&system_tool_str);
-            },
-            Ok(path) => self.tool_file.push_str(stringtify(path).as_str()),
-        };
-        Ok(())
+    fn upatch_tool(&self, patch: &str) -> Result<()> {
+        let cmd = Command::new(&self.tool_file)
+            .args(["resolve", "-b", &self.args.debug_info, "-p", patch])
+            .output()?;
+        match cmd.status.success() {
+            true => Ok(()),
+            false => Err(Error::Project(format!("upatch-tool {} error: {}", patch, String::from_utf8(cmd.stderr).unwrap().trim())))
+        }
     }
 }
