@@ -45,4 +45,3 @@ pub const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 pub const KERNEL_CONFIG_NAME:       &str = ".config";
 pub const KERNEL_DEFCONFIG_NAME:    &str = "openeuler_defconfig";
 pub const KERNEL_VMLINUX_FILE:      &str = "vmlinux";
-pub const KERNEL_ELF_NAME:          &str = "kernel";
