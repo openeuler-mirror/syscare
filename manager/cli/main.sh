@@ -253,8 +253,13 @@ function patch_status() {
 			echo "DEACTIVE"
 		fi
 	else
-		#TODO: add user patch
-		echo "unimplemented"
+		local state=$("${UPATCH_TOOL}" info -p "${PATCH_ROOT}/${PATCH_NAME}" | grep Status | awk -F ':' '{print $2}')
+		state=$(eval echo "${state}")
+		if [ "${state}" == "actived" ]; then
+			echo "ACTIVE"
+		else
+			echo "DEACTIVE"
+		fi
 	fi
 }
 
