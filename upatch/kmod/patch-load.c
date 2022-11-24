@@ -675,6 +675,11 @@ static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *
             pr_info("resolved symbol %s at 0x%lx \n",
                 name, (unsigned long)sym[i].st_value);
             break;
+        case SHN_LIVEPATCH:
+            sym[i].st_value += info->running_elf.load_bias;
+            pr_info("resolved livepatch symbol %s at 0x%lx \n",
+                name, (unsigned long)sym[i].st_value);
+            break;
         default:
             /* use real address to calculate secbase */
             secbase = info->sechdrs[sym[i].st_shndx].sh_addralign;

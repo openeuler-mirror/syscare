@@ -1,3 +1,13 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright (C) 2022 HUAWEI, Inc.
+ *
+ * Authors:
+ *   Zongwu Li <lizongwu@huawei.com>
+ *   Longjun Luo <luolongjuna@gmail.com>
+ *
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -10,9 +20,11 @@
 
 #include "upatch-manage.h"
 #include "upatch-ioctl.h"
+#include "upatch-resolve.h"
 
-#define COMMAND_SIZE 8
-char* command[COMMAND_SIZE] = {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info"};
+#define COMMAND_SIZE 9
+char* command[COMMAND_SIZE] =
+    {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info", "resolve"};
 enum Command {
     DEFAULT,
     ACTIVE,
@@ -22,6 +34,7 @@ enum Command {
     APPLY,
     REMOVE,
     INFO,
+    RESOLVE,
 };
 
 struct arguments {
@@ -31,7 +44,7 @@ struct arguments {
 };
 
 static struct argp_option options[] = {
-        {"cmd", 0, "command", 0, "active/deactive/install/uninstall/apply/remove/info"},
+        {"cmd", 0, "command", 0, "active/deactive/install/uninstall/apply/remove/info/resolve"},
         {"binary", 'b', "binary", 0, "Binary file"},
         {"patch", 'p', "patch", 0, "Patch file"},
         {NULL}
@@ -52,6 +65,7 @@ static error_t check_opt(struct argp_state *state)
     switch (arguments->cmd) {
         case APPLY:
         case INSTALL:
+        case RESOLVE:
             if (arguments->upatch.binary == NULL || arguments->upatch.patch == NULL) {
                 argp_usage(state);
                 return ARGP_ERR_UNKNOWN;
@@ -105,43 +119,52 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 static struct argp argp = {options, parse_opt, args_doc, program_doc};
 
-/* Format of output file is the only export API */
-static void show_program_info(struct arguments *arguments)
+static int upatch_fd = -1;
+
+void prepare_env(struct arguments *arguments)
 {
-    printf("cmd: %d\n", arguments->cmd);
-    printf("binary file: %s\n", arguments->upatch.binary);
-    printf("patch file: %s\n", arguments->upatch.patch);
+    char path[PATH_MAX];
+
+    if (arguments->cmd == RESOLVE)
+        return;
+
+    snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
+    upatch_fd = open(path, O_RDWR);
+    if (upatch_fd < 0)
+        error(errno, 0, "ERROR - %d: open failed %s", errno, path);
+
+    return;
 }
 
-void active(int upatch_fd, const char *file) {
+void active(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: active", errno);
     }
 }
 
-void deactive(int upatch_fd, const char *file) {
+void deactive(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: deactive", errno);
     }
 }
 
-void install(int upatch_fd, struct upatch_conmsg* upatch) {
+void install(struct upatch_conmsg* upatch) {
     int ret = ioctl(upatch_fd, UPATCH_ATTACH_PATCH, upatch);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: install", errno);
     }
 }
 
-void uninstall(int upatch_fd, const char *file) {
+void uninstall(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
     if (ret < 0) {
         error(errno, 0, "ERROR - %d: uninstall", errno);
     }
 }
 
-void info(int upatch_fd, const char *file) {
+void info(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_INFO_PATCH, file);
     char *status;
     if (ret < 0) {
@@ -169,49 +192,52 @@ void info(int upatch_fd, const char *file) {
 
 int main(int argc, char*argv[])
 {
+    int ret = 0;
     struct arguments arguments;
-    char path[PATH_MAX];
-    int upatch_fd;
+    const char* file;
 
     memset(&arguments, 0, sizeof(arguments));
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 
-    snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
-    upatch_fd = open(path, O_RDWR);
-    if (upatch_fd < 0){
-        error(errno, 0, "ERROR - %d: open failed %s", errno, path);
-    }
+    prepare_env(&arguments);
 
-    const char* file = (arguments.upatch.binary == NULL) ? arguments.upatch.patch : arguments.upatch.binary;
+    file = arguments.upatch.binary;
+    if (file == NULL)
+        file = arguments.upatch.patch;
 
     switch (arguments.cmd) {
         case ACTIVE:
-            active(upatch_fd, file);
+            active(file);
             break;
         case DEACTIVE:
-            deactive(upatch_fd, file);
+            deactive(file);
             break;
         case INSTALL:
-            install(upatch_fd, &arguments.upatch);
+            install(&arguments.upatch);
             break;
         case UNINSTALL:
-            uninstall(upatch_fd, file);
+            uninstall(file);
             break;
         case APPLY:
-            install(upatch_fd, &arguments.upatch);
-            active(upatch_fd, file);
+            install(&arguments.upatch);
+            active(file);
             break;
         case REMOVE:
-            deactive(upatch_fd, file);
-            uninstall(upatch_fd, file);
+            deactive(file);
+            uninstall(file);
             break;
         case INFO:
-            info(upatch_fd, file);
+            info(file);
+            break;
+        case RESOLVE:
+            ret = resolve_patch(arguments.upatch.binary, arguments.upatch.patch);
+            if (ret)
+                printf("resolv patch failed - %d \n", ret);
             break;
         default:
             error(-1, 0, "ERROR - -1: no this cmd");
             break;
     }
 
-    return 0;
+    return ret;
 }

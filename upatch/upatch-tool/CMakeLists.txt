@@ -5,6 +5,8 @@ project(upatch-tool)
 
 set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
 
+set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wall -Werror")
+
 include_directories(
     ../kmod
     ../upatch_build
