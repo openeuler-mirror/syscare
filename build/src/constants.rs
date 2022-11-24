@@ -1,7 +1,7 @@
 use crate::cmd::ExternCommand;
 
 // CLI Strings
-pub const CLI_BIN_NAME:                    &str = "syscare build";
+pub const CLI_COMMAND_NAME:                &str = "syscare build";
 pub const CLI_DESCRIPTION:                 &str = "Syscare patch build utility";
 pub const CLI_LOG_FILE_NAME:               &str = "build.log";
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";

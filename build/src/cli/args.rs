@@ -4,7 +4,7 @@ use crate::constants::*;
 use crate::util::sys;
 
 #[derive(Parser, Debug)]
-#[command(bin_name=CLI_BIN_NAME)]
+#[command(bin_name=CLI_COMMAND_NAME)]
 pub struct CliArguments {
     /// Patch name
     #[arg(short='n', long)]
