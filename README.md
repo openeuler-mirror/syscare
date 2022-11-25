@@ -11,8 +11,8 @@
 #### 安装教程
 依赖安装：
 ```
-1.yum install -y kernel-source-`uname -r` kernel-debuginfo-`uname -r` kernel-devel-`uname -r` 
-2.yum install -y elfutils-libelf-devel openssl-devel dwarves python3-devel rpm-build bison cmake make gcc g++
+1. $ yum install -y kernel-source-`uname -r` kernel-debuginfo-`uname -r` kernel-devel-`uname -r` 
+2. $ yum install -y elfutils-libelf-devel openssl-devel dwarves python3-devel rpm-build bison cmake make gcc g++
 ```
 
 源代码编译安装：
@@ -37,7 +37,7 @@ rpm安装：
 
 补丁制作
 ```
-syscare-build --name redis_cve_2021_32675 \
+$ syscare build --name redis_cve_2021_32675 \
         --source redis-6.2.5-1.src.rpm \
         --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
         --target-elfname redis-server \
@@ -47,88 +47,45 @@ syscare-build --name redis_cve_2021_32675 \
 补丁制作详细参数见syscare/build/README.md
 
 补丁管理
-```
 1. 补丁安装
-syscare apply redis_cve_2021_32675
+```
+$ syscare apply redis_cve_2021_32675
+```
 
 2. 补丁激活：
-syscare active redis_cve_2021_32675
+```
+$ syscare active redis_cve_2021_32675
+```
 
 3. 补丁去激活：
-syscarae deactive redis_cve_2021_32675
+```
+$ syscarae deactive redis_cve_2021_32675
+```
 
-4. 补丁卸载/移除：
-syscare remove redis_cve_2021_32675
-补丁只有在deactive的状态才能移除
+4. 补丁卸载/移除：补丁只有在deactive的状态才能移除
+```
+$ syscare remove redis_cve_2021_32675
+```
 
 5. 补丁状态查询：
-syscare status redis_cve_2021_32675
+```
+$ syscare status redis_cve_2021_32675
+```
 
 6. 查询syscare所有补丁：
-syscare patch list
-
+```
+$ syscare list
 ```
 
-#### 示例
-
-补丁制作
-内核补丁制作：
-```
-syscare-build --name redis_cve_2021_32675 \
-        --source redis-6.2.5-1.src.rpm \
-        --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
-        --target-elfname redis-server \
-        --summary CVE-2021-32675 \
-        0001-Prevent-unauthenticated-client-from-easily-consuming.patch
-```
-
-补丁管理
-
-1. 补丁安装
-syscare apply test
-
-2. 补丁激活：
-syscare active test
-
-3. 补丁去激活：
-syscarae deactive test
-
-4. 补丁卸载/移除：
-syscare remove test
-补丁只有在deactive的状态才能移除
-
-5. 补丁状态查询：
-syscare status test
-
-6. 查询syscare所有补丁：
-syscare patch list
 
 #### 约束限制
-1. 版本约束:
-
-内核版本：本期syscare仅支持openEuler22.03 LTS sp1
-
-2. 应用约束
-
-用户态补丁当前仅支持：redis、nginx、mysql
-ps:当前对LINE宏的处理需要对每个软件进行适配，当前仅考虑适配redis、nginx、mysql，其他未适配的软件可能会造成patch的size过大(后续会考虑引入参数支持用户自行适配)
-
-3. 语言约束
-
-原理上补丁制作在object file一级进行比较，与编程语言无关，当前仅测试了c语言
-
-4. 其他约束
-
-* 暂不支持交叉编译
-* 补丁管理操作需要root权限
-* 使用的debug信息格式必须为dwarf，且不支持g3等级的调式信息
+* 当前支持ELF格式的热修复，解释型语言不支持；
+* 支持debug信息格式为DWARF，且不支持g3等级的调试信息；
+* 当前暂不支持交叉编译；
 
 #### 参与贡献
-
 1.  Fork 本仓库 $ git clone https://gitee.com/openeuler/syscare.git
 2.  建立自己分支 $ cd syscare & git branch -b Feature_XXXX
 3.  完善特性代码 $ vim src/upatch/xxxx  & git commit -m ""
 4.  提交代码 $ git push origin
 5.  新建 Pull Request
-
-
