@@ -23,7 +23,7 @@ Options:
       --target-version <TARGET_VERSION>  Patch target version
       --target-release <TARGET_RELEASE>  Patch target release
       --target-license <TARGET_LICENSE>  Patch target license
-  -s, --source <SOURCE>                  source package
+  -s, --source <SOURCE>                  Source package
   -d, --debuginfo <DEBUGINFO>            Debuginfo package
       --workdir <WORKDIR>                Working directory [default: .]
   -o, --output <OUTPUT>                  Generated patch output directory [default: .]

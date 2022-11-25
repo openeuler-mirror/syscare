@@ -38,7 +38,7 @@ pub struct CliArguments {
     #[arg(long)]
     pub target_license: Option<String>,
 
-    /// source package
+    /// Source package
     #[arg(short, long)]
     pub source: String,
 
