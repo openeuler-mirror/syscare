@@ -4,6 +4,9 @@ use std::fs::{OpenOptions, self};
 use std::io::Write;
 
 use crate::dwarf::Dwarf;
+use crate::tool::*;
+use crate::upatch::{ExternCommand, verbose};
+
 use super::Result;
 use super::Error;
 
@@ -63,20 +66,19 @@ impl Compiler {
     }
 
     pub fn check_version(&self, cache_dir: &str, debug_info: &str) -> Result<()> {
-        let tmp_dir = cache_dir.to_string() + "/test";
+        let tmp_dir = format!("{}/test", &cache_dir);
         fs::create_dir(&tmp_dir).unwrap();
-        let test = tmp_dir.clone() + "/test.c";
-        let test_obj = tmp_dir.clone() + "/test.o";
+        let test = format!("{}/test.c", &tmp_dir);
+        let test_obj = format!("{}/test.o", &tmp_dir);
         let mut test_file = OpenOptions::new().create(true).read(true).write(true).open(&test)?;
         test_file.write_all(b"void main(void) {}")?;
 
-        let result = Command::new("gcc")
-                            .args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c", &test, "-o", &test_obj])
-                            .output()?;
-
-        if !result.status.success(){
-            return Err(Error::Compiler(format!("compiler build test error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
-        }
+        let args_list = vec!["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c", &test, "-o", &test_obj];
+        let output = ExternCommand::new(&self.compiler_file).execvp(args_list)?;
+        match output.exit_status().success() {
+            true => (),
+            false => return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
+        };
 
         let dwarf = Dwarf::new();
         let mut gcc_version = String::new();
@@ -106,25 +108,21 @@ impl Compiler {
     }
 
     pub fn linker(&self, dir: &str, output_file: &str) -> Result<()> {
-        let arr = walkdir::WalkDir::new(dir).into_iter()
-                    .filter_map(|e| e.ok())
-                    .filter(|e| e.path().is_file())
-                    .collect::<Vec<_>>();
+        let arr = list_all_files_ext(dir, "o", false)?;
         if arr.is_empty() {
             return Err(Error::Compiler(format!("no functional changes found")));
         }
 
-        let mut build_cmd = Command::new(&self.linker_file);
-        let mut build_cmd = build_cmd.arg("-r").arg("-o").arg(output_file);
-
-        for obj in arr {       
-            let name = obj.path().to_str().unwrap_or_default().to_string();
-            build_cmd = build_cmd.arg(&name);
+        let mut args_list = vec!["-r", "-o", output_file];
+        let arr = arr.iter().map(|x| -> String {stringtify(x)}).rev().collect::<Vec<String>>();
+        for i in 0..arr.len() {
+            args_list.push(&arr[i]);
         }
-        let result = build_cmd.output()?;
-        if !result.status.success(){
-                return Err(Error::Compiler(format!("link obj error {}: {:?}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
-        }
+        let output = ExternCommand::new(&self.linker_file).execvp(args_list)?;
+        match output.exit_status().success() {
+            true => verbose(output.stdout()),
+            false => return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())))
+        };
         Ok(())
     }
 }

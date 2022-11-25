@@ -12,6 +12,7 @@ pub enum Error {
     Mod(String),
     Diff(String),
     InvalidInput(String),
+    TOOL(String),
 }
 
 impl From<io::Error> for Error {
@@ -28,15 +29,16 @@ impl fmt::Display for Error {
 }
 
 impl Error {
-    pub fn description(&self) -> &String {
+    pub fn description(&self) -> String {
         match *&self {
-            Error::Io(err) => err,
-            Error::Compiler(err) => err,
-            Error::Project(err) => err,
-            Error::Build(err) => err,
-            Error::Mod(err) => err,
-            Error::Diff(err) => err,
-            Error::InvalidInput(err) => err,
+            Error::Io(err) => err.to_string(),
+            Error::Compiler(err) => err.to_string(),
+            Error::Project(err) => err.to_string(),
+            Error::Build(err) => err.to_string(),
+            Error::Mod(err) => err.to_string(),
+            Error::Diff(err) => format!("upatch-diff error, {}", err),
+            Error::InvalidInput(err) => format!("InvalidInput, {}", err),
+            Error::TOOL(err) => format!("upatch-tool error, {}", err),
         }
     }
 
@@ -49,6 +51,7 @@ impl Error {
             Error::Mod(_) => 5,
             Error::Diff(_) => 6,
             Error::InvalidInput(_) => 7,
+            Error::TOOL(_) => 8,
         }
     }
 }

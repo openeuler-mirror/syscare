@@ -1,18 +1,19 @@
 use std::{path::Path, env};
-use std::process::Command;
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions, File};
+use std::fs::{self, File};
 use std::io::Read;
+use std::string::String;
 
-use walkdir::WalkDir;
+use crate::tool::*;
+use crate::dwarf::{Dwarf, DwarfCompileUnit};
 
 use super::Arg;
-use crate::dwarf::{Dwarf, DwarfCompileUnit};
 use super::Compiler;
 use super::Project;
 use super::Result;
 use super::Error;
-use super::{stringtify, search_tool};
+use super::ExternCommand;
+use super::{set_log_file, set_verbose, verbose};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -51,6 +52,8 @@ impl UpatchBuild {
 
         // create .upatch directory
         self.create_dir()?;
+        set_log_file(&self.log_file)?;
+        set_verbose(self.args.verbose)?;
 
         if self.args.patch_name.is_empty() {
             self.args.patch_name.push_str(&self.args.elf_name);
@@ -109,7 +112,7 @@ impl UpatchBuild {
 
         // choose the binary's obj to create upatch file
         let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
-        self.upatch_diff(&source_obj, &patch_obj, &binary_obj)?;
+        self.create_diff(&source_obj, &patch_obj, &binary_obj)?;
 
         // ld patchs
         let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
@@ -134,7 +137,7 @@ impl UpatchBuild {
         self.source_dir.push_str(&format!("{}/{}", &self.cache_dir, "source"));
         self.patch_dir.push_str(&format!("{}/{}", &self.cache_dir, "patch"));
         self.output_dir.push_str(&format!("{}/{}", &self.cache_dir, "output"));
-        self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "buildlog"));
+        self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "build.log"));
 
         if Path::new(&self.cache_dir).is_dir() {
             fs::remove_dir_all(self.cache_dir.clone())?;
@@ -159,12 +162,9 @@ impl UpatchBuild {
     }
 
     fn correlate_obj(&self, dwarf: &Dwarf, comp_dir: &str, dir: &str, map: &mut HashMap<String, String>) -> Result<()> {
-        let arr = WalkDir::new(dir).into_iter()
-                .filter_map(|e| e.ok())
-                .filter(|e| e.path().is_file() && (stringtify(e.path().extension().unwrap_or_default()) == "o"))
-                .collect::<Vec<_>>();
+        let arr = list_all_files_ext(dir, "o", false)?;
         for obj in arr {       
-            let name = obj.path().to_str().unwrap_or_default().to_string(); 
+            let name = stringtify(obj);
             let result = dwarf.file_in_obj(name.clone())?;
             if result.len() == 1 && result[0].DW_AT_comp_dir.find(comp_dir) != None{
                 map.insert(result[0].get_source(), name.clone());
@@ -173,24 +173,14 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn upatch_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> Result<()> {
-        // TODO can print changed function
+    fn create_diff(&self, source_obj: &HashMap<String, String>, patch_obj: &HashMap<String, String>, binary_obj: &Vec<DwarfCompileUnit>) -> Result<()> {
         for path in binary_obj {
             let source_name = path.get_source();
             match &patch_obj.get(&source_name) {
                 Some(patch) => {
-                    let output_dir =  self.output_dir.clone() + "/" + Path::new(patch).file_name().unwrap().to_str().unwrap();
+                    let output_dir = format!("{}/{}", &self.output_dir, file_name(patch)?);
                     match &source_obj.get(&source_name) {
-                        Some(source) => {
-                            let output = Command::new(&self.diff_file)
-                                        .args(["-s", &source, "-p", &patch, "-o", &output_dir, "-r", &self.args.debug_info, "-d"])
-                                        .stdout(OpenOptions::new().append(true).write(true).open(&self.log_file)?)
-                                        .stderr(OpenOptions::new().append(true).write(true).open(&self.log_file)?)
-                                        .output()?;
-                            if !output.status.success(){
-                                return Err(Error::Diff(format!("{}: please look {} for detail.", output.status, &self.log_file)));
-                            }
-                        },
+                        Some(source) => self.upatch_diff(source, patch, &output_dir)?,
                         None => { fs::copy(&patch, output_dir)?; },
                     };
                 },
@@ -200,13 +190,26 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn upatch_tool(&self, patch: &str) -> Result<()> {
-        let cmd = Command::new(&self.tool_file)
-            .args(["resolve", "-b", &self.args.debug_info, "-p", patch])
-            .output()?;
-        match cmd.status.success() {
-            true => Ok(()),
-            false => Err(Error::Project(format!("upatch-tool {} error: {}", patch, String::from_utf8(cmd.stderr).unwrap().trim())))
+    fn upatch_diff(&self, source: &str, patch: &str, output_dir: &str) -> Result<()> {
+        let mut args_list = vec!["-s", &source, "-p", &patch, "-o", &output_dir, "-r", &self.args.debug_info];
+        if self.args.verbose {
+            args_list.push("-d");
         }
+        let output = ExternCommand::new(&self.diff_file).execvp(args_list)?;
+        match output.exit_status().success() {
+            true => verbose(output.stdout()),
+            false => return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), &self.log_file)))
+        };
+        Ok(())
+    }
+
+    fn upatch_tool(&self, patch: &str) -> Result<()> {
+        let args_list = vec!["resolve", "-b", &self.args.debug_info, "-p", patch];
+        let output = ExternCommand::new(&self.tool_file).execvp(args_list)?;
+        match output.exit_status().success() {
+            true => verbose(output.stdout()),
+            false => return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
+        };
+        Ok(())
     }
 }

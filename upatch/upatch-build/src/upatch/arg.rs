@@ -5,7 +5,7 @@ use std::process::exit;
 
 use super::Result;
 use super::Error;
-use super::{stringtify, realpath};
+use crate::tool::*;
 
 pub struct Arg {
     pub work_dir: String,
@@ -20,6 +20,7 @@ pub struct Arg {
     pub diff_file: Vec<String>,
     program: String,
     pub skip_compiler_check: bool,
+    pub verbose: bool,
 }
 
 impl Arg {
@@ -38,6 +39,7 @@ impl Arg {
         println!("      -o|--output-dir:            Specify output directory, default --work-dir");
         println!("      -n|--name:                  Specify output name, default --elf-name");
         println!("      --skip-compiler-check:      Specify skip check compiler");
+        println!("      --verbose:                  Specify show debug information");
     }
 
     fn check(&mut self) -> Result<()>  {
@@ -71,6 +73,7 @@ impl Arg {
             diff_file: Vec::new(),
             program: String::new(),
             skip_compiler_check: false,
+            verbose: false,
         }
     }
 
@@ -143,6 +146,9 @@ impl Arg {
                 "--skip-compiler-check" => {
                     self.skip_compiler_check = true;
                 },
+                "--verbose" => {
+                    self.verbose = true;
+                }
                 _ => {
                     if !Path::new(&args[i]).is_file() {
                         self.usage();

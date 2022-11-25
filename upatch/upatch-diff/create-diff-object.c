@@ -329,8 +329,10 @@ static bool locals_match(struct running_elf *relf, int idx,
             }
         }
 
-        if (!found)
+        if (!found){
+            log_debug("can't find %s - in running_sym", running_sym->name);
             return false;
+        }
     }
 
     sym = file_sym;
@@ -357,8 +359,10 @@ static bool locals_match(struct running_elf *relf, int idx,
             }
         }
 
-        if (!found)
+        if (!found){
+            log_debug("can't find %s - in sym", sym->name);
             return false;
+        }
     }
 
     return true;

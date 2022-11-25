@@ -1,7 +1,8 @@
-use std::process::Command;
 use std::fs::File;
 use std::io::Write;
+use crate::upatch::verbose;
 
+use super::ExternCommand;
 use super::Result;
 use super::Error;
 
@@ -24,30 +25,26 @@ impl Project {
         let command_shell_str = format!("{}/{}", output, BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_str)?;
         command_shell.write_all((&build_command).as_ref())?;
-        let result = Command::new("sh")
-            .arg(&command_shell_str)
-            .current_dir(&self.project_dir)
-            .env(COMPILER_CMD_ENV, cmd)
-            .env(ASSEMBLER_DIR_ENV, output)
-            .output()?;
-        if !result.status.success(){
-            return Err(Error::Project(format!("build project error {}: {}", result.status, String::from_utf8(result.stderr).unwrap_or_default())));
-        }
-
+        let args_list = vec![&command_shell_str];
+        let envs_list = vec![
+            (COMPILER_CMD_ENV, cmd),
+            (ASSEMBLER_DIR_ENV, output)
+        ];
+        let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
+        match output.exit_status().success() {
+            true => verbose(output.stdout()),
+            false => return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr())))
+        };
         Ok(())
     }
 
     pub fn patch(&self, patch: String) -> Result<()> {
-        let mut build_cmd = Command::new("patch");
-        let result = build_cmd.current_dir(&self.project_dir).arg("-N").arg("-p1").stdin(File::open(&patch).unwrap()).output()?;
-        match result.status.success() {
-            true =>{
-                println!("{}", String::from_utf8(result.stdout).unwrap().trim());
-                Ok(())
-            },
-            false => {
-                Err(Error::Project(format!("patch file {} error: {}", patch, String::from_utf8(result.stderr).unwrap().trim())))
-            }
-        }
+        let args_list = vec!["-N", "-p1"];
+        let output = ExternCommand::new("patch").execvp_file(args_list, &self.project_dir, &patch)?;
+        match output.exit_status().success() {
+            true => println!("{}", output.stdout()),
+            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch,  output.exit_code(), output.stderr())))
+        };
+        Ok(())
     }
 }

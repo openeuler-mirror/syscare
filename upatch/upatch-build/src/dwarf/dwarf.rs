@@ -1,14 +1,14 @@
 use std::borrow::{Cow, Borrow};
 use std::collections::HashMap;
-use std::{io, path::Path, ffi::OsStr};
+use std::{io, path::Path};
 
 use gimli::{constants, Reader};
 use object::{Object, ObjectSection, ObjectSymbol};
 use typed_arena::Arena;
-use walkdir::WalkDir;
 
 use super::Relocate;
 use super::Result;
+use crate::tool::*;
 
 type RelocationMap = HashMap<usize, object::Relocation>;
 
@@ -66,25 +66,16 @@ impl Dwarf{
 }
 
 impl Dwarf{
-    fn find_binary(&self, dir_str:String, binary: String) -> io::Result<String> {
+    fn find_binary(&self, dir_str: String, binary: String) -> io::Result<String> {
         let dir_path = Path::new(&dir_str);
         if !dir_path.is_dir() {
             return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} is not a directory", &dir_str)));
         }
-        let arr = WalkDir::new(dir_path).into_iter()
-                                                .filter_map(|e| e.ok())
-                                                .filter(|e| e.path().is_file() && (e.path().file_name() == Some(OsStr::new(&binary))))
-                                                .collect::<Vec<_>>();
+        let arr = find_files(&dir_str, &binary, false, true)?;
         match arr.len() {
-            0 => return Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} don't have {}", arr.len(), &dir_str, &binary))),
-            1 => (),
-            _ => {
-                return Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} have too many {}", arr.len(), &dir_str, &binary)))
-            },
-        };
-        match arr[0].path().to_str() {
-            Some(path) => Ok(path.to_string()),
-            None => Err(io::Error::new(io::ErrorKind::NotFound, format!("no such binary file: {}", &binary))),
+            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} don't have {}", arr.len(), &dir_str, &binary))),
+            1 => Ok(stringtify(&arr[0])),
+            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} have too many {}", arr.len(), &dir_str, &binary))),
         }
     }
 
