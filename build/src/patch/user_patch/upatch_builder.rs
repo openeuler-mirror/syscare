@@ -1,7 +1,8 @@
 use crate::cli::{CliWorkDir, CliArguments};
 
 use crate::package::RpmHelper;
-use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments, PatchBuilderArgumentsParser};
+use crate::patch::{PatchInfo, PatchFile};
+use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
 
 use crate::constants::*;
 
@@ -28,14 +29,13 @@ impl UserPatchBuilder {
             "--elf-name",         args.elf_name.as_str(),
             "--output-dir",       args.output_dir.as_str(),
         ];
-
         if args.skip_compiler_check {
             arg_list.push("--skip-compiler-check");
         }
-
-        for patch in &args.patch_list {
-            arg_list.push(patch.get_path())
+        if args.verbose {
+            arg_list.push("--verbose");
         }
+        arg_list.append(&mut args.patch_list.iter().map(PatchFile::get_path).collect());
 
         arg_list
     }
@@ -68,10 +68,11 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
             source_dir:           patch_source_dir,
             elf_name:             target_elf_name.to_owned(),
             debuginfo:            debuginfo_file,
-            output_dir:           patch_output_dir.to_owned(),
             build_source_cmd:     build_original_cmd,
             build_patch_cmd:      build_patched_cmd,
+            output_dir:           patch_output_dir.to_owned(),
             skip_compiler_check:  args.skip_compiler_check,
+            verbose:              args.verbose,
             patch_list:           patch_info.get_file_list().to_owned(),
         };
 
