@@ -253,7 +253,7 @@ function patch_status() {
 			echo "DEACTIVE"
 		fi
 	else
-		local state=$("${UPATCH_TOOL}" info -p "${PATCH_ROOT}/${PATCH_NAME}" | grep Status | awk -F ':' '{print $2}')
+		local state=$("${UPATCH_TOOL}" info -p "${PATCH_ROOT}/${PATCH_NAME}" 2>/dev/null | grep Status | awk -F ':' '{print $2}')
 		state=$(eval echo "${state}")
 		if [ "${state}" == "actived" ]; then
 			echo "ACTIVE"
