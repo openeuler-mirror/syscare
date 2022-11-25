@@ -1,7 +1,8 @@
 use crate::cli::{CliWorkDir, CliArguments};
 
 use crate::package::RpmHelper;
-use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments, PatchBuilderArgumentsParser};
+use crate::patch::{PatchInfo, PatchFile};
+use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
 
 use crate::constants::*;
 
@@ -23,15 +24,12 @@ impl KernelPatchBuilder {
             "--vmlinux",   args.vmlinux.as_str(),
             "--jobs",      Box::leak(Box::new(args.jobs.to_string())),
             "--output",    args.output_dir.as_str(),
+            "--skip-cleanup",
         ];
-
         if args.skip_compiler_check {
             arg_list.push("--skip-compiler-check");
         }
-
-        for patch in &args.patch_list {
-            arg_list.push(patch.get_path())
-        }
+        arg_list.append(&mut args.patch_list.iter().map(PatchFile::get_path).collect());
 
         arg_list
     }
