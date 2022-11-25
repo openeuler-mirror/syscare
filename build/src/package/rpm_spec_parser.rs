@@ -80,6 +80,10 @@ impl RpmSpecParser {
             return None;
         }
 
+        if line.starts_with('#') {
+            return None;
+        }
+
         line.find(':').and_then(|spliter_index| {
             let tag_name  = line[..spliter_index].trim().to_string();
             let tag_value = line[spliter_index + 1..].trim().to_string();
@@ -90,6 +94,10 @@ impl RpmSpecParser {
 
     pub fn parse_id_tag(line: &str, tag_prefix: &str) -> Option<RpmSpecTag> {
         if !line.contains(tag_prefix) {
+            return None;
+        }
+
+        if line.starts_with('#') {
             return None;
         }
 

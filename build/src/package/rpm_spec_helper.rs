@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
+
 use crate::constants::*;
-use crate::util::sys;
-use crate::util::fs;
+use crate::util::{sys, fs};
 
 use crate::patch::PatchInfo;
 
@@ -83,6 +83,10 @@ impl RpmSpecHelper {
         // Parse whole file
         let mut current_line_num = 0usize;
         for current_line in &spec_file_content {
+            if let Some(_) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_BUILD_REQUIRES) {
+                break;
+            }
+
             // If the release tag is not parsed, do parse
             if orig_release_tag.is_none() {
                 if let Some(tag) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_RELEASE) {
@@ -119,11 +123,11 @@ impl RpmSpecHelper {
         // Append 'Source' tag
         let mut lines_to_write = BTreeSet::new();
         let last_source_tag_id = match source_tags.into_iter().last() {
-            Some(tag) => tag.get_id().unwrap_or_default(),
+            Some(tag) => tag.get_id().unwrap(),
             None      => 0
         };
 
-        for source_tag in Self::create_new_source_tags(last_source_tag_id, patch_info) {
+        for source_tag in Self::create_new_source_tags(last_source_tag_id, patch_info).into_iter().rev() {
             lines_to_write.insert((current_line_num, source_tag.to_string()));
         }
 
