@@ -45,7 +45,8 @@ impl ExternCommand<'_> {
         let process_name = self.path;
         let process_id = child_process.id();
 
-        debug!("Executing '{}' ({}):", process_name, process_id);
+        debug!("Executing {:?}", command);
+        debug!("Process '{}' ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
         for read_line in BufReader::new(process_stdout).lines() {

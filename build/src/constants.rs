@@ -9,6 +9,7 @@ pub const CLI_DEFAULT_PATCH_DESCRIPTION:   &str = "None";
 pub const CLI_DEFAULT_WORKDIR:             &str = ".";
 pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
+pub const CLI_DEFAULT_VERBOSE_FLAG:        &str = "false";
 
 // External commands
 pub const MAKE:         ExternCommand = ExternCommand::new("make");

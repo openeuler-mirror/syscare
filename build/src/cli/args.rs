@@ -62,6 +62,10 @@ pub struct CliArguments {
     #[arg(long, default_value=CLI_DEFAULT_SKIP_COMPILER_CHECK)]
     pub skip_compiler_check: bool,
 
+    /// Provide more detailed info
+    #[arg(short='V', long, default_value=CLI_DEFAULT_VERBOSE_FLAG)]
+    pub verbose: bool,
+
     /// Patch file(s)
     #[arg(required=true)]
     pub patches: Vec<String>

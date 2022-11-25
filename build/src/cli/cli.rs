@@ -32,12 +32,13 @@ impl PatchBuildCLI {
     fn init_logger(&self) -> std::io::Result<()> {
         let mut logger = Logger::new();
 
-        logger.set_print_level(LevelFilter::Info);
-        logger.set_log_file(
-            LevelFilter::Debug,
-            format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME)
-        )?;
+        let log_level = match self.args.verbose {
+            false => LevelFilter::Info,
+            true  => LevelFilter::Debug,
+        };
 
+        logger.set_print_level(log_level);
+        logger.set_log_file(LevelFilter::Debug, format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME))?;
         Logger::init_logger(logger);
 
         Ok(())
@@ -239,13 +240,14 @@ impl PatchBuildCLI {
         let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
         let pkg_output_dir = &self.args.output;
 
+        info!("Building source package");
+
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_spec_dir  = source_pkg_build_root.specs_dir();
 
         let spec_file_path = RpmHelper::find_spec_file(source_pkg_spec_dir)?;
         RpmSpecHelper::modify_spec_file_by_patches(&spec_file_path, patch_info)?;
 
-        info!("Building source package");
         let rpm_builder = RpmBuilder::new(source_pkg_build_root);
         rpm_builder.copy_patch_file_to_source(patch_info)?;
         rpm_builder.write_patch_target_info_to_source(patch_info)?;

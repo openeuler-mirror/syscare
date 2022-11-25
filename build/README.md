@@ -29,6 +29,7 @@ Options:
   -o, --output <OUTPUT>                  Generated patch output directory [default: .]
       --kjobs <N>                        Kernel make jobs [default: 32]
       --skip-compiler-check              Skip compiler version check (not recommended)
+  -V, --verbose                          Provide more detailed info
   -h, --help                             Print help information
 ```
 
