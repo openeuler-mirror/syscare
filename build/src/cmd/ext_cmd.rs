@@ -1,8 +1,10 @@
 use std::process::{Command, Stdio};
-use std::io::{BufRead, BufReader};
+use std::io::BufReader;
 use std::ffi::OsStr;
 
 use crate::log::debug;
+
+use super::lossy_lines::LossyLines;
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -49,13 +51,13 @@ impl ExternCommand<'_> {
         debug!("Process '{}' ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
-        for read_line in BufReader::new(process_stdout).lines() {
+        for read_line in LossyLines::from(BufReader::new(process_stdout)) {
             last_stdout = read_line?;
             debug!("{}", last_stdout);
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
-        for read_line in BufReader::new(process_stderr).lines() {
+        for read_line in LossyLines::from(BufReader::new(process_stderr)) {
             last_stderr = read_line?;
             debug!("{}", last_stderr);
         }
