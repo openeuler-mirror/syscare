@@ -1,8 +1,9 @@
 use std::fs::File;
 use std::io::Write;
-use crate::upatch::verbose;
 
-use super::ExternCommand;
+use log::info;
+use crate::cmd::ExternCommand;
+
 use super::Result;
 use super::Error;
 
@@ -31,19 +32,21 @@ impl Project {
             (ASSEMBLER_DIR_ENV, output)
         ];
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
-        match output.exit_status().success() {
-            true => verbose(output.stdout()),
-            false => return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr())))
+        if !output.exit_status().success() {
+            return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }
 
-    pub fn patch(&self, patch: String) -> Result<()> {
+    pub fn patch(&self, patch: String, verbose: bool) -> Result<()> {
         let args_list = vec!["-N", "-p1"];
         let output = ExternCommand::new("patch").execvp_file(args_list, &self.project_dir, &patch)?;
         match output.exit_status().success() {
-            true => println!("{}", output.stdout()),
-            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch,  output.exit_code(), output.stderr())))
+            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch,  output.exit_code(), output.stderr()))),
+            true => match verbose {
+                true => (),
+                false => info!("{}", output.stdout()),
+            }
         };
         Ok(())
     }

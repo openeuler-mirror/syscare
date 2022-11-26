@@ -3,9 +3,10 @@ use std::env;
 use std::path::Path;
 use std::process::exit;
 
+use crate::tool::*;
+
 use super::Result;
 use super::Error;
-use crate::tool::*;
 
 pub struct Arg {
     pub work_dir: String,

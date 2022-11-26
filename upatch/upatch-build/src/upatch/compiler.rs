@@ -5,7 +5,7 @@ use std::io::Write;
 
 use crate::dwarf::Dwarf;
 use crate::tool::*;
-use crate::upatch::{ExternCommand, verbose};
+use crate::cmd::ExternCommand;
 
 use super::Result;
 use super::Error;
@@ -75,9 +75,8 @@ impl Compiler {
 
         let args_list = vec!["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c", &test, "-o", &test_obj];
         let output = ExternCommand::new(&self.compiler_file).execvp(args_list)?;
-        match output.exit_status().success() {
-            true => (),
-            false => return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
+        if !output.exit_status().success() {
+            return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
         };
 
         let dwarf = Dwarf::new();
@@ -119,9 +118,8 @@ impl Compiler {
             args_list.push(&arr[i]);
         }
         let output = ExternCommand::new(&self.linker_file).execvp(args_list)?;
-        match output.exit_status().success() {
-            true => verbose(output.stdout()),
-            false => return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())))
+        if !output.exit_status().success() {
+            return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }

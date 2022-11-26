@@ -1,9 +1,11 @@
 use std::process::{Command, ExitStatus, Stdio};
-use std::io::Write;
 use std::ffi::OsStr;
 use std::fs::File;
+use std::io::BufReader;
 
-use super::get_log_writer;
+use log::*;
+
+use super::LossyLines;
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -39,27 +41,35 @@ pub struct ExternCommand<'a> {
 impl ExternCommand<'_> {
     #[inline(always)]
     pub fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        let child_process = command
+        let mut last_stdout = String::new();
+        let mut last_stderr = String::new();
+        let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .output()?;
+            .spawn()?;
 
-        let mut binding = get_log_writer();
-        let writer = binding.get_mut("log").unwrap();
-        writeln!(writer, "Executing '{}' ({:?}):", &self, command)?;
-        let process_stdout = String::from_utf8_lossy(&child_process.stdout).trim().to_string();
-        let process_stderr = String::from_utf8_lossy(&child_process.stderr).trim().to_string();
+        trace!("Executing '{}' ({:?}):", &self, command);
+        let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
+        for read_line in LossyLines::from(BufReader::new(process_stdout)) {
+            let out = read_line?;
+            last_stdout.push_str(&format!("{}\n", &out));
+            debug!("{}", out);
+        }
 
-        writeln!(writer, "{}", &process_stdout)?;
-        writeln!(writer, "{}", &process_stderr)?;
+        let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
+        for read_line in LossyLines::from(BufReader::new(process_stderr)) {
+            let err = read_line?;
+            last_stderr.push_str(&format!("{}\n", &err));
+            trace!("{}", last_stderr);
+        }
 
-        let exit_status = child_process.status;
-        writeln!(writer, "Process ({}) exited, exit_code={}\n", &self, exit_status.code().expect("get code error"))?;
+        let exit_status = child_process.wait()?;
+        trace!("Process ({}) exited, exit_code={}\n", &self, exit_status.code().expect("get code error"));
 
         Ok(ExternCommandExitStatus {
             exit_status,
-            stdout: process_stdout,
-            stderr: process_stderr,
+            stdout: last_stdout.trim().to_string(),
+            stderr: last_stderr.trim().to_string(),
         })
     }
 }

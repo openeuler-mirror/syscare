@@ -4,16 +4,16 @@ use std::fs::{self, File};
 use std::io::Read;
 use std::string::String;
 
+use crate::log::*;
 use crate::tool::*;
 use crate::dwarf::{Dwarf, DwarfCompileUnit};
+use crate::cmd::ExternCommand;
 
 use super::Arg;
 use super::Compiler;
 use super::Project;
 use super::Result;
 use super::Error;
-use super::ExternCommand;
-use super::{set_log_file, set_verbose, verbose};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -52,8 +52,7 @@ impl UpatchBuild {
 
         // create .upatch directory
         self.create_dir()?;
-        set_log_file(&self.log_file)?;
-        set_verbose(self.args.verbose)?;
+        self.init_logger()?;
 
         if self.args.patch_name.is_empty() {
             self.args.patch_name.push_str(&self.args.elf_name);
@@ -80,28 +79,28 @@ impl UpatchBuild {
         let project_name = &Path::new(&self.args.source).file_name().unwrap();
 
         // hack compiler
-        println!("Hacking compiler");
+        info!("Hacking compiler");
         compiler.hack()?;
 
         // build source
-        println!("Building original {}", project_name.to_str().unwrap());
+        info!("Building original {}", project_name.to_str().unwrap());
         let project = Project::new(self.args.source.clone());
         project.build(CMD_SOURCE_ENTER, &self.source_dir, self.args.build_source_command.clone())?;
 
         // build patch
         for patch in &self.args.diff_file {
-            println!("Patching file: {}", &patch);
-            project.patch(patch.clone())?;
+            info!("Patching file: {}", &patch);
+            project.patch(patch.clone(), self.args.verbose)?;
         }
 
-        println!("Building patched {}", project_name.to_str().unwrap());
+        info!("Building patched {}", project_name.to_str().unwrap());
         project.build(CMD_PATCHED_ENTER, &self.patch_dir, self.args.build_patch_command.clone())?;
 
         // unhack compiler
-        println!("Unhacking compiler");
+        info!("Unhacking compiler");
         compiler.unhack()?;
 
-        println!("Detecting changed objects");
+        info!("Detecting changed objects");
         // correlate obj name
         let mut source_obj: HashMap<String, String> = HashMap::new();
         let mut patch_obj: HashMap<String, String> = HashMap::new();
@@ -118,7 +117,7 @@ impl UpatchBuild {
         let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
         compiler.linker(&self.output_dir, &output_file)?;
         self.upatch_tool(&output_file)?;
-        println!("Building patch: {}", &output_file);
+        info!("Building patch: {}", &output_file);
         Ok(())
     }
 }
@@ -148,6 +147,21 @@ impl UpatchBuild {
         fs::create_dir(self.patch_dir.clone())?;
         fs::create_dir(self.output_dir.clone())?;
         File::create(&self.log_file)?;
+        Ok(())
+    }
+
+    fn init_logger(&self) -> Result<()> {
+        let mut logger = Logger::new();
+
+        let log_level = match self.args.verbose {
+            false => LevelFilter::Info,
+            true  => LevelFilter::Debug,
+        };
+
+        logger.set_print_level(log_level);
+        logger.set_log_file(LevelFilter::Trace, &self.log_file)?;
+        Logger::init_logger(logger);
+
         Ok(())
     }
 
@@ -196,9 +210,8 @@ impl UpatchBuild {
             args_list.push("-d");
         }
         let output = ExternCommand::new(&self.diff_file).execvp(args_list)?;
-        match output.exit_status().success() {
-            true => verbose(output.stdout()),
-            false => return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), &self.log_file)))
+        if !output.exit_status().success() {
+            return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), &self.log_file)))
         };
         Ok(())
     }
@@ -206,9 +219,8 @@ impl UpatchBuild {
     fn upatch_tool(&self, patch: &str) -> Result<()> {
         let args_list = vec!["resolve", "-b", &self.args.debug_info, "-p", patch];
         let output = ExternCommand::new(&self.tool_file).execvp(args_list)?;
-        match output.exit_status().success() {
-            true => verbose(output.stdout()),
-            false => return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
+        if !output.exit_status().success() {
+            return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }
