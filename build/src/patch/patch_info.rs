@@ -183,6 +183,7 @@ pub struct PatchInfo {
     target_elf_name: String,
     license:         String,
     description:     String,
+    builder:         String,
     file_list:       Vec<PatchFile>,
 }
 
@@ -211,6 +212,10 @@ impl PatchInfo {
         &self.description
     }
 
+    pub fn get_builder(&self) -> &str {
+        &self.builder
+    }
+
     pub fn get_file_list(&self) -> &[PatchFile] {
         self.file_list.as_slice()
     }
@@ -223,10 +228,6 @@ impl PatchInfo {
             version: args.version.to_owned(),
             release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
         })
-    }
-
-    fn parse_description(args: &CliArguments) -> String {
-        args.description.to_owned()
     }
 
     fn parse_patch_type(pkg_info: &PackageInfo) -> PatchType {
@@ -256,6 +257,14 @@ impl PatchInfo {
             .to_owned()
     }
 
+    fn parse_description(args: &CliArguments) -> String {
+        args.description.to_owned()
+    }
+
+    fn parse_builder() -> String {
+        format!("{} v{}", CLI_NAME, CLI_VERSION)
+    }
+
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
         let mut patch_file_list = Vec::new();
 
@@ -275,7 +284,8 @@ impl PatchInfo {
             target:          Self::parse_target(args),
             target_elf_name: Self::parse_target_elf_name(args),
             license:         Self::parse_license(args),
-            description:         Self::parse_description(args),
+            description:     Self::parse_description(args),
+            builder:         Self::parse_builder(),
             file_list:       Self::parse_file_list(args)?
         })
     }
@@ -291,6 +301,7 @@ impl std::fmt::Display for PatchInfo {
         f.write_fmt(format_args!("version:     {}\n", self.get_patch().get_version()))?;
         f.write_fmt(format_args!("release:     {}\n", self.get_patch().get_release()))?;
         f.write_fmt(format_args!("description: {}\n", self.get_description()))?;
+        f.write_fmt(format_args!("builder:     {}\n", self.get_builder()))?;
         f.write_str("\npatch list:")?;
         for patch_file in self.get_file_list() {
             f.write_fmt(format_args!("\n{} {}", patch_file.get_name(), patch_file.get_digest()))?;

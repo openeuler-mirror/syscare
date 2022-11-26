@@ -1,8 +1,9 @@
 [package]
 name = "syscare-build"
 version = "1.0.0"
-authors = ["renoseven"]
 edition = "2021"
+authors = ["renoseven"]
+description = "Syscare patch build utility"
 
 [dependencies]
 log = {version = "0.4.17"}

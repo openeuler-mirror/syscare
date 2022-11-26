@@ -1,8 +1,10 @@
 use crate::cmd::ExternCommand;
 
 // CLI Strings
+pub const CLI_NAME:                        &str = env!("CARGO_PKG_NAME");
+pub const CLI_VERSION:                     &str = env!("CARGO_PKG_VERSION");
+pub const CLI_DESCRIPTION:                 &str = env!("CARGO_PKG_DESCRIPTION");
 pub const CLI_COMMAND_NAME:                &str = "syscare build";
-pub const CLI_DESCRIPTION:                 &str = "Syscare patch build utility";
 pub const CLI_LOG_FILE_NAME:               &str = "build.log";
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
 pub const CLI_DEFAULT_PATCH_DESCRIPTION:   &str = "None";
