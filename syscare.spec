@@ -39,10 +39,21 @@ make
 %install
 %make_install
 
+mkdir -p %{buildroot}/usr/lib/systemd/system
+install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-restore.service %{buildroot}/usr/lib/systemd/system
+install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-pre.service %{buildroot}/usr/lib/systemd/system
+
+%post
+%systemd_post %{name}-restore.service
+%systemd_post %{name}-pre.service
+
 %files
 %defattr(-,root,root,-)
 %attr(755,root,root) /usr/bin/syscare
 %attr(755,root,root) /usr/libexec/%{name}/upatch-tool
+%attr(755,root,root) /usr/libexec/%{name}/auto-recovery.sh
+%attr(644,root,root) /usr/lib/systemd/system/%{name}-restore.service
+%attr(644,root,root) /usr/lib/systemd/system/%{name}-pre.service
 
 %files build
 %defattr(-,root,root,-)
@@ -52,5 +63,7 @@ make
 %attr(755,root,root) /usr/libexec/%{name}/syscare-build
 
 %changelog
-* Mon Nov 21 2022 snoweay<snoweay@163.com> - 0.1.1-1
+* Mon Nov 28 2022 snoweay<snoweay@163.com> - 0.1.1-1
+- First version for test. Support patches restore, remove, insmod upatch.ko.
+* Mon Nov 21 2022 snoweay<snoweay@163.com> - 0.1.0-1
 - init version for 0.1.1-1.
