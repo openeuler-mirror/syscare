@@ -5,8 +5,11 @@ After=syscare-pre.service
 Before=network-online.target
 
 [Service]
-ExecStart=/usr/libexec/syscare/auto_recovery.sh
+ExecStart=/usr/libexec/syscare/auto-recovery.sh
 User=root
 Group=root
 Type=oneshot
 RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
