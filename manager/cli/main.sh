@@ -230,7 +230,10 @@ function active_patch() {
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
-		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+		if [ ! -f "${KPATCH_STATE_FILE}" ]; then
+			echo "Patch ${PATCH_NAME} of ${PATCH_PKG} is not applied."
+			return 1
+		fi
 
 		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ] ; then
 			return
