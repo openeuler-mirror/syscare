@@ -191,9 +191,11 @@ static int do_module_create(struct upatch_entity *entity)
 static int do_module_remove(struct upatch_entity *entity,
     struct upatch_module *module)
 {
+    module->real_state = UPATCH_STATE_REMOVED;
     upatch_module_deallocate(module);
-    upatch_module_remove(entity, module);
-    upatch_entity_try_remove(entity);
+    /* TODO: currently, remove is only a mark flag */
+    // upatch_module_remove(entity, module);
+    // upatch_entity_try_remove(entity);
     return 0;
 }
 
