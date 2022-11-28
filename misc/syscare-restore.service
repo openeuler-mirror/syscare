@@ -1,0 +1,12 @@
+[Unit]
+Description=Restore syscare patch status
+Requires=syscare-pre.service
+After=syscare-pre.service
+Before=network-online.target
+
+[Service]
+ExecStart=/usr/libexec/syscare/auto_recovery.sh
+User=root
+Group=root
+Type=oneshot
+RemainAfterExit=yes
