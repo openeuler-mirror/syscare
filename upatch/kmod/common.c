@@ -33,32 +33,18 @@ inline int copy_para_from_user(unsigned long addr, char *buf, size_t buf_len)
     return 0;
 }
 
-/* code from  get_mm_exe_file / get_task_exe_file */
-inline struct file *get_binary_file_from_mm(struct mm_struct *mm)
+struct file *get_binary_file_from_addr(struct task_struct *task, unsigned long addr)
 {
-	struct file *exe_file;
+    struct vm_area_struct *vma = NULL;
 
-	rcu_read_lock();
-	exe_file = rcu_dereference(mm->exe_file);
-	if (exe_file && !get_file_rcu(exe_file))
-		exe_file = NULL;
-	rcu_read_unlock();
-	return exe_file;
-}
+    vma = find_vma(task->mm, addr);
+    if (!vma)
+        return NULL;
 
-inline struct file *get_binary_file_from_task(struct task_struct *task)
-{
-    struct mm_struct *mm;
-    struct file *exe_file = NULL;
+    if (!vma->vm_file)
+        return NULL;
 
-    task_lock(task);
-    mm = task->mm;
-    if (mm) {
-		if (!(task->flags & PF_KTHREAD))
-			exe_file = get_binary_file_from_mm(mm);
-	}
-    task_unlock(task);
-    return exe_file;
+    return vma->vm_file;
 }
 
 /* TODO: handle read from inode, need handle lock here */

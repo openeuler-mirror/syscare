@@ -216,8 +216,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
 
     memset(&info, 0, sizeof(info));
 
-    /* TODO: it could be from library, we should calculate address from PC address */
-    binary_file = get_binary_file_from_task(current);
+    binary_file = get_binary_file_from_addr(current, pc);
     if (!binary_file) {
         pr_err("no exe file found for upatch \n");
         goto out;
