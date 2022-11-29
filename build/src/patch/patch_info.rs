@@ -224,8 +224,8 @@ impl PatchInfo {
 impl PatchInfo {
     fn parse_patch(args: &CliArguments) -> std::io::Result<PatchName> {
         Ok(PatchName {
-            name:    args.name.to_owned(),
-            version: args.version.to_owned(),
+            name:    args.patch_name.to_owned(),
+            version: args.patch_version.to_owned(),
             release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
         })
     }
@@ -258,11 +258,11 @@ impl PatchInfo {
     }
 
     fn parse_description(args: &CliArguments) -> String {
-        args.description.to_owned()
+        args.patch_description.to_owned()
     }
 
     fn parse_builder() -> String {
-        format!("{} v{}", CLI_NAME, CLI_VERSION)
+        format!("{} {}", CLI_NAME, CLI_VERSION)
     }
 
     fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {

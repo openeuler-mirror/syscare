@@ -9,28 +9,29 @@ syscare build为纯CLI工具，提供从RPM包生成热补丁包的功能，补�
 ## 命令行参数
 
 ```
-Usage: syscare build [OPTIONS] --name <NAME> --source <SOURCE> --debuginfo <DEBUGINFO> <PATCHES>...
+Usage: syscare build [OPTIONS] --patch-name <PATCH_NAME> --source <SOURCE> --debuginfo <DEBUGINFO> <PATCHES>...
 
 Arguments:
   <PATCHES>...  Patch file(s)
 
 Options:
-  -n, --name <NAME>                      Patch name
-      --version <VERSION>                Patch version [default: 1]
-      --description <DESCRIPTION>        Patch description [default: None]
-      --target-name <TARGET_NAME>        Patch target name
-  -t, --target-elfname <TARGET_ELFNAME>  Patch target executable name
-      --target-version <TARGET_VERSION>  Patch target version
-      --target-release <TARGET_RELEASE>  Patch target release
-      --target-license <TARGET_LICENSE>  Patch target license
-  -s, --source <SOURCE>                  Source package
-  -d, --debuginfo <DEBUGINFO>            Debuginfo package
-      --workdir <WORKDIR>                Working directory [default: .]
-  -o, --output <OUTPUT>                  Generated patch output directory [default: .]
-      --kjobs <N>                        Kernel make jobs [default: 32]
-      --skip-compiler-check              Skip compiler version check (not recommended)
-  -V, --verbose                          Provide more detailed info
-  -h, --help                             Print help information
+  -n, --patch-name <PATCH_NAME>                Patch name
+      --patch-version <PATCH_VERSION>          Patch version [default: 1]
+      --patch-description <PATCH_DESCRIPTION>  Patch description [default: None]
+      --target-name <TARGET_NAME>              Patch target name
+  -t, --target-elfname <TARGET_ELFNAME>        Patch target executable name
+      --target-version <TARGET_VERSION>        Patch target version
+      --target-release <TARGET_RELEASE>        Patch target release
+      --target-license <TARGET_LICENSE>        Patch target license
+  -s, --source <SOURCE>                        Source package
+  -d, --debuginfo <DEBUGINFO>                  Debuginfo package
+      --workdir <WORKDIR>                      Working directory [default: .]
+  -o, --output <OUTPUT>                        Generated patch output directory [default: .]
+      --kjobs <N>                              Kernel make jobs [default: 32]
+      --skip-compiler-check                    Skip compiler version check (not recommended)
+  -v, --verbose                                Provide more detailed info
+  -h, --help                                   Print help information
+  -V, --version                                Print version information
 ```
 
 
@@ -39,11 +40,11 @@ Options:
 
 | 字段名称         | 字段描述                               |
 | ---------------- | -------------------------------------- |
-| --name           | 补丁名称                               |
+| --patch-name    | 补丁名称                               |
 | --source         | 目标软件源码包                         |
 | --debuginfo      | 目标软件调试信息包                     |
 | --target-elfname | 目标软件可执行文件名（内核补丁可忽略） |
-| <PATCHES>        | 补丁列表                               |
+| \<PATCHES>        | 补丁列表                               |
 
 
 
@@ -51,7 +52,7 @@ Options:
 
 ```
 syscare-build \
-    --name CVE-2021-32675 \
+    --patch-name CVE-2021-32675 \
     --source redis-6.2.5-1.src.rpm \
     --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
     --target-elfname redis-server \
@@ -90,13 +91,13 @@ syscare-build \
 | version     | 补丁版本               |
 | release     | 补丁Release            |
 | description | 补丁描述               |
+| builder     | 补丁制作工具版本       |
 
 
 
 示例：
 
 ```
-Collecting patch info
 ------------------------------
 name:        CVE-2021-32675
 type:        UserPatch
@@ -105,7 +106,8 @@ elf_name:    redis-server
 license:     BSD and MIT
 version:     1
 release:     31fc7544
-description: None
+description: When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users.
+builder:     syscare-build v0.1.0
 
 patch list:
 0001-Prevent-unauthenticated-client-from-easily-consuming.patch 31fc7544
@@ -145,7 +147,7 @@ patch list:
 
    ```
    syscare-build \
-           --name kernel_version \
+           --patch-name kernel_version \
            --source kernel-5.10.0-60.66.0.91.oe2203.src.rpm \
            --debuginfo kernel-debuginfo-5.10.0-60.66.0.91.oe2203.x86_64.rpm \
            --output output \
@@ -216,5 +218,3 @@ patch list:
 5. 若输入参数错误，将不会保留任何日志；
 
 6. 建议以非root用户权限运行本命令。
-
-   ​

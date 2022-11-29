@@ -4,19 +4,19 @@ use crate::constants::*;
 use crate::util::sys;
 
 #[derive(Parser, Debug)]
-#[command(bin_name=CLI_COMMAND_NAME)]
+#[command(bin_name=CLI_COMMAND_NAME, version)]
 pub struct CliArguments {
     /// Patch name
     #[arg(short='n', long)]
-    pub name: String,
+    pub patch_name: String,
 
     /// Patch version
     #[arg(long, default_value=CLI_DEFAULT_PATCH_VERSION)]
-    pub version: String,
+    pub patch_version: String,
 
     /// Patch description
     #[arg(long, default_value=CLI_DEFAULT_PATCH_DESCRIPTION)]
-    pub description: String,
+    pub patch_description: String,
 
     /// Patch target name
     #[arg(long)]
@@ -63,7 +63,7 @@ pub struct CliArguments {
     pub skip_compiler_check: bool,
 
     /// Provide more detailed info
-    #[arg(short='V', long, default_value=CLI_DEFAULT_VERBOSE_FLAG)]
+    #[arg(short, long, default_value=CLI_DEFAULT_VERBOSE_FLAG)]
     pub verbose: bool,
 
     /// Patch file(s)

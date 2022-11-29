@@ -51,7 +51,7 @@ impl PatchBuildCLI {
 
         let args = &mut self.args;
 
-        if !PATCH_NAME_REGEX.is_match(&args.name) {
+        if !PATCH_NAME_REGEX.is_match(&args.patch_name) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch name should not contain any special character except '_' & '-'"),
@@ -165,13 +165,13 @@ impl PatchBuildCLI {
         // Collect patch version info from patched source package
         let patch_version_file = fs::find_file(pkg_source_dir, PKG_VERSION_FILE_NAME, false, false);
         if let Ok(file_path) = &patch_version_file {
-            let arg_version = args.version.parse::<u32>();
+            let arg_version = args.patch_version.parse::<u32>();
             let pkg_version = fs::read_file_to_string(file_path)?.parse::<u32>();
 
             if let (Ok(arg_ver), Ok(pkg_ver)) = (arg_version, pkg_version) {
                 let max_ver = u32::max(arg_ver, pkg_ver + 1);
                 if max_ver > arg_ver {
-                    args.version = max_ver.to_string();
+                    args.patch_version = max_ver.to_string();
                 }
             }
         }

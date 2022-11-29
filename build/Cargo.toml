@@ -1,9 +1,11 @@
-[package]
+ [package]
 name = "syscare-build"
-version = "1.0.0"
+version = "0.1.0"
 edition = "2021"
 authors = ["renoseven"]
 description = "Syscare patch build utility"
+license = "MulanPSL-2.0"
+build = "build.rs"
 
 [dependencies]
 log = {version = "0.4.17"}
