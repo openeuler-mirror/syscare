@@ -153,7 +153,13 @@ function check_kversion() {
 	return 0
 }
 
-function build_patch() {
+function do_build() {
+	if [ ! -f "${SYSCARE_PATCH_BUILD}" ]; then
+		echo "syscare-build is not installed."
+		echo "You can install syscare-build rpm to enable build function."
+		return 1
+	fi
+
 	"${SYSCARE_PATCH_BUILD}" $@
 }
 
@@ -383,7 +389,7 @@ function main() {
 			;;
 		build	|--build-patch)
 			shift
-			build_patch $@
+			do_build $@
 			;;
 		apply	|--apply-patch)
 			shift
