@@ -55,6 +55,7 @@ function list_all_files() {
 }
 
 function fetch_patch_list() {
+	[ -d "$1" ] || return 0
 	for pkg_path in $(list_all_directoies "$1"); do
 		local pkg_name=$(basename "${pkg_path}")
 
@@ -86,6 +87,7 @@ function is_patch_exist() {
 		fi
 	fi
 
+	echo "syscare: patch ${PATCH_PKG}/${PATCH_NAME} has not installed."
 	return 1
 }
 
@@ -203,22 +205,27 @@ function apply_patch() {
 	fi
 }
 
+function check_kapplied() {
+	if [ ! -f "${KPATCH_STATE_FILE}" ]; then
+		echo "patch ${PATCH_PKG}/${PATCH_NAME} is not applied"
+		return 1
+	fi
+
+	return 0
+}
+
 function remove_patch() {
 	is_patch_exist "${PATCH_PKG}/${PATCH_NAME}" || return 1
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
+		check_kapplied || return 1
 
-		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+		[ $(cat "${KPATCH_STATE_FILE}") -eq 1 ] && deactive_patch
 
-		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ]; then
-			echo "patch is in use"
-			return
-	 	else
-			rmmod "${PATCH_NAME}"
-			sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /d" ${RECORD_FILE}
-			return
-		fi
+		rmmod "${PATCH_NAME}"
+		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /d" ${RECORD_FILE}
+		return
 	else
 		"${UPATCH_TOOL}" remove -b "${ELF_PATH}"
 		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /d" ${RECORD_FILE}
@@ -230,10 +237,7 @@ function active_patch() {
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
-		if [ ! -f "${KPATCH_STATE_FILE}" ]; then
-			echo "Patch ${PATCH_NAME} of ${PATCH_PKG} is not applied."
-			return 1
-		fi
+		check_kapplied || return 1
 
 		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ] ; then
 			return
@@ -253,7 +257,7 @@ function deactive_patch() {
 
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
-		[ -f "${KPATCH_STATE_FILE}" ] || return 1
+		check_kapplied || return 1
 
 		if [ $(cat "${KPATCH_STATE_FILE}") -eq 0 ] ; then
 			return
@@ -355,6 +359,71 @@ function initialize_patch_info() {
 	fi
 }
 
+function do_apply() {
+	if [ "$#" -ne 1 ]; then
+		echo "syscare: Invalid Parameters, use \"syscare apply [pkg-name/]<patch-name>\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	initialize_patch_info "$1"
+	apply_patch
+}
+
+function do_active() {
+	if [ "$#" -ne 1 ]; then
+		echo "syscare: Invalid Parameters, use \"syscare active [pkg-name/]<patch-name>\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	initialize_patch_info "$1"
+	active_patch
+}
+
+function do_deactive() {
+	if [ "$#" -ne 1 ]; then
+		echo "syscare: Invalid Parameters, use \"syscare deactive [pkg-name/]<patch-name>\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	initialize_patch_info "$1"
+	deactive_patch
+}
+
+function do_remove() {
+	if [ "$#" -ne 1 ]; then
+		echo "syscare: Invalid Parameters, use \"syscare remove [pkg-name/]<patch-name>\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	initialize_patch_info "$1"
+	remove_patch
+}
+
+function do_list() {
+	if [ "$#" -gt 0 ]; then
+		echo "syscare: Too many parameters, just use \"syscare list\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	show_patch_list
+}
+
+function do_status() {
+	if [ "$#" -ne 1 ]; then
+		echo "syscare: Invalid Parameters, use \"syscare status [pkg-name/]<patch-name>\""
+		exit 1
+	fi
+
+	initialize_patch_list
+	initialize_patch_info "$1"
+	patch_status "$1"
+}
+
 function main() {
 	if [[ $# -lt 1 ]]; then
 		usage
@@ -371,36 +440,31 @@ function main() {
 			build_patch $@
 			;;
 		apply	|--apply-patch)
-			initialize_patch_list
-			initialize_patch_info "$2"
-			apply_patch
+			shift
+			do_apply $@
 			;;
 		active	|--active-patch)
-			initialize_patch_list
-			initialize_patch_info "$2"
-			active_patch
+			shift
+			do_active $@
 			;;
 		deactive	|--deactive-patch)
-			initialize_patch_list
-			initialize_patch_info "$2"
-			deactive_patch
+			shift
+			do_deactive $@
 			;;
 		remove	|--remove-patch)
-			initialize_patch_list
-			initialize_patch_info "$2"
-			remove_patch
+			shift
+			do_remove $@
 			;;
 		list	|--all-patch)
-			initialize_patch_list
-			show_patch_list
+			shift
+			do_list $@
 			;;
 		status	|--patch-status)
-			initialize_patch_list
-			initialize_patch_info "$2"
-			patch_status "$2"
+			shift
+			do_status $@
 			;;
 		*)
-			echo "${SCRIPT_NAME}: command not found, use --help to get usage." >&2
+			echo "${SCRIPT_NAME}: Command not found, use --help to get usage." >&2
 	esac
 }
 
