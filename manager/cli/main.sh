@@ -281,7 +281,7 @@ function patch_status() {
 
 	if [ "${patch_type}" == "kernel" ]; then
 		if [ ! -f "${KPATCH_STATE_FILE}" ]; then
-			echo "DEACTIVE"
+			echo "NOT-APPLIED"
 			return
 		fi
 
@@ -295,6 +295,8 @@ function patch_status() {
 		state=$(eval echo "${state}")
 		if [ "${state}" == "actived" ]; then
 			echo "ACTIVE"
+		elif [ "${state}" == "removed" ]; then
+			echo "NOT-APPLIED"
 		else
 			echo "DEACTIVE"
 		fi
@@ -326,7 +328,7 @@ function initialize_patch_info() {
 	local has_pkg_name=$(echo $1 | grep "/")
 
 	if [ ! -e "${RECORD_FILE}" ]; then
-    	touch "${RECORD_FILE}"
+		touch "${RECORD_FILE}"
 	fi
 
 	if [ ! -d "${patch_root}" ]; then
