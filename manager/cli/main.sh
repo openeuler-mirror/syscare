@@ -160,7 +160,7 @@ function do_build() {
 		return 1
 	fi
 
-	"${SYSCARE_PATCH_BUILD}" $@
+	"${SYSCARE_PATCH_BUILD}" "$@"
 }
 
 function apply_patch() {
@@ -389,35 +389,35 @@ function main() {
 			;;
 		build	|--build-patch)
 			shift
-			do_build $@
+			do_build "$@"
 			;;
 		apply	|--apply-patch)
 			shift
-			do_apply $@
+			do_apply "$@"
 			;;
 		active	|--active-patch)
 			shift
-			do_active $@
+			do_active "$@"
 			;;
 		deactive	|--deactive-patch)
 			shift
-			do_deactive $@
+			do_deactive "$@"
 			;;
 		remove	|--remove-patch)
 			shift
-			do_remove $@
+			do_remove "$@"
 			;;
 		list	|--all-patch)
 			shift
-			do_list $@
+			do_list "$@"
 			;;
 		status	|--patch-status)
 			shift
-			do_status $@
+			do_status "$@"
 			;;
 		*)
 			echo "${SCRIPT_NAME}: Command not found, use --help to get usage." >&2
 	esac
 }
 
-main $@
+main "$@"
