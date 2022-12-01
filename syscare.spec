@@ -1,11 +1,11 @@
 %global debug_package %{nil}
 
 Name:           syscare
-Version:        0.1.1
+Version:        0.1.2
 Release:        1
 Summary:        system hot-fix service
 
-License:        MulanPSL-2.0, GPL-2.0-only
+License:        MulanPSL-2.0 GPL-2.0-only
 URL:            https://gitee.com/openeuler/syscare
 Source0:        %{name}-%{version}.tar.gz
 
@@ -63,6 +63,8 @@ install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-pre.service %{build
 %attr(755,root,root) /usr/libexec/%{name}/syscare-build
 
 %changelog
+* Thu Dec 1 2022 snoweay<snoweay@163.com> - 0.1.2-1
+- 0.1.2 version for test. Fix some syscare cli bugs.
 * Mon Nov 28 2022 snoweay<snoweay@163.com> - 0.1.1-1
 - First version for test. Support patches restore, remove, insmod upatch.ko.
 * Mon Nov 21 2022 snoweay<snoweay@163.com> - 0.1.0-1

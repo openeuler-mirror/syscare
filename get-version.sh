@@ -20,12 +20,16 @@ cd -
 cp -r ${REPO}  ${REPO}-${VERSION}
 cd ${REPO}-${VERSION}
 
-git checkout ${VERSION}
+if [ "${VERSION}" != "HEAD" ]; then
+	git checkout v${VERSION}
+else
+	git checkout ${VERSION}
+fi
 
 for file in `find . -name Cargo.toml`
-do 
+do
 	dir=${file%/Cargo.toml*}
-	
+
 	if [ -n "${dir}" ]; then
 		cd ${dir}
 		cargo vendor
