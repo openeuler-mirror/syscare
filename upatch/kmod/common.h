@@ -18,8 +18,6 @@
 /* Common used tool functions */
 int copy_para_from_user(unsigned long, char *, size_t);
 
-struct file *get_binary_file_from_mm(struct mm_struct *);
-
 struct file *get_binary_file_from_addr(struct task_struct *, unsigned long);
 
 struct file *d_open_inode(struct inode *);

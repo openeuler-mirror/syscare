@@ -33,7 +33,6 @@
 #include "patch-uprobe.h"
 #include "upatch-ioctl.h"
 
-
 #include "asm/hijack.h"
 
 struct elf_path {
@@ -488,8 +487,8 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
     if (put_user((unsigned long)new_path, (unsigned long *)arg_pointer))
         goto out;
 
-    pr_info("exist file name is %s \n", kernel_new_path);
-    pr_info("link file name is %s \n", object_path);
+    pr_debug("exist file name is %s \n", kernel_new_path);
+    pr_debug("link file name is %s \n", object_path);
 
     ret = create_symlink(kernel_new_path, object_path);
     if (ret) {
@@ -623,7 +622,7 @@ static int __unregister_uprobe(unsigned int cmd, struct elf_path *ep, struct upr
     }
     inode = path.dentry->d_inode;
 
-    pr_info("unregister uprobe for %s \n", ep->name);
+    pr_debug("unregister uprobe for %s \n", ep->name);
     uprobe_unregister(inode, ep->entry_offset, uc);
     if (cmd == UPATCH_UNREGISTER_COMPILER || cmd == UPATCH_UNREGISTER_ASSEMBLER) {
         delete_elf_path(cmd, ep->name);
@@ -680,7 +679,7 @@ static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
     }
 
     memmove(elf_path, p, strlen(p) + 1);
-    pr_info("elf path is %s len is %lu \n", elf_path, strlen(elf_path));
+    pr_debug("elf path is %s len is %lu \n", elf_path, strlen(elf_path));
 
     ret = __elf_check(file, entry_offset);
 put_file:
@@ -706,7 +705,7 @@ static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path 
     }
     inode = path.dentry->d_inode;
 
-    pr_info("register uprobe for %s \n", buf);
+    pr_debug("register uprobe for %s \n", buf);
     ret = uprobe_register(inode, ep->entry_offset, uc);
     if (ret) {
         pr_err("uprobe register failed - %d \n", ret);

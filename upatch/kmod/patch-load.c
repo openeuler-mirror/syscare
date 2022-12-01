@@ -102,7 +102,6 @@ int upatch_module_insert(struct upatch_entity *entity,
     struct upatch_module *um)
 {
     int ret;
-    pr_info("insert module in 0x%lx with pid %d \n", (unsigned long)um, um->pid);
     mutex_lock(&entity->module_list_lock);
     ret = __upatch_module_insert(entity, um);
     mutex_unlock(&entity->module_list_lock);
@@ -230,18 +229,14 @@ static void layout_sections(struct upatch_module *mod, struct upatch_load_info *
         switch (m) {
             case 0: /* executable */
                 mod->core_layout.text_size = mod->core_layout.size;
-                pr_info("text size is 0x%x \n", mod->core_layout.size);
                 break;
             case 1: /* RO: text and ro-data */
                 mod->core_layout.ro_size = mod->core_layout.size;
-                pr_info("read only size is 0x%x \n", mod->core_layout.size);
                 break;
             case 2: /* RO after init */
 			    mod->core_layout.ro_after_init_size = mod->core_layout.size;
-                pr_info("read after init size is 0x%x \n", mod->core_layout.size);
                 break;
             case 4: /* whole core */
-                pr_info("whole size is 0x%x \n", mod->core_layout.size);
                 break;
         }
     }
@@ -381,7 +376,7 @@ static int upatch_module_alloc(struct upatch_load_info *info,
         return -ENOMEM;
     }
 
-    pr_info("upatch module at 0x%lx \n", (unsigned long)layout->base);
+    pr_debug("upatch module at 0x%lx \n", (unsigned long)layout->base);
 
     layout->kbase = vmalloc(layout->size);
     if (!layout->kbase) {
@@ -433,7 +428,7 @@ static int move_module(struct upatch_module *mod, struct upatch_load_info *info)
     }
 
     /* Transfer each section which specifies SHF_ALLOC */
-	pr_info("final section addresses:\n");
+	pr_debug("final section addresses:\n");
 	for (i = 0; i < info->hdr->e_shnum; i++) {
 		void __user *dest;
         void *kdest;
@@ -458,11 +453,9 @@ static int move_module(struct upatch_module *mod, struct upatch_load_info *info)
         shdr->sh_addr = (unsigned long)kdest;
         /* overuse this attr to record user address */
         shdr->sh_addralign = (unsigned long)dest;
-		pr_info("\t0x%lx %s <- 0x%lx\n",
+		pr_debug("\t0x%lx %s <- 0x%lx\n",
 		    (long)dest, info->secstrings + shdr->sh_name, (long)kdest);
 	}
-
-    pr_info("move module finished \n");
 
     return 0;
 }
@@ -535,12 +528,9 @@ static int find_upatch_module_sections(struct upatch_module *mod, struct upatch_
 {
     mod->syms = section_objs(info, ".symtab",
 				 sizeof(*mod->syms), &mod->num_syms);
-    pr_info("sym is at 0x%lx \n", (unsigned long)mod->syms);
     mod->upatch_funs = section_objs(info, ".upatch.funcs",
 				 sizeof(*mod->syms), &mod->num_upatch_funcs);
-    pr_info("upatch_funs is at 0x%lx \n", (unsigned long)mod->upatch_funs);
     mod->strtab = section_addr(info, ".strtab");
-    pr_info("strtab is at 0x%lx \n", (unsigned long)mod->strtab);
     return 0;
 }
 
@@ -621,7 +611,7 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
         sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
         if (streql(sym_name, name)) {
             elf_addr = setup_jmp_table(elf_info->load_info, addr);
-            pr_info("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
+            pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
                 sym_name, rela[i].r_offset, addr, elf_addr);
             goto out;
         }
@@ -665,26 +655,25 @@ static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *
             ret = -ENOEXEC;
             break;
         case SHN_ABS:
-            pr_info("absolute symbol %s \n", name);
             break;
         case SHN_UNDEF:
             elf_addr = resolve_symbol_wait(mod, info, name);
             if (!elf_addr)
                 ret = -ENOEXEC;
             sym[i].st_value = elf_addr;
-            pr_info("resolved symbol %s at 0x%lx \n",
+            pr_debug("resolved symbol %s at 0x%lx \n",
                 name, (unsigned long)sym[i].st_value);
             break;
         case SHN_LIVEPATCH:
             sym[i].st_value += info->running_elf.load_bias;
-            pr_info("resolved livepatch symbol %s at 0x%lx \n",
+            pr_debug("resolved livepatch symbol %s at 0x%lx \n",
                 name, (unsigned long)sym[i].st_value);
             break;
         default:
             /* use real address to calculate secbase */
             secbase = info->sechdrs[sym[i].st_shndx].sh_addralign;
             sym[i].st_value += secbase;
-            pr_info("normal symbol %s at 0x%lx \n",
+            pr_debug("normal symbol %s at 0x%lx \n",
                 name, (unsigned long)sym[i].st_value);
             break;
         }
@@ -816,7 +805,7 @@ static int apply_relocations(struct upatch_module *mod, struct upatch_load_info 
 
 static int move_to_user(struct upatch_module_layout *layout)
 {
-    pr_info("mov content from 0x%lx to 0x%lx with 0x%x \n",
+    pr_debug("mov content from 0x%lx to 0x%lx with 0x%x \n",
         (unsigned long)layout->kbase, (unsigned long)layout->base, layout->size);
     if (copy_to_user(layout->base, layout->kbase, layout->size))
         return -EPERM;
@@ -876,20 +865,18 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
             elf_info->index.symstr = elf_info->sechdrs[i].sh_link;
             elf_info->strtab = (char *)elf_info->hdr
                 + elf_info->sechdrs[elf_info->index.symstr].sh_offset;
-            pr_info("find index %d with str %d for symtab \n", i, elf_info->index.symstr);
         } else if (elf_info->sechdrs[i].sh_type == SHT_DYNSYM) {
             elf_info->index.dynsym = i;
             elf_info->index.dynsymstr = elf_info->sechdrs[i].sh_link;
             elf_info->dynstrtab = (char *)elf_info->hdr
                 + elf_info->sechdrs[elf_info->index.dynsymstr].sh_offset;
-            pr_info("find index %d with str %d for dynsym \n", i, elf_info->index.dynsymstr);
         } else if (elf_info->sechdrs[i].sh_type == SHT_DYNAMIC) {
-            pr_info("find dynamic section %d, not use it now \n", i);
+            /* Currently, we don't utilize it */
         } else if (streql(name, PLT_RELO_NAME)
             && elf_info->sechdrs[i].sh_type == SHT_RELA) {
             /* TODO: GOT is also need to be handled */
             elf_info->index.reloplt = i;
-            pr_info("found %s with %d \n", PLT_RELO_NAME, i);
+            pr_debug("found %s with %d \n", PLT_RELO_NAME, i);
         }
     }
 
@@ -900,7 +887,7 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
 
         sym = (void *)elf_info->hdr + symsec->sh_offset;
 
-        pr_info("dynamic symbol address at 0x%lx with 0x%llx \n",
+        pr_debug("dynamic symbol address at 0x%lx with 0x%llx \n",
             (unsigned long)sym_addr, symsec->sh_size);
 
         /* read dynamic symtab from memory and copy it to the binary_hdr */
@@ -938,8 +925,6 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     elf_addr_t min_addr;
     struct upatch_module *mod;
 
-    pr_info("upatch_load works now \n");
-
     min_addr = calculate_load_address(binary_file, true);
     if (min_addr == -1) {
         pr_err("unable to obtain minimal execuatable address \n");
@@ -948,12 +933,12 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     }
 
     info->running_elf.load_min = min_addr;
-    pr_info("PT_X minimal address is 0x%lx \n", info->running_elf.load_min);
+    pr_debug("PT_X minimal address is 0x%lx \n", info->running_elf.load_min);
 
     /* TODO: any protect for start_code ? */
     info->running_elf.load_bias = current->mm->start_code - min_addr;
 
-    pr_info("load bias for pid %d is 0x%lx \n",
+    pr_debug("load bias for pid %d is 0x%lx \n",
         task_pid_nr(current), info->running_elf.load_bias);
 
     err = load_binary_syms(binary_file, &info->running_elf);
@@ -1025,7 +1010,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     if (err < 0)
         goto free_module;
 
-    pr_info("patch load successfully \n");
+    pr_debug("patch load successfully \n");
 
     err = 0;
 

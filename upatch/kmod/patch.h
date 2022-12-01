@@ -69,9 +69,9 @@ struct upatch_module {
     struct list_head list;
     struct upatch_patch_func __user *upatch_funs;
     unsigned int num_upatch_funcs;
+    char __user *strtab;
     Elf_Sym __user *syms;
     unsigned int num_syms;
-    char __user *strtab;
     struct upatch_module_layout core_layout;
     /* drop after init, we use it to store symtab and strtab */
     struct upatch_module_layout init_layout;

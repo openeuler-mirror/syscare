@@ -13,7 +13,7 @@
 #include <linux/highmem.h>
 #include <linux/vmalloc.h>
 
-/* functions from hijack_code.S */
+/* symbols from hijack_code.S */
 #define HIJACK_MAX_LEN PAGE_SIZE
 extern void __run_execve(void);
 extern void __run_exit(int);

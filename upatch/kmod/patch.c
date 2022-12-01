@@ -163,7 +163,7 @@ static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
         if (pc == upatch_funs[i].old_addr) {
             pc = upatch_funs[i].new_addr;
             instruction_pointer_set(regs, pc);
-            pr_info("jmp to patched address 0x%lx \n", pc);
+            pr_debug("jmp to patched address 0x%lx \n", pc);
             set_pc = true;
             break;
         }
@@ -212,7 +212,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     int ret = 0;
 
     pc = instruction_pointer(regs);
-    pr_info("patch handler works in 0x%lx \n", pc);
+    pr_debug("patch handler works in 0x%lx \n", pc);
 
     memset(&info, 0, sizeof(info));
 
@@ -241,7 +241,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
         goto out;
     }
 
-    pr_info("status from %d to %d \n", upatch_mod->real_state, upatch_mod->set_state);
+    pr_debug("status from %d to %d \n", upatch_mod->real_state, upatch_mod->set_state);
 
     info.mod = upatch_mod;
     switch (upatch_mod->set_state)
@@ -309,7 +309,7 @@ static int register_patch_uprobe(struct file *binary_file, loff_t offset)
         goto out;
     }
 
-    pr_info("register patch uprobe at 0x%llx\n", offset);
+    pr_debug("register patch uprobe at 0x%llx\n", offset);
 
     ret = 0;
 out:
@@ -332,14 +332,14 @@ void upatch_entity_try_remove(struct upatch_entity *entity)
     mutex_unlock(&entity->module_list_lock);
 
     if (has_mods) {
-        pr_info("entity still has modules \n");
+        pr_debug("entity still has modules \n");
         return;
     }
 
-    pr_info("start to remove entity \n");
+    pr_debug("start to remove entity \n");
     mutex_lock(&entity->offset_list_lock);
     list_for_each_entry_safe(uprobe_offset, tmp, &entity->offset_list, list) {
-        pr_info("unregister for offset 0x%llx\n", uprobe_offset->offset);
+        pr_debug("unregister for offset 0x%llx\n", uprobe_offset->offset);
         uprobe_unregister(entity->binary, uprobe_offset->offset, &patch_consumber);
         list_del(&uprobe_offset->list);
         kfree(uprobe_offset);
@@ -381,8 +381,6 @@ static int handle_upatch_funcs(struct file *binary_file, struct file *patch_file
     if (!upatch_funs)
         return -ENOMEM;
 
-    pr_info("upatch func len is 0x%x \n", buf_len);
-
     offset = upatch_shdr->sh_offset;
     ret = kernel_read(patch_file, upatch_funs, buf_len, &offset);
     if (ret != buf_len) {
@@ -406,10 +404,9 @@ static int handle_upatch_funcs(struct file *binary_file, struct file *patch_file
         goto out;
     }
 
-    pr_info("load address is 0x%llx \n", min_addr);
+    pr_debug("load address is 0x%llx \n", min_addr);
     for (index = 0; index < upatch_shdr->sh_size / upatch_shdr->sh_entsize; index ++) {
         old_addr = upatch_funs[index].old_addr;
-        pr_info("check index %d - 0x%lx \n", index, old_addr);
         ret = register_patch_uprobe(binary_file, old_addr - min_addr);
         if (ret)
             goto out;
@@ -477,7 +474,7 @@ int upatch_attach(const char *binary, const char *patch)
         goto out;
     }
 
-    pr_info("patch has %d sections at %lld \n", ehdr.e_shnum, ehdr.e_shoff);
+    pr_debug("patch has %d sections at %lld \n", ehdr.e_shnum, ehdr.e_shoff);
     /* read section header table */
     buf_len = sizeof(Elf_Shdr) * ehdr.e_shnum;
     eshdrs = kmalloc(buf_len, GFP_KERNEL);
@@ -494,7 +491,7 @@ int upatch_attach(const char *binary, const char *patch)
         goto out;
     }
 
-    pr_info("section string table index %d at %lld \n", ehdr.e_shstrndx, eshdrs[ehdr.e_shstrndx].sh_offset);
+    pr_debug("section string table index %d at %lld \n", ehdr.e_shstrndx, eshdrs[ehdr.e_shstrndx].sh_offset);
 
     /* read string table for section header table */
     buf_len = eshdrs[ehdr.e_shstrndx].sh_size;
@@ -512,7 +509,7 @@ int upatch_attach(const char *binary, const char *patch)
         goto out;
     }
 
-    pr_info("total section number : %d \n", ehdr.e_shnum);
+    pr_debug("total section number : %d \n", ehdr.e_shnum);
     for (index = 0; index < ehdr.e_shnum; index ++) {
         if (eshdrs[index].sh_name == 0)
             continue;
@@ -521,7 +518,7 @@ int upatch_attach(const char *binary, const char *patch)
         if (strncmp(name, ".upatch.funcs", 13) != 0)
             continue;
 
-        pr_info("upatch section index is %d \n", index);
+        pr_debug("upatch section index is %d \n", index);
         ret = handle_upatch_funcs(binary_file, patch_file, &eshdrs[index]);
         if (ret)
             pr_err("handle upatch failed - %d \n", ret);

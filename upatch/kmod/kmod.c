@@ -46,9 +46,8 @@ static struct file *open_user_path(unsigned long user_addr)
     struct file *elf_file = NULL;
 
     elf_path = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!elf_path) {
+    if (!elf_path)
         goto out;
-    }
 
     if (copy_para_from_user(user_addr, elf_path, PATH_MAX))
         goto out;
@@ -112,7 +111,6 @@ static int check_status(unsigned long user_addr)
     }
 
     ret = entity->entity_status;
-    pr_info("entity status is %d \n", ret);
 out:
     if (elf_file && !IS_ERR(elf_file))
         fput(elf_file);
@@ -151,7 +149,7 @@ int attach_upatch(unsigned long user_addr)
     if (ret)
         goto out;
 
-    pr_info("patch %s with %s \n", binary, patch);
+    pr_debug("patch %s with %s \n", binary, patch);
 
     ret = upatch_attach(binary, patch);
     if (ret)
