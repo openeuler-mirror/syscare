@@ -1,10 +1,10 @@
-use crate::cli::{CliWorkDir, CliArguments};
+use crate::constants::*;
+use crate::log::debug;
 
+use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchFile};
 use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
-
-use crate::constants::*;
 
 use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;
@@ -54,10 +54,14 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let pkg_specs_dir = pkg_root.specs_dir();
 
         let target_elf_name = args.target_elfname.as_ref().expect("Target elf name is empty");
-        let debuginfo_file  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
-
         let patch_source_dir = RpmHelper::find_source_directory(pkg_build_dir, patch_info)?;
-        let spec_file_path   = RpmHelper::find_spec_file(pkg_specs_dir)?;
+        debug!("source directory: '{}'", patch_source_dir);
+
+        let spec_file_path = RpmHelper::find_spec_file(pkg_specs_dir)?;
+        debug!("spec file: '{}'", spec_file_path);
+
+        let debuginfo_file = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
+        debug!("debuginfo file: '{}'", debuginfo_file);
 
         let build_original_cmd = format!("{} --define '_topdir {}' -bb {}", RPM_BUILD, pkg_root, spec_file_path);
         let build_patched_cmd  = format!("{} --define '_topdir {}' -bb --noprep {}", RPM_BUILD, pkg_root, spec_file_path);

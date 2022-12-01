@@ -17,19 +17,21 @@ use super::args::CliArguments;
 use super::workdir::CliWorkDir;
 
 pub struct PatchBuildCLI {
-    workdir: CliWorkDir,
-    args:    CliArguments,
+    workdir:  CliWorkDir,
+    args:     CliArguments,
+    log_file: Option<String>,
 }
 
 impl PatchBuildCLI {
     pub fn new() -> Self {
         Self {
-            workdir: CliWorkDir::new(),
-            args:    CliArguments::new(),
+            workdir:  CliWorkDir::new(),
+            args:     CliArguments::new(),
+            log_file: None,
         }
     }
 
-    fn init_logger(&self) -> std::io::Result<()> {
+    fn init_logger(&mut self) -> std::io::Result<()> {
         let mut logger = Logger::new();
 
         let log_level = match self.args.verbose {
@@ -37,10 +39,13 @@ impl PatchBuildCLI {
             true  => LevelFilter::Debug,
         };
 
+        let log_file_path = format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME);
+
         logger.set_print_level(log_level);
-        logger.set_log_file(LevelFilter::Debug, format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME))?;
+        logger.set_log_file(LevelFilter::Debug, &log_file_path)?;
         Logger::init_logger(logger);
 
+        self.log_file = Some(log_file_path);
         Ok(())
     }
 
@@ -309,6 +314,7 @@ impl PatchBuildCLI {
 
         if let Err(e) = self.main_process() {
             error!("{}", e);
+            println!("For more information, please check '{}'", self.log_file.as_ref().unwrap());
             return;
         }
 

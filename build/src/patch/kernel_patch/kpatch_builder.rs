@@ -1,10 +1,10 @@
-use crate::cli::{CliWorkDir, CliArguments};
+use crate::constants::*;
+use crate::log::debug;
 
+use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchFile};
 use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
-
-use crate::constants::*;
 
 use super::kpatch_helper::KernelPatchHelper;
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
@@ -56,10 +56,14 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
         let source_pkg_build_dir  = source_pkg_build_root.build_dir();
 
         let kernel_source_dir = RpmHelper::find_source_directory(source_pkg_build_dir, patch_info)?;
-        KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
+        debug!("source directory: '{}'", kernel_source_dir);
 
+        KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
         let kernel_config = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
-        let vmlinux_file  = KernelPatchHelper::find_vmlinux_file(debug_pkg_dir)?;
+        debug!("kernel config: '{}'", kernel_config);
+
+        let vmlinux_file = KernelPatchHelper::find_vmlinux_file(debug_pkg_dir)?;
+        debug!("vmlinux: '{}'", vmlinux_file);
 
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),

@@ -39,15 +39,20 @@ impl ExternCommand<'_> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
 
+        debug!("Executing {:?}", command);
         let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
-            .spawn()?;
+            .spawn()
+            .map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!("Start process '{}' failed: {}", self.path, e.to_string())
+                )
+            })?;
 
         let process_name = self.path;
         let process_id = child_process.id();
-
-        debug!("Executing {:?}", command);
         debug!("Process '{}' ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
@@ -101,6 +106,7 @@ impl<'a> ExternCommand<'a> {
         command.args(arg_list);
         command.envs(env_list);
 
+        debug!("Executing {:?}", command);
         self.execute_command(&mut command)
     }
 }
