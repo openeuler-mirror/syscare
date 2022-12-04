@@ -63,18 +63,46 @@ struct upatch_module_layout {
 /* information to manage a patch module */
 struct upatch_module {
     pid_t pid;
+    struct list_head list;
+
+    struct mutex module_status_lock;
+    unsigned long load_bias;
+
     /* state changes happens asynchronously  */
     enum upatch_module_state real_state;
-    enum upatch_module_state set_state;
-    struct list_head list;
+    struct inode *real_patch;
+
+    /* memory layout for patch */
+    struct upatch_module_layout core_layout;
+    /* drop after init, we use it to store symtab and strtab */
+    struct upatch_module_layout init_layout;
+
+    /* address from module layout, consider record in memory */
     struct upatch_patch_func __user *upatch_funs;
     unsigned int num_upatch_funcs;
     char __user *strtab;
     Elf_Sym __user *syms;
     unsigned int num_syms;
-    struct upatch_module_layout core_layout;
-    /* drop after init, we use it to store symtab and strtab */
-    struct upatch_module_layout init_layout;
+};
+
+struct uprobe_offset {
+    loff_t offset;
+    struct list_head list;
+};
+
+struct upatch_entity {
+    struct inode *binary;
+    struct list_head list;
+
+    /* protect any modification for this entity */
+    struct mutex entity_status_lock;
+
+    /* used to handle command */
+    struct inode *set_patch;
+    enum upatch_module_state set_status;
+
+    struct list_head offset_list;
+    struct list_head module_list;
 };
 
 struct upatch_load_info;
@@ -112,32 +140,10 @@ struct upatch_load_info {
     struct running_elf_info running_elf;
 };
 
-struct uprobe_offset {
-    loff_t offset;
-    struct list_head list;
-};
-
-struct upatch_entity {
-    struct inode *binary;
-    struct inode *patch;
-    /* used for moudle create */
-    enum upatch_module_state entity_status;
-    struct list_head list;
-    struct mutex offset_list_lock;
-    struct list_head offset_list;
-    struct mutex module_list_lock;
-    struct list_head module_list;
-};
-
 /* entity/module releated */
 struct upatch_entity *upatch_entity_get(struct inode *);
-void upatch_entity_try_remove(struct upatch_entity *);
-void upatch_update_entity_status(struct upatch_entity *, enum upatch_module_state);
-struct upatch_module *upatch_module_new(pid_t);
-struct upatch_module *upatch_module_get(struct upatch_entity *, pid_t);
-int upatch_module_insert(struct upatch_entity *, struct upatch_module *);
+struct upatch_module *upatch_module_get_or_create(struct upatch_entity *, pid_t);
 void upatch_module_deallocate(struct upatch_module *);
-void upatch_module_remove(struct upatch_entity *, struct upatch_module *);
 
 /* management releated */
 int upatch_attach(const char *, const char *);

@@ -21,7 +21,7 @@ struct upatch_conmsg {
 
 #define UPATCH_DEV_NAME "upatch"
 
-#define UPATCH_VERSION "0.1.0"
+#define UPATCH_VERSION "0.1.1"
 
 #define UPATCH_IOCTL_MAGIC 0xE5
 

@@ -62,16 +62,7 @@ __upatch_module_get(struct upatch_entity *entity, pid_t pid)
     return NULL;
 }
 
-struct upatch_module *upatch_module_get(struct upatch_entity *entity, pid_t pid)
-{
-    struct upatch_module *um;
-    mutex_lock(&entity->module_list_lock);
-    um = __upatch_module_get(entity, pid);
-    mutex_unlock(&entity->module_list_lock);
-    return um;
-}
-
-struct upatch_module *upatch_module_new(pid_t pid)
+struct upatch_module *__upatch_module_new(struct upatch_entity *entity, pid_t pid)
 {
     struct upatch_module *um;
     um = kzalloc(sizeof(struct upatch_module), GFP_KERNEL);
@@ -80,41 +71,22 @@ struct upatch_module *upatch_module_new(pid_t pid)
 
     um->pid = pid;
     um->real_state = UPATCH_STATE_ATTACHED;
-    um->set_state = UPATCH_STATE_ATTACHED;
+    um->real_patch = entity->set_patch;
+    mutex_init(&um->module_status_lock);
     INIT_LIST_HEAD(&um->list);
+    list_add(&um->list, &entity->module_list);
     return um;
 }
 
-static int __upatch_module_insert(struct upatch_entity *entity,
-    struct upatch_module *um)
+struct upatch_module *upatch_module_get_or_create(struct upatch_entity *entity, pid_t pid)
 {
+    struct upatch_module *um;
+    mutex_lock(&entity->entity_status_lock);
+    um = __upatch_module_get(entity, pid);
     if (!um)
-        return -EINVAL;
-
-    if (__upatch_module_get(entity, um->pid))
-        return -EINVAL; // return error to free um
-
-    list_add(&um->list, &entity->module_list);
-    return 0;
-}
-
-int upatch_module_insert(struct upatch_entity *entity,
-    struct upatch_module *um)
-{
-    int ret;
-    mutex_lock(&entity->module_list_lock);
-    ret = __upatch_module_insert(entity, um);
-    mutex_unlock(&entity->module_list_lock);
-    return ret;
-}
-
-void upatch_module_remove(struct upatch_entity *entity,
-    struct upatch_module *um)
-{
-    mutex_lock(&entity->module_list_lock);
-    list_del(&um->list);
-    kfree(um);
-    mutex_unlock(&entity->module_list_lock);
+        um = __upatch_module_new(entity, pid);
+    mutex_unlock(&entity->entity_status_lock);
+    return um;
 }
 
 static int setup_load_info(struct upatch_load_info *info)
@@ -355,12 +327,15 @@ int upatch_module_memfree(struct upatch_module_layout *layout)
 
 void upatch_module_deallocate(struct upatch_module *mod)
 {
-    if (mod->init_layout.base)
-        upatch_module_memfree(&mod->init_layout);
+    // if (mod->init_layout.base)
+    //     upatch_module_memfree(&mod->init_layout);
     mod->init_layout.base = NULL;
-    if (mod->core_layout.base)
-        upatch_module_memfree(&mod->core_layout);
+    // if (mod->core_layout.base)
+    //     upatch_module_memfree(&mod->core_layout);
     mod->core_layout.base = NULL;
+    mod->upatch_funs = NULL;
+    mod->strtab = NULL;
+    mod->syms = NULL;
 }
 
 static int upatch_module_alloc(struct upatch_load_info *info,
@@ -462,8 +437,6 @@ static int move_module(struct upatch_module *mod, struct upatch_load_info *info)
 
 static struct upatch_module *layout_and_allocate(struct upatch_load_info *info)
 {
-    struct upatch_module *mod;
-    // unsigned int ndx;
     int err;
 
     err = check_modinfo();
@@ -478,16 +451,7 @@ static struct upatch_module *layout_and_allocate(struct upatch_load_info *info)
     if (err)
         return ERR_PTR(err);
 
-    /* TODO: update mod meta data info here */
-    // mod = (void *)info->sechdrs[info->index.mod].sh_addr;
-    mod = info->mod;
-    return mod;
-}
-
-/* TODO: check status for in-list patches */
-static int add_upatch_unformed_mod(struct upatch_module *mod)
-{
-    return 0;
+    return info->mod;
 }
 
 static unsigned int find_sec(const struct upatch_load_info *info, const char *name)
@@ -816,6 +780,7 @@ static int post_relocation(struct upatch_module *mod, struct upatch_load_info *i
 {
     int ret;
 
+    mod->load_bias = info->running_elf.load_bias;
     ret = move_to_user(&mod->core_layout);
     if (ret)
         return ret;
@@ -909,10 +874,11 @@ out:
     return ret;
 }
 
-static int complete_formation(struct upatch_module *mod, struct upatch_load_info *info)
+static int complete_formation(struct upatch_module *mod, struct inode *patch)
 {
     /* TODO: set memory previliage */
     mod->real_state = UPATCH_STATE_RESOLVED;
+    mod->real_patch = patch;
     return 0;
 }
 
@@ -984,10 +950,6 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
         goto free_hdr;
     }
 
-    err = add_upatch_unformed_mod(mod);
-    if (err)
-        goto free_module;
-
     /* after this step, everything should be in its final step */
     err = find_upatch_module_sections(mod, info);
     if (err)
@@ -998,6 +960,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     if (err < 0)
         goto free_module;
 
+    /* upatch new address will be updated */
     err = apply_relocations(mod, info);
     if (err < 0)
         goto free_module;
@@ -1006,7 +969,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     if (err < 0)
         goto free_module;
 
-    err = complete_formation(mod, info);
+    err = complete_formation(mod, file_inode(patch_file));
     if (err < 0)
         goto free_module;
 

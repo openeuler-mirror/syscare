@@ -81,9 +81,21 @@ static int update_status(unsigned long user_addr,
         goto out;
     }
 
-    upatch_update_entity_status(entity, status);
+    mutex_lock(&entity->entity_status_lock);
+    if (entity->set_patch == NULL) {
+        pr_err("set status for removed patched is forbidden \n");
+        ret = -EPERM;
+        goto out_lock;
+    } else {
+        entity->set_status = status;
+    }
+
+    if (entity->set_status == UPATCH_STATE_REMOVED)
+        entity->set_patch = NULL;
 
     ret = 0;
+out_lock:
+    mutex_unlock(&entity->entity_status_lock);
 out:
     if (elf_file && !IS_ERR(elf_file))
         fput(elf_file);
@@ -105,12 +117,14 @@ static int check_status(unsigned long user_addr)
 
     entity = upatch_entity_get(file_inode(elf_file));
     if (!entity) {
-        pr_err("no entity found \n");
         ret = -ENOENT;
+        pr_err("no related entity found \n");
         goto out;
-    }
+    }     
 
-    ret = entity->entity_status;
+    mutex_lock(&entity->entity_status_lock);
+    ret = entity->set_status;
+    mutex_unlock(&entity->entity_status_lock);
 out:
     if (elf_file && !IS_ERR(elf_file))
         fput(elf_file);
@@ -193,20 +207,20 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 }
 
 static const struct file_operations upatch_ops = {
-	.owner		= THIS_MODULE,
-	.open		= upatch_open,
-	.release	= upatch_release,
-	.read		= upatch_read,
-	.write		= upatch_write,
+	.owner		    = THIS_MODULE,
+	.open		    = upatch_open,
+	.release	    = upatch_release,
+	.read		    = upatch_read,
+	.write		    = upatch_write,
 	.unlocked_ioctl	= upatch_ioctl,
-	.llseek		= no_llseek,
+	.llseek		    = no_llseek,
 };
 
 static struct miscdevice upatch_dev = {
 	.minor	= MISC_DYNAMIC_MINOR,
 	.name	= UPATCH_DEV_NAME,
 	.fops	= &upatch_ops,
-    .mode = 0666,
+    .mode   = 0666,
 };
 
 static int __init upatch_init(void)
@@ -222,6 +236,8 @@ static int __init upatch_init(void)
     ret = compiler_hack_init();
     if (ret < 0)
         return ret;
+    
+    pr_info("upatch - %s load successfully \n", UPATCH_VERSION);
 
     return 0;
 }
