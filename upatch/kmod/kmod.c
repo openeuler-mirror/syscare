@@ -255,3 +255,4 @@ MODULE_AUTHOR("Longjun Luo (luolongjuna@gmail.com)");
 MODULE_AUTHOR("Zongwu Li (lzw32321226@163.com)");
 MODULE_DESCRIPTION("kernel module for upatch(live-patch in userspace)");
 MODULE_LICENSE("GPL");
+MODULE_VERSION(UPATCH_VERSION);

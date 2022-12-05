@@ -5,7 +5,7 @@ project(syscare-build)
 
 set(SYSCARE_INSTALL_DIR /usr/libexec/syscare)
 
-set(CARGO_CMD cargo build --release)
+set(CARGO_CMD SYSCARE_BUILD_VERSION=${SYSCARE_BUILD_VERSION} cargo build --release)
 set(TARGET_DIR "release")
 
 set(SYSCARE_BUILD_BIN "syscare-build")

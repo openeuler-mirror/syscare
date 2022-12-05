@@ -5,7 +5,7 @@ project(upatch-build)
 
 set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
 
-set(CARGO_CMD cargo build --release)
+set(CARGO_CMD UPATCH_VERSION=${UPATCH_VERSION} cargo build --release)
 set(TARGET_DIR "release")
 
 set(UPATCH_BUILD_BIN "upatch-build")

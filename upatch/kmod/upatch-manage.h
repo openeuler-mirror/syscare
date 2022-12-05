@@ -10,6 +10,10 @@
 #ifndef _UPATCH_MANAGE_H
 #define _UPATCH_MANAGE_H
 
+#ifndef UPATCH_VERSION
+#define UPATCH_VERSION "0.1.1"
+#endif
+
 enum upatch_module_state {
     UPATCH_STATE_REMOVED = 0x1, /* Original status - No patch */
 	UPATCH_STATE_ATTACHED,  /* Attach patch to the binary */

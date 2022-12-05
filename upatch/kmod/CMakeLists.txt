@@ -6,7 +6,7 @@ project(upatch-kmod)
 set(UPATCH_KMOD "upatch.ko")
 set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
 
-set(UPATCH_KMOD_CMD make)
+set(UPATCH_KMOD_CMD make UPATCH_VERSION=${UPATCH_VERSION})
 
 add_custom_target(upatch-kmod ALL
         COMMENT "Compiling upatch-mod..."

@@ -21,8 +21,6 @@ struct upatch_conmsg {
 
 #define UPATCH_DEV_NAME "upatch"
 
-#define UPATCH_VERSION "0.1.1"
-
 #define UPATCH_IOCTL_MAGIC 0xE5
 
 #define UPATCH_REGISTER_COMPILER _IOW(UPATCH_IOCTL_MAGIC, 0x1, const char *)

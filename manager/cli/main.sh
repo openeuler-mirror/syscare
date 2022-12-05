@@ -8,6 +8,7 @@ readonly PATCH_INSTALL_DIR="/usr/lib/syscare/patches"
 readonly SYSCARE_PATCH_BUILD="/usr/libexec/syscare/syscare-build"
 readonly UPATCH_TOOL="/usr/libexec/syscare/upatch-tool"
 readonly RECORD_FILE="/usr/lib/syscare/patch-record"
+readonly SYSCARE_VERSION="DEV"
 
 PATCH_LIST=""
 PATCH_NAME=""
@@ -240,6 +241,7 @@ function usage() {
 	echo -e "  \033[1mdeactive\033[0m <patch-name>           Deactive patch" >&2
 	echo -e "  \033[1mremove\033[0m <patch-name>             Remove the patch in kernel or process" >&2
 	echo -e "  \033[1mstatus\033[0m <patch-name>             Show the status of the patch" >&2
+	echo -e "  \033[1mversion\033[0m <patch-name>            Show the version of syscare" >&2
 	echo -e "  \033[1mhelp\033[0m                            Show this help message" >&2
 }
 
@@ -415,6 +417,10 @@ function main() {
 		status)
 			shift
 			do_status "$@"
+			;;
+		version)
+			shift
+			echo "${SYSCARE_VERSION}"
 			;;
 		*)
 			echo "${SCRIPT_NAME}: Command not found, use --help to get usage." >&2
