@@ -26,7 +26,7 @@ pub struct Arg {
 
 impl Arg {
     fn usage(&self) {
-        println!("Usage: {} FILE [options] -s debug_source -b cmd -i debug_info -e elf_name patches", self.program);
+        println!("Usage: {} [options] --debug-source <DEBUG_SOURCE> --build-source-cmd <BUILD_SOURCE_CMD> --debug-info <DEBUG_INFO> --elf-name <ELF_NAME> <PATCHES>", self.program);
         println!("      -h|--help:                  options message");
         println!("      -w|--work-dir:              Specify work directory, default ~/.upatch/");
         println!("                                  will delete the work_dir when building upatch, use a empty directory");
@@ -40,7 +40,8 @@ impl Arg {
         println!("      -o|--output-dir:            Specify output directory, default --work-dir");
         println!("      -n|--name:                  Specify output name, default --elf-name");
         println!("      --skip-compiler-check:      Specify skip check compiler");
-        println!("      --verbose:                  Specify show debug information");
+        println!("      -v|--verbose:               Specify show debug information");
+        println!("      -V|--version:               Specify show version information");
     }
 
     fn check(&mut self) -> Result<()>  {
@@ -147,9 +148,13 @@ impl Arg {
                 "--skip-compiler-check" => {
                     self.skip_compiler_check = true;
                 },
-                "--verbose" => {
+                "-v" | "--verbose" => {
                     self.verbose = true;
-                }
+                },
+                "-V" | "--version" => {
+                    println!("{} version: {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+                    exit(0);
+                },
                 _ => {
                     if !Path::new(&args[i]).is_file() {
                         self.usage();
