@@ -152,7 +152,7 @@ impl Arg {
                     self.verbose = true;
                 },
                 "-V" | "--version" => {
-                    println!("{} version: {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
+                    println!("{}", env!("CARGO_PKG_VERSION"));
                     exit(0);
                 },
                 _ => {

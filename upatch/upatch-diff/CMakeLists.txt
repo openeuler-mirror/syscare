@@ -6,6 +6,7 @@ project(upatch-diff)
 set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
 
 include_directories(
+    ../kmod/
     ./
     ./insn/
 )

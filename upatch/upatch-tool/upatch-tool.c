@@ -21,6 +21,7 @@
 #include "upatch-manage.h"
 #include "upatch-ioctl.h"
 #include "upatch-resolve.h"
+#include "upatch-manage.h"
 
 #define COMMAND_SIZE 9
 char* command[COMMAND_SIZE] =
@@ -53,6 +54,8 @@ static struct argp_option options[] = {
 static char program_doc[] = "upatch-tool -- apply a patch on binary";
 
 static char args_doc[] = "cmd -b binary -p patch";
+
+const char *argp_program_version = UPATCH_VERSION;
 
 static error_t check_opt(struct argp_state *state)
 {

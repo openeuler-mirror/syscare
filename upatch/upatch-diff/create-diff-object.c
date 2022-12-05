@@ -55,6 +55,7 @@
 #include "elf-correlate.h"
 #include "elf-create.h"
 #include "running-elf.h"
+#include "upatch-manage.h"
 
 enum loglevel loglevel = NORMAL;
 char *logprefix;
@@ -81,6 +82,8 @@ static char program_doc[] =
     "upatch-build -- generate a patch object based on the source object";
 
 static char args_doc[] = "-s source_obj -p patched_obj -r elf_file -o output_obj";
+
+const char *argp_program_version = UPATCH_VERSION;
 
 static error_t check_opt(struct argp_state *state)
 {
