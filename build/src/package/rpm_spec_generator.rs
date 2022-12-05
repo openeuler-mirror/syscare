@@ -47,6 +47,7 @@ impl RpmSpecGenerator {
             .map(fs::file_name)
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
+        let pkg_install_root = format!("{}/{}", PATCH_INSTALL_PATH, patch_info.get_target());
         let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::parse_pkg_install_path(patch_info));
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
@@ -83,6 +84,16 @@ impl RpmSpecGenerator {
 
         writeln!(writer, "%files")?;
         writeln!(writer, "{}", pkg_install_path)?;
+        writeln!(writer)?;
+
+        writeln!(writer, "%postun")?;
+        writeln!(writer, "readonly PKG_DIR=\"{}\"", pkg_install_root)?;
+        writeln!(writer, "if [ \"$1\" != 0 ]; then")?;
+        writeln!(writer, "    return")?;
+        writeln!(writer, "fi")?;
+        writeln!(writer, "if [ -d \"${{PKG_DIR}}\" ] && [ -z \"$(ls -A ${{PKG_DIR}})\" ]; then")?;
+        writeln!(writer, "    rm -rf \"${{PKG_DIR}}\"")?;
+        writeln!(writer, "fi")?;
         writeln!(writer)?;
 
         writeln!(writer, "%changelog")?;
