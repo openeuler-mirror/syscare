@@ -167,7 +167,9 @@ function do_build() {
 function apply_patch() {
 	if  [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
-		[ "${PATCH_STATUS}" == "NOT-APPLIED" ] && insmod "${PATCH_ROOT}/${PATCH_NAME}.ko" || return 1
+		if [ "${PATCH_STATUS}" == "NOT-APPLIED" ]; then
+			insmod "${PATCH_ROOT}/${PATCH_NAME}.ko" || return 1
+		fi
 		PATCH_STATUS="DEACTIVED"
 		active_patch || return 1
 	else
