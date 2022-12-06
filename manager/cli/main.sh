@@ -258,6 +258,10 @@ function initialize_patch_info() {
 	local patch_root=$(get_patch_root_by_patch_name "${patch_name}")
 	local has_pkg_name=$(echo "$1" | grep "/")
 
+	if [ ! -d "${PATCH_INSTALL_DIR}" ]; then
+		mkdir -p "${PATCH_INSTALL_DIR}"
+	fi
+
 	if [ ! -e "${RECORD_FILE}" ]; then
 		touch "${RECORD_FILE}"
 	fi
