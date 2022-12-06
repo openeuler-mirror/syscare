@@ -39,7 +39,6 @@ impl ExternCommand<'_> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
 
-        debug!("Executing {:?}", command);
         let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
