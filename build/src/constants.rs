@@ -42,6 +42,7 @@ pub const PKG_SPEC_TAG_NAME_RELEASE:        &str = "Release:";
 pub const PKG_SPEC_TAG_NAME_SOURCE:         &str = "Source";
 pub const PKG_SPEC_TAG_NAME_BUILD_REQUIRES: &str = "BuildRequires:";
 pub const PKG_SPEC_TAG_VALUE_GROUP:         &str = "Patch";
+pub const PKG_SPEC_TAG_VALUE_REQUIRES:      &str = "syscare";
 
 // Kernel
 pub const KERNEL_PKG_NAME:          &str = "kernel";

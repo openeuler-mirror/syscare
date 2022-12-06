@@ -8,6 +8,23 @@ use crate::patch::PatchInfo;
 pub struct RpmSpecGenerator;
 
 impl RpmSpecGenerator {
+    fn parse_pkg_root(patch_info: &PatchInfo) -> String {
+        format!("{}/{}",
+            PATCH_INSTALL_PATH,
+            patch_info.get_target())
+    }
+
+    fn parse_patch_name(patch_info: &PatchInfo) -> String {
+        patch_info.get_patch().get_name().to_owned()
+    }
+
+    fn parse_patch_root(patch_info: &PatchInfo) -> String {
+        format!("{}/{}/{}",
+            PATCH_INSTALL_PATH,
+            patch_info.get_target(),
+            patch_info.get_patch().get_name())
+    }
+
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         format!("{}-{}-{}",
             PKG_FLAG_PATCH_BINARY,
@@ -15,13 +32,15 @@ impl RpmSpecGenerator {
             patch_info.get_patch().get_name())
     }
 
-    fn parse_pkg_install_path(patch_info: &PatchInfo) -> String {
-        format!("{}/{}",
-            patch_info.get_target(),
-            patch_info.get_patch().get_name())
+    fn parse_pkg_version(patch_info: &PatchInfo) -> String {
+        patch_info.get_patch().get_version().to_owned()
     }
 
-    fn parse_build_requires(patch_info: &PatchInfo) -> String {
+    fn parse_pkg_release(patch_info: &PatchInfo) -> String {
+        patch_info.get_patch().get_release().to_owned()
+    }
+
+    fn parse_requires(patch_info: &PatchInfo) -> String {
         let patch_target = patch_info.get_target();
 
         format!("{} = {}-{}",
@@ -29,6 +48,10 @@ impl RpmSpecGenerator {
             patch_target.get_version(),
             patch_target.get_release()
         )
+    }
+
+    fn parse_license(patch_info: &PatchInfo) -> String {
+        patch_info.get_license().to_owned()
     }
 
     fn parse_summary(patch_info: &PatchInfo) -> String {
@@ -47,16 +70,21 @@ impl RpmSpecGenerator {
             .map(fs::file_name)
             .filter_map(Result::ok)
             .collect::<Vec<_>>();
-        let pkg_install_root = format!("{}/{}", PATCH_INSTALL_PATH, patch_info.get_target());
-        let pkg_install_path = format!("{}/{}", PATCH_INSTALL_PATH, Self::parse_pkg_install_path(patch_info));
+
+        writeln!(writer, "%global pkg_root              {}", Self::parse_pkg_root(patch_info))?;
+        writeln!(writer, "%global patch_name            {}", Self::parse_patch_name(patch_info))?;
+        writeln!(writer, "%global patch_root            {}", Self::parse_patch_root(patch_info))?;
+        writeln!(writer, "%global patch_dir_permission  {}", PATCH_DIR_PERMISSION)?;
+        writeln!(writer, "%global patch_file_permission {}", PATCH_FILE_PERMISSION)?;
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "Version:  {}", patch_info.get_patch().get_version())?;
-        writeln!(writer, "Release:  {}", patch_info.get_patch().get_release())?;
+        writeln!(writer, "Version:  {}", Self::parse_pkg_version(patch_info))?;
+        writeln!(writer, "Release:  {}", Self::parse_pkg_release(patch_info))?;
         writeln!(writer, "Group:    {}", PKG_SPEC_TAG_VALUE_GROUP)?;
-        writeln!(writer, "License:  {}", patch_info.get_license())?;
+        writeln!(writer, "License:  {}", Self::parse_license(patch_info))?;
         writeln!(writer, "Summary:  {}", Self::parse_summary(patch_info))?;
-        writeln!(writer, "Requires: {}", Self::parse_build_requires(patch_info))?;
+        writeln!(writer, "Requires: {}", Self::parse_requires(patch_info))?;
+        writeln!(writer, "Requires: {}", PKG_SPEC_TAG_VALUE_REQUIRES)?;
         let mut file_index = 0usize;
         for file_name in &pkg_file_list {
             writeln!(writer, "Source{}: {}", file_index, file_name)?;
@@ -76,23 +104,28 @@ impl RpmSpecGenerator {
         writeln!(writer)?;
 
         writeln!(writer, "%install")?;
-        writeln!(writer, "install -m {} -d %{{buildroot}}{}", PATCH_DIR_PERMISSION, pkg_install_path)?;
+        writeln!(writer, "install -m %{{patch_dir_permission}} -d %{{buildroot}}%{{patch_root}}")?;
         for file_name in &pkg_file_list {
-            writeln!(writer, "install -m {} %{{_builddir}}/{} %{{buildroot}}{}", PATCH_FILE_PERMISSION, file_name, pkg_install_path)?;
+            writeln!(writer, "install -m %{{patch_file_permission}} %{{_builddir}}/{} %{{buildroot}}%{{patch_root}}", file_name)?;
         }
         writeln!(writer)?;
 
         writeln!(writer, "%files")?;
-        writeln!(writer, "{}", pkg_install_path)?;
+        writeln!(writer, "%{{patch_root}}")?;
         writeln!(writer)?;
 
+        writeln!(writer, "%preun")?;
+        writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" == \"ACTIVED\" ]; then")?;
+        writeln!(writer, "    echo \"error: cannot remove actived patch \'%{{patch_name}}\'\" >&2")?;
+        writeln!(writer, "    exit 1")?;
+        writeln!(writer, "fi")?;
+
         writeln!(writer, "%postun")?;
-        writeln!(writer, "readonly PKG_DIR=\"{}\"", pkg_install_root)?;
         writeln!(writer, "if [ \"$1\" != 0 ]; then")?;
         writeln!(writer, "    return")?;
         writeln!(writer, "fi")?;
-        writeln!(writer, "if [ -d \"${{PKG_DIR}}\" ] && [ -z \"$(ls -A ${{PKG_DIR}})\" ]; then")?;
-        writeln!(writer, "    rm -rf \"${{PKG_DIR}}\"")?;
+        writeln!(writer, "if [ -d \"%{{pkg_root}}\" ] && [ -z \"$(ls -A %{{pkg_root}})\" ]; then")?;
+        writeln!(writer, "    rm -rf \"%{{pkg_root}}\"")?;
         writeln!(writer, "fi")?;
         writeln!(writer)?;
 
