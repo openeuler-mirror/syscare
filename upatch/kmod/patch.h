@@ -37,7 +37,6 @@
  */
 
 #define JMP_TABLE_MAX_ENTRY 100
-#define JMP_TABLE_JUMP  0x90900000000225ff /* jmp [rip+2]; nop; nop */
 
 /* jmp table, solve limit for the jmp instruction */
 struct upatch_jmp_table_entry {

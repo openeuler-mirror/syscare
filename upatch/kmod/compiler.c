@@ -31,9 +31,8 @@
 #include "compiler.h"
 #include "common.h"
 #include "patch-uprobe.h"
+#include "patch-syscall.h"
 #include "upatch-ioctl.h"
-
-#include "asm/hijack.h"
 
 struct elf_path {
     char name[PATH_MAX];
@@ -555,7 +554,7 @@ static int uprobe_assembler_handler(struct uprobe_consumer *self, struct pt_regs
     ret = rewrite_object_path(argv, envp);
     if (ret) {
         pr_warn("rewrite object path failed - %d \n", ret);
-        run_exit_syscall(regs, ret);
+        exit_syscall(regs, ret);
     }
 
     return 0;

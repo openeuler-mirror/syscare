@@ -13,7 +13,7 @@
     .text
     .align PAGE_SIZE
 
-SYM_CODE_START_NOALIGN(__run_execve)
+SYM_CODE_START_NOALIGN(__execve_syscall)
     .code64
     mov     $0x3b, %eax
     syscall
@@ -21,11 +21,11 @@ SYM_CODE_START_NOALIGN(__run_execve)
     mov     %eax, %edi
     mov     $0x3c, %eax
     syscall
-SYM_CODE_END(__run_execve)
+SYM_CODE_END(__execve_syscall)
 
 /* use exit syscall to pass errno */
-SYM_CODE_START_NOALIGN(__run_exit)
+SYM_CODE_START_NOALIGN(__exit_syscall)
     .code64
     mov     $0x3c, %eax
     syscall
-SYM_CODE_END(__run_exit)
+SYM_CODE_END(__exit_syscall)

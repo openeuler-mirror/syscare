@@ -18,7 +18,7 @@
 #include <asm/ptrace.h>
 
 #include "compiler-args.h"
-#include "asm/hijack.h"
+#include "patch-syscall.h"
 
 static const char *append_args[] = {
     "-gdwarf", /* obatain debug information */
@@ -235,14 +235,14 @@ int compiler_args_handler(struct compiler_step *step, struct pt_regs *regs,
     if (get_user(argc, (int *)stack_pointer)) {
         pr_err("handler unable to read argc from stack pointer \n");
         /* let uprobe continue to run */
-        return run_exit_syscall(regs, -EINVAL);;
+        return exit_syscall(regs, -EINVAL);
     }
 
     envp = (void *)((unsigned long)argv + (argc + 1) * sizeof(unsigned long));
     ret = setup_envs(envp, cmd_addr, step->name);
     if (ret) {
         pr_err("set up envs failed - %d \n", ret);
-        return run_exit_syscall(regs, ret);;
+        return exit_syscall(regs, ret);
     }
 
     /* modify args and then execute it again */
@@ -250,16 +250,16 @@ int compiler_args_handler(struct compiler_step *step, struct pt_regs *regs,
         __pathname = __get_exec_path();
         if (!(const char __user *)__pathname) {
             pr_err("get pathname failed \n");
-            return run_exit_syscall(regs, -EFAULT);
+            return exit_syscall(regs, -EFAULT);
         }
 
         argv = create_new_args(argc, argv);
         if (!argv) {
             pr_err("create argv failed \n");
-            return run_exit_syscall(regs, -ENOMEM);
+            return exit_syscall(regs, -ENOMEM);
         }
 
-        ret = run_execve_syscall(regs, __pathname, (void *)argv, (void *)envp);
+        ret = execve_syscall(regs, __pathname, (void *)argv, (void *)envp);
         if (ret) {
             pr_err("write execve syscall failed with %d \n", ret);
             return 0;
