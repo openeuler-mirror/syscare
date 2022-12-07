@@ -9,11 +9,13 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <errno.h>
 #include <error.h>
 #include <argp.h>
 #include <stdbool.h>
+#include <unistd.h>
 #include <fcntl.h>
 
 #include <sys/ioctl.h>
@@ -124,6 +126,12 @@ static struct argp argp = {options, parse_opt, args_doc, program_doc};
 
 static int upatch_fd = -1;
 
+void __tool_exit(const char *str)
+{
+    perror(str);
+    exit(EXIT_FAILURE);
+}
+
 void prepare_env(struct arguments *arguments)
 {
     char path[PATH_MAX];
@@ -134,47 +142,64 @@ void prepare_env(struct arguments *arguments)
     snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
     upatch_fd = open(path, O_RDWR);
     if (upatch_fd < 0)
-        error(errno, 0, "ERROR - %d: open failed %s", errno, path);
+        __tool_exit("open device failed");
+}
 
-    return;
+void __check_files(const char *path)
+{
+    int fd = open(path, O_RDONLY);
+    if (fd != -1)
+        close(fd);
+    else
+        __tool_exit("open file failed");
+}
+
+void check_files(struct arguments *arguments)
+{
+    if (arguments->upatch.binary)
+        __check_files(arguments->upatch.binary);
+    if (arguments->upatch.patch)
+        __check_files(arguments->upatch.patch);
 }
 
 void active(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_ACTIVE_PATCH, file);
-    if (ret < 0) {
-        error(errno, 0, "ERROR - %d: active", errno);
-    }
+    if (ret < 0)
+        __tool_exit("active action failed");
 }
 
 void deactive(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_DEACTIVE_PATCH, file);
-    if (ret < 0) {
-        error(errno, 0, "ERROR - %d: deactive", errno);
-    }
+    if (ret < 0)
+        __tool_exit("deactive action failed");
 }
 
 void install(struct upatch_conmsg* upatch) {
     int ret = ioctl(upatch_fd, UPATCH_ATTACH_PATCH, upatch);
-    if (ret < 0) {
-        error(errno, 0, "ERROR - %d: install", errno);
-    }
+    if (ret < 0)
+        __tool_exit("install action failed");
 }
 
 void uninstall(const char *file) {
     int ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, file);
-    if (ret < 0) {
-        error(errno, 0, "ERROR - %d: uninstall", errno);
-    }
+    if (ret < 0)
+        __tool_exit("uninstall action failed");
 }
 
 void info(const char *file) {
-    int ret = ioctl(upatch_fd, UPATCH_INFO_PATCH, file);
     char *status;
-    if (ret < 0) {
-        error(errno, 0, "ERROR - %d: info", errno);
-    }
+    int ret = ioctl(upatch_fd, UPATCH_INFO_PATCH, file);
+    if (errno == ENOENT)
+        ret = UPATCH_STATE_REMOVED;
+
+    if (ret < 0)
+        __tool_exit("info action failed");
+
     switch (ret)
     {
+    case UPATCH_STATE_REMOVED:
+        status = "removed";
+        break;
     case UPATCH_STATE_ATTACHED:
         status = "installed";
         break;
@@ -183,9 +208,6 @@ void info(const char *file) {
         break;
     case UPATCH_STATE_ACTIVED:
         status = "actived";
-        break;
-    case UPATCH_STATE_REMOVED:
-        status = "removed";
         break;
     default:
         break;
@@ -203,9 +225,11 @@ int main(int argc, char*argv[])
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 
     prepare_env(&arguments);
+    check_files(&arguments);
 
-    file = arguments.upatch.binary;
-    if (file == NULL)
+    if (arguments.upatch.binary != NULL)
+        file = arguments.upatch.binary;
+    else
         file = arguments.upatch.patch;
 
     switch (arguments.cmd) {
@@ -238,8 +262,8 @@ int main(int argc, char*argv[])
                 printf("resolv patch failed - %d \n", ret);
             break;
         default:
-            error(-1, 0, "ERROR - -1: no this cmd");
-            break;
+            fprintf(stderr, "unsupported command\n");
+            exit(EXIT_FAILURE);
     }
 
     return ret;
