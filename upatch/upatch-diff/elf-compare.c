@@ -132,6 +132,13 @@ static int compare_correlated_section(struct section *sec, struct section *sectw
             return -1;
         }
 
+	/* As above but for aarch64 */
+	if (!strcmp(sec->name, ".rela__patchable_function_entries") ||
+	    !strcmp(sec->name, "__patchable_function_entries")) {
+		sec->status = SAME;
+		goto out;
+	}
+
     /* compare file size and data size(memory size) */
 	if (sec->sh.sh_size != sectwin->sh.sh_size ||
 	    sec->data->d_size != sectwin->data->d_size ||
@@ -176,7 +183,7 @@ bool check_line_func(struct upatch_elf *uelf, const char *symname)
  * For example, a WARN() or might_sleep() macro's embedding of the line number into an
  * instruction operand.
  */
-static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
+static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 {
     unsigned long offset, insn1_len, insn2_len;
     void *data1, *data2, *insn1, *insn2;
@@ -254,6 +261,79 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 			sec->name);
 
     return true;
+}
+
+
+static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct section *sec)
+{
+	unsigned char *start1, *start2;
+	unsigned long size, offset, insn_len;
+	struct rela *rela;
+	int lineonly = 0, found;
+
+	insn_len = insn_length(uelf, NULL);
+
+	if (sec->status != CHANGED ||
+	    is_rela_section(sec) ||
+	    !is_text_section(sec) ||
+	    sec->sh.sh_size != sec->twin->sh.sh_size ||
+	    !sec->rela ||
+	    sec->rela->status != SAME)
+		return false;
+
+	start1 = sec->twin->data->d_buf;
+	start2 = sec->data->d_buf;
+	size = sec->sh.sh_size;
+	for (offset = 0; offset < size; offset += insn_len) {
+		if (!memcmp(start1 + offset, start2 + offset, insn_len))
+			continue;
+
+		/* Verify mov w2 <line number> */
+		if (((start1[offset] & 0b11111) != 0x2) || (start1[offset+3] != 0x52) ||
+		    ((start1[offset] & 0b11111) != 0x2) || (start2[offset+3] != 0x52))
+			return false;
+
+		/*
+		 * Verify zero or more string relas followed by a
+		 * warn_slowpath_* or another similar rela.
+		 */
+		found = 0;
+		list_for_each_entry(rela, &sec->rela->relas, list) {
+			if (rela->offset < offset + insn_len)
+				continue;
+			if (rela->string)
+				continue;
+			/* TODO: we may need black list ? */
+			if (check_line_func(uelf, rela->sym->name)) {
+				found = true;
+				break;
+			}
+			return false;
+		}
+		if (!found)
+			return false;
+
+		lineonly = 1;
+	}
+
+	if (!lineonly)
+		ERROR("no instruction changes detected for changed section %s",
+		      sec->name);
+
+	return true;
+}
+
+static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
+{
+	switch(uelf->arch) {
+	case AARCH64:
+		return _line_macro_change_only_aarch64(uelf, sec);
+	case X86_64:
+		return _line_macro_change_only(uelf, sec);
+	default:
+		ERROR("unsupported arch");
+	}
+	return false;
 }
 
 void upatch_compare_sections(struct upatch_elf *uelf)

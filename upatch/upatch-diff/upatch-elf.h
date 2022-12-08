@@ -114,6 +114,7 @@ struct symbol {
 
 enum architecture {
 	X86_64 = 0x1 << 0,
+	AARCH64 = 0x1 << 1,
 };
 
 struct upatch_elf {

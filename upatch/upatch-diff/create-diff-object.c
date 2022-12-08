@@ -495,12 +495,15 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 /* text section refer other sections */
                 if (is_text_section(relasec->base) &&
                     !is_text_section(sym->sec) &&
-                    (rela->type == R_X86_64_32 || rela->type == R_X86_64_32S) &&
+                    (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 || rela->type == R_AARCH64_ABS64) &&
                     rela->addend == (long)sym->sec->sh.sh_size &&
                     end == (long)sym->sec->sh.sh_size)
                     ERROR("relocation refer end of data sections.");
-                else if (target_off == start && target_off == end)
+                else if (target_off == start && target_off == end){
+                    if(is_mapping_symbol(uelf, sym))
+                        continue;
                     log_debug("find relocation reference for empty symbol.\n");
+                }
                 else if (target_off < start || target_off >= end)
                     continue;
 

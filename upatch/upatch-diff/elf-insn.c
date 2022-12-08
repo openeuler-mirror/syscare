@@ -59,26 +59,29 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
     struct section *sec = relasec->base;
 
     switch(uelf->arch) {
-        case X86_64:
-            if (!is_text_section(sec) ||
-                rela->type == R_X86_64_64 ||
-                rela->type == R_X86_64_32 ||
-                rela->type == R_X86_64_32S)
-                add_off = 0;
-            else if (rela->type == R_X86_64_PC32 ||
-                    rela->type == R_X86_64_PLT32) {
-                struct insn insn;
-                rela_insn(sec, rela, &insn);
-                add_off = (long)insn.next_byte -
-                          (long)sec->data->d_buf -
-                          rela->offset;
-            } else {
-                ERROR("unable to handle rela type %d \n", rela->type);
-            }
-            break;
-        default:
-            ERROR("unsupported arch \n");
-            break;
+    case AARCH64:
+        add_off = 0;
+        break;
+    case X86_64:
+        if (!is_text_section(sec) ||
+            rela->type == R_X86_64_64 ||
+            rela->type == R_X86_64_32 ||
+            rela->type == R_X86_64_32S)
+            add_off = 0;
+        else if (rela->type == R_X86_64_PC32 ||
+                rela->type == R_X86_64_PLT32) {
+            struct insn insn;
+            rela_insn(sec, rela, &insn);
+            add_off = (long)insn.next_byte -
+                        (long)sec->data->d_buf -
+                        rela->offset;
+        } else {
+            ERROR("unable to handle rela type %d \n", rela->type);
+        }
+        break;
+    default:
+        ERROR("unsupported arch \n");
+        break;
     }
 
     return rela->addend + add_off;
@@ -87,9 +90,12 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
 unsigned int insn_length(struct upatch_elf *uelf, void * addr)
 {
     struct insn decoded_insn;
+    const unsigned int aarch64_insn_length = 4;
     char *insn = addr;
-
+    
     switch(uelf->arch) {
+    case AARCH64:
+        return aarch64_insn_length;
     case X86_64:
         insn_init(&decoded_insn, addr, 1);
         insn_get_length(&decoded_insn);

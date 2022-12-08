@@ -99,11 +99,24 @@ int offset_of_string(struct list_head *list, char *name)
 bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
 {
 	switch(uelf->arch) {
+	case AARCH64:
+		return false;
 	case X86_64:
 		return false;
 	default:
 		ERROR("unsupported arch");
 	}
+	return false;
+}
 
+bool is_mapping_symbol(struct upatch_elf *uelf, struct symbol *sym)
+{
+	if (uelf->arch != AARCH64)
+		return false;
+
+	if (sym->name && sym->name[0] == '$'
+		&& sym->type == STT_NOTYPE
+		&& sym->bind == STB_LOCAL)
+		return true;
 	return false;
 }

@@ -187,6 +187,8 @@ int offset_of_string(struct list_head *, char *);
 static inline unsigned int absolute_rela_type(struct upatch_elf *uelf)
 {
 	switch(uelf->arch) {
+	case AARCH64:
+		return R_AARCH64_ABS64;
 	case X86_64:
 		return R_X86_64_64;
 	default:
@@ -216,5 +218,13 @@ static inline bool is_local_sym(struct symbol *sym)
 }
 
 bool is_gcc6_localentry_bundled_sym(struct upatch_elf *, struct symbol *);
+
+/*
+ * Mapping symbols are used to mark and label the transitions between code and
+ * data in elf files. They begin with a "$" dollar symbol. Don't correlate them
+ * as they often all have the same name either "$x" to mark the start of code
+ * or "$d" to mark the start of data.
+ */
+bool is_mapping_symbol(struct upatch_elf *, struct symbol *);
 
 #endif

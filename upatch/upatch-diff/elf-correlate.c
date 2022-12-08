@@ -43,16 +43,16 @@ static void correlate_symbol(struct symbol *sym_orig, struct symbol *sym_patched
 		sym_patched->lookup_running_file_sym = sym_orig->lookup_running_file_sym;
 }
 
-void upatch_correlate_symbols(struct list_head *symlist_orig, struct list_head *symlist_patched)
+void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
 	struct symbol *sym_orig, *sym_patched;
 
-	list_for_each_entry(sym_orig, symlist_orig, list) {
+	list_for_each_entry(sym_orig, &uelf_source->symbols, list) {
 		if (sym_orig->twin)
 			continue;
 
         /* find matched symbol */
-		list_for_each_entry(sym_patched, symlist_patched, list) {
+		list_for_each_entry(sym_patched, &uelf_patched->symbols, list) {
 			if (mangled_strcmp(sym_orig->name, sym_patched->name) ||
 			    sym_orig->type != sym_patched->type || sym_patched->twin)
 				continue;
@@ -63,9 +63,14 @@ void upatch_correlate_symbols(struct list_head *symlist_orig, struct list_head *
 			/*
 			 * The .LCx symbols point to string literals in
 			 * '.rodata.<func>.str1.*' sections.  They get included
-			 * in kpatch_include_standard_elements().
+			 * in include_standard_elements().
+			 * Clang creates similar .Ltmp%d symbols in .rodata.str
 			 */
-			if (sym_orig->type == STT_NOTYPE && !strncmp(sym_orig->name, ".LC", 3))
+			if (sym_orig->type == STT_NOTYPE && 
+				(!strncmp(sym_orig->name, ".LC", 3) || !strncmp(sym_orig->name, ".Ltmp", 5)))
+				continue;
+
+			if (is_mapping_symbol(uelf_source, sym_orig))
 				continue;
 
 			/* group section symbols must have correlated sections */
@@ -118,16 +123,16 @@ static void correlate_section(struct section *sec_orig, struct section *sec_patc
 		correlate_symbol(sec_orig->sym, sec_patched->sym);
 }
 
-void upatch_correlate_sections(struct list_head *seclist_source, struct list_head *seclist_patched)
+void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
 	struct section *sec_orig, *sec_patched;
 
-	list_for_each_entry(sec_orig, seclist_source, list) {
+	list_for_each_entry(sec_orig, &uelf_source->sections, list) {
         /* already found */
 		if (sec_orig->twin)
 			continue;
 
-		list_for_each_entry(sec_patched, seclist_patched, list) {
+		list_for_each_entry(sec_patched, &uelf_patched->sections, list) {
 			if (mangled_strcmp(sec_orig->name, sec_patched->name) ||
 			    sec_patched->twin)
 				continue;

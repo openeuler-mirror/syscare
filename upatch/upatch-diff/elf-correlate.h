@@ -26,14 +26,14 @@
 
 #include "upatch-elf.h"
 
-void upatch_correlate_sections(struct list_head *, struct list_head *);
+void upatch_correlate_sections(struct upatch_elf *, struct upatch_elf *);
 
-void upatch_correlate_symbols(struct list_head *, struct list_head *);
+void upatch_correlate_symbols(struct upatch_elf *, struct upatch_elf *);
 
 static inline void upatch_correlate_elf(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
-    upatch_correlate_sections(&uelf_source->sections, &uelf_patched->sections);
-    upatch_correlate_symbols(&uelf_source->symbols, &uelf_patched->symbols);
+    upatch_correlate_sections(uelf_source, uelf_patched);
+    upatch_correlate_symbols(uelf_source, uelf_patched);
 }
 
 void upatch_correlate_static_local_variables(struct upatch_elf *, struct upatch_elf *);

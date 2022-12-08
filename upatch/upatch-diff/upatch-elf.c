@@ -248,6 +248,9 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
      * Not sure how to handle userspace, but let us handle x86 first here
      */
     switch (ehdr.e_machine) {
+    case EM_AARCH64:
+        uelf->arch = AARCH64;
+        break;
     case EM_X86_64:
         uelf->arch = X86_64;
         break;
