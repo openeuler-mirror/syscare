@@ -53,14 +53,13 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let pkg_build_dir = pkg_root.build_dir();
         let pkg_specs_dir = pkg_root.specs_dir();
 
-        let target_elf_name = args.target_elfname.as_ref().expect("Target elf name is empty");
         let patch_source_dir = RpmHelper::find_source_directory(pkg_build_dir, patch_info)?;
         debug!("source directory: '{}'", patch_source_dir);
 
         let spec_file_path = RpmHelper::find_spec_file(pkg_specs_dir)?;
         debug!("spec file: '{}'", spec_file_path);
 
-        let debuginfo_file = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, target_elf_name)?;
+        let debuginfo_file = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, patch_info)?;
         debug!("debuginfo file: '{}'", debuginfo_file);
 
         let build_original_cmd = format!("{} --define '_topdir {}' -bb {}", RPM_BUILD, pkg_root, spec_file_path);
@@ -70,7 +69,7 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
             name:                 patch_info.get_patch().get_name().to_owned(),
             build_root:           patch_build_root.to_owned(),
             source_dir:           patch_source_dir,
-            elf_name:             target_elf_name.to_owned(),
+            elf_name:             patch_info.get_target_elf_name().to_owned(),
             debuginfo:            debuginfo_file,
             build_source_cmd:     build_original_cmd,
             build_patch_cmd:      build_patched_cmd,
