@@ -62,8 +62,8 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let debuginfo_file = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, patch_info)?;
         debug!("debuginfo file: '{}'", debuginfo_file);
 
-        let build_original_cmd = format!("{} --define '_topdir {}' -bb {}", RPM_BUILD, pkg_root, spec_file_path);
-        let build_patched_cmd  = format!("{} --define '_topdir {}' -bb --noprep {}", RPM_BUILD, pkg_root, spec_file_path);
+        let build_original_cmd = format!("{} --define '_topdir {}' -bc --noclean {}", RPM_BUILD, pkg_root, spec_file_path);
+        let build_patched_cmd  = format!("{} --define '_topdir {}' -bc --noprep --noclean {}", RPM_BUILD, pkg_root, spec_file_path);
 
         let builder_args = UserPatchBuilderArguments {
             name:                 patch_info.get_patch().get_name().to_owned(),
