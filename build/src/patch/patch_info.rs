@@ -155,24 +155,12 @@ impl PatchFile {
         &self.name
     }
 
-    pub fn set_name(&mut self, value: String) {
-        self.name = value;
-    }
-
     pub fn get_path(&self) -> &str {
         &self.path
     }
 
-    pub fn set_path(&mut self, value: String) {
-        self.path = value;
-    }
-
     pub fn get_digest(&self) -> &str {
         &self.digest
-    }
-
-    pub fn set_digest(&mut self, value: String) {
-        self.digest = value
     }
 }
 

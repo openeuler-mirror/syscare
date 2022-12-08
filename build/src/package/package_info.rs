@@ -38,10 +38,6 @@ impl PackageInfo {
         &self.release
     }
 
-    pub fn set_release(&mut self, value: String) {
-        self.release = value;
-    }
-
     pub fn get_license(&self) -> &str {
         &self.license
     }
