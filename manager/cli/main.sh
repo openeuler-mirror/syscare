@@ -173,7 +173,12 @@ function apply_patch() {
 		PATCH_STATUS="DEACTIVED"
 		active_patch || return 1
 	else
-		"${UPATCH_TOOL}" apply -b "${ELF_PATH}" -p "${PATCH_ROOT}/${PATCH_NAME}" || return 1
+		if [ "${PATCH_STATUS}" == "NOT-APPLIED" ]; then
+			"${UPATCH_TOOL}" apply -b "${ELF_PATH}" -p "${PATCH_ROOT}/${PATCH_NAME}" || return 1
+		else
+			"${UPATCH_TOOL}" active -b "${ELF_PATH}" -p "${PATCH_ROOT}/${PATCH_NAME}" || return 1
+		fi
+		sed -i "/name:${PATCH_PKG}\/${PATCH_NAME} /c\name:${PATCH_PKG}\/${PATCH_NAME} isactive:1" ${RECORD_FILE}
 	fi
 
 	local patch_name=$(grep "name:${PATCH_PKG}/${PATCH_NAME} " ${RECORD_FILE} | awk '{print $1}' | awk -F: '{print $2}')
