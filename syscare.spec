@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           syscare
-Version:        0.1.2.rc2
+Version:        0.1.2.rc3
 Release:        1
 Summary:        system hot-fix service
 
@@ -16,8 +16,6 @@ BuildRequires:  elfutils-libelf-devel
 BuildRequires:  kernel-devel
 
 Requires:       kpatch-runtime
-
-Patch0:         0001-upatch-Disable-kmod-compile.patch
 
 %description
 SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
@@ -40,7 +38,7 @@ Syscare build tools.
 %build
 mkdir -p tmp_build
 cd tmp_build
-cmake ..
+cmake -DSYSCARE_BUILD_VERSION=%{version} -DKERNEL_VERSION=%{kernel_version} ..
 make
 
 %install
@@ -48,35 +46,38 @@ cd tmp_build
 %make_install
 
 mkdir -p %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
-#install -m 0640 %{buildroot}/usr/libexec/%{name}/upatch.ko %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
+install -m 0640 %{buildroot}/usr/libexec/%{name}/upatch.ko %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
 
 mkdir -p %{buildroot}/usr/lib/systemd/system
 install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-restore.service %{buildroot}/usr/lib/systemd/system
 install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-pre.service %{buildroot}/usr/lib/systemd/system
 
-#cd %{buildroot}
-#find lib -name "upatch.ko" \
-#	-fprintf %{_builddir}/%{name}-%{version}/ko.files.list "/%p\n"
+mkdir -p %{buildroot}/usr/lib/syscare
+
+cd %{buildroot}
+find lib -name "upatch.ko" \
+	-fprintf %{_builddir}/%{name}-%{version}/ko.files.list "/%p\n"
 
 %post
 %systemd_post %{name}-restore.service
 %{_bindir}/systemctl enable %{name}-pre.service
-#depmod -A
+depmod -A
 
 %preun
 %systemd_preun %{name}-restore.service
 %systemd_preun %{name}-pre.service
 
 %postun
-#depmod -A
+depmod -A
 
-#%files -f ko.files.list
+%files -f ko.files.list
 %files
 %defattr(-,root,root,-)
+%dir /usr/lib/syscare
 %attr(755,root,root) /usr/bin/syscare
 %attr(755,root,root) /usr/libexec/%{name}/upatch-tool
 %attr(755,root,root) /usr/libexec/%{name}/auto-recovery.sh
-#%attr(640,root,root) /usr/libexec/%{name}/upatch.ko
+%attr(640,root,root) /usr/libexec/%{name}/upatch.ko
 %attr(644,root,root) /usr/lib/systemd/system/%{name}-restore.service
 %attr(644,root,root) /usr/lib/systemd/system/%{name}-pre.service
 
@@ -88,6 +89,8 @@ install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-pre.service %{build
 %attr(755,root,root) /usr/libexec/%{name}/syscare-build
 
 %changelog
+* Fri Dec 9 2022 snoweay<snoweay@163.com> - 0.1.2.rc3-1
+- Enable upatch.ko compile. Fix some recovery issues.
 * Thu Dec 8 2022 snoweay<snoweay@163.com> - 0.1.2.rc2-1
 - 0.1.2.rc2 version for test. Fix some issues..
 * Thu Dec 1 2022 snoweay<snoweay@163.com> - 0.1.2-1
