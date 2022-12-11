@@ -1,7 +1,7 @@
 [Unit]
 Description=Restore syscare patch status
-Requires=syscare-pre.service local-fs.target
-After=syscare-pre.service local-fs.target
+Requires=local-fs.target
+After=local-fs.target
 Before=network-online.target
 
 [Service]
