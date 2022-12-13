@@ -443,8 +443,8 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
 
     ret = obtain_parameter_addr(envp, ASSEMBLER_DIR_ENV, &dir_addr, NULL);
     if (ret || dir_addr == 0) {
-        pr_warn("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);
-        ret = -EINVAL;
+        pr_debug("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);
+        ret = 0;
         goto out;
     }
 
