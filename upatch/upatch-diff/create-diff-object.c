@@ -682,7 +682,7 @@ static void verify_patchability(struct upatch_elf *uelf)
     int errs = 0;
 
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->status == CHANGED && !sec->include) {
+        if (sec->status == CHANGED && !sec->include && !is_eh_frame_section(sec)) {
             log_normal("changed section %s not selected for inclusion\n", sec->name);
             errs++;
         }

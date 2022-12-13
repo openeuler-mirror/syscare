@@ -263,15 +263,14 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
     return true;
 }
 
-
 static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct section *sec)
 {
-	unsigned char *start1, *start2;
-	unsigned long size, offset, insn_len;
-	struct rela *rela;
-	int lineonly = 0, found;
 
-	insn_len = insn_length(uelf, NULL);
+	unsigned long start1, start2, size, offset;
+	struct rela *rela;
+	bool found_any = false, found;
+	unsigned int mov_imm_mask = ((1<<16) - 1)<<5;
+	unsigned long insn_len = insn_length(uelf, NULL);
 
 	if (sec->status != CHANGED ||
 	    is_rela_section(sec) ||
@@ -281,28 +280,25 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
 	    sec->rela->status != SAME)
 		return false;
 
-	start1 = sec->twin->data->d_buf;
-	start2 = sec->data->d_buf;
+	start1 = (unsigned long)sec->twin->data->d_buf;
+	start2 = (unsigned long)sec->data->d_buf;
 	size = sec->sh.sh_size;
 	for (offset = 0; offset < size; offset += insn_len) {
-		if (!memcmp(start1 + offset, start2 + offset, insn_len))
+		if (!memcmp((void *)start1 + offset, (void *)start2 + offset, insn_len))
 			continue;
 
-		/* Verify mov w2 <line number> */
-		if (((start1[offset] & 0b11111) != 0x2) || (start1[offset+3] != 0x52) ||
-		    ((start1[offset] & 0b11111) != 0x2) || (start2[offset+3] != 0x52))
+		/* verify it's a mov immediate to w1 */
+		if ((*(int *)(start1 + offset) & ~mov_imm_mask) !=
+				(*(int *)(start2 + offset) & ~mov_imm_mask))
 			return false;
 
-		/*
-		 * Verify zero or more string relas followed by a
-		 * warn_slowpath_* or another similar rela.
-		 */
-		found = 0;
+		found = false;
 		list_for_each_entry(rela, &sec->rela->relas, list) {
 			if (rela->offset < offset + insn_len)
 				continue;
 			if (rela->string)
 				continue;
+
 			/* TODO: we may need black list ? */
 			if (check_line_func(uelf, rela->sym->name)) {
 				found = true;
@@ -313,10 +309,10 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
 		if (!found)
 			return false;
 
-		lineonly = 1;
+		found_any = true;
 	}
 
-	if (!lineonly)
+	if (!found_any)
 		ERROR("no instruction changes detected for changed section %s",
 		      sec->name);
 

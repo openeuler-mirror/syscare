@@ -24,7 +24,6 @@ static const char *append_args[] = {
     "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
     "-fdata-sections",
-    "-fno-asynchronous-unwind-tables", /* temporary paras */
     "NULL",
 };
 

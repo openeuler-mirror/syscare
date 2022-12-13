@@ -73,8 +73,18 @@ static inline bool is_debug_section(struct section *sec)
 	else
 		name = sec->name;
 
-	return !strncmp(name, ".debug_", 7) ||
-	       !strncmp(name, ".eh_frame", 9);
+	return !strncmp(name, ".debug_", 7);
+}
+
+static inline bool is_eh_frame_section(struct section *sec)
+{
+	char *name;
+	if (is_rela_section(sec))
+		name = sec->base->name;
+	else
+		name = sec->name;
+
+	return !strncmp(name, ".eh_frame", 9);
 }
 
 static inline struct symbol *find_symbol_by_index(struct list_head *list, size_t index)

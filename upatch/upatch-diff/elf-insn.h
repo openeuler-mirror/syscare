@@ -28,6 +28,8 @@
 #include "asm/insn.h"
 #include "upatch-elf.h"
 
+#define ARM64_INSTR_LEN 4
+
 void rela_insn(const struct section *sec, const struct rela *rela, struct insn *insn);
 
 /*
