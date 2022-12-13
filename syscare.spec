@@ -1,7 +1,7 @@
 %global debug_package %{nil}
 
 Name:           syscare
-Version:        0.1.2.rc4
+Version:        1.0.0
 Release:        1
 Summary:        system hot-fix service
 
@@ -70,7 +70,7 @@ find lib -name "upatch.ko" \
 %ifarch x86_64
 %{_bindir}/systemctl enable %{name}-pre.service
 %endif
-depmod -A
+depmod -a > /dev/null 2>&1 || true
 
 %preun
 %systemd_preun %{name}-restore.service
@@ -79,7 +79,7 @@ depmod -A
 %endif
 
 %postun
-depmod -A
+depmod -a > /dev/null 2>&1 || true
 
 %ifarch x86_64
 %files -f ko.files.list
@@ -106,15 +106,5 @@ depmod -A
 %endif
 
 %changelog
-* Mon Dec 12 2022 snoweay<snoweay@163.com> - 0.1.2.rc4-1
-- Enable syscare of arm64 just for kernel patch.
-* Fri Dec 9 2022 snoweay<snoweay@163.com> - 0.1.2.rc3-1
-- Enable upatch.ko compile. Fix some recovery issues.
-* Thu Dec 8 2022 snoweay<snoweay@163.com> - 0.1.2.rc2-1
-- 0.1.2.rc2 version for test. Fix some issues..
-* Thu Dec 1 2022 snoweay<snoweay@163.com> - 0.1.2-1
-- 0.1.2 version for test. Fix some syscare cli bugs.
-* Mon Nov 28 2022 snoweay<snoweay@163.com> - 0.1.1-1
-- First version for test. Support patches restore, remove, insmod upatch.ko.
-* Mon Nov 21 2022 snoweay<snoweay@163.com> - 0.1.0-1
-- init version for 0.1.1-1.
+* Tue Dec 13 2022 snoweay<snoweay@163.com> - 1.0.0-1
+- Release the first version 1.0.0.
