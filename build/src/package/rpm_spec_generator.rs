@@ -115,8 +115,8 @@ impl RpmSpecGenerator {
         writeln!(writer)?;
 
         writeln!(writer, "%preun")?;
-        writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" == \"ACTIVED\" ]; then")?;
-        writeln!(writer, "    echo \"error: cannot remove actived patch \'%{{patch_name}}\'\" >&2")?;
+        writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" != \"NOT-APPLIED\" ]; then")?;
+        writeln!(writer, "    echo \"error: cannot remove applied patch \'%{{patch_name}}\'\" >&2")?;
         writeln!(writer, "    exit 1")?;
         writeln!(writer, "fi")?;
 
