@@ -54,86 +54,6 @@ static DEFINE_MUTEX(compiler_paths_lock);
 static LIST_HEAD(assembler_paths_list);
 static DEFINE_MUTEX(assembler_paths_lock);
 
-static struct list_head *get_elf_list(unsigned int cmd)
-{
-    if ((cmd == UPATCH_REGISTER_COMPILER) || (cmd == UPATCH_UNREGISTER_COMPILER)) {
-        return &compiler_paths_list;
-    } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
-        return &assembler_paths_list;
-    } else {
-        pr_warn("invalid command for upatch cmd. \n");
-        return NULL;
-    }
-}
-
-static struct mutex *get_elf_lock(unsigned int cmd)
-{
-    if ((cmd == UPATCH_REGISTER_COMPILER) || (cmd == UPATCH_UNREGISTER_COMPILER)) {
-        return &compiler_paths_lock;
-    } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
-        return &assembler_paths_lock;
-    } else {
-        pr_warn("invalid command for upatch cmd. \n");
-        return NULL;
-    }
-}
-
-static struct elf_path *__get_elf_path(unsigned int cmd, char *name)
-{
-    struct elf_path *ep;
-    struct list_head *elf_list;
-
-    elf_list = get_elf_list(cmd);
-    if (elf_list) {
-        list_for_each_entry(ep, elf_list, list) {
-            if (strncmp(ep->name, name, PATH_MAX) == 0) {
-                return ep;
-            }
-        }
-    }
-    return NULL;
-}
-
-struct elf_path *get_elf_path(unsigned int cmd, char *name)
-{
-    struct mutex *lock;
-    struct elf_path *ep = NULL;
-
-    lock = get_elf_lock(cmd);
-    if (lock) {
-        mutex_lock(lock);
-        ep = __get_elf_path(cmd, name);
-        mutex_unlock(lock);
-    }
-    return ep;
-}
-
-static void inline __delete_elf_path(unsigned int cmd, char *name)
-{
-    struct elf_path *ep;
-
-    if (!name)
-        return;
-
-    ep = __get_elf_path(cmd, name);
-    if (ep) {
-        list_del(&ep->list);
-        kfree(ep);
-    }
-}
-
-void delete_elf_path(unsigned int cmd, char *name)
-{
-    struct mutex *lock;
-
-    lock = get_elf_lock(cmd);
-    if (lock) {
-        mutex_lock(lock);
-        __delete_elf_path(cmd, name);
-        mutex_unlock(lock);
-    }
-}
-
 static int generate_file_name(char *buf, int buf_len)
 {
     unsigned long id;
@@ -609,9 +529,6 @@ static int __unregister_uprobe(unsigned int cmd, struct elf_path *ep, struct upr
 
     pr_debug("unregister uprobe for %s \n", ep->name);
     uprobe_unregister(inode, ep->entry_offset, uc);
-    if (cmd == UPATCH_UNREGISTER_COMPILER || cmd == UPATCH_UNREGISTER_ASSEMBLER) {
-        delete_elf_path(cmd, ep->name);
-    }
 out:
     return ret;
 }
@@ -673,6 +590,42 @@ out:
     return ret;
 }
 
+static struct list_head *get_elf_list(unsigned int cmd)
+{
+    if ((cmd == UPATCH_REGISTER_COMPILER) || (cmd == UPATCH_UNREGISTER_COMPILER)) {
+        return &compiler_paths_list;
+    } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
+        return &assembler_paths_list;
+    } else {
+        pr_warn("invalid command for upatch cmd. \n");
+        return NULL;
+    }
+}
+
+static struct uprobe_consumer *get_uprobe_consumer(unsigned int cmd)
+{
+    if ((cmd == UPATCH_REGISTER_COMPILER) || (cmd == UPATCH_UNREGISTER_COMPILER)) {
+        return &uprobe_compiler_consumer;
+    } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
+        return &uprobe_assembler_consumer;
+    } else {
+        pr_warn("invalid command for upatch cmd. \n");
+        return NULL;
+    }
+}
+
+static struct mutex *get_elf_lock(unsigned int cmd)
+{
+    if ((cmd == UPATCH_REGISTER_COMPILER) || (cmd == UPATCH_UNREGISTER_COMPILER)) {
+        return &compiler_paths_lock;
+    } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
+        return &assembler_paths_lock;
+    } else {
+        pr_warn("invalid command for upatch cmd. \n");
+        return NULL;
+    }
+}
+
 static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
 {
     int ret;
@@ -692,17 +645,127 @@ static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprob
 
     pr_debug("register uprobe for %s \n", ep->name);
     ret = uprobe_register(inode, ep->entry_offset, uc);
-    if (ret) {
-        pr_err("uprobe register failed - %d \n", ret);
-        if (cmd == UPATCH_REGISTER_COMPILER)
-            delete_elf_path(UPATCH_UNREGISTER_COMPILER, ep->name);
-        else
-            delete_elf_path(UPATCH_UNREGISTER_ASSEMBLER, ep->name);
-        goto out;
-    }
-
-    ret = 0;
 out:
+    return ret;
+}
+
+static struct elf_path *__get_elf_path(unsigned int cmd, char *name)
+{
+    struct elf_path *ep;
+    struct list_head *elf_list;
+
+    elf_list = get_elf_list(cmd);
+    if (elf_list) {
+        list_for_each_entry(ep, elf_list, list) {
+            if (strncmp(ep->name, name, PATH_MAX) == 0) {
+                return ep;
+            }
+        }
+    }
+    return NULL;
+}
+
+static int inline __delete_elf_path(unsigned int cmd, char *name)
+{
+    struct elf_path *ep;
+    int ret;
+    struct uprobe_consumer  *uc = get_uprobe_consumer(cmd);
+
+    if (!uc)
+        return -ENOTTY;
+
+    ep = __get_elf_path(cmd, name);
+    if (ep) {
+        ret = __unregister_uprobe(cmd, ep, uc);
+        if (ret)
+            return ret;
+        list_del(&ep->list);
+        kfree(ep);
+    }
+    return 0;
+}
+
+static int inline __add_elf_path(unsigned int cmd, char *name)
+{
+    struct elf_path *ep;
+    int ret;
+    struct list_head *elf_list = get_elf_list(cmd);
+    struct uprobe_consumer  *uc = get_uprobe_consumer(cmd);
+
+    if (!uc)
+        return -ENOTTY;
+
+    if (!elf_list)
+        return -ENOTTY;
+
+    ep = kzalloc(sizeof(*ep), GFP_KERNEL);
+    if (!ep)
+        return -ENOTTY;
+
+    strncpy(ep->name, name, PATH_MAX);
+    ep->count = 1;
+    ep->entry_offset = 0;
+
+    ret = __register_uprobe(cmd, ep, uc);
+    if (ret)
+        return ret;
+
+    list_add(&ep->list, elf_list);
+
+    return 0;
+}
+
+struct elf_path *get_elf_path(unsigned int cmd, char *name)
+{
+    struct mutex *lock;
+    struct elf_path *ep = NULL;
+
+    lock = get_elf_lock(cmd);
+    if (lock) {
+        mutex_lock(lock);
+        ep = __get_elf_path(cmd, name);
+        mutex_unlock(lock);
+    }
+    return ep;
+}
+
+int delete_elf_path(unsigned int cmd, char *name)
+{
+    struct mutex *lock;
+    struct elf_path *ep = NULL;
+    int ret = 0;
+
+    lock = get_elf_lock(cmd);
+    if (lock) {
+        mutex_lock(lock);
+        ep = __get_elf_path(cmd, name);
+        if (ep) {
+            ep->count--;
+            if (!ep->count)
+                ret = __delete_elf_path(cmd, name);
+        }
+        mutex_unlock(lock);
+    }
+    return ret;
+}
+
+int add_elf_path(unsigned int cmd, char *name)
+{
+    struct mutex *lock;
+    struct elf_path *ep = NULL;
+    int ret = 0;
+
+    lock = get_elf_lock(cmd);
+    if (lock) {
+        mutex_lock(lock);
+        ep = __get_elf_path(cmd, name);
+        if (!ep) {
+            ret = __add_elf_path(cmd, name);
+        } else {
+            ep->count++;
+        }
+        mutex_unlock(lock);
+    }
     return ret;
 }
 
@@ -710,7 +773,6 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
 {
     int ret;
     char *path = NULL;
-    struct elf_path *ep = NULL;
 
     path = kmalloc(PATH_MAX, GFP_KERNEL);
     if (!path)
@@ -720,56 +782,16 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
     if (ret)
         goto out;
 
-    ep = get_elf_path(cmd, path);
-
     switch (cmd)
     {
     case UPATCH_REGISTER_COMPILER:
-        if (!ep) {
-            ep = kzalloc(sizeof(*ep), GFP_KERNEL);
-            if (!ep)
-                return -ENOMEM;
-
-            strncpy(ep->name, path, PATH_MAX);
-            ep->count = 1;
-            ep->entry_offset = 0;
-            list_add(&ep->list, &compiler_paths_list);
-            ret = __register_uprobe(cmd, ep, &uprobe_compiler_consumer);
-        } else {
-            ep->count++;
-        }
+    case UPATCH_REGISTER_ASSEMBLER:
+        ret = add_elf_path(cmd, path);
         break;
 
     case UPATCH_UNREGISTER_COMPILER:
-        if (ep && ep->count > 0) {
-            ep->count--;
-            if (!ep->count)
-                ret = __unregister_uprobe(cmd, ep, &uprobe_compiler_consumer);
-        }
-        break;
-
-    case UPATCH_REGISTER_ASSEMBLER:
-        if (!ep) {
-            ep = kzalloc(sizeof(*ep), GFP_KERNEL);
-            if (!ep)
-                return -ENOMEM;
-
-            strncpy(ep->name, path, PATH_MAX);
-            ep->count = 1;
-            ep->entry_offset = 0;
-            list_add(&ep->list, &assembler_paths_list);
-            ret = __register_uprobe(cmd, ep, &uprobe_assembler_consumer);
-        } else {
-            ep->count++;
-        }
-        break;
-
     case UPATCH_UNREGISTER_ASSEMBLER:
-        if (ep && ep->count > 0) {
-            ep->count--;
-            if (!ep->count)
-                ret = __unregister_uprobe(cmd, ep, &uprobe_assembler_consumer);
-        }
+        ret = delete_elf_path(cmd, path);
         break;
 
     default:
@@ -800,19 +822,22 @@ out:
 void clear_compiler_path(void)
 {
     struct elf_path *ep, *tmp;
+
+    mutex_lock(&compiler_paths_lock);
     list_for_each_entry_safe(ep, tmp, &compiler_paths_list, list) {
-        ep->count = 0;
-        __unregister_uprobe(UPATCH_UNREGISTER_COMPILER, ep, &uprobe_compiler_consumer);
+        __delete_elf_path(UPATCH_UNREGISTER_COMPILER, ep->name);
     }
+    mutex_unlock(&compiler_paths_lock);
 }
 
 void clear_assembler_path(void)
 {
     struct elf_path *ep, *tmp;
+    mutex_lock(&assembler_paths_lock);
     list_for_each_entry_safe(ep, tmp, &assembler_paths_list, list) {
-        ep->count = 0;
-        __unregister_uprobe(UPATCH_UNREGISTER_ASSEMBLER, ep, &uprobe_assembler_consumer);
+        __delete_elf_path(UPATCH_UNREGISTER_ASSEMBLER, ep->name);
     }
+    mutex_unlock(&assembler_paths_lock);
 }
 
 void __exit compiler_hack_exit(void)
