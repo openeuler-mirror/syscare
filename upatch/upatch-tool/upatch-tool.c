@@ -23,7 +23,6 @@
 #include "upatch-manage.h"
 #include "upatch-ioctl.h"
 #include "upatch-resolve.h"
-#include "upatch-manage.h"
 
 #define COMMAND_SIZE 9
 char* command[COMMAND_SIZE] =

@@ -227,16 +227,16 @@ static int __init upatch_init(void)
 {
     int ret;
 
+    ret = compiler_hack_init();
+    if (ret < 0)
+        return ret;
+
     ret = misc_register(&upatch_dev);
     if (ret) {
         pr_err("register misc device for %s failed\n", UPATCH_DEV_NAME);
         return ret;
     }
 
-    ret = compiler_hack_init();
-    if (ret < 0)
-        return ret;
-    
     pr_info("upatch - %s load successfully \n", UPATCH_VERSION);
 
     return 0;
@@ -244,8 +244,8 @@ static int __init upatch_init(void)
 
 static void __exit upatch_exit(void)
 {
-    compiler_hack_exit();
     misc_deregister(&upatch_dev);
+    compiler_hack_exit();
 }
 
 module_init(upatch_init);
