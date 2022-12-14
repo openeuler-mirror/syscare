@@ -1,0 +1,325 @@
+From 81008c77dba79eb311ad537051086f10ba1ccd22 Mon Sep 17 00:00:00 2001
+From: Longjun Luo <luolongjuna@gmail.com>
+Date: Tue, 13 Dec 2022 16:08:45 +0800
+Subject: [PATCH 1/6] kmod: make it normal when using hack-gcc without env
+
+Signed-off-by: Longjun Luo <luolongjuna@gmail.com>
+---
+ upatch/kmod/compiler.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/upatch/kmod/compiler.c b/upatch/kmod/compiler.c
+index 87cdc3e..9f45cb7 100755
+--- a/upatch/kmod/compiler.c
++++ b/upatch/kmod/compiler.c
+@@ -443,8 +443,8 @@ static int rewrite_object_path(char __user **argv, char __user **envp)
+ 
+     ret = obtain_parameter_addr(envp, ASSEMBLER_DIR_ENV, &dir_addr, NULL);
+     if (ret || dir_addr == 0) {
+-        pr_warn("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);
+-        ret = -EINVAL;
++        pr_debug("no valid %s found %s \n", ASSEMBLER_DIR_ENV, object_path);
++        ret = 0;
+         goto out;
+     }
+ 
+-- 
+2.33.0
+
+
+From 024e9cd683055ca1702710a60d9c8abebfdbcbb3 Mon Sep 17 00:00:00 2001
+From: snoweay <snoweay@163.com>
+Date: Wed, 14 Dec 2022 01:37:26 +0000
+Subject: [PATCH 2/6] manager: Allow apply to actived kernel patch
+
+Signed-off-by: snoweay <snoweay@163.com>
+---
+ manager/cli/main.sh | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/manager/cli/main.sh b/manager/cli/main.sh
+index 6e6c86a..8ee3bd0 100755
+--- a/manager/cli/main.sh
++++ b/manager/cli/main.sh
+@@ -167,6 +167,8 @@ function do_build() {
+ function apply_patch() {
+ 	if  [ "${PATCH_TYPE}" == "kernel" ] ; then
+ 		check_kversion || return 1
++		[ "${PATCH_STATUS}" == "ACTIVED" ] && return
++
+ 		if [ "${PATCH_STATUS}" == "NOT-APPLIED" ]; then
+ 			insmod "${PATCH_ROOT}/${PATCH_NAME}.ko" || return 1
+ 		fi
+-- 
+2.33.0
+
+
+From 5874b79701fe7854575f710277f241a63a50afeb Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 14 Dec 2022 03:34:01 +0800
+Subject: [PATCH 3/6] build: only 'NOT-APPLIED' patch package can be removed
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ build/src/package/rpm_spec_generator.rs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/build/src/package/rpm_spec_generator.rs b/build/src/package/rpm_spec_generator.rs
+index 9781eb1..917e12e 100644
+--- a/build/src/package/rpm_spec_generator.rs
++++ b/build/src/package/rpm_spec_generator.rs
+@@ -115,8 +115,8 @@ impl RpmSpecGenerator {
+         writeln!(writer)?;
+ 
+         writeln!(writer, "%preun")?;
+-        writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" == \"ACTIVED\" ]; then")?;
+-        writeln!(writer, "    echo \"error: cannot remove actived patch \'%{{patch_name}}\'\" >&2")?;
++        writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" != \"NOT-APPLIED\" ]; then")?;
++        writeln!(writer, "    echo \"error: cannot remove applied patch \'%{{patch_name}}\'\" >&2")?;
+         writeln!(writer, "    exit 1")?;
+         writeln!(writer, "fi")?;
+ 
+-- 
+2.33.0
+
+
+From 1506b703935004b04fbf73f8875f33b5a8b8fe87 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 14 Dec 2022 23:50:03 +0800
+Subject: [PATCH 4/6] build: fix 'kernel patch cannot be insmod during system
+ start' issue
+
+1. change ko file(s) security context type to 'modules_object_t' after
+   package install, as selinux blocks loading unconfigured kernel module
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ build/src/package/rpm_spec_generator.rs | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/build/src/package/rpm_spec_generator.rs b/build/src/package/rpm_spec_generator.rs
+index 917e12e..f76e109 100644
+--- a/build/src/package/rpm_spec_generator.rs
++++ b/build/src/package/rpm_spec_generator.rs
+@@ -114,6 +114,10 @@ impl RpmSpecGenerator {
+         writeln!(writer, "%{{patch_root}}")?;
+         writeln!(writer)?;
+ 
++        writeln!(writer, "%post")?;
++        writeln!(writer, "readonly KO_LIST=\"$(find %{{patch_root}} -name *.ko)\"")?;
++        writeln!(writer, "chcon -t modules_object_t \"${{KO_LIST}}\"")?;
++
+         writeln!(writer, "%preun")?;
+         writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" != \"NOT-APPLIED\" ]; then")?;
+         writeln!(writer, "    echo \"error: cannot remove applied patch \'%{{patch_name}}\'\" >&2")?;
+-- 
+2.33.0
+
+
+From dc73e5833888096518321e6ba15503d9806199fb Mon Sep 17 00:00:00 2001
+From: Longjun Luo <luolongjuna@gmail.com>
+Date: Wed, 14 Dec 2022 12:43:46 +0800
+Subject: [PATCH 5/6] kmod: adjust order of the misc device (un)register
+
+After all init finished, then provides the device
+for users.
+
+When exit starts, unregister the device first.
+
+Signed-off-by: Longjun Luo <luolongjuna@gmail.com>
+---
+ upatch/kmod/kmod.c               | 10 +++++-----
+ upatch/upatch-tool/upatch-tool.c |  1 -
+ 2 files changed, 5 insertions(+), 6 deletions(-)
+
+diff --git a/upatch/kmod/kmod.c b/upatch/kmod/kmod.c
+index 3ce40ae..d31037f 100755
+--- a/upatch/kmod/kmod.c
++++ b/upatch/kmod/kmod.c
+@@ -227,16 +227,16 @@ static int __init upatch_init(void)
+ {
+     int ret;
+ 
++    ret = compiler_hack_init();
++    if (ret < 0)
++        return ret;
++
+     ret = misc_register(&upatch_dev);
+     if (ret) {
+         pr_err("register misc device for %s failed\n", UPATCH_DEV_NAME);
+         return ret;
+     }
+ 
+-    ret = compiler_hack_init();
+-    if (ret < 0)
+-        return ret;
+-    
+     pr_info("upatch - %s load successfully \n", UPATCH_VERSION);
+ 
+     return 0;
+@@ -244,8 +244,8 @@ static int __init upatch_init(void)
+ 
+ static void __exit upatch_exit(void)
+ {
+-    compiler_hack_exit();
+     misc_deregister(&upatch_dev);
++    compiler_hack_exit();
+ }
+ 
+ module_init(upatch_init);
+diff --git a/upatch/upatch-tool/upatch-tool.c b/upatch/upatch-tool/upatch-tool.c
+index c96836b..d1328aa 100644
+--- a/upatch/upatch-tool/upatch-tool.c
++++ b/upatch/upatch-tool/upatch-tool.c
+@@ -23,7 +23,6 @@
+ #include "upatch-manage.h"
+ #include "upatch-ioctl.h"
+ #include "upatch-resolve.h"
+-#include "upatch-manage.h"
+ 
+ #define COMMAND_SIZE 9
+ char* command[COMMAND_SIZE] =
+-- 
+2.33.0
+
+
+From d54264a83c2cc997ebaba0be8c32fc90682a9c04 Mon Sep 17 00:00:00 2001
+From: lzwycc <lzw32321226@163.com>
+Date: Wed, 14 Dec 2022 19:44:23 +0800
+Subject: [PATCH 6/6] kmod: unregister when rmmod upatch
+
+unregister compiler and assembler when rmmod upatch
+
+Signed-off-by: lzwycc <lzw32321226@163.com>
+---
+ upatch/kmod/compiler.c | 50 +++++++++++++++++++++++-------------------
+ 1 file changed, 27 insertions(+), 23 deletions(-)
+
+diff --git a/upatch/kmod/compiler.c b/upatch/kmod/compiler.c
+index 9f45cb7..899b83f 100755
+--- a/upatch/kmod/compiler.c
++++ b/upatch/kmod/compiler.c
+@@ -135,20 +135,6 @@ void delete_elf_path(unsigned int cmd, char *name)
+     }
+ }
+ 
+-void clear_compiler_path(void)
+-{
+-    struct elf_path *ep, *tmp;
+-    list_for_each_entry_safe(ep, tmp, &compiler_paths_list, list)
+-        delete_elf_path(UPATCH_UNREGISTER_COMPILER, ep->name);
+-}
+-
+-void clear_assembler_path(void)
+-{
+-    struct elf_path *ep, *tmp;
+-    list_for_each_entry_safe(ep, tmp, &assembler_paths_list, list)
+-        delete_elf_path(UPATCH_UNREGISTER_ASSEMBLER, ep->name);
+-}
+-
+ static int generate_file_name(char *buf, int buf_len)
+ {
+     unsigned long id;
+@@ -658,13 +644,13 @@ out:
+     return ret;
+ }
+ 
+-static int elf_check(const char *buf, char *elf_path, loff_t *entry_offset)
++static int elf_check(char *elf_path, loff_t *entry_offset)
+ {
+     struct file *file;
+     int ret;
+     char *p;
+ 
+-    file = filp_open(buf, O_RDONLY, 0);
++    file = filp_open(elf_path, O_RDONLY, 0);
+     if (IS_ERR(file)) {
+         ret = PTR_ERR(file);
+         pr_err("open elf failed - %d \n", ret);
+@@ -688,13 +674,13 @@ out:
+     return ret;
+ }
+ 
+-static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
++static int __register_uprobe(unsigned int cmd, struct elf_path *ep, struct uprobe_consumer *uc)
+ {
+     int ret;
+     struct path path;
+     struct inode *inode;
+ 
+-    ret = elf_check(buf, ep->name, &ep->entry_offset);
++    ret = elf_check(ep->name, &ep->entry_offset);
+     if (ret)
+         goto out;
+ 
+@@ -705,7 +691,7 @@ static int __register_uprobe(const char *buf, unsigned int cmd, struct elf_path
+     }
+     inode = path.dentry->d_inode;
+ 
+-    pr_debug("register uprobe for %s \n", buf);
++    pr_debug("register uprobe for %s \n", ep->name);
+     ret = uprobe_register(inode, ep->entry_offset, uc);
+     if (ret) {
+         pr_err("uprobe register failed - %d \n", ret);
+@@ -749,14 +735,14 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
+             ep->count = 1;
+             ep->entry_offset = 0;
+             list_add(&ep->list, &compiler_paths_list);
+-            ret = __register_uprobe(path, cmd, ep, &uprobe_compiler_consumer);
++            ret = __register_uprobe(cmd, ep, &uprobe_compiler_consumer);
+         } else {
+             ep->count++;
+         }
+         break;
+ 
+     case UPATCH_UNREGISTER_COMPILER:
+-        if (ep) {
++        if (ep && ep->count > 0) {
+             ep->count--;
+             if (!ep->count)
+                 ret = __unregister_uprobe(cmd, ep, &uprobe_compiler_consumer);
+@@ -773,14 +759,14 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
+             ep->count = 1;
+             ep->entry_offset = 0;
+             list_add(&ep->list, &assembler_paths_list);
+-            ret = __register_uprobe(path, cmd, ep, &uprobe_assembler_consumer);
++            ret = __register_uprobe(cmd, ep, &uprobe_assembler_consumer);
+         } else {
+             ep->count++;
+         }
+         break;
+ 
+     case UPATCH_UNREGISTER_ASSEMBLER:
+-        if (ep) {
++        if (ep && ep->count > 0) {
+             ep->count--;
+             if (!ep->count)
+                 ret = __unregister_uprobe(cmd, ep, &uprobe_assembler_consumer);
+@@ -812,6 +798,24 @@ out:
+     return ret;
+ }
+ 
++void clear_compiler_path(void)
++{
++    struct elf_path *ep, *tmp;
++    list_for_each_entry_safe(ep, tmp, &compiler_paths_list, list) {
++        ep->count = 0;
++        __unregister_uprobe(UPATCH_UNREGISTER_COMPILER, ep, &uprobe_compiler_consumer);
++    }
++}
++
++void clear_assembler_path(void)
++{
++    struct elf_path *ep, *tmp;
++    list_for_each_entry_safe(ep, tmp, &assembler_paths_list, list) {
++        ep->count = 0;
++        __unregister_uprobe(UPATCH_UNREGISTER_ASSEMBLER, ep, &uprobe_assembler_consumer);
++    }
++}
++
+ void __exit compiler_hack_exit(void)
+ {
+     clear_compiler_path();
+-- 
+2.33.0
+
