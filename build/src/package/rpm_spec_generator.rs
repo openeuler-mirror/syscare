@@ -114,10 +114,6 @@ impl RpmSpecGenerator {
         writeln!(writer, "%{{patch_root}}")?;
         writeln!(writer)?;
 
-        writeln!(writer, "%post")?;
-        writeln!(writer, "readonly KO_LIST=\"$(find %{{patch_root}} -name *.ko)\"")?;
-        writeln!(writer, "chcon -t modules_object_t \"${{KO_LIST}}\"")?;
-
         writeln!(writer, "%preun")?;
         writeln!(writer, "if [ \"$(syscare status %{{patch_name}})\" != \"NOT-APPLIED\" ]; then")?;
         writeln!(writer, "    echo \"error: cannot remove applied patch \'%{{patch_name}}\'\" >&2")?;
