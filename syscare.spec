@@ -2,19 +2,19 @@
 
 Name:           syscare
 Version:        1.0.0
-Release:        2
+Release:        3
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 GPL-2.0-only
 URL:            https://gitee.com/openeuler/syscare
 Source0:        %{name}-%{version}.tar.gz
-Patch1:         v1.0.0-2.patch
+Patch1:         v1.0.0-3.patch
 
 BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
 BuildRequires:  kernel-devel
 
-Requires:       kpatch-runtime
+Requires:       kpatch-runtime coreutils
 
 %description
 SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
@@ -107,6 +107,8 @@ depmod -a > /dev/null 2>&1 || true
 %endif
 
 %changelog
+* Thu Dec 15 2022 snoweay<snoweay@163.com> - 1.0.0-3
+- Change kernel patches' scontext before apply not at rpm-post.
 * Wed Dec 14 2022 snoweay<snoweay@163.com> - 1.0.0-2
 - Fix some issues:
 - manager: Allow apply to actived kernel patch
