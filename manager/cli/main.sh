@@ -130,7 +130,7 @@ function get_patch_type() {
 }
 
 function get_patch_elf_path() {
-	[ "${PATCH_TYPE}" == "kernel" ] && return
+	[ "${PATCH_TYPE}" == "kernel" ] && return 0
 
 	local patch_name="$1"
 	local patch_root=$(get_patch_root_by_patch_name "${patch_name}")
@@ -164,12 +164,21 @@ function do_build() {
 	"${SYSCARE_PATCH_BUILD}" "$@"
 }
 
+function set_kpatch_scontext() {
+	local getenforce_bin=$(which getenforce 2> /dev/null)
+	[ -n "${getenforce_bin}" ] || return 0
+
+	"${getenforce_bin}" | grep -q "Enforcing" 2> /dev/null || return 0
+	 chcon -t modules_object_t "${PATCH_ROOT}/${PATCH_NAME}.ko"
+}
+
 function apply_patch() {
 	if  [ "${PATCH_TYPE}" == "kernel" ] ; then
 		check_kversion || return 1
-		[ "${PATCH_STATUS}" == "ACTIVED" ] && return
+		[ "${PATCH_STATUS}" == "ACTIVED" ] && return 0
 
 		if [ "${PATCH_STATUS}" == "NOT-APPLIED" ]; then
+			set_kpatch_scontext
 			insmod "${PATCH_ROOT}/${PATCH_NAME}.ko" || return 1
 		fi
 		PATCH_STATUS="DEACTIVED"
@@ -191,7 +200,7 @@ function apply_patch() {
 
 function remove_patch() {
 	if [ "${PATCH_TYPE}" == "kernel" ] ; then
-		[ "${PATCH_STATUS}" == "NOT-APPLIED" ] && return
+		[ "${PATCH_STATUS}" == "NOT-APPLIED" ] && return 0
 		[ "${PATCH_STATUS}" == "ACTIVED" ] && deactive_patch
 		rmmod "${PATCH_NAME}" || return 1
 	else
@@ -306,7 +315,7 @@ function initialize_patch_info() {
 	if [ "${PATCH_TYPE}" == "kernel" ]; then
 		if [ ! -f "${KPATCH_STATE_FILE}" ]; then
 			PATCH_STATUS="NOT-APPLIED"
-			return
+			return 0
 		fi
 
 		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ]; then
