@@ -2,6 +2,7 @@ use std::borrow::{Cow, Borrow};
 use std::collections::HashMap;
 use std::{io, path::Path};
 
+use log::*;
 use gimli::{constants, Reader};
 use object::{Object, ObjectSection, ObjectSymbol};
 use typed_arena::Arena;
@@ -96,7 +97,7 @@ impl Dwarf{
                                     relocation.set_addend(addend as i64);
                                 }
                                 Err(_) => {
-                                    println!( "Relocation with invalid symbol for section {} at offset 0x{:08x}",
+                                    trace!( "Relocation with invalid symbol for section {} at offset 0x{:08x}",
                                         section.name().unwrap(),
                                         offset
                                     );
@@ -106,14 +107,14 @@ impl Dwarf{
                         _ => {}
                     }
                     if relocations.insert(offset, relocation).is_some() {
-                        println!("Multiple relocations for section {} at offset 0x{:08x}",
+                        trace!("Multiple relocations for section {} at offset 0x{:08x}",
                             section.name().unwrap(),
                             offset
                         );
                     }
                 }
                 _ => {
-                    println!( "Unsupported relocation for section {} at offset 0x{:08x}",
+                    trace!( "Unsupported relocation for section {} at offset 0x{:08x}",
                         section.name().unwrap(),
                         offset
                     );
