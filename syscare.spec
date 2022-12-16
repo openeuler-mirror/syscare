@@ -2,13 +2,13 @@
 
 Name:           syscare
 Version:        1.0.0
-Release:        3
+Release:        4
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 GPL-2.0-only
 URL:            https://gitee.com/openeuler/syscare
 Source0:        %{name}-%{version}.tar.gz
-Patch1:         v1.0.0-3.patch
+Patch1:         v1.0.0-4.patch
 
 BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
@@ -38,7 +38,7 @@ Syscare build tools.
 %build
 mkdir -p tmp_build
 cd tmp_build
-cmake -DSYSCARE_BUILD_VERSION=%{version} -DKERNEL_VERSION=%{kernel_version} ..
+cmake -DSYSCARE_BUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_version} ..
 make
 
 %install
@@ -107,6 +107,8 @@ depmod -a > /dev/null 2>&1 || true
 %endif
 
 %changelog
+* Fri Dec 16 2022 snoweay<snoweay@163.com> - 1.0.0-4
+- Avoid duplicate elfs by not following symlinks at build.
 * Thu Dec 15 2022 snoweay<snoweay@163.com> - 1.0.0-3
 - Change kernel patches' scontext before apply not at rpm-post.
 * Wed Dec 14 2022 snoweay<snoweay@163.com> - 1.0.0-2
