@@ -17,4 +17,5 @@ typed-arena = "2.0.1"
 libc = "0.2.137"
 copy_dir = "0.1.2"
 lazy_static = "1.4.0"
+signal-hook = "0.3.14"
 

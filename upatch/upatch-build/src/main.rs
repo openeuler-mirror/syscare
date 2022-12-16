@@ -9,6 +9,7 @@ fn main() {
             exit(0);
         },
         Err(e) => {
+            upatch.unhack_compiler();
             eprintln!("ERROR {}: {}", e.code(), e);
             exit(e.code());
         },

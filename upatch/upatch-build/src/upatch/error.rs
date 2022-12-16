@@ -44,14 +44,14 @@ impl Error {
 
     pub fn code(&self) -> i32 {
         match *&self {
-            Error::Io(_) => 1,
-            Error::Compiler(_) => 2,
-            Error::Project(_) => 3,
-            Error::Build(_) => 4,
-            Error::Mod(_) => 5,
-            Error::Diff(_) => 6,
-            Error::InvalidInput(_) => 7,
-            Error::TOOL(_) => 8,
+            Error::Io(_) => -1,
+            Error::Compiler(_) => -2,
+            Error::Project(_) => -3,
+            Error::Build(_) => -4,
+            Error::Mod(_) => -5,
+            Error::Diff(_) => -6,
+            Error::InvalidInput(_) => -7,
+            Error::TOOL(_) => -8,
         }
     }
 }

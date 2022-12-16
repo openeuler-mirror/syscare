@@ -16,6 +16,7 @@ const UPATCH_REGISTER_ASSEMBLER: u64 = 1074324739;
 const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
 use super::UPATCH_DEV_NAME;
 
+#[derive(Clone)]
 pub struct Compiler {
     compiler_file: String,
     as_file: String,
@@ -23,9 +24,9 @@ pub struct Compiler {
 }
 
 impl Compiler {
-    pub fn new(compiler_file: String) -> Self {
+    pub fn new() -> Self {
         Self {
-            compiler_file,
+            compiler_file: String::new(),
             as_file: String::new(),
             linker_file: String::new(),
         }
@@ -40,7 +41,8 @@ impl Compiler {
         Ok(path_str)
     }
 
-    pub fn analyze(&mut self) -> Result<()> {
+    pub fn analyze(&mut self, compiler_file: String) -> Result<()> {
+        self.compiler_file = compiler_file.clone();
         if self.compiler_file.is_empty() {
             self.compiler_file.push_str("gcc");
         }

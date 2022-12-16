@@ -1,8 +1,14 @@
-use std::{path::Path, env};
+use std::path::Path;
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
 use std::string::String;
+use std::process::exit;
+use std::thread;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+
+use signal_hook::{iterator::Signals, consts::SIGINT};
 
 use crate::log::*;
 use crate::tool::*;
@@ -11,6 +17,7 @@ use crate::cmd::ExternCommand;
 
 use super::Arg;
 use super::Compiler;
+use super::WorkDir;
 use super::Project;
 use super::Result;
 use super::Error;
@@ -23,27 +30,23 @@ const SUPPORT_DIFF: &str = "upatch-diff";
 const SUPPORT_TOOL: &str = "upatch-tool";
 
 pub struct UpatchBuild {
-    cache_dir: String,
-    source_dir: String,
-    patch_dir: String,
-    output_dir: String,
-    log_file: String,
     args: Arg,
+    work_dir: WorkDir,
+    compiler: Compiler,
     diff_file: String,
     tool_file: String,
+    hack_flag: Arc<AtomicBool>,
 }
 
 impl UpatchBuild {
     pub fn new() -> Self {
         Self {
-            cache_dir: String::new(),
-            source_dir: String::new(),
-            patch_dir: String::new(),
-            output_dir: String::new(),
-            log_file: String::new(),
             args: Arg::new(),
+            work_dir: WorkDir::new(),
+            compiler: Compiler::new(),
             diff_file: String::new(),
             tool_file: String::new(),
+            hack_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -51,14 +54,14 @@ impl UpatchBuild {
         self.args.read()?;
 
         // create .upatch directory
-        self.create_dir()?;
+        self.work_dir.create_dir(self.args.work_dir.clone())?;
         self.init_logger()?;
 
         if self.args.patch_name.is_empty() {
             self.args.patch_name.push_str(&self.args.elf_name);
         }
         if self.args.output.is_empty() {
-            self.args.output.push_str(&self.cache_dir);
+            self.args.output.push_str(self.work_dir.cache_dir());
         }
 
         // check mod
@@ -69,10 +72,9 @@ impl UpatchBuild {
         self.tool_file = search_tool(SUPPORT_TOOL)?;
 
         // check compiler
-        let mut compiler = Compiler::new(self.args.compiler_file.clone());
-        compiler.analyze()?;
+        self.compiler.analyze(self.args.compiler_file.clone())?;
         if !self.args.skip_compiler_check {
-            compiler.check_version(&self.cache_dir, &self.args.debug_info)?;
+            self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_info)?;
         }
 
         // copy source
@@ -80,12 +82,14 @@ impl UpatchBuild {
 
         // hack compiler
         info!("Hacking compiler");
-        compiler.hack()?;
+        self.unhack_stop();
+        self.compiler.hack()?;
+        self.hack_flag.store(true, Ordering::Relaxed);
 
         // build source
         info!("Building original {}", project_name.to_str().unwrap());
         let project = Project::new(self.args.source.clone());
-        project.build(CMD_SOURCE_ENTER, &self.source_dir, self.args.build_source_command.clone())?;
+        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_command.clone())?;
 
         // build patch
         for patch in &self.args.diff_file {
@@ -94,11 +98,12 @@ impl UpatchBuild {
         }
 
         info!("Building patched {}", project_name.to_str().unwrap());
-        project.build(CMD_PATCHED_ENTER, &self.patch_dir, self.args.build_patch_command.clone())?;
+        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_command.clone())?;
 
         // unhack compiler
         info!("Unhacking compiler");
-        compiler.unhack()?;
+        self.compiler.unhack()?;
+        self.hack_flag.store(false, Ordering::Relaxed);
 
         info!("Detecting changed objects");
         // correlate obj name
@@ -106,8 +111,8 @@ impl UpatchBuild {
         let mut patch_obj: HashMap<String, String> = HashMap::new();
         let dwarf = Dwarf::new();
 
-        self.correlate_obj(&dwarf, self.args.source.as_str(), &self.source_dir, &mut source_obj)?;
-        self.correlate_obj(&dwarf, self.args.source.as_str(), &self.patch_dir, &mut patch_obj)?;
+        self.correlate_obj(&dwarf, self.args.source.as_str(), self.work_dir.source_dir(), &mut source_obj)?;
+        self.correlate_obj(&dwarf, self.args.source.as_str(), self.work_dir.patch_dir(), &mut patch_obj)?;
 
         // choose the binary's obj to create upatch file
         let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
@@ -115,41 +120,23 @@ impl UpatchBuild {
 
         // ld patchs
         let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
-        compiler.linker(&self.output_dir, &output_file)?;
+        self.compiler.linker(self.work_dir.output_dir(), &output_file)?;
         self.upatch_tool(&output_file)?;
         info!("Building patch: {}", &output_file);
         Ok(())
     }
+
+    pub fn unhack_compiler(&self){
+        if self.hack_flag.load(Ordering::Relaxed) {
+            if let Err(_) = self.compiler.unhack() {
+                println!("unhack failed after upatch build error");
+            }
+            self.hack_flag.store(false, Ordering::Relaxed);
+        }
+    }
 }
 
 impl UpatchBuild {
-    fn create_dir(&mut self) -> Result<()> {
-        #![allow(deprecated)]
-        if self.args.work_dir.is_empty(){
-            // home_dir() don't support BSD system
-            self.cache_dir.push_str(&format!("{}/{}", env::home_dir().unwrap().to_str().unwrap(), ".upatch"));
-        }
-        else{
-            self.cache_dir.push_str(&self.args.work_dir);
-        }
-
-        self.source_dir.push_str(&format!("{}/{}", &self.cache_dir, "source"));
-        self.patch_dir.push_str(&format!("{}/{}", &self.cache_dir, "patch"));
-        self.output_dir.push_str(&format!("{}/{}", &self.cache_dir, "output"));
-        self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "build.log"));
-
-        if Path::new(&self.cache_dir).is_dir() {
-            fs::remove_dir_all(self.cache_dir.clone())?;
-        }
-
-        fs::create_dir_all(self.cache_dir.clone())?;
-        fs::create_dir(self.source_dir.clone())?;
-        fs::create_dir(self.patch_dir.clone())?;
-        fs::create_dir(self.output_dir.clone())?;
-        File::create(&self.log_file)?;
-        Ok(())
-    }
-
     fn init_logger(&self) -> Result<()> {
         let mut logger = Logger::new();
 
@@ -159,7 +146,7 @@ impl UpatchBuild {
         };
 
         logger.set_print_level(log_level);
-        logger.set_log_file(LevelFilter::Trace, &self.log_file)?;
+        logger.set_log_file(LevelFilter::Trace, self.work_dir.log_file())?;
         Logger::init_logger(logger);
 
         Ok(())
@@ -192,7 +179,7 @@ impl UpatchBuild {
             let source_name = path.get_source();
             match &patch_obj.get(&source_name) {
                 Some(patch) => {
-                    let output_dir = format!("{}/{}", &self.output_dir, file_name(patch)?);
+                    let output_dir = format!("{}/{}", self.work_dir.output_dir(), file_name(patch)?);
                     match &source_obj.get(&source_name) {
                         Some(source) => self.upatch_diff(source, patch, &output_dir)?,
                         None => { fs::copy(&patch, output_dir)?; },
@@ -211,7 +198,7 @@ impl UpatchBuild {
         }
         let output = ExternCommand::new(&self.diff_file).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), &self.log_file)))
+            return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), self.work_dir.log_file())))
         };
         Ok(())
     }
@@ -223,5 +210,34 @@ impl UpatchBuild {
             return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
         };
         Ok(())
+    }
+
+    fn unhack_stop(&self) {
+        let mut signals = Signals::new(&[SIGINT]).expect("signal_hook error");
+        let hack_flag_clone = self.hack_flag.clone();
+        let compiler_clone = self.compiler.clone();
+        thread::spawn(move || {
+            for signal in signals.forever() {
+                if hack_flag_clone.load(Ordering::Relaxed) {
+                    if let Err(e) = compiler_clone.unhack() {
+                        println!("{} after upatch build error", e);
+                    }
+                    hack_flag_clone.store(false, Ordering::Relaxed);
+                }
+                eprintln!("ERROR: receive system signal {}", signal);
+                exit(signal);
+            }
+        });
+
+        let hack_flag_clone = self.hack_flag.clone();
+        let compiler_clone = self.compiler.clone();
+        std::panic::set_hook(Box::new(move |_| {
+            if hack_flag_clone.load(Ordering::Relaxed) {
+                if let Err(e) = compiler_clone.unhack() {
+                    println!("{} after upatch build error", e);
+                }
+                hack_flag_clone.store(false, Ordering::Relaxed);
+            }
+        }));
     }
 }

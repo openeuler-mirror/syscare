@@ -15,8 +15,11 @@ pub struct ExternCommandExitStatus {
 }
 
 impl ExternCommandExitStatus {
-    pub fn exit_code(&self) -> i32 {
-        self.exit_status.code().expect("Get process exit code failed")
+    pub fn exit_code(&self) -> String {
+        match self.exit_status.code() {
+            Some(code) => code.to_string(),
+            None => String::from("None"),
+        }
     }
 
     pub fn exit_status(&self) -> ExitStatus {
@@ -64,7 +67,10 @@ impl ExternCommand<'_> {
         }
 
         let exit_status = child_process.wait()?;
-        trace!("Process ({}) exited, exit_code={}\n", &self, exit_status.code().expect("get code error"));
+        match exit_status.code() {
+            Some(code) => trace!("Process ({}) exited, exit_code={}\n", &self, code),
+            None => trace!("Process ({}) exited, exit_code=None\n", &self),
+        }
 
         Ok(ExternCommandExitStatus {
             exit_status,

@@ -1,7 +1,6 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-const PKG_SPEC_FILE_EXTENSION: &str = "spec";
 const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
 
 pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
@@ -192,16 +191,6 @@ pub fn find_files<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, rec
         }
     }
     Ok(file_list)
-}
-
-pub fn find_spec_file(directory: &str) -> std::io::Result<String> {
-    let spec_file = find_file_ext(
-        directory,
-        PKG_SPEC_FILE_EXTENSION,
-        true
-    )?;
-
-    Ok(stringtify(spec_file))
 }
 
 pub fn search_tool(tool_name: &str) -> std::io::Result<String> {
