@@ -61,8 +61,11 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
     for dir_entry in std::fs::read_dir(search_path)? {
         if let Ok(entry) = dir_entry {
             let current_path = entry.path();
-            let current_path_type = current_path.metadata()?.file_type();
+            let current_path_type = current_path.symlink_metadata()?.file_type();
 
+            if current_path_type.is_symlink() {
+                continue;
+            }
             if current_path_type.is_file() {
                 file_list.push(self::realpath(current_path.as_path())?);
             }
@@ -90,7 +93,12 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
     for dir_entry in std::fs::read_dir(search_path)? {
         if let Ok(entry) = dir_entry {
             let current_path = entry.path();
-            if !current_path.is_dir() {
+            let current_path_type = current_path.symlink_metadata()?.file_type();
+
+            if current_path_type.is_symlink() {
+                continue;
+            }
+            if !current_path_type.is_dir() {
                 continue;
             }
             dir_list.push(self::realpath(current_path.as_path())?);
@@ -116,8 +124,11 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
     for dir_entry in std::fs::read_dir(search_path)? {
         if let Ok(entry) = dir_entry {
             let current_path = entry.path();
-            let current_path_type = current_path.metadata()?.file_type();
+            let current_path_type = current_path.symlink_metadata()?.file_type();
 
+            if current_path_type.is_symlink() {
+                continue;
+            }
             if current_path_type.is_file() {
                 let current_path_ext = current_path.extension().unwrap_or_default();
                 if current_path_ext == file_ext {
