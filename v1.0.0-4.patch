@@ -1,7 +1,7 @@
 From 81008c77dba79eb311ad537051086f10ba1ccd22 Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjuna@gmail.com>
 Date: Tue, 13 Dec 2022 16:08:45 +0800
-Subject: [PATCH 1/8] kmod: make it normal when using hack-gcc without env
+Subject: [PATCH 01/10] kmod: make it normal when using hack-gcc without env
 
 Signed-off-by: Longjun Luo <luolongjuna@gmail.com>
 ---
@@ -30,7 +30,7 @@ index 87cdc3e..9f45cb7 100755
 From 024e9cd683055ca1702710a60d9c8abebfdbcbb3 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Wed, 14 Dec 2022 01:37:26 +0000
-Subject: [PATCH 2/8] manager: Allow apply to actived kernel patch
+Subject: [PATCH 02/10] manager: Allow apply to actived kernel patch
 
 Signed-off-by: snoweay <snoweay@163.com>
 ---
@@ -57,7 +57,7 @@ index 6e6c86a..8ee3bd0 100755
 From 5874b79701fe7854575f710277f241a63a50afeb Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 14 Dec 2022 03:34:01 +0800
-Subject: [PATCH 3/8] build: only 'NOT-APPLIED' patch package can be removed
+Subject: [PATCH 03/10] build: only 'NOT-APPLIED' patch package can be removed
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -86,7 +86,7 @@ index 9781eb1..917e12e 100644
 From 1506b703935004b04fbf73f8875f33b5a8b8fe87 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 14 Dec 2022 23:50:03 +0800
-Subject: [PATCH 4/8] build: fix 'kernel patch cannot be insmod during system
+Subject: [PATCH 04/10] build: fix 'kernel patch cannot be insmod during system
  start' issue
 
 1. change ko file(s) security context type to 'modules_object_t' after
@@ -119,7 +119,7 @@ index 917e12e..f76e109 100644
 From dc73e5833888096518321e6ba15503d9806199fb Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjuna@gmail.com>
 Date: Wed, 14 Dec 2022 12:43:46 +0800
-Subject: [PATCH 5/8] kmod: adjust order of the misc device (un)register
+Subject: [PATCH 05/10] kmod: adjust order of the misc device (un)register
 
 After all init finished, then provides the device
 for users.
@@ -186,7 +186,7 @@ index c96836b..d1328aa 100644
 From d54264a83c2cc997ebaba0be8c32fc90682a9c04 Mon Sep 17 00:00:00 2001
 From: lzwycc <lzw32321226@163.com>
 Date: Wed, 14 Dec 2022 19:44:23 +0800
-Subject: [PATCH 6/8] kmod: unregister when rmmod upatch
+Subject: [PATCH 06/10] kmod: unregister when rmmod upatch
 
 unregister compiler and assembler when rmmod upatch
 
@@ -327,8 +327,8 @@ index 9f45cb7..899b83f 100755
 From 8b8a62377a425c273c2a584ff9f299f88b70f0e5 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Thu, 15 Dec 2022 18:34:53 +0800
-Subject: [PATCH 7/8] Revert "build: fix 'kernel patch cannot be insmod during
- system start' issue"
+Subject: [PATCH 07/10] Revert "build: fix 'kernel patch cannot be insmod
+ during system start' issue"
 
 This reverts commit 1506b703935004b04fbf73f8875f33b5a8b8fe87.
 ---
@@ -357,7 +357,7 @@ index f76e109..917e12e 100644
 From 5171debddcbd632cb25c30d2325f0a655945c0f2 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Thu, 15 Dec 2022 18:37:42 +0800
-Subject: [PATCH 8/8] manager: Set kpatch's scontext to modules_object_t
+Subject: [PATCH 08/10] manager: Set kpatch's scontext to modules_object_t
 
 Signed-off-by: snoweay <snoweay@163.com>
 ---
@@ -418,6 +418,122 @@ index 8ee3bd0..c056f62 100755
  		fi
  
  		if [ $(cat "${KPATCH_STATE_FILE}") -eq 1 ]; then
+-- 
+2.33.0
+
+
+From d8ef956b6e5ee05e95c757fe79a1bde58908efb4 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 16 Dec 2022 19:37:53 +0800
+Subject: [PATCH 09/10] upatch: file searching would not follow symlinks
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-build/src/tool/fs.rs | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/upatch/upatch-build/src/tool/fs.rs b/upatch/upatch-build/src/tool/fs.rs
+index 17fd307..9f15dc2 100644
+--- a/upatch/upatch-build/src/tool/fs.rs
++++ b/upatch/upatch-build/src/tool/fs.rs
+@@ -61,8 +61,11 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            let current_path_type = current_path.metadata()?.file_type();
++            let current_path_type = current_path.symlink_metadata()?.file_type();
+ 
++            if current_path_type.is_symlink() {
++                continue;
++            }
+             if current_path_type.is_file() {
+                 file_list.push(self::realpath(current_path.as_path())?);
+             }
+@@ -90,7 +93,12 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            if !current_path.is_dir() {
++            let current_path_type = current_path.symlink_metadata()?.file_type();
++
++            if current_path_type.is_symlink() {
++                continue;
++            }
++            if !current_path_type.is_dir() {
+                 continue;
+             }
+             dir_list.push(self::realpath(current_path.as_path())?);
+@@ -116,8 +124,11 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            let current_path_type = current_path.metadata()?.file_type();
++            let current_path_type = current_path.symlink_metadata()?.file_type();
+ 
++            if current_path_type.is_symlink() {
++                continue;
++            }
+             if current_path_type.is_file() {
+                 let current_path_ext = current_path.extension().unwrap_or_default();
+                 if current_path_ext == file_ext {
+-- 
+2.33.0
+
+
+From 7c61c25746a4f9ef82b3383d093123da7888c532 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 16 Dec 2022 19:42:42 +0800
+Subject: [PATCH 10/10] build: file searching would not follow symlinks
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ build/src/util/fs.rs | 17 ++++++++++++++---
+ 1 file changed, 14 insertions(+), 3 deletions(-)
+
+diff --git a/build/src/util/fs.rs b/build/src/util/fs.rs
+index 8ac2e9e..3343256 100644
+--- a/build/src/util/fs.rs
++++ b/build/src/util/fs.rs
+@@ -68,7 +68,12 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            if !current_path.is_dir() {
++            let current_path_type = current_path.symlink_metadata()?.file_type();
++
++            if current_path_type.is_symlink() {
++                continue;
++            }
++            if !current_path_type.is_dir() {
+                 continue;
+             }
+             dir_list.push(self::realpath(current_path.as_path())?);
+@@ -94,8 +99,11 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            let current_path_type = current_path.metadata()?.file_type();
++            let current_path_type = current_path.symlink_metadata()?.file_type();
+ 
++            if current_path_type.is_symlink() {
++                continue;
++            }
+             if current_path_type.is_file() {
+                 file_list.push(self::realpath(current_path.as_path())?);
+             }
+@@ -124,8 +132,11 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
+     for dir_entry in std::fs::read_dir(search_path)? {
+         if let Ok(entry) = dir_entry {
+             let current_path = entry.path();
+-            let current_path_type = current_path.metadata()?.file_type();
++            let current_path_type = current_path.symlink_metadata()?.file_type();
+ 
++            if current_path_type.is_symlink() {
++                continue;
++            }
+             if current_path_type.is_file() {
+                 let current_path_ext = current_path.extension().unwrap_or_default();
+                 if current_path_ext == file_ext {
 -- 
 2.33.0
 
