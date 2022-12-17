@@ -129,17 +129,14 @@ impl PatchBuildCLI {
         info!("{}", dbg_pkg_info);
         info!("------------------------------\n");
 
-        let src_pkg_name = src_pkg_info.get_name();
-        let src_pkg_ver  = src_pkg_info.get_version();
-        let dbg_pkg_name = dbg_pkg_info.get_name();
-        let dbg_pkg_ver  = dbg_pkg_info.get_version();
-        if !dbg_pkg_name.contains(src_pkg_name) || (src_pkg_ver != dbg_pkg_ver) {
+        if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
+           (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
+           (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Debuginfo package does not match the source package"),
             ));
         }
-
         Ok(src_pkg_info)
     }
 
