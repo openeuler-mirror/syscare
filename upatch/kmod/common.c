@@ -65,6 +65,8 @@ struct file *d_open_inode(struct inode *inode)
         goto out_unlock;
 
     d_file = filp_open(p, O_RDWR, 0);
+    if (IS_ERR(d_file))
+        pr_err("open patch file failed - %ld \n", PTR_ERR(d_file));
 out_unlock:
     __putname(name);
     // spin_unlock_irqrestore(&inode->i_lock, flags);

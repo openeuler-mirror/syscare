@@ -133,12 +133,16 @@ static int partly_resolve_patch(int patch_fd, Elf64_Sym *binary_symtab,
         
         name = strtab + sym->st_name;
         if (sym->st_shndx == SHN_UNDEF) {
-            ret = __partly_resolve_patch(sym, name,
-                binary_symtab, binary_symnum, binary_strtab);
-            if (ret)
-                goto out;
+            if (ELF64_ST_BIND(sym->st_info) == STB_LOCAL) {
+                /* only partly resolved undefined symbol could have st_value */
+                if (sym->st_value)
+                    sym->st_shndx = SHN_LIVEPATCH;
+            } else {
+                ret = __partly_resolve_patch(sym, name,
+                    binary_symtab, binary_symnum, binary_strtab);
+                if (ret) goto out;
+            }
         }
-        
     }
 
     ret = 0;

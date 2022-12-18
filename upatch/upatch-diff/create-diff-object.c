@@ -53,6 +53,7 @@
 #include "elf-insn.h"
 #include "elf-compare.h"
 #include "elf-correlate.h"
+#include "elf-resolve.h"
 #include "elf-create.h"
 #include "running-elf.h"
 #include "upatch-manage.h"
@@ -860,6 +861,8 @@ int main(int argc, char*argv[])
     upatch_create_shstrtab(&uelf_out);
 
     upatch_create_strtab(&uelf_out);
+
+    upatch_partly_resolve(&uelf_out, &relf);
 
     upatch_create_symtab(&uelf_out);
 
