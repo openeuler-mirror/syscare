@@ -74,9 +74,9 @@ impl Dwarf{
         }
         let arr = find_files(&dir_str, &binary, false, true)?;
         match arr.len() {
-            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} don't have {}", arr.len(), &dir_str, &binary))),
+            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} don't have {}", &dir_str, &binary))),
             1 => Ok(stringtify(&arr[0])),
-            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{}, {} have too many {}", arr.len(), &dir_str, &binary))),
+            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} have {} {}", &dir_str, arr.len(), &binary))),
         }
     }
 

@@ -158,7 +158,7 @@ impl UpatchBuild {
         file.read_to_string(&mut contents)?;
         match contents.find(UPATCH_DEV_NAME) {
             Some(_) => Ok(()),
-            None => Err(Error::Mod(format!("can't found upatch mod in system"))),
+            None => Err(Error::Mod(format!("can't find upatch mod in system"))),
         }
     }
 

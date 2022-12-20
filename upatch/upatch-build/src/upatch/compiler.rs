@@ -3,6 +3,8 @@ use std::process::Command;
 use std::fs::{OpenOptions, self};
 use std::io::Write;
 
+use log::*;
+
 use crate::dwarf::Dwarf;
 use crate::tool::*;
 use crate::cmd::ExternCommand;
@@ -32,13 +34,20 @@ impl Compiler {
         }
     }
 
-    pub fn readlink(&self, name: String) -> Result<String> {
-        let mut path_str = String::from_utf8(Command::new("which").arg(&name).output()?.stdout).unwrap();
-        path_str.pop();
-        if path_str.is_empty() {
-            return Err(Error::Compiler(format!("can't found compiler")));
+    pub fn readlink(&self, name: &str) -> Result<String> {
+        let output = Command::new("which").arg(name).output()?;
+        if !output.status.success() {
+            return Err(Error::Compiler(format!("can't find compiler")));
         }
-        Ok(path_str)
+        Ok(String::from_utf8(output.stdout).unwrap().trim().to_string())
+    }
+
+    pub fn read_from_compiler(&self, name: &str) -> Result<String> {
+        let output = Command::new(&self.compiler_file).arg(&name).output()?;
+        if !output.status.success() {
+            return Err(Error::Compiler(format!("can't find {} from compiler {}", name, &self.compiler_file)));
+        }
+        Ok(String::from_utf8(output.stdout).unwrap().trim().to_string())
     }
 
     pub fn analyze(&mut self, compiler_file: String) -> Result<()> {
@@ -46,16 +55,12 @@ impl Compiler {
         if self.compiler_file.is_empty() {
             self.compiler_file.push_str("gcc");
         }
-        self.compiler_file = self.readlink(self.compiler_file.clone())?;
-        println!("Using compiler at: {}", &self.compiler_file);
+        self.compiler_file = self.readlink(&self.compiler_file.clone())?;
+        info!("Using compiler at: {}", &self.compiler_file);
 
-        self.as_file = String::from_utf8(Command::new(&self.compiler_file).arg("-print-prog-name=as").output()?.stdout).unwrap();
-        self.as_file.pop();
-        self.as_file = self.readlink(self.as_file.clone())?;
+        self.as_file = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
 
-        self.linker_file = String::from_utf8(Command::new(&self.compiler_file).arg("-print-prog-name=ld").output()?.stdout).unwrap();
-        self.linker_file.pop();
-        self.linker_file = self.readlink(self.linker_file.clone())?;
+        self.linker_file = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
         Ok(())
     }    
     

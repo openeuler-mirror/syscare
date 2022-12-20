@@ -46,10 +46,15 @@ impl ExternCommand<'_> {
     pub fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
-        let mut child_process = command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()?;
+        let mut child_process = match command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+            Ok(child_process) => child_process,
+            Err(e) => {
+                if e.kind() == std::io::ErrorKind::NotFound{
+                    return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("can't find command: {}", self.path)));
+                }
+                return Err(e);
+            }
+        };
 
         trace!("Executing '{}' ({:?}):", &self, command);
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
