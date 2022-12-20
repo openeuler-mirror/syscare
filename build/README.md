@@ -16,10 +16,13 @@ Arguments:
 
 Options:
   -n, --patch-name <PATCH_NAME>                Patch name
+      --patch-arch <PATCH_ARCH>                Patch architecture [default: x86_64]
       --patch-version <PATCH_VERSION>          Patch version [default: 1]
-      --patch-description <PATCH_DESCRIPTION>  Patch description [default: None]
+      --patch-description <PATCH_DESCRIPTION>  Patch description [default: (none)]
       --target-name <TARGET_NAME>              Patch target name
   -t, --target-elfname <TARGET_ELFNAME>        Patch target executable name
+      --target-arch <TARGET_ARCH>              parch target architecture
+      --target-epoch <TARGET_EPOCH>            Patch target epoch
       --target-version <TARGET_VERSION>        Patch target version
       --target-release <TARGET_RELEASE>        Patch target release
       --target-license <TARGET_LICENSE>        Patch target license
@@ -38,13 +41,13 @@ Options:
 
 必要参数：
 
-| 字段名称         | 字段描述                               |
+| 字段名称          | 字段描述                                |
 | ---------------- | -------------------------------------- |
-| --patch-name    | 补丁名称                               |
-| --source         | 目标软件源码包                         |
-| --debuginfo      | 目标软件调试信息包                     |
-| --target-elfname | 目标软件可执行文件名（内核补丁可忽略） |
-| \<PATCHES>        | 补丁列表                               |
+| --patch-name     | 补丁名称                                |
+| --source         | 目标软件源码包                           |
+| --debuginfo      | 目标软件调试信息包                       |
+| --target-elfname | 目标软件可执行文件名（内核补丁可忽略）      |
+| \<PATCHES>       | 补丁列表                                |
 
 
 
@@ -81,17 +84,18 @@ syscare-build \
 
 补丁元信息中包含以下字段：
 
-| 字段名称    | 字段描述               |
+| 字段名称     | 字段描述                |
 | ----------- | ---------------------- |
-| name        | 补丁名称               |
-| type        | 补丁类型               |
-| target      | 目标软件名             |
-| elf_name    | 目标软件可执行文件名称 |
-| license     | 目标软件许可证         |
-| version     | 补丁版本               |
+| name        | 补丁名称                |
+| type        | 补丁类型                |
+| arch        | 补丁架构                |
+| target      | 目标软件名              |
+| elf_name    | 目标软件可执行文件名称    |
+| license     | 目标软件许可证           |
+| version     | 补丁版本                |
 | release     | 补丁Release            |
-| description | 补丁描述               |
-| builder     | 补丁制作工具版本       |
+| description | 补丁描述                |
+| builder     | 补丁制作工具版本         |
 
 
 
@@ -101,13 +105,14 @@ syscare-build \
 ------------------------------
 name:        CVE-2021-32675
 type:        UserPatch
+arch:        x86_64
 target:      redis-6.2.5-1
 elf_name:    redis-server
 license:     BSD and MIT
 version:     1
 release:     31fc7544
 description: When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users.
-builder:     syscare-build v0.1.0
+builder:     syscare-build 1.0.0
 
 patch list:
 0001-Prevent-unauthenticated-client-from-easily-consuming.patch 31fc7544
