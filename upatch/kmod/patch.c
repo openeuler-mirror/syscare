@@ -9,6 +9,7 @@
 
 #include <linux/printk.h>
 #include <linux/uprobes.h>
+#include <linux/spinlock.h>
 #include <linux/binfmts.h> /* for MAX_ARG_STRLEN */
 #include <linux/slab.h>
 #include <linux/namei.h>
@@ -16,6 +17,7 @@
 #include <linux/elf.h>
 #include <linux/mm.h>
 #include <linux/fs.h>
+#include <linux/vmalloc.h>
 
 #include "common.h"
 #include "patch.h"
@@ -25,6 +27,9 @@
 
 static DEFINE_MUTEX(upatch_entity_lock);
 static LIST_HEAD(upatch_entity_list);
+
+/* lock for all patch entity, since we need free its memory */
+static DEFINE_SPINLOCK(patch_entity_lock);
 
 static struct upatch_entity *__get_upatch_entity(struct inode *uinode)
 {
@@ -45,17 +50,84 @@ struct upatch_entity *upatch_entity_get(struct inode *uinode)
     return entity;
 }
 
-static int __insert_upatch_entity(struct inode *binary, struct inode *patch)
+void __remove_patch_entity(struct patch_entity *patch_entity)
 {
-    struct upatch_entity *entity;
+    if (patch_entity->patch_buff)
+        vm_munmap((unsigned long)patch_entity->patch_buff, patch_entity->patch_size);
+    patch_entity->patch_buff = NULL;
+    patch_entity->patch_size = 0;
+    kfree(patch_entity);
+}
+
+/* After put, holder should never use this memory */
+void upatch_put_patch_entity(struct patch_entity *patch_entity)
+{
+    if (patch_entity == NULL)
+        return;
+
+    spin_lock(&patch_entity_lock);
+    patch_entity->ref --;
+    if (patch_entity->ref == 0)
+        __remove_patch_entity(patch_entity);
+    spin_unlock(&patch_entity_lock);
+}
+
+void upatch_get_patch_entity(struct patch_entity *patch_entity)
+{
+    if (patch_entity == NULL)
+        return;
+
+    spin_lock(&patch_entity_lock);
+    patch_entity->ref ++;
+    spin_unlock(&patch_entity_lock);
+}
+
+int upatch_init_patch_entity(struct patch_entity *patch_entity, struct file *patch)
+{
+    int ret;
+
+    if (patch == NULL)
+        return 0;
+
+    patch_entity->ref = 1;
+    patch_entity->patch_size = i_size_read(file_inode(patch));
+    patch_entity->patch_buff = vmalloc(patch_entity->patch_size);
+    if (!patch_entity->patch_buff)
+        return -ENOMEM;
+
+    ret = kernel_read(patch, patch_entity->patch_buff, patch_entity->patch_size, 0);
+    if (ret != patch_entity->patch_size) {
+        pr_err("read patch file for entity failed. \n");
+        vm_munmap((unsigned long)patch_entity->patch_buff, patch_entity->patch_size);
+        return -ENOEXEC;
+    }
+    return 0;
+}
+
+static int __insert_upatch_entity(struct file *binary, struct file *patch)
+{
+    struct upatch_entity *entity = NULL;
+    int err;
 
     entity = kzalloc(sizeof(*entity), GFP_KERNEL);
     if (!entity)
         return -ENOMEM;
 
-    entity->binary = binary;
-    entity->set_patch = patch;
+    entity->patch_entity = kzalloc(sizeof(*entity->patch_entity), GFP_KERNEL);
+    if (!entity->patch_entity) {
+        err = -ENOMEM;
+        goto err_out;
+    }
+
+    err = upatch_init_patch_entity(entity->patch_entity, patch);
+    if (err) {
+        err = -ENOMEM;
+        goto err_out;
+    }
+
+    entity->set_patch = file_inode(patch);
     entity->set_status = UPATCH_STATE_ATTACHED;
+    entity->binary = file_inode(binary);
 
     mutex_init(&entity->entity_status_lock);
     INIT_LIST_HEAD(&entity->offset_list);
@@ -64,19 +136,45 @@ static int __insert_upatch_entity(struct inode *binary, struct inode *patch)
     /* when everything is ok, add it to the list */
     list_add(&entity->list, &upatch_entity_list);
     return 0;
+
+err_out:
+    if (entity && entity->patch_entity)
+        __remove_patch_entity(entity->patch_entity);
+    if (entity && entity->patch_entity)
+        kfree(entity->patch_entity);
+    if (entity)
+        kfree(entity);
+    return err;
 }
 
-static int __update_upatch_entity(struct upatch_entity *entity, struct inode *patch)
+static int __update_upatch_entity(struct upatch_entity *entity, struct file *patch)
 {
-    /* if lock upatch_entity_lock necessary, always before entity_status_lock */
+    int ret;
+
+    if (patch == NULL)
+        return -EINVAL;
+
+    /* upatch_entity_lock > entity_status_lock > patch_entity_lock */
     mutex_lock(&entity->entity_status_lock);
-    entity->set_patch = patch;
+
+    upatch_put_patch_entity(entity->patch_entity);
+    entity->patch_entity = NULL;
+
+    entity->patch_entity = kzalloc(sizeof(*entity->patch_entity), GFP_KERNEL);
+    ret = upatch_init_patch_entity(entity->patch_entity, patch);
+    if (ret != 0) {
+        kfree(entity->patch_entity);
+        goto out;
+    }
+
+    entity->set_patch = file_inode(patch);
     entity->set_status = UPATCH_STATE_ATTACHED;
+out:
     mutex_unlock(&entity->entity_status_lock);
-    return 0;
+    return ret;
 }
 
-static int update_upatch_entity(struct inode *binary, struct inode *patch)
+static int update_upatch_entity(struct file *binary, struct file *patch)
 {
     int ret;
     struct upatch_entity *entity;
@@ -85,7 +183,7 @@ static int update_upatch_entity(struct inode *binary, struct inode *patch)
         return -EINVAL;
 
     mutex_lock(&upatch_entity_lock);
-    entity = __get_upatch_entity(binary);
+    entity = __get_upatch_entity(file_inode(binary));
     if (entity)
         ret = __update_upatch_entity(entity, patch);
     else
@@ -139,26 +237,6 @@ static bool check_upatch(Elf_Ehdr *ehdr)
         return false;
 
     return true;
-}
-
-static int do_module_load(struct upatch_entity *entity, struct file *binary_file,
-    struct upatch_load_info *info)
-{
-    int ret;
-    struct file *patch_file = NULL;
-
-    patch_file = d_open_inode(entity->set_patch);
-    if (!patch_file || IS_ERR(patch_file)) {
-        pr_err("open patch inode failed \n");
-        ret = -ENOEXEC;
-        goto out;
-    }
-
-    ret = upatch_load(binary_file, patch_file, info);
-out:
-    if (patch_file && !IS_ERR(patch_file))
-        fput(patch_file);
-    return ret;
 }
 
 static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
@@ -237,6 +315,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
 
     enum upatch_module_state set_status;
     struct inode *set_patch;
+    struct patch_entity *patch_entity = NULL;
 
     pc = instruction_pointer(regs);
 
@@ -259,6 +338,8 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     mutex_lock(&entity->entity_status_lock);
     set_status = entity->set_status;
     set_patch = entity->set_patch;
+    patch_entity = entity->patch_entity;
+    upatch_get_patch_entity(patch_entity);
     mutex_unlock(&entity->entity_status_lock);
 
     upatch_mod = upatch_module_get_or_create(entity, task_pid_nr(current));
@@ -297,7 +378,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     }
 
     /* we can be sure module->real_patch == set_patch/NULL  */
-    if (need_resolve && do_module_load(entity, binary_file, &info)) {
+    if (need_resolve && upatch_load(binary_file, set_patch, patch_entity, &info)) {
         pr_err("load patch failed \n");
         goto out_unlock;
     }
@@ -310,6 +391,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
 out_unlock:
     mutex_unlock(&upatch_mod->module_status_lock);
 out:
+    upatch_put_patch_entity(patch_entity);
     return ret;
 }
 
@@ -427,7 +509,7 @@ static int handle_upatch_funcs(struct file *binary_file, struct file *patch_file
     /* TODO: if failed, we need clean this entity */
     /* TODO: check if other patch has taken effect */
     /* before uprobe works, we must set upatch entity first */
-    ret = update_upatch_entity(file_inode(binary_file), file_inode(patch_file));
+    ret = update_upatch_entity(binary_file, patch_file);
     if (ret) {
         pr_err("update upatch entity failed - %d \n", ret);
         goto out;
@@ -571,8 +653,8 @@ out:
     if (eshdrs)
         kfree(eshdrs);
     if (patch_file && !IS_ERR(patch_file))
-        fput(patch_file);
+        filp_close(patch_file, NULL);
     if (binary_file && !IS_ERR(binary_file))
-        fput(binary_file);
+        filp_close(binary_file, NULL);
     return ret;
 }

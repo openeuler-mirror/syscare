@@ -883,13 +883,18 @@ static int complete_formation(struct upatch_module *mod, struct inode *patch)
 }
 
 /* The main idea is from insmod */
-int upatch_load(struct file *binary_file, struct file *patch_file,
-    struct upatch_load_info *info)
+int upatch_load(struct file *binary_file, struct inode *set_patch,
+    struct patch_entity *patch_entity, struct upatch_load_info *info)
 {
     int err;
-    loff_t offset;
     elf_addr_t min_addr;
     struct upatch_module *mod;
+
+    if (patch_entity == NULL) {
+        pr_err("invalid patch entity \n");
+        err = -EINVAL;
+        goto free_hdr;
+    }
 
     min_addr = calculate_load_address(binary_file, true);
     if (min_addr == -1) {
@@ -913,21 +918,15 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
 
     info->running_elf.load_info = info;
 
-    info->len = i_size_read(file_inode(patch_file));
+    info->len = patch_entity->patch_size;
     info->hdr = vmalloc(info->len);
     if (!info->hdr) {
         err = -ENOMEM;
         goto free_hdr;
     }
 
-    offset = 0;
     /* read patch file into kernel memory */
-    err = kernel_read(patch_file, info->hdr, info->len, &offset);
-    if (err != info->len) {
-        pr_err("read kernel failed - %d \n", err);
-        err = -EINVAL;
-        goto free_hdr;
-    }
+    memcpy(info->hdr, patch_entity->patch_buff, info->len);
 
     err = patch_header_check(info);
     if (err) {
@@ -969,7 +968,7 @@ int upatch_load(struct file *binary_file, struct file *patch_file,
     if (err < 0)
         goto free_module;
 
-    err = complete_formation(mod, file_inode(patch_file));
+    err = complete_formation(mod, set_patch);
     if (err < 0)
         goto free_module;
 

@@ -90,15 +90,18 @@ static int update_status(unsigned long user_addr,
         entity->set_status = status;
     }
 
-    if (entity->set_status == UPATCH_STATE_REMOVED)
+    if (entity->set_status == UPATCH_STATE_REMOVED) {
+        upatch_put_patch_entity(entity->patch_entity);
+        entity->patch_entity = NULL;
         entity->set_patch = NULL;
+    }
 
     ret = 0;
 out_lock:
     mutex_unlock(&entity->entity_status_lock);
 out:
     if (elf_file && !IS_ERR(elf_file))
-        fput(elf_file);
+        filp_close(elf_file, NULL);
     return ret;
 }
 
@@ -127,7 +130,7 @@ static int check_status(unsigned long user_addr)
     mutex_unlock(&entity->entity_status_lock);
 out:
     if (elf_file && !IS_ERR(elf_file))
-        fput(elf_file);
+        filp_close(elf_file, NULL);
     return ret;
 }
 

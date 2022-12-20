@@ -90,6 +90,12 @@ struct uprobe_offset {
     struct list_head list;
 };
 
+struct patch_entity {
+    unsigned int ref;
+    void *patch_buff;
+    size_t patch_size;
+};
+
 struct upatch_entity {
     struct inode *binary;
     struct list_head list;
@@ -98,8 +104,11 @@ struct upatch_entity {
     struct mutex entity_status_lock;
 
     /* used to handle command */
-    struct inode *set_patch;
     enum upatch_module_state set_status;
+    struct inode *set_patch;
+
+    /* sync with set_patch */
+    struct patch_entity *patch_entity;
 
     struct list_head offset_list;
     struct list_head module_list;
@@ -144,9 +153,12 @@ struct upatch_load_info {
 struct upatch_entity *upatch_entity_get(struct inode *);
 struct upatch_module *upatch_module_get_or_create(struct upatch_entity *, pid_t);
 void upatch_module_deallocate(struct upatch_module *);
+void upatch_put_patch_entity(struct patch_entity *);
+void upatch_get_patch_entity(struct patch_entity *);
 
 /* management releated */
 int upatch_attach(const char *, const char *);
-int upatch_load(struct file *, struct file *, struct upatch_load_info *);
+int upatch_load(struct file *, struct inode *, struct patch_entity *,
+    struct upatch_load_info *);
 
 #endif /* _UPATCH_PATCH_H */

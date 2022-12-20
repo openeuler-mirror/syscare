@@ -669,7 +669,7 @@ static int elf_check(char *elf_path, loff_t *entry_offset)
 
     ret = __elf_check(file, entry_offset);
 put_file:
-    fput(file);
+    filp_close(file, NULL);
 out:
     return ret;
 }

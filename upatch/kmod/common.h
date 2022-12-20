@@ -20,8 +20,6 @@ int copy_para_from_user(unsigned long, char *, size_t);
 
 struct file *get_binary_file_from_addr(struct task_struct *, unsigned long);
 
-struct file *d_open_inode(struct inode *);
-
 static bool inline streql(const char *a, const char *b)
 {
     return strlen(a) == strlen(b) && !strncmp(a, b, strlen(a));
