@@ -1,8 +1,8 @@
-use crate::patch::{PatchName, PatchFile};
+use crate::patch::PatchFile;
 
 pub struct KernelPatchBuilderArguments {
     pub build_root:          String,
-    pub patch_name:          PatchName,
+    pub patch_name:          String,
     pub source_dir:          String,
     pub config:              String,
     pub vmlinux:             String,

@@ -40,7 +40,7 @@ impl SysInitializer {
     }
 }
 
-pub fn get_cpu_arch() -> &'static str {
+pub const fn get_cpu_arch() -> &'static str {
     std::env::consts::ARCH
 }
 

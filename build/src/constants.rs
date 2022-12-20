@@ -1,4 +1,4 @@
-use crate::cmd::ExternCommand;
+use crate::{cmd::ExternCommand, util::sys};
 
 // CLI Strings
 pub const CLI_NAME:                        &str = env!("CARGO_PKG_NAME");
@@ -6,8 +6,9 @@ pub const CLI_VERSION:                     &str = env!("CARGO_PKG_VERSION");
 pub const CLI_DESCRIPTION:                 &str = env!("CARGO_PKG_DESCRIPTION");
 pub const CLI_COMMAND_NAME:                &str = "syscare build";
 pub const CLI_LOG_FILE_NAME:               &str = "build.log";
+pub const CLI_DEFAULT_PATCH_ARCH:          &str = sys::get_cpu_arch();
 pub const CLI_DEFAULT_PATCH_VERSION:       &str = "1";
-pub const CLI_DEFAULT_PATCH_DESCRIPTION:   &str = "None";
+pub const CLI_DEFAULT_PATCH_DESCRIPTION:   &str = "(none)";
 pub const CLI_DEFAULT_WORKDIR:             &str = ".";
 pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
 pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
@@ -34,7 +35,7 @@ pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
 pub const PKG_FILE_EXTENSION:               &str = "rpm";
 pub const PKG_FLAG_PATCH_BINARY:            &str = "patch";
 pub const PKG_FLAG_PATCHED_SOURCE:          &str = "patched";
-pub const PKG_FLAG_NO_SOURCE_PKG:           &str = "(none)";
+pub const PKG_FLAG_NONE:                    &str = "(none)";
 pub const PKG_VERSION_FILE_NAME:            &str = "syscare-patch-version";
 pub const PKG_TARGET_FILE_NAME:             &str = "syscare-patch-target";
 pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";

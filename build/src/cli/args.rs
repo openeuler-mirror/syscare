@@ -10,6 +10,10 @@ pub struct CliArguments {
     #[arg(short='n', long)]
     pub patch_name: String,
 
+    /// Patch architecture
+    #[arg(long, default_value=CLI_DEFAULT_PATCH_ARCH)]
+    pub patch_arch: String,
+
     /// Patch version
     #[arg(long, default_value=CLI_DEFAULT_PATCH_VERSION)]
     pub patch_version: String,
@@ -25,6 +29,14 @@ pub struct CliArguments {
     /// Patch target executable name
     #[arg(short, long)]
     pub target_elfname: Option<String>,
+
+    /// parch target architecture
+    #[arg(long)]
+    pub target_arch: Option<String>,
+
+    /// Patch target epoch
+    #[arg(long)]
+    pub target_epoch: Option<String>,
 
     /// Patch target version
     #[arg(long)]

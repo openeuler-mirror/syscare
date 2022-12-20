@@ -18,7 +18,7 @@ impl KernelPatchBuilder {
 
     fn parse_arg_list<'a>(&self, args: &'a KernelPatchBuilderArguments) -> Vec<&'a str> {
         let mut arg_list = vec![
-            "--name",      args.patch_name.get_name(),
+            "--name",      args.patch_name.as_str(),
             "--sourcedir", args.source_dir.as_str(),
             "--config",    args.config.as_str(),
             "--vmlinux",   args.vmlinux.as_str(),
@@ -62,15 +62,15 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
         let kernel_config = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
         debug!("kernel config: '{}'", kernel_config);
 
-        let vmlinux_file = KernelPatchHelper::find_vmlinux_file(debug_pkg_dir)?;
-        debug!("vmlinux: '{}'", vmlinux_file);
+        let debuginfo_file = KernelPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
+        debug!("debuginfo file: '{}'", debuginfo_file);
 
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),
-            patch_name:          patch_info.get_patch().to_owned(),
+            patch_name:          patch_info.get_name().to_owned(),
             source_dir:          kernel_source_dir,
             config:              kernel_config,
-            vmlinux:             vmlinux_file,
+            vmlinux:             debuginfo_file,
             jobs:                args.kjobs,
             output_dir:          patch_output_dir.to_owned(),
             skip_compiler_check: args.skip_compiler_check,

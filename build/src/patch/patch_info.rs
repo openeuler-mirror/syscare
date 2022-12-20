@@ -6,60 +6,10 @@ use lazy_static::*;
 
 use crate::constants::*;
 use crate::log::*;
-use crate::util::{sys, fs};
+use crate::util::fs;
 
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
-
-#[derive(Clone)]
-#[derive(Debug)]
-pub struct PatchName {
-    name:    String,
-    version: String,
-    release: String,
-}
-
-impl PatchName {
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn get_version(&self) -> &str {
-        &self.version
-    }
-
-    pub fn get_release(&self) -> &str {
-        &self.release
-    }
-}
-
-impl std::fmt::Display for PatchName {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}-{}-{}", self.get_name(), self.get_version(), self.get_release()))
-    }
-}
-
-impl std::str::FromStr for PatchName {
-    type Err = std::io::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let str_slice = s.split('-').collect::<Vec<&str>>();
-        if str_slice.len() != 3 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Parse patch name failed"),
-            ));
-        }
-
-        Ok(Self {
-            name:    str_slice[0].to_owned(),
-            version: str_slice[1].to_owned(),
-            release: str_slice[2].to_owned(),
-        })
-    }
-}
-
-pub type PatchTargetName = PatchName;
 
 #[derive(Clone, Copy)]
 #[derive(Debug)]
@@ -167,31 +117,39 @@ impl PatchFile {
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct PatchInfo {
-    patch:           PatchName,
-    patch_type:      PatchType,
-    patch_arch:      String,
-    target:          PatchTargetName,
+    name:            String,
+    kind:            PatchType,
+    version:         String,
+    release:         String,
+    target:          PackageInfo,
     target_elf_name: String,
-    license:         String,
     description:     String,
     builder:         String,
     file_list:       Vec<PatchFile>,
 }
 
 impl PatchInfo {
-    pub fn get_patch(&self) -> &PatchName {
-        &self.patch
+    pub fn get_name(&self) -> &str {
+        &self.name
     }
 
-    pub fn get_patch_type(&self) -> PatchType {
-        self.patch_type
+    pub fn get_type(&self) -> PatchType {
+        self.kind
     }
 
-    pub fn get_patch_arch(&self) -> &str {
-        &self.patch_arch
+    pub fn get_arch(&self) -> &str {
+        self.target.get_arch()
     }
 
-    pub fn get_target(&self) -> &PatchTargetName {
+    pub fn get_version(&self) -> &str {
+        &self.version
+    }
+
+    pub fn get_release(&self) -> &str {
+        &self.release
+    }
+
+    pub fn get_target(&self) -> &PackageInfo {
         &self.target
     }
 
@@ -200,7 +158,7 @@ impl PatchInfo {
     }
 
     pub fn get_license(&self) -> &str {
-        &self.license
+        &self.target.get_license()
     }
 
     pub fn get_description(&self) -> &str {
@@ -217,16 +175,16 @@ impl PatchInfo {
 }
 
 impl PatchInfo {
-    fn parse_patch(args: &CliArguments) -> std::io::Result<PatchName> {
-        Ok(PatchName {
-            name:    args.patch_name.to_owned(),
-            version: args.patch_version.to_owned(),
-            release: fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string(),
-        })
+    fn parse_patch_name(args: &CliArguments) -> String {
+        args.patch_name.to_owned()
     }
 
-    fn parse_patch_arch() -> String {
-        sys::get_cpu_arch().to_owned()
+    fn parse_patch_version(args: &CliArguments) -> String {
+        args.patch_version.to_owned()
+    }
+
+    fn parse_patch_release(args: &CliArguments) -> std::io::Result<String> {
+        Ok(fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string())
     }
 
     fn parse_patch_type(pkg_info: &PackageInfo) -> PatchType {
@@ -236,18 +194,17 @@ impl PatchInfo {
         }
     }
 
-    fn parse_license(args: &CliArguments) -> String {
-        args.target_license.as_ref()
-            .expect("Parse target license failed")
-            .to_owned()
-    }
-
-    fn parse_target(args: &CliArguments) -> PatchName {
-        PatchName {
-            name:    args.target_name.as_ref().expect("Parse target name failed").to_owned(),
-            version: args.target_version.as_ref().expect("Parse target version failed").to_owned(),
-            release: args.target_release.as_ref().expect("Parse target release failed").to_owned(),
-        }
+    fn parse_target(args: &CliArguments) -> std::io::Result<PackageInfo> {
+        let query_str = format!("{}|{}|{}|{}|{}|{}|{}",
+            args.target_name.as_ref().expect("Parse target name failed").to_owned(),
+            args.target_arch.as_ref().expect("Parse target arch failed").to_owned(),
+            args.target_epoch.as_ref().expect("Parse target epoch failed").to_owned(),
+            args.target_version.as_ref().expect("Parse target version failed").to_owned(),
+            args.target_release.as_ref().expect("Parse target release failed").to_owned(),
+            args.target_license.as_ref().expect("Parse target license failed").to_owned(),
+            PKG_FLAG_NONE
+        );
+        query_str.parse::<PackageInfo>()
     }
 
     fn parse_target_elf_name(args: &CliArguments) -> String {
@@ -278,12 +235,12 @@ impl PatchInfo {
 
     pub fn parse_from(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
         Ok(PatchInfo {
-            patch:           Self::parse_patch(args)?,
-            patch_type:      Self::parse_patch_type(pkg_info),
-            patch_arch:      Self::parse_patch_arch(),
-            target:          Self::parse_target(args),
+            name:            Self::parse_patch_name(args),
+            version:         Self::parse_patch_version(args),
+            release:         Self::parse_patch_release(args)?,
+            kind:            Self::parse_patch_type(pkg_info),
+            target:          Self::parse_target(args)?,
             target_elf_name: Self::parse_target_elf_name(args),
-            license:         Self::parse_license(args),
             description:     Self::parse_description(args),
             builder:         Self::parse_builder(),
             file_list:       Self::parse_file_list(args)?
@@ -293,14 +250,14 @@ impl PatchInfo {
 
 impl std::fmt::Display for PatchInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("name:        {}\n", self.get_patch().get_name()))?;
-        f.write_fmt(format_args!("type:        {}\n", self.get_patch_type()))?;
-        f.write_fmt(format_args!("arch:        {}\n", self.get_patch_arch()))?;
-        f.write_fmt(format_args!("target:      {}\n", self.get_target()))?;
+        f.write_fmt(format_args!("name:        {}\n", self.get_name()))?;
+        f.write_fmt(format_args!("type:        {}\n", self.get_type()))?;
+        f.write_fmt(format_args!("arch:        {}\n", self.get_arch()))?;
+        f.write_fmt(format_args!("target:      {}\n", self.get_target().get_simple_name()))?;
         f.write_fmt(format_args!("elf_name:    {}\n", self.get_target_elf_name()))?;
         f.write_fmt(format_args!("license:     {}\n", self.get_license()))?;
-        f.write_fmt(format_args!("version:     {}\n", self.get_patch().get_version()))?;
-        f.write_fmt(format_args!("release:     {}\n", self.get_patch().get_release()))?;
+        f.write_fmt(format_args!("version:     {}\n", self.get_version()))?;
+        f.write_fmt(format_args!("release:     {}\n", self.get_release()))?;
         f.write_fmt(format_args!("description: {}\n", self.get_description()))?;
         f.write_fmt(format_args!("builder:     {}\n", self.get_builder()))?;
         f.write_str("\npatch list:")?;

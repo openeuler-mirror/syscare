@@ -30,14 +30,13 @@ impl RpmBuilder {
         let rpm_source_dir = self.build_root.sources_dir();
         let version_file_path = format!("{}/{}", rpm_source_dir, PKG_VERSION_FILE_NAME);
         let target_file_path  = format!("{}/{}", rpm_source_dir, PKG_TARGET_FILE_NAME);
-
         fs::write_string_to_file(
             version_file_path,
-            patch_info.get_patch().get_version()
+            patch_info.get_version()
         )?;
         fs::write_string_to_file(
             target_file_path,
-            patch_info.get_target().to_string().as_str()
+            &patch_info.get_target().to_query_str()
         )?;
 
         Ok(())

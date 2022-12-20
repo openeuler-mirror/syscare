@@ -10,14 +10,14 @@ pub struct PatchBuilderFactory;
 
 impl PatchBuilderFactory {
     pub fn get_builder(patch_info: &PatchInfo) -> Box<dyn PatchBuilder> {
-        match patch_info.get_patch_type() {
+        match patch_info.get_type() {
             PatchType::KernelPatch => Box::new(KernelPatchBuilder::new()),
             PatchType::UserPatch   => Box::new(UserPatchBuilder::new()),
         }
     }
 
     pub fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        match patch_info.get_patch_type() {
+        match patch_info.get_type() {
             PatchType::KernelPatch => KernelPatchBuilder::parse_args(patch_info, workdir, args),
             PatchType::UserPatch   => UserPatchBuilder::parse_args(patch_info, workdir, args),
         }

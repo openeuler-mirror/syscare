@@ -12,16 +12,15 @@ pub struct RpmSpecHelper;
 
 impl RpmSpecHelper {
     fn create_new_release_tag(orig_release_tag: RpmSpecTag, patch_info: &PatchInfo) -> RpmSpecTag {
-        let patch  = patch_info.get_patch();
         let target = patch_info.get_target();
 
         let tag_name  = orig_release_tag.get_name().to_string();
         let tag_value = format!("{}.{}.{}.{}.{}",
             target.get_release(),
             PKG_FLAG_PATCHED_SOURCE,
-            patch.get_name(),
-            patch.get_version(),
-            patch.get_release()
+            patch_info.get_name(),
+            patch_info.get_version(),
+            patch_info.get_release()
         );
 
         RpmSpecTag::new_tag(tag_name, tag_value)

@@ -4,14 +4,14 @@ use regex::Regex;
 use crate::package::{PackageInfo, PackageType};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 
-use crate::patch::{PatchInfo, PatchName};
+use crate::patch::PatchInfo;
 use crate::patch::{PatchHelper, PatchBuilderFactory};
 
 use crate::log::{Logger, LevelFilter};
 use crate::log::{info, warn, error};
 
 use crate::constants::*;
-use crate::util::fs;
+use crate::util::{sys, fs};
 
 use super::args::CliArguments;
 use super::workdir::CliWorkDir;
@@ -130,6 +130,8 @@ impl PatchBuildCLI {
         info!("------------------------------\n");
 
         if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
+           (src_pkg_info.get_arch()    != dbg_pkg_info.get_arch())    ||
+           (src_pkg_info.get_epoch()   != dbg_pkg_info.get_epoch())   ||
            (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
            (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
             return Err(std::io::Error::new(
@@ -182,19 +184,22 @@ impl PatchBuildCLI {
         let patch_target_file = fs::find_file(pkg_source_dir, PKG_TARGET_FILE_NAME, false, false);
         match &patch_target_file {
             Ok(file_path) => {
-                let patch_target_name = fs::read_file_to_string(file_path)?.parse::<PatchName>()?;
-                args.target_name.get_or_insert(patch_target_name.get_name().to_owned());
-                args.target_version.get_or_insert(patch_target_name.get_version().to_owned());
-                args.target_release.get_or_insert(patch_target_name.get_release().to_owned());
-                args.target_license.get_or_insert(pkg_info.get_license().to_owned());
+                let patch_target = fs::read_file_to_string(file_path)?.parse::<PackageInfo>()?;
+                args.target_name.get_or_insert(patch_target.get_name().to_owned());
+                args.target_arch.get_or_insert(patch_target.get_arch().to_owned());
+                args.target_epoch.get_or_insert(patch_target.get_epoch().to_owned());
+                args.target_version.get_or_insert(patch_target.get_version().to_owned());
+                args.target_release.get_or_insert(patch_target.get_release().to_owned());
             },
             Err(_) => {
                 args.target_name.get_or_insert(pkg_info.get_name().to_owned());
+                args.target_arch.get_or_insert(pkg_info.get_arch().to_owned());
+                args.target_epoch.get_or_insert(pkg_info.get_epoch().to_owned());
                 args.target_version.get_or_insert(pkg_info.get_version().to_owned());
                 args.target_release.get_or_insert(pkg_info.get_release().to_owned());
-                args.target_license.get_or_insert(pkg_info.get_license().to_owned());
             }
         }
+        args.target_license.get_or_insert(pkg_info.get_license().to_owned());
 
         // Collect patch list from patched source package
         if patch_version_file.is_ok() && patch_target_file.is_ok() {
@@ -213,10 +218,19 @@ impl PatchBuildCLI {
     fn check_build_args(&self) -> std::io::Result<()> {
         let args = &self.args;
 
-        if args.target_name.is_none() || args.target_version.is_none() || args.target_release.is_none() {
+        let patch_arch = args.patch_arch.as_str();
+        if patch_arch != sys::get_cpu_arch() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Patch target info is not complete"),
+                format!("Patch arch '{}' is unsupported", patch_arch),
+            ));
+        }
+
+        let target_arch = args.target_arch.as_deref().unwrap();
+        if args.patch_arch.as_str() != target_arch {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Target arch '{}' is not match patch arch '{}'", target_arch, patch_arch),
             ));
         }
 
@@ -225,10 +239,6 @@ impl PatchBuildCLI {
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch target elf name is empty"),
             ));
-        }
-
-        if args.target_license.is_none() {
-            warn!("Warning: Patch target license is not set");
         }
 
         if args.skip_compiler_check {

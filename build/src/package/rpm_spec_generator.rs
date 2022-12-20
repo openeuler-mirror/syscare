@@ -11,43 +11,55 @@ impl RpmSpecGenerator {
     fn parse_pkg_root(patch_info: &PatchInfo) -> String {
         format!("{}/{}",
             PATCH_INSTALL_PATH,
-            patch_info.get_target())
+            patch_info.get_target().get_simple_name())
     }
 
     fn parse_patch_name(patch_info: &PatchInfo) -> String {
-        patch_info.get_patch().get_name().to_owned()
+        patch_info.get_name().to_owned()
     }
 
     fn parse_patch_root(patch_info: &PatchInfo) -> String {
         format!("{}/{}/{}",
             PATCH_INSTALL_PATH,
-            patch_info.get_target(),
-            patch_info.get_patch().get_name())
+            patch_info.get_target().get_simple_name(),
+            patch_info.get_name())
     }
 
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         format!("{}-{}-{}",
             PKG_FLAG_PATCH_BINARY,
-            patch_info.get_target(),
-            patch_info.get_patch().get_name())
+            patch_info.get_target().get_simple_name(),
+            patch_info.get_name())
     }
 
     fn parse_pkg_version(patch_info: &PatchInfo) -> String {
-        patch_info.get_patch().get_version().to_owned()
+        patch_info.get_version().to_owned()
     }
 
     fn parse_pkg_release(patch_info: &PatchInfo) -> String {
-        patch_info.get_patch().get_release().to_owned()
+        patch_info.get_release().to_owned()
     }
 
     fn parse_requires(patch_info: &PatchInfo) -> String {
         let patch_target = patch_info.get_target();
 
-        format!("{} = {}-{}",
-            patch_target.get_name(),
-            patch_target.get_version(),
-            patch_target.get_release()
-        )
+        match patch_target.get_epoch() == PKG_FLAG_NONE {
+            true => {
+                format!("{} = {}-{}",
+                    patch_target.get_name(),
+                    patch_target.get_version(),
+                    patch_target.get_release()
+                )
+            },
+            false => {
+                format!("{} = {}:{}-{}",
+                    patch_target.get_name(),
+                    patch_target.get_epoch(),
+                    patch_target.get_version(),
+                    patch_target.get_release()
+                )
+            }
+        }
     }
 
     fn parse_license(patch_info: &PatchInfo) -> String {
@@ -56,8 +68,8 @@ impl RpmSpecGenerator {
 
     fn parse_summary(patch_info: &PatchInfo) -> String {
         format!("Syscare patch '{}' for {}",
-            patch_info.get_patch().get_name(),
-            patch_info.get_target()
+            patch_info.get_name(),
+            patch_info.get_target().get_simple_name()
         )
     }
 

@@ -32,7 +32,7 @@ impl KernelPatchHelper {
         Ok(fs::stringtify(config_file_path))
     }
 
-    pub fn find_vmlinux_file(directory: &str) -> std::io::Result<String> {
+    pub fn find_debuginfo_file(directory: &str) -> std::io::Result<String> {
         let vmlinux_file_path = fs::find_file(
             directory,
             KERNEL_VMLINUX_FILE,

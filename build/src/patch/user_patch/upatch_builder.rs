@@ -66,7 +66,7 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let build_patched_cmd  = format!("{} --define '_topdir {}' -bc --noprep --noclean {}", RPM_BUILD, pkg_root, spec_file_path);
 
         let builder_args = UserPatchBuilderArguments {
-            name:                 patch_info.get_patch().get_name().to_owned(),
+            name:                 patch_info.get_name().to_owned(),
             build_root:           patch_build_root.to_owned(),
             source_dir:           patch_source_dir,
             elf_name:             patch_info.get_target_elf_name().to_owned(),
