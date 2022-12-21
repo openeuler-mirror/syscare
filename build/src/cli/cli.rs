@@ -98,7 +98,7 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn extract_packages(&self) -> std::io::Result<PackageInfo> {
+    fn extract_packages(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
         info!("Extracting source package");
         let src_pkg_info = RpmExtractor::extract_package(
             &self.args.source,
@@ -129,17 +129,7 @@ impl PatchBuildCLI {
         info!("{}", dbg_pkg_info);
         info!("------------------------------\n");
 
-        if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
-           (src_pkg_info.get_arch()    != dbg_pkg_info.get_arch())    ||
-           (src_pkg_info.get_epoch()   != dbg_pkg_info.get_epoch())   ||
-           (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
-           (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Debuginfo package does not match the source package"),
-            ));
-        }
-        Ok(src_pkg_info)
+        Ok((src_pkg_info, dbg_pkg_info))
     }
 
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
@@ -153,7 +143,7 @@ impl PatchBuildCLI {
         Ok(patch_info)
     }
 
-    fn complete_build_args(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
+    fn complete_build_args(&mut self, pkg_info: &mut PackageInfo) -> std::io::Result<()> {
         let mut args = &mut self.args;
 
         // If the source package is kernel, append target elf name 'vmlinux' to arguments
@@ -190,6 +180,8 @@ impl PatchBuildCLI {
                 args.target_epoch.get_or_insert(patch_target.get_epoch().to_owned());
                 args.target_version.get_or_insert(patch_target.get_version().to_owned());
                 args.target_release.get_or_insert(patch_target.get_release().to_owned());
+                // Override original package info with saved data in package
+                *pkg_info = patch_target;
             },
             Err(_) => {
                 args.target_name.get_or_insert(pkg_info.get_name().to_owned());
@@ -215,8 +207,19 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn check_build_args(&self) -> std::io::Result<()> {
+    fn check_build_args(&self, src_pkg_info: &PackageInfo, dbg_pkg_info: &PackageInfo) -> std::io::Result<()> {
         let args = &self.args;
+
+        if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
+           (src_pkg_info.get_arch()    != dbg_pkg_info.get_arch())    ||
+           (src_pkg_info.get_epoch()   != dbg_pkg_info.get_epoch())   ||
+           (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
+           (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
+                return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Debuginfo package does not match the source package"),
+            ));
+        }
 
         let patch_arch = args.patch_arch.as_str();
         if patch_arch != sys::get_cpu_arch() {
@@ -295,12 +298,12 @@ impl PatchBuildCLI {
         info!("==============================");
         info!("{}", CLI_DESCRIPTION);
         info!("==============================\n");
-        let pkg_info = self.extract_packages()?;
-        self.complete_build_args(&pkg_info)?;
+        let (mut src_pkg_info, dbg_pkg_info) = self.extract_packages()?;
+        self.complete_build_args(&mut src_pkg_info)?;
 
-        self.check_build_args()?;
+        self.check_build_args(&src_pkg_info, &dbg_pkg_info)?;
 
-        let patch_info = self.collect_patch_info(&pkg_info)?;
+        let patch_info = self.collect_patch_info(&src_pkg_info)?;
         self.build_patch_package(&patch_info)?;
         self.build_source_package(&patch_info)?;
 

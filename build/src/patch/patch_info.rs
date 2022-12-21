@@ -5,7 +5,6 @@ use std::sync::Mutex;
 use lazy_static::*;
 
 use crate::constants::*;
-use crate::log::*;
 use crate::util::fs;
 
 use crate::package::PackageInfo;
@@ -62,14 +61,18 @@ impl PatchFile {
 
         let file_ext = fs::file_ext(file_path.as_path())?;
         if file_ext != PATCH_FILE_EXTENSION {
-            error!("File {} is not a patch", file_name);
-            return Ok(None);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("File {} is not a patch", file_name)
+            ));
         }
 
         let file_digest = &fs::sha256_digest_file(file_path.as_path())?[..PATCH_VERSION_DIGITS];
         if !file_digests.insert(file_digest.to_owned()) {
-            error!("Patch file '{}' is duplicated", file_name);
-            return Ok(None);
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("File {} is duplicated", file_name)
+            ));
         }
 
         *file_id += 1;
