@@ -30,6 +30,10 @@
 #define ARCH_SHF_SMALL 0
 #endif
 
+#ifndef R_X86_64_REX_GOTPCRELX
+#define R_X86_64_REX_GOTPCRELX 42
+#endif
+
 /* If this is set, the section belongs in the init part of the module */
 #define INIT_OFFSET_MASK (1UL << (BITS_PER_LONG-1))
 
@@ -277,18 +281,15 @@ static void layout_jmptable(struct upatch_module *mod, struct upatch_load_info *
 }
 
 /* TODO: lock for mm */
-unsigned long get_upatch_pole(unsigned long hint, unsigned long size)
+unsigned long get_upatch_pole(unsigned long search, unsigned long size)
 {
-    unsigned long range;
-    unsigned search = hint;
-    struct vm_area_struct *vma = find_vma(current->mm, search);
+    struct vm_area_struct *vma =
+        find_vma_intersection(current->mm, search, search + size);
     while (vma) {
         search = vma->vm_end;
-        range = vma->vm_next->vm_start - vma->vm_end;
-        if (range > size)
-            break;
-        vma = vma->vm_next;
+        vma = find_vma_intersection(current->mm, search, search + size);
     }
+    pr_debug("find search address at 0x%lx \n", search);
     return search;
 }
 
@@ -341,11 +342,13 @@ void upatch_module_deallocate(struct upatch_module *mod)
 static int upatch_module_alloc(struct upatch_load_info *info,
     struct upatch_module_layout *layout, unsigned long user_limit)
 {
-    layout->base = __upatch_module_alloc(info->running_elf.load_min, layout->size);
+    unsigned long hint = info->running_elf.load_min + info->running_elf.load_bias;
+
+    layout->base = __upatch_module_alloc(hint, layout->size);
     if (!layout->base)
         return -ENOMEM;
 
-    if ((unsigned long)layout->base - info->running_elf.load_min >= user_limit) {
+    if ((unsigned long)layout->base - hint >= user_limit) {
         pr_err("out of range limit \n");
         __upatch_module_memfree(layout->base, layout->size);
         return -ENOMEM;
@@ -515,6 +518,29 @@ static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned lon
         + index * sizeof(struct upatch_jmp_table_entry));
 }
 
+/*
+ * Jmp tabale records address and used call instruction to execute it.
+ * So, we need 'Inst' and 'addr'
+ * GOT only need record address and resolve it by [got_addr].
+ * To simplify design, use same table for both jmp table and GOT.
+ */
+static unsigned long setup_got_table(struct upatch_load_info *info, unsigned long jmp_addr)
+{
+    struct upatch_jmp_table_entry *table =
+        info->mod->core_layout.kbase + info->jmp_offs;
+    unsigned int index = info->jmp_cur_entry;
+    if (index >= info->jmp_max_entry) {
+        pr_err("got table overflow \n");
+        return 0;
+    }
+
+    table[index].inst = jmp_addr;
+    table[index].addr = 0xffffffff;
+    info->jmp_cur_entry ++;
+    return (unsigned long)(info->mod->core_layout.base + info->jmp_offs
+        + index * sizeof(struct upatch_jmp_table_entry));
+}
+
 static unsigned long
 resolve_symbol(struct running_elf_info *elf_info, const char *name)
 {
@@ -647,14 +673,15 @@ static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *
 }
 
 /* TODO: arch releated */
-int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
-		   unsigned int symindex, unsigned int relsec, struct upatch_module *me)
+int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
+    const char *strtab, unsigned int symindex,
+    unsigned int relsec, struct upatch_module *me)
 {
     unsigned int i;
     Elf64_Rela *rel = (void *)sechdrs[relsec].sh_addr;
     Elf64_Sym *sym;
     void *loc, *real_loc;
-    u64 val;
+    u64 val, got;
     const char *name;
 
     pr_debug("Applying relocate section %u to %u\n",
@@ -702,7 +729,15 @@ int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
                 && (ELF_ST_TYPE(sym->st_info) != STT_SECTION))
 				goto overflow;
 			break;
-        		case R_X86_64_PC32:
+        case R_X86_64_REX_GOTPCRELX:
+            /* get GOT address */
+            got = setup_got_table(info, sym->st_value);
+            if (got == 0)
+                goto overflow;
+            /* G + GOT + A*/
+            val = got + rel[i].r_addend;
+            fallthrough;
+        case R_X86_64_PC32:
 		case R_X86_64_PLT32:
 			if (*(u32 *)loc != 0)
 				goto invalid_relocation;
@@ -757,7 +792,7 @@ static int apply_relocations(struct upatch_module *mod, struct upatch_load_info 
             return -EPERM;
         } else if (info->sechdrs[i].sh_type == SHT_RELA) {
             pr_debug("do rela relocations for %s \n", name);
-            err = apply_relocate_add(info->sechdrs, info->strtab,
+            err = apply_relocate_add(info, info->sechdrs, info->strtab,
                 info->index.sym, i, mod);
         }
 
