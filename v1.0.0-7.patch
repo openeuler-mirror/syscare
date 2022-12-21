@@ -1,7 +1,7 @@
 From 81008c77dba79eb311ad537051086f10ba1ccd22 Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjuna@gmail.com>
 Date: Tue, 13 Dec 2022 16:08:45 +0800
-Subject: [PATCH 01/15] kmod: make it normal when using hack-gcc without env
+Subject: [PATCH 01/20] kmod: make it normal when using hack-gcc without env
 
 Signed-off-by: Longjun Luo <luolongjuna@gmail.com>
 ---
@@ -30,7 +30,7 @@ index 87cdc3e..9f45cb7 100755
 From 024e9cd683055ca1702710a60d9c8abebfdbcbb3 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Wed, 14 Dec 2022 01:37:26 +0000
-Subject: [PATCH 02/15] manager: Allow apply to actived kernel patch
+Subject: [PATCH 02/20] manager: Allow apply to actived kernel patch
 
 Signed-off-by: snoweay <snoweay@163.com>
 ---
@@ -57,7 +57,7 @@ index 6e6c86a..8ee3bd0 100755
 From 5874b79701fe7854575f710277f241a63a50afeb Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 14 Dec 2022 03:34:01 +0800
-Subject: [PATCH 03/15] build: only 'NOT-APPLIED' patch package can be removed
+Subject: [PATCH 03/20] build: only 'NOT-APPLIED' patch package can be removed
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -86,7 +86,7 @@ index 9781eb1..917e12e 100644
 From 1506b703935004b04fbf73f8875f33b5a8b8fe87 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 14 Dec 2022 23:50:03 +0800
-Subject: [PATCH 04/15] build: fix 'kernel patch cannot be insmod during system
+Subject: [PATCH 04/20] build: fix 'kernel patch cannot be insmod during system
  start' issue
 
 1. change ko file(s) security context type to 'modules_object_t' after
@@ -119,7 +119,7 @@ index 917e12e..f76e109 100644
 From dc73e5833888096518321e6ba15503d9806199fb Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjuna@gmail.com>
 Date: Wed, 14 Dec 2022 12:43:46 +0800
-Subject: [PATCH 05/15] kmod: adjust order of the misc device (un)register
+Subject: [PATCH 05/20] kmod: adjust order of the misc device (un)register
 
 After all init finished, then provides the device
 for users.
@@ -186,7 +186,7 @@ index c96836b..d1328aa 100644
 From d54264a83c2cc997ebaba0be8c32fc90682a9c04 Mon Sep 17 00:00:00 2001
 From: lzwycc <lzw32321226@163.com>
 Date: Wed, 14 Dec 2022 19:44:23 +0800
-Subject: [PATCH 06/15] kmod: unregister when rmmod upatch
+Subject: [PATCH 06/20] kmod: unregister when rmmod upatch
 
 unregister compiler and assembler when rmmod upatch
 
@@ -327,7 +327,7 @@ index 9f45cb7..899b83f 100755
 From 8b8a62377a425c273c2a584ff9f299f88b70f0e5 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Thu, 15 Dec 2022 18:34:53 +0800
-Subject: [PATCH 07/15] Revert "build: fix 'kernel patch cannot be insmod
+Subject: [PATCH 07/20] Revert "build: fix 'kernel patch cannot be insmod
  during system start' issue"
 
 This reverts commit 1506b703935004b04fbf73f8875f33b5a8b8fe87.
@@ -357,7 +357,7 @@ index f76e109..917e12e 100644
 From 5171debddcbd632cb25c30d2325f0a655945c0f2 Mon Sep 17 00:00:00 2001
 From: snoweay <snoweay@163.com>
 Date: Thu, 15 Dec 2022 18:37:42 +0800
-Subject: [PATCH 08/15] manager: Set kpatch's scontext to modules_object_t
+Subject: [PATCH 08/20] manager: Set kpatch's scontext to modules_object_t
 
 Signed-off-by: snoweay <snoweay@163.com>
 ---
@@ -425,7 +425,7 @@ index 8ee3bd0..c056f62 100755
 From d8ef956b6e5ee05e95c757fe79a1bde58908efb4 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 16 Dec 2022 19:37:53 +0800
-Subject: [PATCH 09/15] upatch: file searching would not follow symlinks
+Subject: [PATCH 09/20] upatch: file searching would not follow symlinks
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -483,7 +483,7 @@ index 17fd307..9f15dc2 100644
 From 7c61c25746a4f9ef82b3383d093123da7888c532 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 16 Dec 2022 19:42:42 +0800
-Subject: [PATCH 10/15] build: file searching would not follow symlinks
+Subject: [PATCH 10/20] build: file searching would not follow symlinks
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -541,7 +541,7 @@ index 8ac2e9e..3343256 100644
 From 641b7a2cc731cf3a1fe4874ed5cfc51f328b764e Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Sat, 17 Dec 2022 11:51:31 +0800
-Subject: [PATCH 11/15] build: match release of source pkg & debuginfo pkg
+Subject: [PATCH 11/20] build: match release of source pkg & debuginfo pkg
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -580,7 +580,7 @@ index 79dec44..a8980c2 100644
 From bec264ec1ba7eb30c360caa3806c34711e6d8f83 Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjuna@gmail.com>
 Date: Mon, 19 Dec 2022 02:38:34 +0800
-Subject: [PATCH 12/15] upatch: resolve local symbols within upatch-diff
+Subject: [PATCH 12/20] upatch: resolve local symbols within upatch-diff
 
 Symbol resolution will be finished in 3 steps:
 1. local symbols resolved in upatch-diff
@@ -748,7 +748,7 @@ index 0b94def..9427cf3 100644
 From 1158ae346a870bc706e61619dbc8d2178963f49e Mon Sep 17 00:00:00 2001
 From: Longjun Luo <luolongjun@huawei.com>
 Date: Tue, 20 Dec 2022 21:33:15 +0800
-Subject: [PATCH 13/15] kmod: do the patch read within attach
+Subject: [PATCH 13/20] kmod: do the patch read within attach
 
 Since uprobe handler is a soft interrupt handler,
 it is forbidden to call block API in its context.
@@ -1231,7 +1231,7 @@ index f9e1b2e..91b7fb0 100644
 From c49e2351a906d595b686a810d9f8e095e8a8eced Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Tue, 20 Dec 2022 22:17:46 +0800
-Subject: [PATCH 14/15] build: add rpm epoch support
+Subject: [PATCH 14/20] build: add rpm epoch support
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -2046,7 +2046,7 @@ index c716f3d..3bbc8dc 100644
 From 6c5bdd855ecc2409248d98321a898a2b10f79e67 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Tue, 20 Dec 2022 23:01:48 +0800
-Subject: [PATCH 15/15] build: update readme
+Subject: [PATCH 15/20] build: update readme
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -2136,6 +2136,419 @@ index 14493f7..94bb4c1 100644
  
  patch list:
  0001-Prevent-unauthenticated-client-from-easily-consuming.patch 31fc7544
+-- 
+2.33.0
+
+
+From d90bfc405121a4c1293da055e734149c1f8b7cf6 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 21 Dec 2022 12:29:38 +0800
+Subject: [PATCH 16/20] build: fix 'cannot build from patched source package'
+ issue
+
+1. overrides source package info from patched source package
+2. move package matching process from extract_packages() to check_build_args()
+3. treats duplicated patch or illegal patch type as error
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ build/src/cli/cli.rs          | 39 +++++++++++++++++++----------------
+ build/src/patch/patch_info.rs | 13 +++++++-----
+ 2 files changed, 29 insertions(+), 23 deletions(-)
+
+diff --git a/build/src/cli/cli.rs b/build/src/cli/cli.rs
+index d88d830..27b09f1 100644
+--- a/build/src/cli/cli.rs
++++ b/build/src/cli/cli.rs
+@@ -98,7 +98,7 @@ impl PatchBuildCLI {
+         Ok(())
+     }
+ 
+-    fn extract_packages(&self) -> std::io::Result<PackageInfo> {
++    fn extract_packages(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
+         info!("Extracting source package");
+         let src_pkg_info = RpmExtractor::extract_package(
+             &self.args.source,
+@@ -129,17 +129,7 @@ impl PatchBuildCLI {
+         info!("{}", dbg_pkg_info);
+         info!("------------------------------\n");
+ 
+-        if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
+-           (src_pkg_info.get_arch()    != dbg_pkg_info.get_arch())    ||
+-           (src_pkg_info.get_epoch()   != dbg_pkg_info.get_epoch())   ||
+-           (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
+-           (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
+-            return Err(std::io::Error::new(
+-                std::io::ErrorKind::InvalidInput,
+-                format!("Debuginfo package does not match the source package"),
+-            ));
+-        }
+-        Ok(src_pkg_info)
++        Ok((src_pkg_info, dbg_pkg_info))
+     }
+ 
+     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
+@@ -153,7 +143,7 @@ impl PatchBuildCLI {
+         Ok(patch_info)
+     }
+ 
+-    fn complete_build_args(&mut self, pkg_info: &PackageInfo) -> std::io::Result<()> {
++    fn complete_build_args(&mut self, pkg_info: &mut PackageInfo) -> std::io::Result<()> {
+         let mut args = &mut self.args;
+ 
+         // If the source package is kernel, append target elf name 'vmlinux' to arguments
+@@ -190,6 +180,8 @@ impl PatchBuildCLI {
+                 args.target_epoch.get_or_insert(patch_target.get_epoch().to_owned());
+                 args.target_version.get_or_insert(patch_target.get_version().to_owned());
+                 args.target_release.get_or_insert(patch_target.get_release().to_owned());
++                // Override original package info with saved data in package
++                *pkg_info = patch_target;
+             },
+             Err(_) => {
+                 args.target_name.get_or_insert(pkg_info.get_name().to_owned());
+@@ -215,9 +207,20 @@ impl PatchBuildCLI {
+         Ok(())
+     }
+ 
+-    fn check_build_args(&self) -> std::io::Result<()> {
++    fn check_build_args(&self, src_pkg_info: &PackageInfo, dbg_pkg_info: &PackageInfo) -> std::io::Result<()> {
+         let args = &self.args;
+ 
++        if !dbg_pkg_info.get_name().contains(src_pkg_info.get_name()) ||
++           (src_pkg_info.get_arch()    != dbg_pkg_info.get_arch())    ||
++           (src_pkg_info.get_epoch()   != dbg_pkg_info.get_epoch())   ||
++           (src_pkg_info.get_version() != dbg_pkg_info.get_version()) ||
++           (src_pkg_info.get_release() != dbg_pkg_info.get_release()) {
++                return Err(std::io::Error::new(
++                std::io::ErrorKind::InvalidInput,
++                format!("Debuginfo package does not match the source package"),
++            ));
++        }
++
+         let patch_arch = args.patch_arch.as_str();
+         if patch_arch != sys::get_cpu_arch() {
+             return Err(std::io::Error::new(
+@@ -295,12 +298,12 @@ impl PatchBuildCLI {
+         info!("==============================");
+         info!("{}", CLI_DESCRIPTION);
+         info!("==============================\n");
+-        let pkg_info = self.extract_packages()?;
+-        self.complete_build_args(&pkg_info)?;
++        let (mut src_pkg_info, dbg_pkg_info) = self.extract_packages()?;
++        self.complete_build_args(&mut src_pkg_info)?;
+ 
+-        self.check_build_args()?;
++        self.check_build_args(&src_pkg_info, &dbg_pkg_info)?;
+ 
+-        let patch_info = self.collect_patch_info(&pkg_info)?;
++        let patch_info = self.collect_patch_info(&src_pkg_info)?;
+         self.build_patch_package(&patch_info)?;
+         self.build_source_package(&patch_info)?;
+ 
+diff --git a/build/src/patch/patch_info.rs b/build/src/patch/patch_info.rs
+index 98b8ecd..dad27ab 100644
+--- a/build/src/patch/patch_info.rs
++++ b/build/src/patch/patch_info.rs
+@@ -5,7 +5,6 @@ use std::sync::Mutex;
+ use lazy_static::*;
+ 
+ use crate::constants::*;
+-use crate::log::*;
+ use crate::util::fs;
+ 
+ use crate::package::PackageInfo;
+@@ -62,14 +61,18 @@ impl PatchFile {
+ 
+         let file_ext = fs::file_ext(file_path.as_path())?;
+         if file_ext != PATCH_FILE_EXTENSION {
+-            error!("File {} is not a patch", file_name);
+-            return Ok(None);
++            return Err(std::io::Error::new(
++                std::io::ErrorKind::InvalidInput,
++                format!("File {} is not a patch", file_name)
++            ));
+         }
+ 
+         let file_digest = &fs::sha256_digest_file(file_path.as_path())?[..PATCH_VERSION_DIGITS];
+         if !file_digests.insert(file_digest.to_owned()) {
+-            error!("Patch file '{}' is duplicated", file_name);
+-            return Ok(None);
++            return Err(std::io::Error::new(
++                std::io::ErrorKind::InvalidInput,
++                format!("File {} is duplicated", file_name)
++            ));
+         }
+ 
+         *file_id += 1;
+-- 
+2.33.0
+
+
+From 5537cc4e6396c8cccc334996e126ec3e082b15e0 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 21 Dec 2022 16:28:32 +0800
+Subject: [PATCH 17/20] build: add '--skip-cleanup' flag
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ build/src/cli/args.rs  | 4 ++++
+ build/src/cli/cli.rs   | 4 +++-
+ build/src/constants.rs | 1 +
+ 3 files changed, 8 insertions(+), 1 deletion(-)
+
+diff --git a/build/src/cli/args.rs b/build/src/cli/args.rs
+index 583df2c..4917d87 100644
+--- a/build/src/cli/args.rs
++++ b/build/src/cli/args.rs
+@@ -74,6 +74,10 @@ pub struct CliArguments {
+     #[arg(long, default_value=CLI_DEFAULT_SKIP_COMPILER_CHECK)]
+     pub skip_compiler_check: bool,
+ 
++    /// Skip post-build cleanup
++    #[arg(long, default_value=CLI_DEFAULT_SKIP_CLEANUP_FLAG)]
++    pub skip_cleanup: bool,
++
+     /// Provide more detailed info
+     #[arg(short, long, default_value=CLI_DEFAULT_VERBOSE_FLAG)]
+     pub verbose: bool,
+diff --git a/build/src/cli/cli.rs b/build/src/cli/cli.rs
+index 27b09f1..07af853 100644
+--- a/build/src/cli/cli.rs
++++ b/build/src/cli/cli.rs
+@@ -328,6 +328,8 @@ impl PatchBuildCLI {
+             return;
+         }
+ 
+-        self.workdir.remove().ok();
++        if !self.args.skip_cleanup {
++            self.workdir.remove().ok();
++        }
+     }
+ }
+diff --git a/build/src/constants.rs b/build/src/constants.rs
+index c3dff49..87f6bc3 100644
+--- a/build/src/constants.rs
++++ b/build/src/constants.rs
+@@ -12,6 +12,7 @@ pub const CLI_DEFAULT_PATCH_DESCRIPTION:   &str = "(none)";
+ pub const CLI_DEFAULT_WORKDIR:             &str = ".";
+ pub const CLI_DEFAULT_OUTPUT_DIR:          &str = ".";
+ pub const CLI_DEFAULT_SKIP_COMPILER_CHECK: &str = "false";
++pub const CLI_DEFAULT_SKIP_CLEANUP_FLAG:   &str = "false";
+ pub const CLI_DEFAULT_VERBOSE_FLAG:        &str = "false";
+ 
+ // External commands
+-- 
+2.33.0
+
+
+From ece643d23ae16a5c61a4c87de1395f3605834f3e Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 21 Dec 2022 16:28:58 +0800
+Subject: [PATCH 18/20] build: update readme
+
+---
+ build/README.md | 1 +
+ 1 file changed, 1 insertion(+)
+
+diff --git a/build/README.md b/build/README.md
+index 94bb4c1..7714e0b 100644
+--- a/build/README.md
++++ b/build/README.md
+@@ -32,6 +32,7 @@ Options:
+   -o, --output <OUTPUT>                        Generated patch output directory [default: .]
+       --kjobs <N>                              Kernel make jobs [default: 32]
+       --skip-compiler-check                    Skip compiler version check (not recommended)
++      --skip-cleanup                           Skip post-build cleanup
+   -v, --verbose                                Provide more detailed info
+   -h, --help                                   Print help information
+   -V, --version                                Print version information
+-- 
+2.33.0
+
+
+From e52fad8f68b1df70d093dc39a55909829559d07b Mon Sep 17 00:00:00 2001
+From: Longjun Luo <luolongjun@huawei.com>
+Date: Wed, 21 Dec 2022 19:14:35 +0800
+Subject: [PATCH 19/20] kmod: add support for R_X86_64_REX_GOTPCRELX
+
+R_X86_64_REX_GOTPCRELX is calculated by:
+
+G + GOT + A -p.
+
+Signed-off-by: Longjun Luo <luolongjun@huawei.com>
+---
+ upatch/kmod/patch-load.c | 65 ++++++++++++++++++++++++++++++----------
+ 1 file changed, 50 insertions(+), 15 deletions(-)
+
+diff --git a/upatch/kmod/patch-load.c b/upatch/kmod/patch-load.c
+index f753104..2f726c3 100644
+--- a/upatch/kmod/patch-load.c
++++ b/upatch/kmod/patch-load.c
+@@ -30,6 +30,10 @@
+ #define ARCH_SHF_SMALL 0
+ #endif
+ 
++#ifndef R_X86_64_REX_GOTPCRELX
++#define R_X86_64_REX_GOTPCRELX 42
++#endif
++
+ /* If this is set, the section belongs in the init part of the module */
+ #define INIT_OFFSET_MASK (1UL << (BITS_PER_LONG-1))
+ 
+@@ -277,18 +281,15 @@ static void layout_jmptable(struct upatch_module *mod, struct upatch_load_info *
+ }
+ 
+ /* TODO: lock for mm */
+-unsigned long get_upatch_pole(unsigned long hint, unsigned long size)
++unsigned long get_upatch_pole(unsigned long search, unsigned long size)
+ {
+-    unsigned long range;
+-    unsigned search = hint;
+-    struct vm_area_struct *vma = find_vma(current->mm, search);
++    struct vm_area_struct *vma =
++        find_vma_intersection(current->mm, search, search + size);
+     while (vma) {
+         search = vma->vm_end;
+-        range = vma->vm_next->vm_start - vma->vm_end;
+-        if (range > size)
+-            break;
+-        vma = vma->vm_next;
++        vma = find_vma_intersection(current->mm, search, search + size);
+     }
++    pr_debug("find search address at 0x%lx \n", search);
+     return search;
+ }
+ 
+@@ -341,11 +342,13 @@ void upatch_module_deallocate(struct upatch_module *mod)
+ static int upatch_module_alloc(struct upatch_load_info *info,
+     struct upatch_module_layout *layout, unsigned long user_limit)
+ {
+-    layout->base = __upatch_module_alloc(info->running_elf.load_min, layout->size);
++    unsigned long hint = info->running_elf.load_min + info->running_elf.load_bias;
++
++    layout->base = __upatch_module_alloc(hint, layout->size);
+     if (!layout->base)
+         return -ENOMEM;
+ 
+-    if ((unsigned long)layout->base - info->running_elf.load_min >= user_limit) {
++    if ((unsigned long)layout->base - hint >= user_limit) {
+         pr_err("out of range limit \n");
+         __upatch_module_memfree(layout->base, layout->size);
+         return -ENOMEM;
+@@ -515,6 +518,29 @@ static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned lon
+         + index * sizeof(struct upatch_jmp_table_entry));
+ }
+ 
++/*
++ * Jmp tabale records address and used call instruction to execute it.
++ * So, we need 'Inst' and 'addr'
++ * GOT only need record address and resolve it by [got_addr].
++ * To simplify design, use same table for both jmp table and GOT.
++ */
++static unsigned long setup_got_table(struct upatch_load_info *info, unsigned long jmp_addr)
++{
++    struct upatch_jmp_table_entry *table =
++        info->mod->core_layout.kbase + info->jmp_offs;
++    unsigned int index = info->jmp_cur_entry;
++    if (index >= info->jmp_max_entry) {
++        pr_err("got table overflow \n");
++        return 0;
++    }
++
++    table[index].inst = jmp_addr;
++    table[index].addr = 0xffffffff;
++    info->jmp_cur_entry ++;
++    return (unsigned long)(info->mod->core_layout.base + info->jmp_offs
++        + index * sizeof(struct upatch_jmp_table_entry));
++}
++
+ static unsigned long
+ resolve_symbol(struct running_elf_info *elf_info, const char *name)
+ {
+@@ -647,14 +673,15 @@ static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *
+ }
+ 
+ /* TODO: arch releated */
+-int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
+-		   unsigned int symindex, unsigned int relsec, struct upatch_module *me)
++int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
++    const char *strtab, unsigned int symindex,
++    unsigned int relsec, struct upatch_module *me)
+ {
+     unsigned int i;
+     Elf64_Rela *rel = (void *)sechdrs[relsec].sh_addr;
+     Elf64_Sym *sym;
+     void *loc, *real_loc;
+-    u64 val;
++    u64 val, got;
+     const char *name;
+ 
+     pr_debug("Applying relocate section %u to %u\n",
+@@ -702,7 +729,15 @@ int apply_relocate_add(Elf64_Shdr *sechdrs, const char *strtab,
+                 && (ELF_ST_TYPE(sym->st_info) != STT_SECTION))
+ 				goto overflow;
+ 			break;
+-        		case R_X86_64_PC32:
++        case R_X86_64_REX_GOTPCRELX:
++            /* get GOT address */
++            got = setup_got_table(info, sym->st_value);
++            if (got == 0)
++                goto overflow;
++            /* G + GOT + A*/
++            val = got + rel[i].r_addend;
++            fallthrough;
++        case R_X86_64_PC32:
+ 		case R_X86_64_PLT32:
+ 			if (*(u32 *)loc != 0)
+ 				goto invalid_relocation;
+@@ -757,7 +792,7 @@ static int apply_relocations(struct upatch_module *mod, struct upatch_load_info
+             return -EPERM;
+         } else if (info->sechdrs[i].sh_type == SHT_RELA) {
+             pr_debug("do rela relocations for %s \n", name);
+-            err = apply_relocate_add(info->sechdrs, info->strtab,
++            err = apply_relocate_add(info, info->sechdrs, info->strtab,
+                 info->index.sym, i, mod);
+         }
+ 
+-- 
+2.33.0
+
+
+From 5869dca3761942411ff54a443627c21005cef813 Mon Sep 17 00:00:00 2001
+From: Longjun Luo <luolongjuna@gmail.com>
+Date: Wed, 21 Dec 2022 19:26:28 +0800
+Subject: [PATCH 20/20] kmod: add support for R_X86_64_GOTPCRELX
+
+same as R_X86_64_REX_GOTPCRELX
+
+Signed-off-by: Longjun Luo <luolongjuna@gmail.com>
+---
+ upatch/kmod/patch-load.c | 5 +++++
+ 1 file changed, 5 insertions(+)
+
+diff --git a/upatch/kmod/patch-load.c b/upatch/kmod/patch-load.c
+index 2f726c3..ff25e26 100644
+--- a/upatch/kmod/patch-load.c
++++ b/upatch/kmod/patch-load.c
+@@ -30,6 +30,10 @@
+ #define ARCH_SHF_SMALL 0
+ #endif
+ 
++#ifndef R_X86_64_GOTPCRELX
++#define R_X86_64_GOTPCRELX 41
++#endif
++
+ #ifndef R_X86_64_REX_GOTPCRELX
+ #define R_X86_64_REX_GOTPCRELX 42
+ #endif
+@@ -729,6 +733,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
+                 && (ELF_ST_TYPE(sym->st_info) != STT_SECTION))
+ 				goto overflow;
+ 			break;
++        case R_X86_64_GOTPCRELX:
+         case R_X86_64_REX_GOTPCRELX:
+             /* get GOT address */
+             got = setup_got_table(info, sym->st_value);
 -- 
 2.33.0
 
