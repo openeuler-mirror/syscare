@@ -30,6 +30,10 @@
 #define ARCH_SHF_SMALL 0
 #endif
 
+#ifndef R_X86_64_GOTPCRELX
+#define R_X86_64_GOTPCRELX 41
+#endif
+
 #ifndef R_X86_64_REX_GOTPCRELX
 #define R_X86_64_REX_GOTPCRELX 42
 #endif
@@ -729,6 +733,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
                 && (ELF_ST_TYPE(sym->st_info) != STT_SECTION))
 				goto overflow;
 			break;
+        case R_X86_64_GOTPCRELX:
         case R_X86_64_REX_GOTPCRELX:
             /* get GOT address */
             got = setup_got_table(info, sym->st_value);
