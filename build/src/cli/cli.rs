@@ -328,6 +328,8 @@ impl PatchBuildCLI {
             return;
         }
 
-        self.workdir.remove().ok();
+        if !self.args.skip_cleanup {
+            self.workdir.remove().ok();
+        }
     }
 }

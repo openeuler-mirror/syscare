@@ -74,6 +74,10 @@ pub struct CliArguments {
     #[arg(long, default_value=CLI_DEFAULT_SKIP_COMPILER_CHECK)]
     pub skip_compiler_check: bool,
 
+    /// Skip post-build cleanup
+    #[arg(long, default_value=CLI_DEFAULT_SKIP_CLEANUP_FLAG)]
+    pub skip_cleanup: bool,
+
     /// Provide more detailed info
     #[arg(short, long, default_value=CLI_DEFAULT_VERBOSE_FLAG)]
     pub verbose: bool,
