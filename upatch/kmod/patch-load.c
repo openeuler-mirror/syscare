@@ -309,7 +309,10 @@ static void __user *__upatch_module_alloc(unsigned long hint, unsigned long size
     mem_addr = vm_mmap(NULL, addr, size,
         PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_ANONYMOUS | MAP_PRIVATE, 0);
-    if (mem_addr != addr) {
+    if (IS_ERR((void *)mem_addr)) {
+        pr_err("mmap module memory faild with %ld \n", PTR_ERR((void *)mem_addr));
+        return NULL;
+    } else if (mem_addr != addr) {
         pr_err("find wrong place 0x%lx <- 0x%lx \n", mem_addr, addr);
         vm_munmap(mem_addr, size);
         return NULL;
