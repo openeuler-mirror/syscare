@@ -17,6 +17,7 @@
 #include <linux/kernel.h>
 #include <linux/mm.h>
 #include <linux/mman.h>
+#include <linux/kprobes.h>
 
 #include <asm/module.h>
 
@@ -176,6 +177,15 @@ static long get_offset(struct upatch_module *mod, unsigned int *size,
 	return ret;
 }
 
+static void layout_jmptable(struct upatch_module *mod, struct upatch_load_info *info)
+{
+    info->jmp_cur_entry = 0;
+    info->jmp_max_entry = JMP_TABLE_MAX_ENTRY;
+    info->jmp_offs = ALIGN(mod->core_layout.size, sizeof(unsigned long));
+    mod->core_layout.size = info->jmp_offs
+        + info->jmp_max_entry * sizeof(struct upatch_jmp_table_entry);
+}
+
 static void layout_sections(struct upatch_module *mod, struct upatch_load_info *info)
 {
 	static unsigned long const masks[][2] = {
@@ -208,15 +218,20 @@ static void layout_sections(struct upatch_module *mod, struct upatch_load_info *
         }
         switch (m) {
             case 0: /* executable */
+                layout_jmptable(info->mod, info);
+                mod->core_layout.size = PAGE_ALIGN(mod->core_layout.size);
                 mod->core_layout.text_size = mod->core_layout.size;
                 break;
             case 1: /* RO: text and ro-data */
+                mod->core_layout.size = PAGE_ALIGN(mod->core_layout.size);
                 mod->core_layout.ro_size = mod->core_layout.size;
                 break;
             case 2: /* RO after init */
-			    mod->core_layout.ro_after_init_size = mod->core_layout.size;
+                mod->core_layout.size = PAGE_ALIGN(mod->core_layout.size);
+                mod->core_layout.ro_after_init_size = mod->core_layout.size;
                 break;
             case 4: /* whole core */
+                mod->core_layout.size = PAGE_ALIGN(mod->core_layout.size);
                 break;
         }
     }
@@ -267,21 +282,14 @@ static void layout_symtab(struct upatch_module *mod, struct upatch_load_info *in
     mod->core_layout.size += strtab_size;
     info->core_typeoffs = mod->core_layout.size;
     mod->core_layout.size += ndst * sizeof(char);
+    mod->core_layout.size = PAGE_ALIGN(mod->core_layout.size);
 
     /* Put string table section at end of init part of module. */
     strsect->sh_flags |= SHF_ALLOC;
     strsect->sh_entsize = get_offset(mod, &mod->init_layout.size, strsect,
 					 info->index.str) | INIT_OFFSET_MASK;
+    mod->init_layout.size = PAGE_ALIGN(mod->init_layout.size);
     pr_debug("\t%s\n", info->secstrings + strsect->sh_name);
-}
-
-static void layout_jmptable(struct upatch_module *mod, struct upatch_load_info *info)
-{
-    info->jmp_cur_entry = 0;
-    info->jmp_max_entry = JMP_TABLE_MAX_ENTRY;
-    info->jmp_offs = ALIGN(mod->core_layout.size, sizeof(unsigned long));
-    mod->core_layout.size = info->jmp_offs
-        + info->jmp_max_entry * sizeof(struct upatch_jmp_table_entry);
 }
 
 /* TODO: lock for mm */
@@ -452,7 +460,6 @@ static struct upatch_module *layout_and_allocate(struct upatch_load_info *info)
 
     layout_sections(info->mod, info);
     layout_symtab(info->mod, info);
-    layout_jmptable(info->mod, info);
 
     err = move_module(info->mod, info);
     if (err)
@@ -914,9 +921,46 @@ out:
     return ret;
 }
 
+static struct kprobe kp = {
+    .symbol_name = "do_mprotect_pkey"
+};
+
+typedef int (*do_mprotect_pkey_t)(unsigned long start, size_t len, unsigned long prot, int pkey);
+
+static void frob_text(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+{
+    do_mprotect_pkey((unsigned long)layout->base, layout->text_size, PROT_READ | PROT_EXEC, -1);
+}
+
+static void frob_rodata(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+{
+    do_mprotect_pkey((unsigned long)layout->base + layout->text_size, layout->ro_size - layout->text_size, PROT_READ, -1);
+}
+
+static void frob_writable_data(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+{
+    do_mprotect_pkey((unsigned long)layout->base + layout->ro_after_init_size, layout->size - layout->ro_after_init_size, PROT_READ | PROT_WRITE, -1);
+}
+
+static void set_memory_previliage(struct upatch_module *mod)
+{
+    do_mprotect_pkey_t do_mprotect_pkey;
+    register_kprobe(&kp);
+    do_mprotect_pkey = (do_mprotect_pkey_t) kp.addr;
+
+    frob_text(&mod->core_layout, do_mprotect_pkey);
+    frob_rodata(&mod->core_layout, do_mprotect_pkey);
+    frob_writable_data(&mod->core_layout, do_mprotect_pkey);
+    frob_text(&mod->init_layout, do_mprotect_pkey);
+    frob_rodata(&mod->init_layout, do_mprotect_pkey);
+    frob_writable_data(&mod->init_layout, do_mprotect_pkey);
+
+    unregister_kprobe(&kp);
+}
+
 static int complete_formation(struct upatch_module *mod, struct inode *patch)
 {
-    /* TODO: set memory previliage */
+    set_memory_previliage(mod);
     mod->real_state = UPATCH_STATE_RESOLVED;
     mod->real_patch = patch;
     return 0;
