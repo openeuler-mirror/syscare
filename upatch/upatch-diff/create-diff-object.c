@@ -486,7 +486,7 @@ static void replace_section_syms(struct upatch_elf *uelf)
             list_for_each_entry(sym, &uelf->symbols, list) {
                 long start, end;
 
-                /* find object which belongs to this section, is could be .data .rodat etc */
+                /* find object which belongs to this section, it could be .data .rodata etc */
                 if (sym->type == STT_SECTION || sym->sec != rela->sym->sec)
                     continue;
 
@@ -517,9 +517,41 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 break;
             }
 
-            /* only rodata based is allowed */
+            /* only rodata and data based is allowed
+             * if we compile with fPIC and the function's local char* array is too large,
+             * (we test the array's size > 32),
+             * gcc will generate the relocation rodata.str1.1 about the array in .data section.
+             * this .data symbol's type is STT_SECTION. and this function has the .data
+             * symbol's relocation. just like:
+             *
+             * code:
+             * int glo_func(void)
+             * {
+             * char *help[]={"test1", "test2",.....,"test33"};
+             * return 0;
+             * }
+             *
+             * elf:
+             * Relocation section '.rela.data' at offset 0xc30 contains 33 entries:
+             * Offset          Info           Type           Sym. Value    Sym. Name + Addend
+             * 000000000000  000300000001 R_X86_64_64       0000000000000000 .rodata.str1.1 + 0
+             * 000000000008  000300000001 R_X86_64_64       0000000000000000 .rodata.str1.1 + 6
+             * ....
+             *
+             * Relocation section '.rela.text.glo_func' at offset 0x738 contains 3 entries:
+             * Offset          Info           Type           Sym. Value    Sym. Name + Addend
+             * 000000000015  000200000002 R_X86_64_PC32     0000000000000000 .data - 4
+             *
+             * but if we change the other function which has nothing to do with this .data
+             * section and the glo_function. the glo_function will still error because of
+             * the glo_function's .data relocation.
+             *
+             * we do not allow .data section is "include" in verify_patchability. so we
+             * don't worry about the .data section will produce unexpected behavior later on.
+             */
             if (!found && !is_string_literal_section(rela->sym->sec) &&
-                strncmp(rela->sym->name, ".rodata", strlen(".rodata"))) {
+                strncmp(rela->sym->name, ".rodata", strlen(".rodata")) &&
+                strncmp(rela->sym->name, ".data", strlen(".data"))) {
                 ERROR("%s+0x%x: can't find replacement symbol for %s+%ld reference.",
                 relasec->base->name, rela->offset, rela->sym->name, rela->addend);
             }
