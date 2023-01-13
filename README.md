@@ -89,3 +89,8 @@ $ syscare list
 3.  完善特性代码 $ vim src/upatch/xxxx  & git commit -m ""
 4.  提交代码 $ git push origin
 5.  新建 Pull Request
+
+
+#### 参与讨论
+* 可添加微信号: syscare, 申请加入syscare讨论群
+* 可在openEuler论坛发帖或相应帖子中回复: [https://forum.openeuler.org/](https://forum.openeuler.org/)
