@@ -818,8 +818,19 @@ static void frob_writable_data(const struct upatch_module_layout *layout, do_mpr
 
 static void set_memory_previliage(struct upatch_module *mod)
 {
+    int ret;
     do_mprotect_pkey_t do_mprotect_pkey;
-    register_kprobe(&kp);
+
+    ret = register_kprobe(&kp);
+    if (ret) {
+        pr_err("register_kprobe do_mprotect_pkey error %d\n", ret);
+        kp.symbol_name = "do_mprotect_pkey.constprop.0";
+        ret = register_kprobe(&kp);
+        if (ret) {
+            pr_err("register_kprobe do_mprotect_pkey.constprop.0 error %d\n", ret);
+            return;
+        }
+    }
     do_mprotect_pkey = (do_mprotect_pkey_t) kp.addr;
 
     frob_text(&mod->core_layout, do_mprotect_pkey);
