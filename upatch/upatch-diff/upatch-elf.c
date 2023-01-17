@@ -241,7 +241,7 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
 
     /* TODO: check ELF type here, we only handle object file */
     if (ehdr.e_type != ET_REL)
-        ERROR("upatch-build only handles relocatable files \n");
+        ERROR("only handles relocatable files \n");
 
     /*
      * Main problem here is stack check, for kernel, only x86 is support

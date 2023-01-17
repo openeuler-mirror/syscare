@@ -148,6 +148,14 @@ struct upatch_load_info {
     struct running_elf_info running_elf;
 };
 
+struct elf_build_id {
+    struct {
+        Elf64_Nhdr nhdr;
+        char name[4];
+    } head;
+    uint8_t *id;
+};
+
 /* entity/module releated */
 struct upatch_entity *upatch_entity_get(struct inode *);
 struct upatch_module *upatch_module_get_or_create(struct upatch_entity *, pid_t);

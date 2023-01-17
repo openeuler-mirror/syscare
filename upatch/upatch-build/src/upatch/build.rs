@@ -28,6 +28,7 @@ const CMD_SOURCE_ENTER: &str = "SE";
 const CMD_PATCHED_ENTER: &str = "PE";
 const SUPPORT_DIFF: &str = "upatch-diff";
 const SUPPORT_TOOL: &str = "upatch-tool";
+const SUPPORT_NOTES: &str = "upatch-notes";
 
 pub struct UpatchBuild {
     args: Arg,
@@ -35,6 +36,7 @@ pub struct UpatchBuild {
     compiler: Compiler,
     diff_file: String,
     tool_file: String,
+    notes_file: String,
     hack_flag: Arc<AtomicBool>,
 }
 
@@ -46,6 +48,7 @@ impl UpatchBuild {
             compiler: Compiler::new(),
             diff_file: String::new(),
             tool_file: String::new(),
+            notes_file: String::new(),
             hack_flag: Arc::new(AtomicBool::new(false)),
         }
     }
@@ -70,6 +73,7 @@ impl UpatchBuild {
         // find upatch-diff and upatch-tool
         self.diff_file = search_tool(SUPPORT_DIFF)?;
         self.tool_file = search_tool(SUPPORT_TOOL)?;
+        self.notes_file = search_tool(SUPPORT_NOTES)?;
 
         // check compiler
         self.compiler.analyze(self.args.compiler_file.clone())?;
@@ -118,11 +122,15 @@ impl UpatchBuild {
         let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
         self.create_diff(&source_obj, &patch_obj, &binary_obj)?;
 
+        // build notes.o
+        let notes = format!("{}/notes.o", self.work_dir.output_dir());
+        self.upatch_notes(&notes)?;
+
         // ld patchs
         let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
+        info!("Building patch: {}", &output_file);
         self.compiler.linker(self.work_dir.output_dir(), &output_file)?;
         self.upatch_tool(&output_file)?;
-        info!("Building patch: {}", &output_file);
         Ok(())
     }
 
@@ -206,6 +214,15 @@ impl UpatchBuild {
     fn upatch_tool(&self, patch: &str) -> Result<()> {
         let args_list = vec!["resolve", "-b", &self.args.debug_info, "-p", patch];
         let output = ExternCommand::new(&self.tool_file).execvp(args_list)?;
+        if !output.exit_status().success() {
+            return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
+        };
+        Ok(())
+    }
+
+    fn upatch_notes(&self, notes: &str) -> Result<()> {
+        let args_list = vec!["-r", &self.args.debug_info, "-o", notes];
+        let output = ExternCommand::new(&self.notes_file).execvp(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
         };

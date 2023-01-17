@@ -225,18 +225,154 @@ static int insert_uprobe_offset(struct upatch_entity *entity, loff_t offset)
     return ret;
 }
 
-static bool check_upatch(Elf_Ehdr *ehdr)
+static int read_build_id(struct file *file, struct elf_build_id *build_id)
 {
+    int ret = 0;
+    int index;
+    loff_t offset;
+    int buf_len;
+    Elf_Ehdr ehdr;
+    Elf_Shdr *eshdrs = NULL;
+    char* shstr = NULL;
+    char* name = NULL;
+
+    offset = 0;
+    buf_len = sizeof(Elf_Ehdr);
+    ret = kernel_read(file, &ehdr, buf_len, &offset);
+    if (ret != buf_len) {
+        pr_err("read file failed - %d \n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    buf_len = sizeof(Elf_Shdr) * ehdr.e_shnum;
+    eshdrs = kmalloc(buf_len, GFP_KERNEL);
+    if (!eshdrs) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    offset = ehdr.e_shoff;
+    ret = kernel_read(file, eshdrs, buf_len, &offset);
+    if (ret != buf_len) {
+        pr_err("read patch section header failed - %d \n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    pr_debug("section string table index %d at %lld \n", ehdr.e_shstrndx, eshdrs[ehdr.e_shstrndx].sh_offset);
+
+    /* read string table for section header table */
+    buf_len = eshdrs[ehdr.e_shstrndx].sh_size;
+    shstr = kmalloc(buf_len, GFP_KERNEL);
+    if (!shstr) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    offset = eshdrs[ehdr.e_shstrndx].sh_offset;
+    ret = kernel_read(file, shstr, buf_len, &offset);
+    if (ret != buf_len) {
+        pr_err("read string table failed - %d \n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    pr_debug("total section number : %d \n", ehdr.e_shnum);
+    for (index = 0; index < ehdr.e_shnum; index ++) {
+        if (eshdrs[index].sh_name == 0)
+            continue;
+
+        name = shstr + eshdrs[index].sh_name;
+        if (!strcmp(name, ".note.gnu.build-id") != 0)
+            break;
+    }
+
+    if (index == ehdr.e_shnum) {
+        ret = -EINVAL;
+        goto out;
+    }
+
+    offset = eshdrs[index].sh_offset;
+    buf_len = sizeof(build_id->head);
+    if (buf_len >= eshdrs[index].sh_size) {
+        pr_err(".note.gnu.build-id section is failed \n");
+        ret = -EINVAL;
+        goto out;
+    }
+
+    ret = kernel_read(file, &build_id->head, buf_len, &offset);
+    if (ret != buf_len) {
+        pr_err("read .note.gnu.build-id failed - %d \n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+
+    buf_len = build_id->head.nhdr.n_descsz;
+    offset = eshdrs[index].sh_offset + sizeof(build_id->head);
+    build_id->id = kmalloc(buf_len, GFP_KERNEL);
+    if (!build_id->id) {
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    ret = kernel_read(file, build_id->id, buf_len, &offset);
+    if (ret != buf_len) {
+        pr_err("read .build-id failed - %d \n", ret);
+        ret = -EINVAL;
+        goto out;
+    }
+    ret = 0;
+out:
+    if (shstr)
+        kfree(shstr);
+    if (eshdrs)
+        kfree(eshdrs);
+    return ret;
+}
+
+static int check_upatch(Elf_Ehdr *ehdr, struct file *patch_file, struct file *binary_file)
+{
+    int ret = -EINVAL;
+    struct elf_build_id patch_id;
+    struct elf_build_id binary_id;
+
+    memset(&patch_id, 0, sizeof(patch_id));
+    memset(&binary_id, 0, sizeof(binary_id));
+
     if (memcmp(ehdr->e_ident, ELFMAG, SELFMAG) != 0)
-        return false;
+        goto out;
 
     if (ehdr->e_type != ET_REL)
-        return false;
+        goto out;
 
     if (ehdr->e_shentsize != sizeof(Elf_Shdr))
-        return false;
+        goto out;
 
-    return true;
+    ret = read_build_id(patch_file, &patch_id);
+    if (ret) {
+        pr_err("read patch's build id failed - %d \n", ret);
+        goto out;
+    }
+
+    ret = read_build_id(binary_file, &binary_id);
+    if (ret) {
+        pr_err("read binary's build id failed - %d \n", ret);
+        goto out;
+    }
+
+    if (memcmp(patch_id.id, binary_id.id, binary_id.head.nhdr.n_descsz) != 0) {
+        pr_err("build id is different.\n");
+        goto out;
+    }
+
+    ret = 0;
+out:
+    if (patch_id.id)
+        kfree(patch_id.id);
+    if (binary_id.id)
+        kfree(binary_id.id);
+    return ret;
 }
 
 static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
@@ -589,8 +725,9 @@ int upatch_attach(const char *binary, const char *patch)
         goto out;
     }
 
-    if (!check_upatch(&ehdr)) {
-        pr_err("check upatch failed \n");
+    ret = check_upatch(&ehdr, patch_file, binary_file);
+    if (ret) {
+        pr_err("check upatch failed - %d \n", ret);
         ret = -EINVAL;
         goto out;
     }

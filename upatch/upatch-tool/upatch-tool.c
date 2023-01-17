@@ -46,15 +46,22 @@ struct arguments {
 };
 
 static struct argp_option options[] = {
-        {"cmd", 0, "command", 0, "active/deactive/install/uninstall/apply/remove/info/resolve"},
         {"binary", 'b', "binary", 0, "Binary file"},
         {"patch", 'p', "patch", 0, "Patch file"},
+        {"cmd", 0, "active", 0, "Active the patch (require binary or patch)"},
+        {"cmd", 0, "deactive", 0, "Deactive the patch (require binary or patch)"},
+        {"cmd", 0, "install", 0, "Install the patch"},
+        {"cmd", 0, "uninstall", 0, "Uninstall the patch (require binary or patch)"},
+        {"cmd", 0, "apply", 0, "Equivalent to: install and active"},
+        {"cmd", 0, "remove", 0, "Equivalent to: deactive and uninstall"},
+        {"cmd", 0, "resolve", 0, "Resolve the patch"},
+        {"cmd", 0, "info", 0, "Show status of the patch (require binary or patch)"},
         {NULL}
 };
 
-static char program_doc[] = "upatch-tool -- apply a patch on binary";
+static char program_doc[] = "Operate a patch on binary";
 
-static char args_doc[] = "cmd -b binary -p patch";
+static char args_doc[] = "<cmd> --binary <Binary file> --patch <Patch file>";
 
 const char *argp_program_version = UPATCH_VERSION;
 
