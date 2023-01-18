@@ -5,7 +5,7 @@ After=local-fs.target
 Before=network-online.target
 
 [Service]
-ExecStart=/usr/libexec/syscare/auto-recovery.sh
+ExecStart=/usr/bin/syscare restore
 User=root
 Group=root
 Type=oneshot
