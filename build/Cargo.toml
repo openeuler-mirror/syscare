@@ -11,5 +11,5 @@ build = "build.rs"
 log = {version = "0.4.17"}
 lazy_static = { version = "1.4.0" }
 regex = { version = "1" }
-clap = { version = "4.0.16", features = ["derive", "env", "cargo"] }
+clap = { version = "4.0.32", features = ["derive"] }
 sha2 = { version = "0.10.6" }
