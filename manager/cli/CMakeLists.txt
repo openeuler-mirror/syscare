@@ -12,6 +12,8 @@ set(SYSCARE_CLI_BIN "syscare")
 
 add_custom_target(syscare-cli ALL
         COMMENT "Compiling syscare-cli..."
+        COMMAND cargo update -p clap --precise 4.0.32
+        COMMAND cargo update -p clap_lex --precise 0.3.0
         COMMAND CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
         COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/${SYSCARE_CLI_BIN} ${CMAKE_CURRENT_BINARY_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
