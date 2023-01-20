@@ -134,7 +134,7 @@ impl RpmSpecGenerator {
 
         writeln!(writer, "%postun")?;
         writeln!(writer, "if [ \"$1\" != 0 ]; then")?;
-        writeln!(writer, "    return")?;
+        writeln!(writer, "    exit 0")?;
         writeln!(writer, "fi")?;
         writeln!(writer, "if [ -d \"%{{pkg_root}}\" ] && [ -z \"$(ls -A %{{pkg_root}})\" ]; then")?;
         writeln!(writer, "    rm -rf \"%{{pkg_root}}\"")?;
