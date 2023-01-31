@@ -57,7 +57,7 @@ impl PatchManager {
             return false;
         }
 
-        debug!("matched \"{}\"", full_name);
+        debug!("matched patch \"{}\"", full_name);
         true
     }
 
@@ -195,12 +195,17 @@ impl PatchManager {
 
     pub fn read_saved_patch_status(&self) -> std::io::Result<Vec<(String, PatchStatus)>> {
         let patch_status_file = self.patch_status_file;
-        fs::check_file(patch_status_file)?;
-
         let reader = BufReader::new(
-            std::fs::File::open(patch_status_file)?
+            match std::fs::File::open(patch_status_file) {
+                Ok(file) => file,
+                Err(e) => {
+                    debug!("cannot open file \"{}\", {}", patch_status_file, e.to_string());
+                    return Ok(vec![]);
+                },
+            }
         );
 
+        debug!("reading saved patch status from \"{}\"", patch_status_file);
         bincode::deserialize_from::<_, Vec<(String, PatchStatus)>>(reader).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -209,9 +214,7 @@ impl PatchManager {
         })
     }
 
-    pub fn restore_all_patch_status(&mut self, patch_name: &str, status: PatchStatus) -> std::io::Result<()> {
-        debug!("restoring all patch status");
-
+    pub fn restore_patch_status(&mut self, patch_name: &str, status: PatchStatus) -> std::io::Result<()> {
         match self.find_patch_mut(patch_name) {
             Ok(patch) => patch.restore(status)?,
             Err(e)    => warn!("{}", e.to_string())

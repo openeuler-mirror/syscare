@@ -148,7 +148,9 @@ impl Patch {
 impl Patch {
     pub fn update_status(&mut self) -> std::io::Result<()> {
         let patch_status = self.get_adapter().status()?;
+
         self.status = patch_status;
+        debug!("patch \"{}\" is \"{}\"", self, patch_status);
 
         Ok(())
     }
@@ -252,6 +254,8 @@ impl Patch {
         }
 
         let transition = (self.get_status(), status);
+        debug!("restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
+
         match PATCH_TRANSITION_MAP.get(&transition) {
             Some(action) => action(self)?,
             None         => debug!("patch \"{}\" status not change", self),

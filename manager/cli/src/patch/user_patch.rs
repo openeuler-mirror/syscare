@@ -112,16 +112,18 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
         let patch_target = self.patch.get_target();
         let patch_arch   = self.patch.get_arch();
-        let pkg_name = format!("{}.{}", patch_target, patch_arch);
-        debug!("pkg_name: \"{}\"", pkg_name);
 
-        let exit_status = RPM.execvp(["-q", &pkg_name])?;
+        let target_name = format!("{}.{}", patch_target, patch_arch);
+        debug!("target_name:  \"{}\"", target_name);
+
+        let exit_status = RPM.execvp(["-q", &target_name])?;
         if exit_status.exit_code() != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
                 exit_status.stdout()
             ));
         }
+        debug!("package_name: \"{}\"", exit_status.stdout());
 
         Ok(())
     }

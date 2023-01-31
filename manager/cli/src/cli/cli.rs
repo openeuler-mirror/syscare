@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::{LevelFilter, debug};
+use log::LevelFilter;
 
 use crate::log::Logger;
 use crate::util::sys;
@@ -87,11 +87,7 @@ impl SyscareCLI {
             },
         };
 
-        debug!("{:?}", cmd);
-        let exit_code = cmd_executor.invoke(&cmd_args)?;
-        debug!("{:?} finished", cmd);
-
-        Ok(exit_code)
+        Ok(cmd_executor.invoke(&cmd_args)?)
     }
 }
 

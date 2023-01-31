@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use log::debug;
+use log::{trace, debug};
 
 use crate::util::sys;
 use crate::util::fs;
@@ -76,6 +76,7 @@ impl<'a> KernelPatchAdapter<'a> {
         let read_result = fs::read_file_to_string(&sys_file_path);
         match read_result {
             Ok(s) => {
+                trace!("read file \"{}\": {}", sys_file_path, s);
                 let patch_status = match s.as_str() {
                     KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
                     KPATCH_STATUS_ENABLED  => PatchStatus::Actived,
@@ -102,6 +103,7 @@ impl<'a> KernelPatchAdapter<'a> {
             PatchStatus::NotApplied | PatchStatus::Deactived => KPATCH_STATUS_DISABLED,
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
         };
+        trace!("write file \"{}\": {}", sys_file_path, status_str);
 
         fs::write_string_to_file(&sys_file_path, status_str)
     }

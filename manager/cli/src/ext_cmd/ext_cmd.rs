@@ -2,7 +2,8 @@ use std::process::{Command, Stdio};
 use std::io::BufReader;
 use std::ffi::OsStr;
 
-use crate::log::{info, error};
+use log::{info, error, trace};
+
 use crate::util::lossy_lines::LossyLines;
 
 #[derive(Debug)]
@@ -36,6 +37,8 @@ pub struct ExternCommand<'a> {
 impl ExternCommand<'_> {
     #[inline(always)]
     fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
+        trace!("executing {:?}", command);
+
         let mut stdout_buf = String::new();
         let mut stderr_buf = String::new();
 
@@ -75,6 +78,8 @@ impl ExternCommand<'_> {
         }
 
         let exit_code = child.wait()?.code().expect("Get process exit code failed");
+        trace!("process {:?} ({}) exited, exit_code={}", command.get_program(), child.id(), exit_code);
+
         Ok(ExternCommandExitStatus {
             exit_code,
             stdout: stdout_buf,
