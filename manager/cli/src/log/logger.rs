@@ -1,37 +1,67 @@
-use super::{Level, LevelFilter, Metadata, Record};
+use std::sync::Once;
 
-pub struct Logger {
-    log_level: LevelFilter,
-}
+use log::LevelFilter;
+
+use log4rs::Config;
+use log4rs::config::{Root, Appender};
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::append::console::{ConsoleAppender, Target};
+
+use super::LogLevelFilter;
+
+pub struct Logger;
 
 impl Logger {
-    pub fn init_logger(log_level: LevelFilter) {
-        log::set_logger(Box::leak(Box::new(Logger { log_level })))
-            .map(|_| log::set_max_level(log_level))
-            .expect("set logger failed");
+    fn init_console_log(max_level: LevelFilter) -> Vec<Appender> {
+        const CONSOLE_LOG_PATTERN:  &str = "{m}{n}";
+        const STDOUT_APPENDER_NAME: &str = "stdout";
+        const STDERR_APPENDER_NAME: &str = "stderr";
+
+        vec![
+            Appender::builder()
+                .filter(Box::new(LogLevelFilter::new(LevelFilter::Info, max_level)))
+                .build(
+                    STDOUT_APPENDER_NAME,
+                    Box::new(ConsoleAppender::builder()
+                        .target(Target::Stdout)
+                        .encoder(Box::new(PatternEncoder::new(CONSOLE_LOG_PATTERN)))
+                        .build())
+                ),
+            Appender::builder()
+                .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, LevelFilter::Warn)))
+                .build(
+                    STDERR_APPENDER_NAME,
+                    Box::new(ConsoleAppender::builder()
+                        .target(Target::Stderr)
+                        .encoder(Box::new(PatternEncoder::new(CONSOLE_LOG_PATTERN)))
+                        .build())
+                )
+        ]
     }
-}
 
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.log_level
+    #[inline]
+    fn do_init(max_level: LevelFilter) {
+        let mut appenders = Vec::new();
+
+        appenders.extend(Self::init_console_log(max_level));
+
+        let root = Root::builder()
+            .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
+            .build(max_level);
+
+        let log_config = Config::builder()
+            .appenders(appenders)
+            .build(root)
+            .unwrap();
+
+        log4rs::init_config(log_config).unwrap();
     }
 
-    fn log(&self, record: &Record) {
-        let metadata = record.metadata();
-        if !self.enabled(metadata) {
-            return;
-        }
+    pub fn initialize(max_level: LevelFilter) {
+        static LOGGER_INITIALIZE: Once = Once::new();
 
-        match metadata.level() {
-            Level::Error | Level::Warn => {
-                eprintln!("{}", record.args());
-            },
-            _=> {
-                println!("{}", record.args());
-            },
-        };
+        LOGGER_INITIALIZE.call_once(|| {
+            Self::do_init(max_level);
+        });
     }
-
-    fn flush(&self) { }
 }

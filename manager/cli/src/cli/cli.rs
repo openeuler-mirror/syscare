@@ -1,5 +1,3 @@
-use std::sync::Once;
-
 use clap::Parser;
 use log::{LevelFilter, debug};
 
@@ -7,12 +5,10 @@ use crate::log::Logger;
 use crate::util::sys;
 use crate::cmd::*;
 
-pub const CLI_NAME: &str = env!("CARGO_PKG_NAME");
-const CLI_AUTHOR:   &str = env!("CARGO_PKG_AUTHORS");
-const CLI_VERSION:  &str = env!("CARGO_PKG_VERSION");
-const CLI_ABOUT:    &str = env!("CARGO_PKG_DESCRIPTION");
-
-const ROOT_UID: u32 = 0;
+const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
+const CLI_AUTHOR:  &str = env!("CARGO_PKG_AUTHORS");
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CLI_ABOUT:   &str = env!("CARGO_PKG_DESCRIPTION");
 
 #[derive(Debug)]
 #[derive(Parser)]
@@ -27,23 +23,9 @@ pub struct SyscareCLI {
 }
 
 impl SyscareCLI {
-    pub fn new() -> Self {
-        Self::parse()
-    }
+    fn check_root_permission() -> std::io::Result<()> {
+        const ROOT_UID: u32 = 0;
 
-    fn initialize(&self) {
-        static INITIALIZE: Once = Once::new();
-
-        INITIALIZE.call_once(|| {
-            let log_level = match self.verbose {
-                false => LevelFilter::Info,
-                true  => LevelFilter::Debug,
-            };
-            Logger::init_logger(log_level);
-        });
-    }
-
-    fn check_root_permission(&self) -> std::io::Result<()> {
         if sys::get_uid() != ROOT_UID {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
@@ -54,10 +36,7 @@ impl SyscareCLI {
         Ok(())
     }
 
-    pub fn run(&self) -> std::io::Result<i32> {
-        self.initialize();
-
-        let cmd = &self.cmd;
+    fn cli_main(cmd: &Command) -> std::io::Result<i32> {
         let cmd_args;
         let cmd_executor;
 
@@ -67,42 +46,42 @@ impl SyscareCLI {
                 cmd_args = args.to_owned();
             }
             Command::Info { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::Status { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::List => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(ListCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![];
             },
             Command::Apply { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(ApplyCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::Remove { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(RemoveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::Active { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(ActiveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::Deactive { patch_name } => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
             Command::Restore => {
-                self.check_root_permission()?;
+                Self::check_root_permission()?;
                 cmd_executor = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![];
             },
@@ -113,5 +92,22 @@ impl SyscareCLI {
         debug!("{:?} finished", cmd);
 
         Ok(exit_code)
+    }
+}
+
+impl SyscareCLI {
+    pub fn name() -> &'static str {
+        CLI_NAME
+    }
+
+    pub fn run() -> std::io::Result<i32> {
+        let cli = Self::parse();
+
+        Logger::initialize(match cli.verbose {
+            false => LevelFilter::Info,
+            true  => LevelFilter::Debug,
+        });
+
+        Self::cli_main(&cli.cmd)
     }
 }

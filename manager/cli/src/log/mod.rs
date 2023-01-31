@@ -1,4 +1,5 @@
+mod level_filter;
 mod logger;
 
-pub(super) use log::*;
+pub use level_filter::*;
 pub use logger::*;
