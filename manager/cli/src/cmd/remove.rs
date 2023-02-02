@@ -12,6 +12,7 @@ impl CommandExecutor for RemoveCommandExecutor {
         debug!("handle command \"remove {}\"", args[0]);
 
         patch_manager.remove_patch(&args[0])?;
+        patch_manager.save_all_patch_status()?;
 
         debug!("command \"remove {}\" done", args[0]);
         Ok(0)

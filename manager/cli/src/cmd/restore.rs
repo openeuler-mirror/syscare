@@ -11,9 +11,7 @@ impl CommandExecutor for RestoreCommandExecutor {
         let mut patch_manager = PatchManager::new()?;
         debug!("handle command \"restore\"");
 
-        for (patch_name, status) in patch_manager.read_saved_patch_status()? {
-            patch_manager.restore_patch_status(&patch_name, status)?;
-        }
+        patch_manager.restore_all_patch_status()?;
 
         debug!("command \"restore\" done");
         Ok(0)

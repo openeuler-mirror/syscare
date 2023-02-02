@@ -12,6 +12,7 @@ impl CommandExecutor for ApplyCommandExecutor {
         debug!("handle command \"apply {}\"", args[0]);
 
         patch_manager.apply_patch(&args[0])?;
+        patch_manager.save_all_patch_status()?;
 
         debug!("command \"apply {}\" done", args[0]);
         Ok(0)

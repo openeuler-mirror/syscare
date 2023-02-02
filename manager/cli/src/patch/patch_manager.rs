@@ -19,6 +19,16 @@ pub struct PatchManager {
 }
 
 impl PatchManager {
+    fn initialize(&mut self) -> std::io::Result<()> {
+        debug!("scanning patch list");
+        self.scan_patch_list()?;
+
+        debug!("updating all patch status");
+        self.update_all_patch_status()?;
+
+        Ok(())
+    }
+
     fn scan_patch_list(&mut self) -> std::io::Result<()> {
         let scan_root  = self.patch_install_dir;
         let patch_list = &mut self.patch_list;
@@ -104,10 +114,50 @@ impl PatchManager {
             patch_name
         )
     }
+}
 
-    fn save_all_patch_status(&self) -> std::io::Result<()> {
-        debug!("saving all patch status");
+impl PatchManager {
+    pub fn new() -> std::io::Result<Self> {
+        let mut new_instance = Self {
+            patch_list:        vec![],
+            patch_install_dir: PATCH_INSTALL_DIR,
+            patch_status_file: PATCH_STATUS_FILE,
+        };
 
+        new_instance.initialize()?;
+
+        Ok(new_instance)
+    }
+
+    pub fn get_patch_list(&self) -> &[Patch] {
+        self.patch_list.as_slice()
+    }
+
+    pub fn get_patch_info(&self, patch_name: &str) -> std::io::Result<&PatchInfo> {
+        Ok(self.find_patch(patch_name)?.get_info())
+    }
+
+    pub fn get_patch_status(&self, patch_name: &str) -> std::io::Result<PatchStatus> {
+        Ok(self.find_patch(patch_name)?.get_status())
+    }
+
+    pub fn apply_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch_mut(patch_name)?.apply()
+    }
+
+    pub fn remove_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch_mut(patch_name)?.remove()
+    }
+
+    pub fn active_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch_mut(patch_name)?.active()
+    }
+
+    pub fn deactive_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch_mut(patch_name)?.deactive()
+    }
+
+    pub fn save_all_patch_status(&self) -> std::io::Result<()> {
         let patch_status_file = self.patch_status_file;
         let patch_status_list = self.patch_list.iter().map(|patch| {
             (patch.get_full_name(), patch.get_status())
@@ -130,94 +180,35 @@ impl PatchManager {
 
         writer.write_all(&buf)?;
         writer.flush()?;
-        writer.into_inner()?.sync_data()?;
-
-        Ok(())
-    }
-}
-
-impl PatchManager {
-    pub fn new() -> std::io::Result<Self> {
-        let mut new_instance = Self {
-            patch_list:        vec![],
-            patch_install_dir: PATCH_INSTALL_DIR,
-            patch_status_file: PATCH_STATUS_FILE,
-        };
-
-        debug!("scanning patch list");
-        new_instance.scan_patch_list()?;
-
-        debug!("updating all patch status");
-        new_instance.update_all_patch_status()?;
-
-        Ok(new_instance)
-    }
-
-    pub fn get_patch_list(&self) -> &[Patch] {
-        self.patch_list.as_slice()
-    }
-
-    pub fn get_patch_info(&self, patch_name: &str) -> std::io::Result<&PatchInfo> {
-        Ok(self.find_patch(patch_name)?.get_info())
-    }
-
-    pub fn get_patch_status(&self, patch_name: &str) -> std::io::Result<PatchStatus> {
-        Ok(self.find_patch(patch_name)?.get_status())
-    }
-
-    pub fn apply_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.apply()?;
-        self.save_all_patch_status()?;
+        writer.into_inner()?.sync_all()?;
 
         Ok(())
     }
 
-    pub fn remove_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.remove()?;
-        self.save_all_patch_status()?;
-
-        Ok(())
-    }
-
-    pub fn active_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.active()?;
-        self.save_all_patch_status()?;
-
-        Ok(())
-    }
-
-    pub fn deactive_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.deactive()?;
-        self.save_all_patch_status()?;
-
-        Ok(())
-    }
-
-    pub fn read_saved_patch_status(&self) -> std::io::Result<Vec<(String, PatchStatus)>> {
+    pub fn restore_all_patch_status(&mut self) -> std::io::Result<()> {
         let patch_status_file = self.patch_status_file;
         let reader = BufReader::new(
             match std::fs::File::open(patch_status_file) {
                 Ok(file) => file,
                 Err(e) => {
                     debug!("cannot open file \"{}\", {}", patch_status_file, e.to_string());
-                    return Ok(vec![]);
+                    return Ok(());
                 },
             }
         );
 
-        debug!("reading saved patch status from \"{}\"", patch_status_file);
-        bincode::deserialize_from::<_, Vec<(String, PatchStatus)>>(reader).map_err(|e| {
+        let saved_patch_status = bincode::deserialize_from::<_, Vec<(String, PatchStatus)>>(reader).map_err(|e| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("deserialize patch status records from \"{}\" failed, {}", patch_status_file, e.to_string())
             )
-        })
-    }
+        })?;
 
-    pub fn restore_patch_status(&mut self, patch_name: &str, status: PatchStatus) -> std::io::Result<()> {
-        match self.find_patch_mut(patch_name) {
-            Ok(patch) => patch.restore(status)?,
-            Err(e)    => warn!("{}", e.to_string())
+        for (patch_name, status) in saved_patch_status {
+            match self.find_patch_mut(&patch_name) {
+                Ok(patch) => patch.restore(status)?,
+                Err(e)    => warn!("{}", e.to_string())
+            }
         }
 
         Ok(())

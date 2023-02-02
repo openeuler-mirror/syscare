@@ -12,6 +12,7 @@ impl CommandExecutor for ActiveCommandExecutor {
         debug!("handle command \"active {}\"", args[0]);
 
         patch_manager.active_patch(&args[0])?;
+        patch_manager.save_all_patch_status()?;
 
         debug!("command \"active {}\" done", args[0]);
         Ok(0)
