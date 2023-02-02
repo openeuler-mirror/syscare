@@ -80,11 +80,13 @@ impl Patch {
             return;
         }
 
-        self.status = target_tatus;
         debug!("patch \"{}\" status changed from \"{}\" to \"{}\"", self, current_status, target_tatus);
+        self.status = target_tatus;
     }
 
     fn do_apply(&mut self) -> std::io::Result<()> {
+        debug!("applying patch \"{}\"", self);
+
         self.get_adapter().check_compatibility().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
@@ -104,6 +106,8 @@ impl Patch {
     }
 
     fn do_remove(&mut self) -> std::io::Result<()> {
+        debug!("removing patch \"{}\"", self);
+
         self.get_adapter().remove().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
@@ -116,6 +120,8 @@ impl Patch {
     }
 
     fn do_active(&mut self) -> std::io::Result<()> {
+        debug!("activing patch \"{}\"", self);
+
         self.get_adapter().active().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
@@ -128,6 +134,8 @@ impl Patch {
     }
 
     fn do_deactive(&mut self) -> std::io::Result<()> {
+        debug!("deactiving patch \"{}\"", self);
+
         self.get_adapter().deactive().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
@@ -151,8 +159,6 @@ impl Patch {
     }
 
     pub fn apply(&mut self) -> std::io::Result<()> {
-        debug!("applying patch \"{}\"", self);
-
         match self.get_status() {
             PatchStatus::NotApplied => {
                 self.do_apply()?;
@@ -167,8 +173,6 @@ impl Patch {
     }
 
     pub fn remove(&mut self) -> std::io::Result<()> {
-        debug!("removing patch \"{}\"", self);
-
         match self.get_status() {
             PatchStatus::NotApplied => {
                 debug!("patch \"{}\" is already removed", self);
@@ -186,8 +190,6 @@ impl Patch {
     }
 
     pub fn active(&mut self) -> std::io::Result<()> {
-        debug!("activing patch \"{}\"", self);
-
         match self.get_status() {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
@@ -207,8 +209,6 @@ impl Patch {
     }
 
     pub fn deactive(&mut self) -> std::io::Result<()> {
-        debug!("deactiving patch \"{}\"", self);
-
         match self.get_status() {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
