@@ -72,18 +72,6 @@ impl Patch {
         }
     }
 
-    fn check_compatibility(&self) -> std::io::Result<()> {
-        self.get_adapter().check_compatibility().map_err(|e| {
-            std::io::Error::new(
-                e.kind(),
-                format!("check patch \"{}\" failed, {}", self, e.to_string())
-            )
-        })?;
-
-        debug!("patch \"{}\" is compatible", self);
-        Ok(())
-    }
-
     fn set_status(&mut self, status: PatchStatus) {
         let current_status = self.status;
         let target_tatus   = status;
@@ -97,6 +85,13 @@ impl Patch {
     }
 
     fn do_apply(&mut self) -> std::io::Result<()> {
+        self.get_adapter().check_compatibility().map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("check patch \"{}\" failed, {}", self, e.to_string())
+            )
+        })?;
+
         self.get_adapter().apply().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
@@ -160,7 +155,6 @@ impl Patch {
 
         match self.get_status() {
             PatchStatus::NotApplied => {
-                self.check_compatibility()?;
                 self.do_apply()?;
                 self.do_active()?;
             },
@@ -234,22 +228,24 @@ impl Patch {
     }
 
     pub fn restore(&mut self, status: PatchStatus) -> std::io::Result<()> {
-        type PatchTransition   = (PatchStatus, PatchStatus);
-        type PatchTransitionFn = dyn Fn(&mut Patch) -> std::io::Result<()> + Sync;
+        type Transition  = (PatchStatus, PatchStatus);
+        type TransitionAction = dyn Fn(&mut Patch) -> std::io::Result<()> + Sync;
 
-        const PATCH_APPLY_FN:    &PatchTransitionFn = &Patch::apply;
-        const PATCH_REMOVE_FN:   &PatchTransitionFn = &Patch::remove;
-        const PATCH_ACTIVE_FN:   &PatchTransitionFn = &Patch::active;
-        const PATCH_DEACTIVE_FN: &PatchTransitionFn = &Patch::deactive;
+        const PATCH_APPLY:         &TransitionAction = &Patch::apply;
+        const PATCH_REMOVE:        &TransitionAction = &Patch::remove;
+        const PATCH_APPLY_ONLY:    &TransitionAction = &Patch::do_apply;
+        const PATCH_REMOVE_ONLY:   &TransitionAction = &Patch::do_remove;
+        const PATCH_ACTIVE_ONLY:   &TransitionAction = &Patch::do_active;
+        const PATCH_DEACTIVE_ONLY: &TransitionAction = &Patch::do_deactive;
 
         lazy_static! {
-            static ref PATCH_TRANSITION_MAP: HashMap<PatchTransition, &'static PatchTransitionFn> = [
-                ( (PatchStatus::NotApplied, PatchStatus::Deactived ), PATCH_APPLY_FN    ),
-                ( (PatchStatus::NotApplied, PatchStatus::Actived   ), PATCH_ACTIVE_FN   ),
-                ( (PatchStatus::Deactived,  PatchStatus::NotApplied), PATCH_REMOVE_FN   ),
-                ( (PatchStatus::Deactived,  PatchStatus::Actived   ), PATCH_ACTIVE_FN   ),
-                ( (PatchStatus::Actived,    PatchStatus::NotApplied), PATCH_REMOVE_FN   ),
-                ( (PatchStatus::Actived,    PatchStatus::Deactived ), PATCH_DEACTIVE_FN ),
+            static ref PATCH_TRANSITION_MAP: HashMap<Transition, &'static TransitionAction> = [
+                ( (PatchStatus::NotApplied, PatchStatus::Actived   ), PATCH_APPLY         ),
+                ( (PatchStatus::Actived,    PatchStatus::NotApplied), PATCH_REMOVE        ),
+                ( (PatchStatus::NotApplied, PatchStatus::Deactived ), PATCH_APPLY_ONLY    ),
+                ( (PatchStatus::Deactived,  PatchStatus::NotApplied), PATCH_REMOVE_ONLY   ),
+                ( (PatchStatus::Deactived,  PatchStatus::Actived   ), PATCH_ACTIVE_ONLY   ),
+                ( (PatchStatus::Actived,    PatchStatus::Deactived ), PATCH_DEACTIVE_ONLY ),
             ].into_iter().collect();
         }
 
