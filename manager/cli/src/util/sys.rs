@@ -14,6 +14,7 @@ pub fn get_kernel_version() -> std::io::Result<String> {
         if libc::uname(&mut buf) != 0 {
             return Err(std::io::Error::last_os_error());
         }
+        // FIXME: CStr::to_string_lossy() may loss non UTF-8 chars
         CStr::from_ptr(buf.release.as_ptr()).to_string_lossy().to_string()
     };
     Ok(version_str)
