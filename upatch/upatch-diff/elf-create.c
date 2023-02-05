@@ -386,10 +386,6 @@ void upatch_reindex_elements(struct upatch_elf *uelf)
             sym->sym.st_shndx = (unsigned short)sym->sec->index;
         else if (sym->sym.st_shndx != SHN_ABS) {
             sym->sym.st_shndx = SHN_UNDEF;
-            /* if sym->bind == LOCAL and st_shndx == SHN_UNDEF,
-             * it will undefined reference when linking object file in aarch64
-             */
-            sym->sym.st_info = GELF_ST_INFO(STB_WEAK, sym->type);
         }
     }
 }

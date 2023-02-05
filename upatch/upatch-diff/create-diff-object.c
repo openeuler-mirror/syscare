@@ -57,6 +57,7 @@
 #include "elf-create.h"
 #include "running-elf.h"
 #include "upatch-manage.h"
+#include "upatch-patch.h"
 
 enum loglevel loglevel = NORMAL;
 char *logprefix;
@@ -592,6 +593,8 @@ static void include_symbol(struct symbol *sym)
      */
     sym->include = 1;
 
+    if (!sym->sec)
+        return;
     /*
      * For a function/object symbol, if it has a section, we only need to
      * include the section if it has changed. Otherwise the symbol will be
@@ -600,8 +603,22 @@ static void include_symbol(struct symbol *sym)
      * For section symbols, we always include the section because
      * references to them can't otherwise be resolved externally.
      */
-    if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME))
+    if (sym->type == STT_SECTION || sym->status != SAME)
         include_section(sym->sec);
+    /*
+     * For a local symbol referenced in the rela list of a changing function,
+     * if it has no section, it will link error.
+     * So we create a empty section for link purpose.
+     * We use st_other to mark these symbols.
+     */
+    else if (sym->status == SAME && sym->bind == STB_LOCAL && sym->type == STT_FUNC) {
+        sym->sym.st_other |= SYM_OTHER;
+        sym->sec->include = 1;
+        sym->sec->data->d_buf = NULL;
+        sym->sec->data->d_size = 0;
+        if (sym->sec->secsym)
+            sym->sec->secsym->include = 1;
+    }
 }
 
 static void include_section(struct section *sec)

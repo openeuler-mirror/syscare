@@ -20,6 +20,7 @@
 #include <sys/mman.h>
 
 #include <linux/elf.h>
+#include "upatch-patch.h"
 
 static int read_from_offset(int fd, void **buf, int len, loff_t offset)
 {
@@ -132,7 +133,12 @@ static int partly_resolve_patch(int patch_fd, Elf64_Sym *binary_symtab,
             continue;
         
         name = strtab + sym->st_name;
-        if (sym->st_shndx == SHN_UNDEF) {
+        if (sym->st_other & SYM_OTHER) {
+            // TODO: we can delete these symbol's section here.
+            sym->st_shndx = SHN_LIVEPATCH;
+            sym->st_other &= ~SYM_OTHER;
+        }
+        else if (sym->st_shndx == SHN_UNDEF) {
             if (ELF64_ST_BIND(sym->st_info) == STB_LOCAL) {
                 /* only partly resolved undefined symbol could have st_value */
                 if (sym->st_value)

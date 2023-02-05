@@ -23,6 +23,7 @@
 #include <gelf.h>
 
 #include "running-elf.h"
+#include "upatch-patch.h"
 
 /* To avoid mutiple definiation, only handle local symbols */
 void upatch_partly_resolve(struct upatch_elf *uelf, struct running_elf *relf)
@@ -31,7 +32,7 @@ void upatch_partly_resolve(struct upatch_elf *uelf, struct running_elf *relf)
     struct lookup_result symbol;
 
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->sym.st_shndx == SHN_UNDEF && sym->bind == STB_LOCAL) {
+        if (sym->sym.st_other & SYM_OTHER) {
             if (!lookup_relf(relf, sym, &symbol))
                 continue;
             /* keep it undefined for link purpose */

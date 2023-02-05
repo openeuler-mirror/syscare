@@ -6,6 +6,7 @@ project(upatch-tool)
 set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
 
 include_directories(
+    ../upatch-diff
     ../kmod
     ./
 )
