@@ -15,7 +15,7 @@ use crate::tool::*;
 use crate::dwarf::{Dwarf, DwarfCompileUnit};
 use crate::cmd::ExternCommand;
 
-use super::Arg;
+use super::Arguments;
 use super::Compiler;
 use super::WorkDir;
 use super::Project;
@@ -31,7 +31,7 @@ const SUPPORT_TOOL: &str = "upatch-tool";
 const SUPPORT_NOTES: &str = "upatch-notes";
 
 pub struct UpatchBuild {
-    args: Arg,
+    args: Arguments,
     work_dir: WorkDir,
     compiler: Compiler,
     diff_file: String,
@@ -43,7 +43,7 @@ pub struct UpatchBuild {
 impl UpatchBuild {
     pub fn new() -> Self {
         Self {
-            args: Arg::new(),
+            args: Arguments::new(),
             work_dir: WorkDir::new(),
             compiler: Compiler::new(),
             diff_file: String::new(),
@@ -54,18 +54,10 @@ impl UpatchBuild {
     }
 
     pub fn run(&mut self) -> Result<()> {
-        self.args.read()?;
+        self.args.check()?;
 
-        // create .upatch directory
         self.work_dir.create_dir(self.args.work_dir.clone())?;
         self.init_logger()?;
-
-        if self.args.patch_name.is_empty() {
-            self.args.patch_name.push_str(&self.args.elf_name);
-        }
-        if self.args.output.is_empty() {
-            self.args.output.push_str(self.work_dir.cache_dir());
-        }
 
         // check mod
         self.check_mod()?;
@@ -76,13 +68,13 @@ impl UpatchBuild {
         self.notes_file = search_tool(SUPPORT_NOTES)?;
 
         // check compiler
-        self.compiler.analyze(self.args.compiler_file.clone())?;
+        self.compiler.analyze(self.args.compiler.clone())?;
         if !self.args.skip_compiler_check {
             self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_info)?;
         }
 
         // copy source
-        let project_name = &Path::new(&self.args.source).file_name().unwrap();
+        let project_name = &Path::new(&self.args.debug_source).file_name().unwrap();
 
         // hack compiler
         info!("Hacking compiler");
@@ -92,17 +84,17 @@ impl UpatchBuild {
 
         // build source
         info!("Building original {}", project_name.to_str().unwrap());
-        let project = Project::new(self.args.source.clone());
-        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_command.clone())?;
+        let project = Project::new(self.args.debug_source.clone());
+        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
 
         // build patch
-        for patch in &self.args.diff_file {
+        for patch in &self.args.patches {
             info!("Patching file: {}", &patch);
             project.patch(patch.clone(), self.args.verbose)?;
         }
 
         info!("Building patched {}", project_name.to_str().unwrap());
-        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_command.clone())?;
+        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
         // unhack compiler
         info!("Unhacking compiler");
@@ -115,11 +107,11 @@ impl UpatchBuild {
         let mut patch_obj: HashMap<String, String> = HashMap::new();
         let dwarf = Dwarf::new();
 
-        self.correlate_obj(&dwarf, self.args.source.as_str(), self.work_dir.source_dir(), &mut source_obj)?;
-        self.correlate_obj(&dwarf, self.args.source.as_str(), self.work_dir.patch_dir(), &mut patch_obj)?;
+        self.correlate_obj(&dwarf, self.args.debug_source.as_str(), self.work_dir.source_dir(), &mut source_obj)?;
+        self.correlate_obj(&dwarf, self.args.debug_source.as_str(), self.work_dir.patch_dir(), &mut patch_obj)?;
 
         // choose the binary's obj to create upatch file
-        let binary_obj = dwarf.file_in_binary(self.args.source.clone(), self.args.elf_name.clone())?;
+        let binary_obj = dwarf.file_in_binary(self.args.debug_source.clone(), self.args.elf_name.clone())?;
         self.create_diff(&source_obj, &patch_obj, &binary_obj)?;
 
         // build notes.o
@@ -127,7 +119,7 @@ impl UpatchBuild {
         self.upatch_notes(&notes)?;
 
         // ld patchs
-        let output_file = format!("{}/{}", &self.args.output, &self.args.patch_name);
+        let output_file = format!("{}/{}", &self.args.output_dir, &self.args.patch_name);
         info!("Building patch: {}", &output_file);
         self.compiler.linker(self.work_dir.output_dir(), &output_file)?;
         self.upatch_tool(&output_file)?;
@@ -137,7 +129,7 @@ impl UpatchBuild {
     pub fn unhack_compiler(&self){
         if self.hack_flag.load(Ordering::Relaxed) {
             if let Err(_) = self.compiler.unhack() {
-                println!("unhack failed after upatch build error");
+                eprintln!("unhack failed after upatch build error");
             }
             self.hack_flag.store(false, Ordering::Relaxed);
         }
@@ -224,7 +216,7 @@ impl UpatchBuild {
         let args_list = vec!["-r", &self.args.debug_info, "-o", notes];
         let output = ExternCommand::new(&self.notes_file).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
+            return Err(Error::NOTES(format!("{}: {}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }
@@ -237,7 +229,7 @@ impl UpatchBuild {
             for signal in signals.forever() {
                 if hack_flag_clone.load(Ordering::Relaxed) {
                     if let Err(e) = compiler_clone.unhack() {
-                        println!("{} after upatch build error", e);
+                        eprintln!("{} after upatch build error", e);
                     }
                     hack_flag_clone.store(false, Ordering::Relaxed);
                 }
@@ -251,7 +243,7 @@ impl UpatchBuild {
         std::panic::set_hook(Box::new(move |_| {
             if hack_flag_clone.load(Ordering::Relaxed) {
                 if let Err(e) = compiler_clone.unhack() {
-                    println!("{} after upatch build error", e);
+                    eprintln!("{} after upatch build error", e);
                 }
                 hack_flag_clone.store(false, Ordering::Relaxed);
             }

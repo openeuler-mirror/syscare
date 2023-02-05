@@ -1,9 +1,7 @@
 use std::ffi::CString;
-use std::process::Command;
-use std::fs::{OpenOptions, self};
-use std::io::Write;
 
 use log::*;
+use which::which;
 
 use crate::dwarf::Dwarf;
 use crate::tool::*;
@@ -35,27 +33,23 @@ impl Compiler {
     }
 
     pub fn readlink(&self, name: &str) -> Result<String> {
-        let output = Command::new("which").arg(name).output()?;
-        if !output.status.success() {
-            return Err(Error::Compiler(format!("can't find compiler")));
+        match which(name) {
+            Ok(result) => Ok(stringtify(result)),
+            Err(e) => Err(Error::Compiler(format!("get {} failed: {}", name, e))),
         }
-        Ok(String::from_utf8(output.stdout).unwrap().trim().to_string())
     }
 
     pub fn read_from_compiler(&self, name: &str) -> Result<String> {
-        let output = Command::new(&self.compiler_file).arg(&name).output()?;
-        if !output.status.success() {
-            return Err(Error::Compiler(format!("can't find {} from compiler {}", name, &self.compiler_file)));
+        let args_list = vec![&name];
+        let output = ExternCommand::new(&self.compiler_file).execvp(args_list)?;
+        if !output.exit_status().success() {
+            return Err(Error::Compiler(format!("get {} from compiler {} failed", name, &self.compiler_file)));
         }
-        Ok(String::from_utf8(output.stdout).unwrap().trim().to_string())
+        Ok(output.stdout().to_string())
     }
 
     pub fn analyze(&mut self, compiler_file: String) -> Result<()> {
         self.compiler_file = compiler_file.clone();
-        if self.compiler_file.is_empty() {
-            self.compiler_file.push_str("gcc");
-        }
-        self.compiler_file = self.readlink(&self.compiler_file.clone())?;
         info!("Using compiler at: {}", &self.compiler_file);
 
         self.as_file = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
@@ -73,15 +67,11 @@ impl Compiler {
     }
 
     pub fn check_version(&self, cache_dir: &str, debug_info: &str) -> Result<()> {
-        let tmp_dir = format!("{}/test", &cache_dir);
-        fs::create_dir(&tmp_dir).unwrap();
-        let test = format!("{}/test.c", &tmp_dir);
-        let test_obj = format!("{}/test.o", &tmp_dir);
-        let mut test_file = OpenOptions::new().create(true).read(true).write(true).open(&test)?;
-        test_file.write_all(b"void main(void) {}")?;
+        let test_obj = format!("{}/test.o", &cache_dir);
+        let output = std::process::Command::new("echo").arg("int main() {return 0;}").stdout(std::process::Stdio::piped()).spawn().expect("exec echo failed");
 
-        let args_list = vec!["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c", &test, "-o", &test_obj];
-        let output = ExternCommand::new(&self.compiler_file).execvp(args_list)?;
+        let args_list = vec!["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o", &test_obj];
+        let output = ExternCommand::new(&self.compiler_file).execvp_file(args_list, &cache_dir, output.stdout.expect("get echo stdout failed"))?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
         };
@@ -98,7 +88,6 @@ impl Compiler {
             system_gcc_version.push_str(&element.get_compiler_version());
             break;
         }
-        fs::remove_dir_all(&tmp_dir)?;
 
         /* Dwraf DW_AT_producer 
          * GNU standard version 

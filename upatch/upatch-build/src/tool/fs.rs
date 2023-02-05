@@ -32,6 +32,20 @@ pub fn check_dir<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
     Ok(())
 }
 
+pub fn check_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<()> {
+    let path = file_path.as_ref();
+
+    self::check_exist(path)?;
+    if !path.is_file() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("'{}' is not a file", path.display())
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
     let file = file_path.as_ref();
 
@@ -195,17 +209,27 @@ pub fn find_files<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, rec
 
 pub fn search_tool(tool_name: &str) -> std::io::Result<String> {
     let current_tool = format!("./{}", tool_name);
-    match Path::new(&current_tool).is_file() {
-        false => {
+    match self::check_file(&current_tool) {
+        Err(_) => {
             let system_tool = format!("{}/{}", SYSTEM_TOOL_DIR, tool_name);
-            if !Path::new(&system_tool).is_file() {
-                return Err(std::io::Error::new(
+            match self::check_file(&system_tool) {
+                Err(e) => Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("Cannot tools '{}' file in '{}'", tool_name, SYSTEM_TOOL_DIR)
-                ));
+                    format!("search '{}' in '{}' failed: {}", tool_name, SYSTEM_TOOL_DIR, e)
+                )),
+                Ok(()) => Ok(system_tool.to_string()),
             }
-            Ok(system_tool.to_string())
         },
-        true => Ok(current_tool.to_string()),
+        Ok(()) => Ok(current_tool.to_string()),
+    }
+}
+
+pub fn real_arg(name: &str) -> std::io::Result<PathBuf> {
+    match realpath(name) {
+        Ok(result) => Ok(result),
+        Err(e) => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("{} is InvalidInput, {}", name, e),
+        )),
     }
 }

@@ -18,4 +18,5 @@ libc = "0.2.137"
 copy_dir = "0.1.2"
 lazy_static = "1.4.0"
 signal-hook = "0.3.14"
-
+clap = { version = "4.0.32", features = ["derive"] }
+which = "4.4.0"

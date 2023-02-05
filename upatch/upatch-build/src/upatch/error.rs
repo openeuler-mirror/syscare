@@ -11,8 +11,8 @@ pub enum Error {
     Io(String),
     Mod(String),
     Diff(String),
-    InvalidInput(String),
     TOOL(String),
+    NOTES(String),
 }
 
 impl From<io::Error> for Error {
@@ -37,8 +37,8 @@ impl Error {
             Error::Build(err) => err.to_string(),
             Error::Mod(err) => err.to_string(),
             Error::Diff(err) => format!("upatch-diff error, {}", err),
-            Error::InvalidInput(err) => format!("InvalidInput, {}", err),
             Error::TOOL(err) => format!("upatch-tool error, {}", err),
+            Error::NOTES(err) => format!("upatch-notes error, {}", err),
         }
     }
 
@@ -50,8 +50,8 @@ impl Error {
             Error::Build(_) => -4,
             Error::Mod(_) => -5,
             Error::Diff(_) => -6,
-            Error::InvalidInput(_) => -7,
-            Error::TOOL(_) => -8,
+            Error::TOOL(_) => -7,
+            Error::NOTES(_) => -8,
         }
     }
 }

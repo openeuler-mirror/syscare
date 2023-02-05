@@ -1,6 +1,6 @@
 use std::fs::{self, File};
-use std::{path::Path, env};
 
+use crate::tool::*;
 use super::Result;
 
 pub struct WorkDir {
@@ -23,21 +23,13 @@ impl WorkDir {
     }
 
     pub fn create_dir(&mut self, work_dir: String) -> Result<()> {
-        #![allow(deprecated)]
-        if work_dir.is_empty(){
-            // home_dir() don't support BSD system
-            self.cache_dir.push_str(&format!("{}/{}", env::home_dir().unwrap().to_str().unwrap(), ".upatch"));
-        }
-        else{
-            self.cache_dir.push_str(&work_dir);
-        }
-
+        self.cache_dir = work_dir.clone();
         self.source_dir.push_str(&format!("{}/{}", &self.cache_dir, "source"));
         self.patch_dir.push_str(&format!("{}/{}", &self.cache_dir, "patch"));
         self.output_dir.push_str(&format!("{}/{}", &self.cache_dir, "output"));
         self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "build.log"));
 
-        if Path::new(&self.cache_dir).is_dir() {
+        if let Ok(()) = self::check_dir(&self.cache_dir) {
             fs::remove_dir_all(self.cache_dir.clone())?;
         }
 

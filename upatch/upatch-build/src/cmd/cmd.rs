@@ -1,6 +1,5 @@
 use std::process::{Command, ExitStatus, Stdio};
 use std::ffi::OsStr;
-use std::fs::File;
 use std::io::BufReader;
 
 use log::*;
@@ -101,15 +100,16 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(&mut command)
     }
 
-    pub fn execvp_file<I, S> (&self, arg_list: I, current_dir: &str, file: &str) -> std::io::Result<ExternCommandExitStatus>
+    pub fn execvp_file<I, S, T> (&self, arg_list: I, current_dir: &str, stdio: T) -> std::io::Result<ExternCommandExitStatus>
         where
             I: IntoIterator<Item = S>,
             S: AsRef<OsStr>,
+            T: Into<Stdio>
     {
         let mut command = Command::new(self.path);
         command.args(arg_list);
         command.current_dir(current_dir);
-        command.stdin(File::open(file).expect(&format!("open {} error", file)));
+        command.stdin(stdio);
 
         self.execute_command(&mut command)
     }

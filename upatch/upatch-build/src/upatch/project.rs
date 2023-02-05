@@ -40,7 +40,7 @@ impl Project {
 
     pub fn patch(&self, patch: String, verbose: bool) -> Result<()> {
         let args_list = vec!["-N", "-p1"];
-        let output = ExternCommand::new("patch").execvp_file(args_list, &self.project_dir, &patch)?;
+        let output = ExternCommand::new("patch").execvp_file(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch)))?;
         match output.exit_status().success() {
             false => return Err(Error::Project(format!("patch file {} error {}: {}", patch,  output.exit_code(), output.stderr()))),
             true => match verbose {
