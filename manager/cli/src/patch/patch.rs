@@ -30,7 +30,7 @@ impl Patch {
 
         Ok(Self {
             root:   patch_root.as_ref().to_path_buf(),
-            info:   fs::read_file_to_string(file_path)?.parse::<PatchInfo>()?,
+            info:   fs::read_to_string(file_path)?.parse::<PatchInfo>()?,
             status: PatchStatus::NotApplied,
         })
     }

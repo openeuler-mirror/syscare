@@ -3,7 +3,6 @@ use std::io::Read;
 
 use log::debug;
 
-use crate::util::fs;
 use crate::ext_cmd::ExternCommand;
 
 use super::patch::Patch;
@@ -86,14 +85,16 @@ impl<'a> UserPatchAdapter<'a> {
     }
 
     fn exec_upatch_tool(&self, action: &str) -> std::io::Result<String> {
-        let patch_file = fs::stringtify(self.get_patch_file());
+        let patch_file = self.get_patch_file();
+        let file_path = patch_file.to_string_lossy();
+
         let exit_status = match action {
             UPATCH_ACTION_INSTALL => {
                 let elf_file = self.get_elf_file()?;
-                UPATCH_TOOL.execvp([action, "-p", &patch_file, "-b", &elf_file])?
+                UPATCH_TOOL.execvp([action, "-p", &file_path, "-b", &elf_file])?
             },
             _ => {
-                UPATCH_TOOL.execvp([action, "-p", &patch_file])?
+                UPATCH_TOOL.execvp([action, "-p", &file_path])?
             }
         };
 

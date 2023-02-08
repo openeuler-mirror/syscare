@@ -42,7 +42,7 @@ impl PatchManager {
                         patch_list.push(patch);
                     },
                     Err(e) => {
-                        warn!("failed to parse patch from \"{}\", {}", patch_root.display(), e);
+                        debug!("failed to parse patch info, {}", e);
                     }
                 }
             }

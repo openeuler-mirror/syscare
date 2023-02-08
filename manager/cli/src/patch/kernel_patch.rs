@@ -61,29 +61,30 @@ impl<'a> KernelPatchAdapter<'a> {
         Ok(())
     }
 
-    fn get_sys_interface(&self) -> String {
+    fn patch_sys_interface(&self) -> PathBuf {
         let patch_name = self.patch.get_simple_name().replace('-', "_");
-        fs::stringtify(
-            PathBuf::from(KPATCH_MGNT_DIR)
-                .join(patch_name)
-                .join(KPATCH_MGNT_FILE)
-        )
+
+        PathBuf::from(KPATCH_MGNT_DIR)
+            .join(patch_name)
+            .join(KPATCH_MGNT_FILE)
     }
 
     fn read_patch_status(&self) -> std::io::Result<PatchStatus> {
-        let sys_file_path = self.get_sys_interface();
+        let sys_file_path = self.patch_sys_interface();
 
-        let read_result = fs::read_file_to_string(&sys_file_path);
+        let read_result = fs::read_to_string(&sys_file_path);
         match read_result {
             Ok(s) => {
-                trace!("read file \"{}\": {}", sys_file_path, s);
-                let patch_status = match s.as_str() {
+                let status = s.trim();
+                trace!("read file \"{}\": {}", sys_file_path.display(), status);
+
+                let patch_status = match status {
                     KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
                     KPATCH_STATUS_ENABLED  => PatchStatus::Actived,
                     _ => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            format!("status \"{}\" is invalid", s)
+                            format!("status \"{}\" is invalid", status)
                         ));
                     }
                 };
@@ -98,14 +99,14 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn write_patch_status(&self, status: PatchStatus) -> std::io::Result<()> {
-        let sys_file_path = self.get_sys_interface();
+        let sys_file_path = self.patch_sys_interface();
         let status_str = match status {
             PatchStatus::NotApplied | PatchStatus::Deactived => KPATCH_STATUS_DISABLED,
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
         };
-        trace!("write file \"{}\": {}", sys_file_path, status_str);
+        trace!("write file \"{}\": {}", sys_file_path.display(), status_str);
 
-        fs::write_string_to_file(&sys_file_path, status_str)
+        fs::write(&sys_file_path, status_str)
     }
 }
 

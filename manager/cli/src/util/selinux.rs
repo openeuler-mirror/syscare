@@ -18,7 +18,7 @@ pub fn set_enforce(value: u32) -> std::io::Result<()> {
             format!("set enforce failed, value \"{}\" is invalid", value)
         ));
     }
-    fs::write_string_to_file(SELINUX_ENFORCE_FILE, &value.to_string()).map_err(|e| {
+    fs::write(SELINUX_ENFORCE_FILE, value.to_string()).map_err(|e| {
         std::io::Error::new(
             e.kind(),
             format!("set enforce failed, {}", e.to_string())
@@ -27,7 +27,7 @@ pub fn set_enforce(value: u32) -> std::io::Result<()> {
 }
 
 pub fn get_enforce() -> std::io::Result<u32> {
-    match fs::read_file_to_string(SELINUX_ENFORCE_FILE) {
+    match fs::read_to_string(SELINUX_ENFORCE_FILE) {
         Ok(status) => {
             Ok(status.parse().unwrap_or(SELINUX_PERMISSIVE))
         },
