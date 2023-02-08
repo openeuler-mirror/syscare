@@ -8,7 +8,8 @@ use super::Result;
 use super::Error;
 
 const COMPILER_CMD_ENV: &str = "UPATCH_CMD";
-const ASSEMBLER_DIR_ENV: &str = "UPATCH_OUTPUT";
+const ASSEMBLER_DIR_ENV: &str = "UPATCH_AS_OUTPUT";
+const LINK_DIR_ENV: &str = "UPATCH_LINK_OUTPUT";
 const BUILD_SHELL: &str = "build.sh";
 
 pub struct Project {
@@ -22,14 +23,15 @@ impl Project {
         }
     }
 
-    pub fn build(&self, cmd: &str, output: &str, build_command: String) -> Result<()> {
-        let command_shell_str = format!("{}/{}", output, BUILD_SHELL);
+    pub fn build(&self, cmd: &str, assembler_output: &str, link_output: &str, build_command: String) -> Result<()> {
+        let command_shell_str = format!("{}/{}", assembler_output, BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_str)?;
         command_shell.write_all((&build_command).as_ref())?;
         let args_list = vec![&command_shell_str];
         let envs_list = vec![
             (COMPILER_CMD_ENV, cmd),
-            (ASSEMBLER_DIR_ENV, output)
+            (ASSEMBLER_DIR_ENV, assembler_output),
+            (LINK_DIR_ENV, link_output)
         ];
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {

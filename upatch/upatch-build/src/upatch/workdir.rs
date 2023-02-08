@@ -8,6 +8,7 @@ pub struct WorkDir {
     source_dir: String,
     patch_dir: String,
     output_dir: String,
+    binary_dir: String,
     log_file: String,
 }
 
@@ -18,6 +19,7 @@ impl WorkDir {
             source_dir: String::new(),
             patch_dir: String::new(),
             output_dir: String::new(),
+            binary_dir: String::new(),
             log_file: String::new(),
         }
     }
@@ -27,6 +29,7 @@ impl WorkDir {
         self.source_dir.push_str(&format!("{}/{}", &self.cache_dir, "source"));
         self.patch_dir.push_str(&format!("{}/{}", &self.cache_dir, "patch"));
         self.output_dir.push_str(&format!("{}/{}", &self.cache_dir, "output"));
+        self.binary_dir.push_str(&format!("{}/{}", &self.cache_dir, "binary"));
         self.log_file.push_str(&format!("{}/{}", &self.cache_dir, "build.log"));
 
         if let Ok(()) = self::check_dir(&self.cache_dir) {
@@ -37,6 +40,7 @@ impl WorkDir {
         fs::create_dir(self.source_dir.clone())?;
         fs::create_dir(self.patch_dir.clone())?;
         fs::create_dir(self.output_dir.clone())?;
+        fs::create_dir(self.binary_dir.clone())?;
         File::create(&self.log_file)?;
         Ok(())
     }
@@ -56,6 +60,10 @@ impl WorkDir {
 
     pub fn output_dir(&self) -> &str {
         &self.output_dir
+    }
+
+    pub fn binary_dir(&self) -> &str {
+        &self.binary_dir
     }
 
     pub fn log_file(&self) -> &str {

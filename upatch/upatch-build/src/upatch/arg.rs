@@ -24,25 +24,21 @@ pub struct Arguments {
     #[arg(long, default_value_t = String::new(), hide_default_value = true)]
     pub build_patch_cmd: String,
 
-    /// Specify debug info
-    #[arg(short = 'i', long)]
-    pub debug_info: String,
+    /// Specify debug info array
+    #[arg(short = 'i', long = "debug-info", required = true)]
+    pub debug_infoes: Vec<String>,
 
     /// Specify compiler [default: gcc]
     #[arg(short, long, default_value_t = String::new(), hide_default_value = true)]
     pub compiler: String,
 
-    /// Specify running file name
-    #[arg(short, long)]
-    pub elf_name: String,
-
     /// Specify output directory [default: <WORK_DIR>]
     #[arg(short, long, default_value_t = String::new(), hide_default_value = true)]
     pub output_dir: String,
 
-    /// Specify output name [default: <ELF_NAME>]
-    #[arg(short = 'n', long = "name", default_value_t = String::new(), hide_default_value = true)]
-    pub patch_name: String,
+    /// Specify output name
+    #[arg(short, long, default_value_t = String::new(), hide_default_value = true)]
+    pub name: String,
 
     /// Skip compiler version check (not recommended)
     #[arg(long, default_value = "false")]
@@ -85,7 +81,9 @@ impl Arguments {
         }
 
         self.debug_source = stringtify(real_arg(&self.debug_source)?);
-        self.debug_info = stringtify(real_arg(&self.debug_info)?);
+        for debug_info in &mut self.debug_infoes {
+            *debug_info = stringtify(real_arg(debug_info.as_str())?);
+        }
         self.compiler = stringtify(real_arg(&self.compiler)?);
 
         for patch in &mut self.patches {
@@ -96,9 +94,10 @@ impl Arguments {
             self.build_patch_cmd = self.build_source_cmd.clone();
         }
 
-        if self.patch_name.is_empty() {
-             self.patch_name = self.elf_name.clone();
+        if !self.name.is_empty() {
+            self.name.push('-');
         }
+
         if self.output_dir.is_empty() {
             self.output_dir = self.work_dir.clone();
         }

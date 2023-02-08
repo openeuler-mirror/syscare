@@ -1,6 +1,6 @@
 use std::borrow::{Cow, Borrow};
 use std::collections::HashMap;
-use std::{io, path::Path};
+use std::io;
 
 use log::*;
 use gimli::{constants, Reader};
@@ -45,7 +45,7 @@ impl Dwarf{
         Self {}
     }
 
-    pub fn file_in_binary(&self, dir_str: String, binary: String) -> io::Result<Vec<DwarfCompileUnit>> {
+    pub fn file_in_binary(&self, dir_str: &str, binary: &str) -> io::Result<Vec<DwarfCompileUnit>> {
         let path = self.find_binary(dir_str, binary)?;
         self.file_in_obj(path)
     }
@@ -67,11 +67,7 @@ impl Dwarf{
 }
 
 impl Dwarf{
-    fn find_binary(&self, dir_str: String, binary: String) -> io::Result<String> {
-        let dir_path = Path::new(&dir_str);
-        if !dir_path.is_dir() {
-            return Err(io::Error::new(io::ErrorKind::NotFound, format!("{} is not a directory", &dir_str)));
-        }
+    fn find_binary(&self, dir_str: &str, binary: &str) -> io::Result<String> {
         let arr = find_files(&dir_str, &binary, false, true)?;
         match arr.len() {
             0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} don't have {}", &dir_str, &binary))),

@@ -14,6 +14,8 @@ const UPATCH_REGISTER_COMPILER: u64 = 1074324737;
 const UPATCH_UNREGISTER_COMPILER: u64 = 1074324738;
 const UPATCH_REGISTER_ASSEMBLER: u64 = 1074324739;
 const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
+const UPATCH_REGISTER_LINK: u64 = 1074324741;
+const UPATCH_UNREGISTER_LINK: u64 = 1074324742;
 use super::UPATCH_DEV_NAME;
 
 #[derive(Clone)]
@@ -21,6 +23,7 @@ pub struct Compiler {
     compiler_file: String,
     as_file: String,
     linker_file: String,
+    collect2_file: String,
 }
 
 impl Compiler {
@@ -29,6 +32,7 @@ impl Compiler {
             compiler_file: String::new(),
             as_file: String::new(),
             linker_file: String::new(),
+            collect2_file: String::new(),
         }
     }
 
@@ -53,8 +57,8 @@ impl Compiler {
         info!("Using compiler at: {}", &self.compiler_file);
 
         self.as_file = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
-
         self.linker_file = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
+        self.collect2_file = self.readlink(&self.read_from_compiler("-print-prog-name=collect2")?)?;
         Ok(())
     }    
     
@@ -102,20 +106,14 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn linker(&self, dir: &str, output_file: &str) -> Result<()> {
-        let arr = list_all_files_ext(dir, "o", false)?;
-        if arr.is_empty() {
-            return Err(Error::Compiler(format!("no functional changes found")));
-        }
-
+    pub fn linker(&self, link_list: &Vec<String>, output_file: &str) -> Result<()> {
         let mut args_list = vec!["-r", "-o", output_file];
-        let arr = arr.iter().map(|x| -> String {stringtify(x)}).rev().collect::<Vec<String>>();
-        for i in 0..arr.len() {
-            args_list.push(&arr[i]);
+        for i in 0..link_list.len() {
+            args_list.push(&link_list[i]);
         }
         let output = ExternCommand::new(&self.linker_file).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())))
+            return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())));
         };
         Ok(())
     }
@@ -126,6 +124,7 @@ impl Compiler {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
         let compiler_str = CString::new(self.compiler_file.clone()).unwrap();
         let assembler_str = CString::new(self.as_file.clone()).unwrap();
+        let collect2_str = CString::new(self.collect2_file.clone()).unwrap();
 
         unsafe{
             let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
@@ -136,23 +135,34 @@ impl Compiler {
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
                     libc::close(fd);
-                    return Err(Error::Mod(format!("hack {} error", &self.compiler_file)));
+                    return Err(Error::Mod(format!("hack {} error {}", &self.compiler_file, ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
                     libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                     libc::close(fd);
-                    return Err(Error::Mod(format!("hack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("hack {} error {}", &self.as_file, ret)));
+                }
+                let ret = libc::ioctl(fd, UPATCH_REGISTER_LINK, collect2_str.as_ptr());
+                if ret < 0 {
+                    libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
+                    libc::ioctl(fd, UPATCH_UNREGISTER_ASSEMBLER, assembler_str.as_ptr());
+                    libc::close(fd);
+                    return Err(Error::Mod(format!("hack {} error {}", &self.collect2_file, ret)));
                 }
             }
             else{
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
-                    return Err(Error::Mod(format!("unhack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.compiler_file, ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
-                    return Err(Error::Mod(format!("unhack {} error", &self.as_file)));
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.as_file, ret)));
+                }
+                let ret = libc::ioctl(fd, UPATCH_UNREGISTER_LINK, collect2_str.as_ptr());
+                if ret < 0 {
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.collect2_file, ret)));
                 }
             }
             libc::close(fd);

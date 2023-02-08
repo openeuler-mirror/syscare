@@ -54,6 +54,9 @@ static DEFINE_MUTEX(compiler_paths_lock);
 static LIST_HEAD(assembler_paths_list);
 static DEFINE_MUTEX(assembler_paths_lock);
 
+static LIST_HEAD(link_paths_list);
+static DEFINE_MUTEX(link_paths_lock);
+
 static int generate_file_name(char *buf, int buf_len)
 {
     unsigned long id;
@@ -417,6 +420,105 @@ out_normal:
     return ret;
 }
 
+// TODO: maybe the collect2 don't have "-o" parameter
+static int rewrite_link_path(char __user **argv, char __user **envp)
+{
+    int ret;
+    size_t len;
+    char *link_path = NULL;
+    char *out_dir = NULL;
+    char *kernel_new_path = NULL;
+    char *new_path = NULL;
+    unsigned long arg_pointer;
+    unsigned long arg_addr, dir_addr;
+
+    ret = -ENOMEM;
+    link_path = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!link_path)
+        goto out;
+
+    ret = obtain_parameter_pointer(argv, "-o", NULL, &arg_pointer);
+    if (ret || arg_pointer == 0) {
+        pr_debug("no valid object object_path found - %d \n", ret);
+        ret = 0;
+        goto out;
+    }
+
+    ret = -EFAULT;
+    if (get_user(arg_addr, (unsigned long __user *)arg_pointer))
+        goto out;
+
+    ret = copy_para_from_user(arg_addr, link_path, PATH_MAX);
+    if (ret)
+        goto out;
+
+    ret = obtain_parameter_addr(envp, LINK_DIR_ENV, &dir_addr, NULL);
+    if (ret || dir_addr == 0) {
+        pr_debug("no valid %s found %s \n", LINK_DIR_ENV, link_path);
+        ret = 0;
+        goto out;
+    }
+
+    ret = -ENOMEM;
+    out_dir = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!out_dir)
+        goto out;
+
+    ret = copy_para_from_user((unsigned long)((char *)dir_addr + LINK_DIR_ENV_LEN + 1),
+        out_dir, PATH_MAX);
+    if (ret)
+        goto out;
+
+    len = strlen(out_dir) + 1 + strlen(link_path) + 1;
+
+    ret = -ENOMEM;
+    kernel_new_path = kmalloc(len, GFP_KERNEL);
+    if (!kernel_new_path)
+        goto out;
+
+    new_path = (void *)vm_mmap(NULL, 0, len,
+        PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0);
+    if (IS_ERR((void *)new_path))
+        goto out;
+
+    ret = -ENOMEM;
+    strncpy(kernel_new_path, out_dir, strlen(out_dir));
+    strncpy(kernel_new_path + strlen(out_dir), "/", 1);
+    strncpy(kernel_new_path + strlen(out_dir) + 1, link_path, strlen(link_path));
+    strncpy(kernel_new_path + strlen(out_dir) + 1 + strlen(link_path), "\0", 1);
+
+    if (copy_to_user(new_path, kernel_new_path, len))
+        goto out;
+
+    /* modify path of output name */
+    if (put_user((unsigned long)new_path, (unsigned long *)arg_pointer))
+        goto out;
+
+    pr_debug("exist file name is %s \n", kernel_new_path);
+    pr_debug("link file name is %s \n", link_path);
+
+    ret = create_symlink(kernel_new_path, link_path);
+    if (ret) {
+        pr_err("create symbol link for linker failed - %d \n", ret);
+        goto out;
+    }
+
+    ret = 0;
+    goto out_normal;
+
+out:
+    if (new_path && !IS_ERR((void *)new_path))
+        vm_munmap((unsigned long)new_path, len);
+out_normal:
+    if (link_path)
+        kfree(link_path);
+    if (out_dir)
+        kfree(out_dir);
+    if (kernel_new_path)
+        kfree(kernel_new_path);
+    return ret;
+}
+
 static inline char __user **get_argv_from_regs(struct pt_regs *regs)
 {
     unsigned long stack_pointer = user_stack_pointer(regs);
@@ -482,6 +584,30 @@ static int uprobe_assembler_handler(struct uprobe_consumer *self, struct pt_regs
 
 static struct uprobe_consumer uprobe_assembler_consumer = {
     .handler = uprobe_assembler_handler,
+    .ret_handler = NULL,
+    .filter = uprobe_default_filter,
+};
+
+static int uprobe_link_handler(struct uprobe_consumer *self, struct pt_regs *regs)
+{
+    int ret;
+    char __user **argv = get_argv_from_regs(regs);
+    char __user **envp = get_env_from_regs(regs);
+
+    if (!argv || !envp)
+        return 0;
+
+    ret = rewrite_link_path(argv, envp);
+    if (ret) {
+        pr_warn("rewrite link path failed - %d \n", ret);
+        exit_syscall(regs, ret);
+    }
+
+    return 0;
+}
+
+static struct uprobe_consumer uprobe_link_consumer = {
+    .handler = uprobe_link_handler,
     .ret_handler = NULL,
     .filter = uprobe_default_filter,
 };
@@ -596,6 +722,8 @@ static struct list_head *get_elf_list(unsigned int cmd)
         return &compiler_paths_list;
     } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
         return &assembler_paths_list;
+    } else if ((cmd == UPATCH_REGISTER_LINK) || (cmd == UPATCH_UNREGISTER_LINK)) {
+        return &link_paths_list;
     } else {
         pr_warn("invalid command for upatch cmd. \n");
         return NULL;
@@ -608,6 +736,8 @@ static struct uprobe_consumer *get_uprobe_consumer(unsigned int cmd)
         return &uprobe_compiler_consumer;
     } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
         return &uprobe_assembler_consumer;
+    } else if ((cmd == UPATCH_REGISTER_LINK) || (cmd == UPATCH_UNREGISTER_LINK)) {
+        return &uprobe_link_consumer;
     } else {
         pr_warn("invalid command for upatch cmd. \n");
         return NULL;
@@ -620,6 +750,8 @@ static struct mutex *get_elf_lock(unsigned int cmd)
         return &compiler_paths_lock;
     } else if ((cmd == UPATCH_REGISTER_ASSEMBLER) || (cmd == UPATCH_UNREGISTER_ASSEMBLER)) {
         return &assembler_paths_lock;
+    } else if ((cmd == UPATCH_REGISTER_LINK) || (cmd == UPATCH_UNREGISTER_LINK)) {
+        return &link_paths_lock;
     } else {
         pr_warn("invalid command for upatch cmd. \n");
         return NULL;
@@ -786,11 +918,13 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
     {
     case UPATCH_REGISTER_COMPILER:
     case UPATCH_REGISTER_ASSEMBLER:
+    case UPATCH_REGISTER_LINK:
         ret = add_elf_path(cmd, path);
         break;
 
     case UPATCH_UNREGISTER_COMPILER:
     case UPATCH_UNREGISTER_ASSEMBLER:
+    case UPATCH_UNREGISTER_LINK:
         ret = delete_elf_path(cmd, path);
         break;
 
@@ -840,9 +974,20 @@ void clear_assembler_path(void)
     mutex_unlock(&assembler_paths_lock);
 }
 
+void clear_link_path(void)
+{
+    struct elf_path *ep, *tmp;
+    mutex_lock(&link_paths_lock);
+    list_for_each_entry_safe(ep, tmp, &link_paths_list, list) {
+        __delete_elf_path(UPATCH_UNREGISTER_LINK, ep->name);
+    }
+    mutex_unlock(&link_paths_lock);
+}
+
 void __exit compiler_hack_exit(void)
 {
     clear_compiler_path();
     clear_assembler_path();
+    clear_link_path();
     clear_compiler_step();
 }

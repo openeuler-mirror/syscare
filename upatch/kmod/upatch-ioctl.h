@@ -31,16 +31,20 @@ struct upatch_conmsg {
 
 #define UPATCH_UNREGISTER_ASSEMBLER _IOW(UPATCH_IOCTL_MAGIC, 0x4, const char *)
 
+#define UPATCH_REGISTER_LINK _IOW(UPATCH_IOCTL_MAGIC, 0x5, const char *)
+
+#define UPATCH_UNREGISTER_LINK _IOW(UPATCH_IOCTL_MAGIC, 0x6, const char *)
+
 /* when apply: patch information will be recored to the context of the process */
-#define UPATCH_ATTACH_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x5, const struct upatch_conmsg *)
+#define UPATCH_ATTACH_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x7, const struct upatch_conmsg *)
 
-#define UPATCH_REMOVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x6, const char *)
+#define UPATCH_REMOVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x8, const char *)
 
-#define UPATCH_ACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x7, const char *)
+#define UPATCH_ACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x9, const char *)
 
 /* deactive the jmp instruction but do not remove */
-#define UPATCH_DEACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x8, const char *)
+#define UPATCH_DEACTIVE_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0xA, const char *)
 
-#define UPATCH_INFO_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x9, const char *)
+#define UPATCH_INFO_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0xB, const char *)
 
 #endif /* _UPATCH_IOCTL_H */
