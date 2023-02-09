@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::constants::*;
 
 use super::rpm_helper::RpmHelper;
@@ -72,7 +74,7 @@ impl PackageInfo {
         )
     }
 
-    pub fn query_from(pkg_path: &str) -> std::io::Result<Self> {
+    pub fn query_from<P: AsRef<Path>>(pkg_path: P) -> std::io::Result<Self> {
         Ok(RpmHelper::query_package_info(
             pkg_path,
             "%{NAME}|%{ARCH}|%{EPOCH}|%{VERSION}|%{RELEASE}|%{LICENSE}|%{SOURCERPM}"

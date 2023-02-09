@@ -1,23 +1,28 @@
+use std::path::Path;
+
 use crate::constants::*;
+use crate::cmd::ExternCommandArgs;
 
 use super::{PackageInfo, PackageType, RpmBuilder, RpmHelper};
 
 pub struct RpmExtractor;
 
 impl RpmExtractor {
-    fn install_package(pkg_path: &str, output_dir: &str) -> std::io::Result<()> {
-        let exit_status = RPM.execvp([
-            "--install",
-            "--nodeps",
-            "--nofiledigest",
-            "--nocontexts",
-            "--nocaps",
-            "--noscripts",
-            "--notriggers",
-            "--allfiles",
-            "--root", output_dir,
-            pkg_path
-        ])?;
+    fn install_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<()> {
+        let exit_status = RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("--install")
+                .arg("--nodeps")
+                .arg("--nofiledigest")
+                .arg("--nocontexts")
+                .arg("--nocaps")
+                .arg("--noscripts")
+                .arg("--notriggers")
+                .arg("--allfiles")
+                .arg("--root")
+                .arg(output_dir.as_ref())
+                .arg(pkg_path.as_ref())
+        )?;
 
         let exit_code = exit_status.exit_code();
         if exit_code != 0 {
@@ -30,14 +35,14 @@ impl RpmExtractor {
         Ok(())
     }
 
-    pub fn extract_package(pkg_path: &str, output_dir: &str) -> std::io::Result<PackageInfo> {
-        Self::install_package(pkg_path, output_dir)?;
+    pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<PackageInfo> {
+        Self::install_package(&pkg_path, &output_dir)?;
 
-        let pkg_info = PackageInfo::query_from(pkg_path)?;
+        let pkg_info = PackageInfo::query_from(&pkg_path)?;
         if pkg_info.get_type() == PackageType::SourcePackage {
             RpmBuilder::new(
                 RpmHelper::find_build_root(
-                    output_dir
+                    &output_dir
                 )?
             ).build_prepare()?;
         }

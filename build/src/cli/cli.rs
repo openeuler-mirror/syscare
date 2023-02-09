@@ -1,4 +1,3 @@
-use lazy_static::lazy_static;
 use regex::Regex;
 
 use crate::package::{PackageInfo, PackageType};
@@ -17,17 +16,15 @@ use super::args::CliArguments;
 use super::workdir::CliWorkDir;
 
 pub struct PatchBuildCLI {
-    workdir:  CliWorkDir,
-    args:     CliArguments,
-    log_file: Option<String>,
+    workdir: CliWorkDir,
+    args:    CliArguments,
 }
 
 impl PatchBuildCLI {
     pub fn new() -> Self {
         Self {
-            workdir:  CliWorkDir::new(),
-            args:     CliArguments::new(),
-            log_file: None,
+            workdir: CliWorkDir::new(),
+            args:    CliArguments::new(),
         }
     }
 
@@ -39,24 +36,17 @@ impl PatchBuildCLI {
             true  => LevelFilter::Debug,
         };
 
-        let log_file_path = format!("{}/{}", self.workdir, CLI_LOG_FILE_NAME);
-
         logger.set_print_level(log_level);
-        logger.set_log_file(LevelFilter::Debug, &log_file_path)?;
+        logger.set_log_file(LevelFilter::Debug, self.workdir.log_file_path())?;
         Logger::init_logger(logger);
 
-        self.log_file = Some(log_file_path);
         Ok(())
     }
 
     fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
-        lazy_static! {
-            static ref PATCH_NAME_REGEX: Regex = Regex::new(PATCH_NAME_REGEX_STR).unwrap();
-        }
-
         let args = &mut self.args;
 
-        if !PATCH_NAME_REGEX.is_match(&args.patch_name) {
+        if !Regex::new(PATCH_NAME_REGEX_STR).unwrap().is_match(&args.patch_name) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch name should not contain any special character except '_' & '-'"),
@@ -69,7 +59,7 @@ impl PatchBuildCLI {
                 format!("Source should be rpm package"),
             ));
         }
-        args.source = fs::stringtify(fs::realpath(&args.source)?);
+        args.source = fs::realpath(&args.source)?;
 
         if fs::file_ext(&args.debuginfo)? != PKG_FILE_EXTENSION {
             return Err(std::io::Error::new(
@@ -77,22 +67,19 @@ impl PatchBuildCLI {
                 format!("Debuginfo should be rpm package"),
             ));
         }
-        args.debuginfo = fs::stringtify(fs::realpath(&args.debuginfo)?);
+        args.debuginfo = fs::realpath(&args.debuginfo)?;
 
-        fs::check_dir(&args.workdir)?;
-        args.workdir = fs::stringtify(fs::realpath(&args.workdir)?);
-
-        fs::check_dir(&args.output)?;
-        args.output = fs::stringtify(fs::realpath(&args.output)?);
+        args.workdir = fs::realpath(&args.workdir)?;
+        args.output  = fs::realpath(&args.output)?;
 
         for patch in &mut args.patches {
-            if fs::file_ext(patch.as_str())? != PATCH_FILE_EXTENSION {
+            if fs::file_ext(&patch)? != PATCH_FILE_EXTENSION {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("Patches should be patch file"),
                 ));
             }
-            *patch = fs::stringtify(fs::realpath(patch.as_str())?);
+            *patch = fs::realpath(&patch)?;
         }
 
         Ok(())
@@ -256,7 +243,6 @@ impl PatchBuildCLI {
         let pkg_output_dir = &self.args.output;
 
         info!("Building source package");
-
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_spec_dir  = source_pkg_build_root.specs_dir();
 
@@ -324,7 +310,7 @@ impl PatchBuildCLI {
 
         if let Err(e) = self.main_process() {
             error!("{}", e);
-            println!("For more information, please check '{}'", self.log_file.as_ref().unwrap());
+            error!("For more information, please check '{}'", self.workdir.log_file_path().display());
             return;
         }
 

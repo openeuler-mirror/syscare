@@ -1,7 +1,8 @@
 use std::collections::BTreeSet;
-
+use std::path::Path;
 
 use crate::constants::*;
+use crate::util::os_str::OsStrContains;
 use crate::util::{sys, fs};
 
 use crate::patch::PatchInfo;
@@ -35,8 +36,8 @@ impl RpmSpecHelper {
         let mut is_patched_pkg = false;
 
         for patch_file in patch_info.get_file_list() {
-            // File path contains pid (in workdir) means some of patches are come from source package
-            match patch_file.get_path().contains(&sys::get_process_id().to_string()) {
+            // File path contains pid (in workdir) means some of patches are coming from source package
+            match patch_file.get_path().contains(sys::get_process_id().to_string()) {
                 true  => {
                     // Exclude patches from patched source package
                     // and leave a flag to identify this
@@ -74,8 +75,8 @@ impl RpmSpecHelper {
         source_tag_list
     }
 
-    pub fn modify_spec_file_by_patches(spec_file_path: &str, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let mut spec_file_content = fs::read_file_content(spec_file_path)?;
+    pub fn modify_spec_file_by_patches<P: AsRef<Path>>(spec_file_path: P, patch_info: &PatchInfo) -> std::io::Result<()> {
+        let mut spec_file_content = fs::read_file_content(&spec_file_path)?;
         let mut orig_release_tag = None;
         let mut source_tags = BTreeSet::new();
 
@@ -114,7 +115,9 @@ impl RpmSpecHelper {
             None => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Parse rpm spec file '{}' failed, cannot find tag 'Release'", spec_file_path),
+                    format!("Parse rpm spec file '{}' failed, cannot find tag 'Release'",
+                        spec_file_path.as_ref().display()
+                    ),
                 ));
             }
         }
@@ -136,7 +139,7 @@ impl RpmSpecHelper {
         }
 
         // Write to file
-        fs::write_file_content(spec_file_path, spec_file_content)?;
+        fs::write_file_content(&spec_file_path, spec_file_content)?;
 
         Ok(())
     }

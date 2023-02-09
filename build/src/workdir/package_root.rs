@@ -1,40 +1,40 @@
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::ops::Deref;
+
 use crate::util::fs;
 
 use super::workdir::ManageWorkDir;
 use super::package_build_root::PackageBuildRoot;
 
 pub struct PackageRoot {
-    base:       String,
-    source_pkg: String,
-    debug_pkg:  String,
-    binary_pkg: String,
+    path:       PathBuf,
+    source_pkg: PathBuf,
+    debug_pkg:  PathBuf,
+    binary_pkg: PathBuf,
     build_root: PackageBuildRoot,
 }
 
 impl PackageRoot {
-    pub fn new(base_dir: String) -> Self {
-        Self {
-            base:       base_dir.to_owned(),
-            source_pkg: format!("{}/source",    base_dir),
-            debug_pkg:  format!("{}/debuginfo", base_dir),
-            binary_pkg: format!("{}/binary",    base_dir),
-            build_root: PackageBuildRoot::new(format!("{}/rpmbuild", base_dir)),
-        }
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        let path       = path.as_ref().to_path_buf();
+        let source_pkg = path.join("source");
+        let debug_pkg  = path.join("debuginfo");
+        let binary_pkg = path.join("binary");
+        let build_root = PackageBuildRoot::new(path.join("rpmbuild"));
+
+        Self { path, source_pkg, debug_pkg, binary_pkg, build_root }
     }
 
-    fn base_dir(&self) -> &str {
-        &self.base
-    }
-
-    pub fn source_pkg_dir(&self) -> &str {
+    pub fn source_pkg_dir(&self) -> &Path {
         &self.source_pkg
     }
 
-    pub fn debug_pkg_dir(&self) -> &str {
+    pub fn debug_pkg_dir(&self) -> &Path {
         &self.debug_pkg
     }
 
-    pub fn binary_pkg_dir(&self) -> &str {
+    pub fn binary_pkg_dir(&self) -> &Path {
         &self.binary_pkg
     }
 
@@ -45,10 +45,10 @@ impl PackageRoot {
 
 impl ManageWorkDir for PackageRoot {
     fn create_all(&self) -> std::io::Result<()> {
-        fs::create_dir(self.base_dir())?;
-        fs::create_dir(self.source_pkg_dir())?;
-        fs::create_dir(self.debug_pkg_dir())?;
-        fs::create_dir(self.binary_pkg_dir())?;
+        fs::create_dir(&self.path)?;
+        fs::create_dir(&self.source_pkg)?;
+        fs::create_dir(&self.debug_pkg)?;
+        fs::create_dir(&self.binary_pkg)?;
         self.build_root().create_all()?;
 
         Ok(())
@@ -56,14 +56,22 @@ impl ManageWorkDir for PackageRoot {
 
     fn remove_all(&self) -> std::io::Result<()> {
         self.build_root().remove_all()?;
-        std::fs::remove_dir_all(self.base_dir())?;
+        std::fs::remove_dir_all(&self.path)?;
 
         Ok(())
     }
 }
 
-impl std::fmt::Display for PackageRoot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.base_dir())
+impl Deref for PackageRoot {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl AsRef<OsStr> for PackageRoot {
+    fn as_ref(&self) -> &OsStr {
+        self.as_os_str()
     }
 }

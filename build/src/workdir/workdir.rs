@@ -1,3 +1,8 @@
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::ops::Deref;
+
+use crate::constants::*;
 use crate::util::fs;
 
 use super::patch_root::PatchRoot;
@@ -9,22 +14,19 @@ pub trait ManageWorkDir {
 }
 
 pub struct WorkDir {
-    base:         String,
+    path:         PathBuf,
+    log_file:     PathBuf,
     patch_root:   PatchRoot,
     package_root: PackageRoot,
 }
 
 impl WorkDir {
-    pub fn new(base_dir: String) -> Self {
-        let base         = base_dir.to_owned();
-        let patch_root   = PatchRoot::new(format!("{}/patch", base_dir));
-        let package_root = PackageRoot::new(format!("{}/package",  base_dir));
-
-        Self { base, patch_root, package_root }
-    }
-
-    fn base_dir(&self) -> &str {
-        &self.base
+    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+        let path         = path.as_ref().to_path_buf();
+        let log_file     = path.join(CLI_LOG_FILE_NAME);
+        let patch_root   = PatchRoot::new(path.join("path"));
+        let package_root = PackageRoot::new(path.join("package"));
+        Self { path, log_file, patch_root, package_root }
     }
 
     pub fn patch_root(&self) -> &PatchRoot {
@@ -34,11 +36,15 @@ impl WorkDir {
     pub fn package_root(&self) -> &PackageRoot {
         &self.package_root
     }
+
+    pub fn log_file_path(&self) -> &Path {
+        &self.log_file
+    }
 }
 
 impl ManageWorkDir for WorkDir {
     fn create_all(&self) -> std::io::Result<()> {
-        fs::create_dir(self.base_dir())?;
+        fs::create_dir(&self.path)?;
         self.patch_root.create_all()?;
         self.package_root.create_all()?;
 
@@ -48,14 +54,22 @@ impl ManageWorkDir for WorkDir {
     fn remove_all(&self) -> std::io::Result<()> {
         self.package_root.remove_all()?;
         self.patch_root.remove_all()?;
-        std::fs::remove_dir_all(self.base_dir())?;
+        std::fs::remove_dir_all(&self.path)?;
 
         Ok(())
     }
 }
 
-impl std::fmt::Display for WorkDir {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.base_dir())
+impl Deref for WorkDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl AsRef<OsStr> for WorkDir {
+    fn as_ref(&self) -> &OsStr {
+        self.as_os_str()
     }
 }

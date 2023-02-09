@@ -1,13 +1,15 @@
+use std::path::PathBuf;
+
 use crate::patch::PatchFile;
 
 pub struct KernelPatchBuilderArguments {
-    pub build_root:          String,
+    pub build_root:          PathBuf,
     pub patch_name:          String,
-    pub source_dir:          String,
-    pub config:              String,
-    pub vmlinux:             String,
+    pub source_dir:          PathBuf,
+    pub config_file:         PathBuf,
+    pub vmlinux:             PathBuf,
     pub jobs:                usize,
-    pub output_dir:          String,
+    pub output_dir:          PathBuf,
     pub skip_compiler_check: bool,
     pub patch_list:          Vec<PatchFile>,
 }

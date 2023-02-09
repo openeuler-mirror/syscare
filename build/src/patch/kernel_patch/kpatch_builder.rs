@@ -2,6 +2,7 @@ use crate::constants::*;
 use crate::log::debug;
 
 use crate::cli::{CliWorkDir, CliArguments};
+use crate::cmd::{ExternCommandArgs, ExternCommandEnvs};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchFile};
 use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
@@ -16,31 +17,36 @@ impl KernelPatchBuilder {
         Self {}
     }
 
-    fn parse_arg_list<'a>(&self, args: &'a KernelPatchBuilderArguments) -> Vec<&'a str> {
-        let mut arg_list = vec![
-            "--name",      args.patch_name.as_str(),
-            "--sourcedir", args.source_dir.as_str(),
-            "--config",    args.config.as_str(),
-            "--vmlinux",   args.vmlinux.as_str(),
-            "--jobs",      Box::leak(Box::new(args.jobs.to_string())),
-            "--output",    args.output_dir.as_str(),
-            "--skip-cleanup",
-        ];
-        if args.skip_compiler_check {
-            arg_list.push("--skip-compiler-check");
-        }
-        arg_list.append(&mut args.patch_list.iter().map(PatchFile::get_path).collect());
+    fn parse_cmd_args(&self, args: &KernelPatchBuilderArguments) -> ExternCommandArgs {
+        let mut cmd_args = ExternCommandArgs::new()
+            .arg("--name")
+            .arg(&args.patch_name)
+            .arg("--sourcedir")
+            .arg(&args.source_dir)
+            .arg("--config")
+            .arg(&args.config_file)
+            .arg("--vmlinux")
+            .arg(&args.vmlinux)
+            .arg("--jobs")
+            .arg(args.jobs.to_string())
+            .arg("--output")
+            .arg(&args.output_dir)
+            .arg("--skip-cleanup");
 
-        arg_list
+        if args.skip_compiler_check {
+            cmd_args = cmd_args.arg("--skip-compiler-check");
+        }
+        cmd_args = cmd_args.args(args.patch_list.iter().map(PatchFile::get_path));
+
+        cmd_args
     }
 
-    fn parse_env_list<'a>(&'a self, args: &'a KernelPatchBuilderArguments) -> Vec<(&str, &str)> {
-        vec![
-            ("CACHEDIR",           args.build_root.as_str()),
-            ("NO_PROFILING_CALLS", "yes"),
-            ("DISABLE_AFTER_LOAD", "yes"),
-            ("KEEP_JUMP_LABEL",    "yes")
-        ]
+    fn parse_cmd_envs(&self, args: &KernelPatchBuilderArguments) -> ExternCommandEnvs {
+        ExternCommandEnvs::new()
+            .env("CACHEDIR",           &args.build_root)
+            .env("NO_PROFILING_CALLS", &args.build_root)
+            .env("DISABLE_AFTER_LOAD", &args.build_root)
+            .env("KEEP_JUMP_LABEL",    &args.build_root)
     }
 }
 
@@ -56,20 +62,20 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
         let source_pkg_build_dir  = source_pkg_build_root.build_dir();
 
         let kernel_source_dir = RpmHelper::find_source_directory(source_pkg_build_dir, patch_info)?;
-        debug!("source directory: '{}'", kernel_source_dir);
+        debug!("source directory: '{}'", kernel_source_dir.display());
 
         KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
-        let kernel_config = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
-        debug!("kernel config: '{}'", kernel_config);
+        let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
+        debug!("kernel config: '{}'", kernel_config_file.display());
 
         let debuginfo_file = KernelPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
-        debug!("debuginfo file: '{}'", debuginfo_file);
+        debug!("debuginfo file: '{}'", debuginfo_file.display());
 
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),
             patch_name:          patch_info.get_name().to_owned(),
             source_dir:          kernel_source_dir,
-            config:              kernel_config,
+            config_file:         kernel_config_file,
             vmlinux:             debuginfo_file,
             jobs:                args.kjobs,
             output_dir:          patch_output_dir.to_owned(),
@@ -86,8 +92,8 @@ impl PatchBuilder for KernelPatchBuilder {
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => {
                 let exit_status = KPATCH_BUILD.execve(
-                    self.parse_arg_list(&kargs),
-                    self.parse_env_list(&kargs)
+                    self.parse_cmd_args(&kargs),
+                    self.parse_cmd_envs(&kargs)
                 )?;
 
                 let exit_code = exit_status.exit_code();

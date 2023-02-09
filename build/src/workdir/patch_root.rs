@@ -1,38 +1,38 @@
+use std::ffi::OsStr;
+use std::path::{Path, PathBuf};
+use std::ops::Deref;
+
 use crate::util::fs;
 
 use super::workdir::ManageWorkDir;
 
 pub struct PatchRoot {
-    base:       String,
-    build_root: String,
-    output:     String,
+    path:       PathBuf,
+    build_root: PathBuf,
+    output:     PathBuf,
 }
 
 impl PatchRoot {
-    pub fn new(base_dir: String) -> Self {
-        Self {
-            base:       base_dir.to_owned(),
-            build_root: format!("{}/build",  base_dir),
-            output:     format!("{}/output", base_dir)
-        }
+    pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
+        let path       = base_dir.as_ref().to_path_buf();
+        let build_root = path.join("build");
+        let output     = path.join("output");
+
+        Self { path, build_root, output }
     }
 
-    fn base_dir(&self) -> &str {
-        &self.base
-    }
-
-    pub fn build_root_dir(&self) -> &str {
+    pub fn build_root_dir(&self) -> &Path {
         &self.build_root
     }
 
-    pub fn output_dir(&self) -> &str {
+    pub fn output_dir(&self) -> &Path {
         &self.output
     }
 }
 
 impl ManageWorkDir for PatchRoot {
     fn create_all(&self) -> std::io::Result<()> {
-        fs::create_dir(self.base_dir())?;
+        fs::create_dir(&self.path)?;
         fs::create_dir(self.build_root_dir())?;
         fs::create_dir(self.output_dir())?;
 
@@ -40,14 +40,22 @@ impl ManageWorkDir for PatchRoot {
     }
 
     fn remove_all(&self) -> std::io::Result<()> {
-        std::fs::remove_dir_all(self.base_dir())?;
+        std::fs::remove_dir_all(&self.path)?;
 
         Ok(())
     }
 }
 
-impl std::fmt::Display for PatchRoot {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(self.base_dir())
+impl Deref for PatchRoot {
+    type Target = Path;
+
+    fn deref(&self) -> &Self::Target {
+        &self.path
+    }
+}
+
+impl AsRef<OsStr> for PatchRoot {
+    fn as_ref(&self) -> &OsStr {
+        self.as_os_str()
     }
 }

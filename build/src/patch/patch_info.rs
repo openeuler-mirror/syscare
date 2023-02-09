@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use lazy_static::*;
@@ -27,7 +27,7 @@ impl std::fmt::Display for PatchType {
 #[derive(Debug)]
 pub struct PatchFile {
     name:   String,
-    path:   String,
+    path:   PathBuf,
     digest: String,
 }
 
@@ -35,7 +35,7 @@ impl std::fmt::Display for PatchFile {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("PatchFile {{ name: {}, path: {}, digest: ${} }}",
             self.name,
-            self.path,
+            self.path.display(),
             self.digest
         ))
     }
@@ -52,14 +52,14 @@ impl PatchFile {
         let mut file_digests = FILE_DIGESTS.lock().unwrap();
 
         let file_path     = fs::realpath(path)?;
-        let mut file_name = fs::file_name(file_path.as_path())?;
+        let mut file_name = fs::file_name(&file_path)?;
         if !Self::validate_naming_rule(&file_name) {
             // The patch file may come form patched source rpm, which is already renamed.
             // Patch file naming rule: ${patch_id}-${patch_name}.patch
             file_name = format!("{:04}-{}", file_id, file_name);
         };
 
-        let file_ext = fs::file_ext(file_path.as_path())?;
+        let file_ext = fs::file_ext(&file_path)?;
         if file_ext != PATCH_FILE_EXTENSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -79,7 +79,7 @@ impl PatchFile {
 
         Ok(Some(Self {
             name:   file_name,
-            path:   fs::stringtify(file_path.as_path()),
+            path:   file_path,
             digest: file_digest.to_owned()
         }))
     }
@@ -108,7 +108,7 @@ impl PatchFile {
         &self.name
     }
 
-    pub fn get_path(&self) -> &str {
+    pub fn get_path(&self) -> &Path {
         &self.path
     }
 

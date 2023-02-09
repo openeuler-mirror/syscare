@@ -1,14 +1,19 @@
+use std::path::{PathBuf, Path};
+
 use crate::constants::*;
 use crate::util::fs;
+
+use crate::cmd::ExternCommandArgs;
 
 pub struct KernelPatchHelper;
 
 impl KernelPatchHelper {
-    pub fn generate_defconfig(source_dir: &str) -> std::io::Result<()> {
-        let exit_status = MAKE.execvp([
-            "-C", source_dir,
-            KERNEL_DEFCONFIG_NAME
-        ])?;
+    pub fn generate_defconfig<P: AsRef<Path>>(source_dir: P) -> std::io::Result<()> {
+        let exit_status = MAKE.execvp(ExternCommandArgs::new()
+            .arg("-C")
+            .arg(source_dir.as_ref())
+            .arg(KERNEL_DEFCONFIG_NAME)
+        )?;
 
         let exit_code = exit_status.exit_code();
         if exit_code != 0 {
@@ -21,25 +26,21 @@ impl KernelPatchHelper {
         Ok(())
     }
 
-    pub fn find_kernel_config(directory: &str) -> std::io::Result<String> {
-        let config_file_path = fs::find_file(
+    pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+        fs::find_file(
             directory,
             KERNEL_CONFIG_NAME,
             false,
             true
-        )?;
-
-        Ok(fs::stringtify(config_file_path))
+        )
     }
 
-    pub fn find_debuginfo_file(directory: &str) -> std::io::Result<String> {
-        let vmlinux_file_path = fs::find_file(
+    pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+        fs::find_file(
             directory,
             KERNEL_VMLINUX_FILE,
             false,
             true
-        )?;
-
-        Ok(fs::stringtify(vmlinux_file_path))
+        )
     }
 }

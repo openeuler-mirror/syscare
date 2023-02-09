@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use clap::Parser;
 
 use crate::constants::*;
@@ -52,22 +54,22 @@ pub struct CliArguments {
 
     /// Source package
     #[arg(short, long)]
-    pub source: String,
+    pub source: PathBuf,
 
     /// Debuginfo package
     #[arg(short, long)]
-    pub debuginfo: String,
+    pub debuginfo: PathBuf,
 
     /// Working directory
     #[arg(long, default_value=CLI_DEFAULT_WORKDIR)]
-    pub workdir: String,
+    pub workdir: PathBuf,
 
     /// Generated patch output directory
     #[arg(short, long, default_value=CLI_DEFAULT_OUTPUT_DIR)]
-    pub output: String,
+    pub output: PathBuf,
 
     /// Kernel make jobs
-    #[arg(long, value_name="N", default_value=Self::get_default_kjobs())]
+    #[arg(long, value_name="N", default_value=sys::get_cpu_num())]
     pub kjobs: usize,
 
     /// Skip compiler version check (not recommended)
@@ -84,19 +86,11 @@ pub struct CliArguments {
 
     /// Patch file(s)
     #[arg(required=true)]
-    pub patches: Vec<String>
+    pub patches: Vec<PathBuf>
 }
 
 impl CliArguments {
     pub fn new() -> Self {
         CliArguments::parse()
-    }
-
-    fn get_default_kjobs() -> &'static str {
-        Box::leak(
-            sys::get_cpu_num()
-                .to_string()
-                .into_boxed_str()
-        )
     }
 }

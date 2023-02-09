@@ -1,4 +1,5 @@
 use std::ops::Deref;
+use std::path::Path;
 
 use crate::util::sys;
 
@@ -13,12 +14,10 @@ impl CliWorkDir {
         Self { inner: None }
     }
 
-    pub fn create(&mut self, workdir: &str) -> std::io::Result<()> {
-        let process_id   = sys::get_process_id();
-        let process_name = sys::get_process_name();
+    pub fn create<P: AsRef<Path>>(&mut self, workdir: P) -> std::io::Result<()> {
+        let dir_name = format!("{}.{}", sys::get_process_name(), sys::get_process_id());
+        let workdir = WorkDir::new(workdir.as_ref().join(dir_name));
 
-        let basedir = format!("{}/{}.{}", workdir, process_name, process_id);
-        let workdir = WorkDir::new(basedir);
         workdir.create_all()?;
 
         self.inner = Some(workdir);
@@ -39,11 +38,5 @@ impl Deref for CliWorkDir {
 
     fn deref(&self) -> &Self::Target {
         self.inner.as_ref().expect("Working directory is not exist")
-    }
-}
-
-impl std::fmt::Display for CliWorkDir {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.deref()))
     }
 }
