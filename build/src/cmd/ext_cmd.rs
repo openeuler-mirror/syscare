@@ -1,29 +1,97 @@
+use std::ffi::{OsStr, OsString};
+use std::collections::HashMap;
+
 use std::process::{Command, Stdio};
 use std::io::BufReader;
-use std::ffi::OsStr;
 
 use crate::log::debug;
 
 use super::lossy_lines::LossyLines;
 
-#[derive(Debug)]
-pub struct ExternCommandExitStatus {
-    exit_code: i32,
-    stdout: String,
-    stderr: String,
+pub struct ExternCommandArgs {
+    args: Vec<OsString>,
 }
 
-impl ExternCommandExitStatus {
-    pub fn exit_code(&self) -> i32 {
-        self.exit_code
+impl ExternCommandArgs {
+    pub fn new() -> Self {
+        Self { args: Vec::new() }
     }
 
-    pub fn stdout(&self) -> &str {
-        &self.stdout
+    pub fn arg<S>(mut self, arg: S) -> Self
+    where
+        S: AsRef<OsStr>
+    {
+        self.args.push(arg.as_ref().to_os_string());
+        self
     }
 
-    pub fn stderr(&self) -> &str {
-        &self.stderr
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>
+    {
+        for arg in args {
+            self.args.push(arg.as_ref().to_os_string())
+        }
+
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandArgs {
+    type Item = OsString;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.args.into_iter()
+    }
+}
+
+pub struct ExternCommandEnvs {
+    envs: HashMap<OsString, OsString>,
+}
+
+impl ExternCommandEnvs {
+    pub fn new() -> Self {
+        Self { envs: HashMap::new() }
+    }
+
+    pub fn env<K, V>(mut self, k: K, v: V) -> Self
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.envs.insert(
+            k.as_ref().to_os_string(),
+            v.as_ref().to_os_string()
+        );
+        self
+    }
+
+    pub fn envs<I, K, V>(mut self, envs: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in envs {
+            self.envs.insert(
+                k.as_ref().to_os_string(),
+                v.as_ref().to_os_string()
+            );
+        }
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandEnvs {
+    type Item = (OsString, OsString);
+
+    type IntoIter = std::collections::hash_map::IntoIter<OsString, OsString>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.envs.into_iter()
     }
 }
 
@@ -82,28 +150,18 @@ impl<'a> ExternCommand<'a> {
         Self { path }
     }
 
-    pub fn execvp<I, S> (&self, arg_list: I) -> std::io::Result<ExternCommandExitStatus>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
+    pub fn execvp(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
-        command.args(arg_list);
+        command.args(args.into_iter());
 
         self.execute_command(&mut command)
     }
 
-    pub fn execve<I, E, S, K, V>(&self, arg_list: I, env_list: E) -> std::io::Result<ExternCommandExitStatus>
-    where
-        I: IntoIterator<Item = S>,
-        E: IntoIterator<Item = (K, V)>,
-        S: AsRef<OsStr>,
-        K: AsRef<OsStr>,
-        V: AsRef<OsStr>,
+    pub fn execve(&self, args: ExternCommandArgs, vars: ExternCommandEnvs) -> std::io::Result<ExternCommandExitStatus>
     {
         let mut command = Command::new(self.path);
-        command.args(arg_list);
-        command.envs(env_list);
+        command.args(args.into_iter());
+        command.envs(vars.into_iter());
 
         debug!("Executing {:?}", command);
         self.execute_command(&mut command)
@@ -113,5 +171,26 @@ impl<'a> ExternCommand<'a> {
 impl std::fmt::Display for ExternCommand<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}", self.path))
+    }
+}
+
+#[derive(Debug)]
+pub struct ExternCommandExitStatus {
+    exit_code: i32,
+    stdout: String,
+    stderr: String,
+}
+
+impl ExternCommandExitStatus {
+    pub fn exit_code(&self) -> i32 {
+        self.exit_code
+    }
+
+    pub fn stdout(&self) -> &str {
+        &self.stdout
+    }
+
+    pub fn stderr(&self) -> &str {
+        &self.stderr
     }
 }
