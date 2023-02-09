@@ -12,6 +12,8 @@ set(UPATCH_BUILD_BIN "upatch-build")
 
 add_custom_target(upatch-build ALL
         COMMENT "Compiling upatch-build..."
+        COMMAND cargo update -p clap --precise 4.0.32
+        COMMAND cargo update -p clap_lex --precise 0.3.0
         COMMAND CARGO_TARGET_DIR=${CMAKE_CURRENT_BINARY_DIR} ${CARGO_CMD}
         COMMAND cp ${CMAKE_CURRENT_BINARY_DIR}/${TARGET_DIR}/${UPATCH_BUILD_BIN} ${CMAKE_CURRENT_BINARY_DIR}
         WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
