@@ -1,10 +1,100 @@
 use std::process::{Command, ExitStatus, Stdio};
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::io::BufReader;
+use std::path::Path;
+use std::collections::HashMap;
 
 use log::*;
 
 use super::LossyLines;
+
+#[derive(Clone)]
+pub struct ExternCommandArgs {
+    args: Vec<OsString>,
+}
+
+impl ExternCommandArgs {
+    pub fn new() -> Self {
+        Self { args: Vec::new() }
+    }
+
+    pub fn arg<S>(mut self, arg: S) -> Self
+    where
+        S: AsRef<OsStr>
+    {
+        self.args.push(arg.as_ref().to_os_string());
+        self
+    }
+
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>
+    {
+        for arg in args {
+            self.args.push(arg.as_ref().to_os_string())
+        }
+
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandArgs {
+    type Item = OsString;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.args.into_iter()
+    }
+}
+
+pub struct ExternCommandEnvs {
+    envs: HashMap<OsString, OsString>,
+}
+
+impl ExternCommandEnvs {
+    pub fn new() -> Self {
+        Self { envs: HashMap::new() }
+    }
+
+    pub fn env<K, V>(mut self, k: K, v: V) -> Self
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.envs.insert(
+            k.as_ref().to_os_string(),
+            v.as_ref().to_os_string()
+        );
+        self
+    }
+
+    pub fn envs<I, K, V>(mut self, envs: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in envs {
+            self.envs.insert(
+                k.as_ref().to_os_string(),
+                v.as_ref().to_os_string()
+            );
+        }
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandEnvs {
+    type Item = (OsString, OsString);
+
+    type IntoIter = std::collections::hash_map::IntoIter<OsString, OsString>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.envs.into_iter()
+    }
+}
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -37,7 +127,7 @@ impl ExternCommandExitStatus {
 #[derive(Debug)]
 #[derive(Clone)]
 pub struct ExternCommand<'a> {
-    path: &'a str,
+    path: &'a OsStr,
 }
 
 impl ExternCommand<'_> {
@@ -49,7 +139,7 @@ impl ExternCommand<'_> {
             Ok(child_process) => child_process,
             Err(e) => {
                 if e.kind() == std::io::ErrorKind::NotFound{
-                    return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("can't find command: {}", self.path)));
+                    return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("can't find command: {:?}", self.path)));
                 }
                 return Err(e);
             }
@@ -85,46 +175,34 @@ impl ExternCommand<'_> {
 }
 
 impl<'a> ExternCommand<'a> {
-    pub const fn new(path: &'a str) -> Self {
-        Self { path }
+    pub fn new<S: AsRef<OsStr> + ?Sized>(path: &'a S) -> Self {
+        Self { path: path.as_ref() }
     }
 
-    pub fn execvp<I, S> (&self, arg_list: I) -> std::io::Result<ExternCommandExitStatus>
-        where
-            I: IntoIterator<Item = S>,
-            S: AsRef<OsStr>,
-    {
+    pub fn execvp(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
-        command.args(arg_list);
+        command.args(args.into_iter());
 
         self.execute_command(&mut command)
     }
 
-    pub fn execvp_file<I, S, T> (&self, arg_list: I, current_dir: &str, stdio: T) -> std::io::Result<ExternCommandExitStatus>
-        where
-            I: IntoIterator<Item = S>,
-            S: AsRef<OsStr>,
-            T: Into<Stdio>
+    pub fn execvp_stdio<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T) -> std::io::Result<ExternCommandExitStatus>
+    where
+        P: AsRef<Path>,
+        T: Into<Stdio>,
     {
         let mut command = Command::new(self.path);
-        command.args(arg_list);
+        command.args(args.into_iter());
         command.current_dir(current_dir);
         command.stdin(stdio);
 
         self.execute_command(&mut command)
     }
 
-    pub fn execve<I, E, S, K, V>(&self, arg_list: I, env_list: E, current_dir: &str) -> std::io::Result<ExternCommandExitStatus>
-        where
-            I: IntoIterator<Item = S>,
-            E: IntoIterator<Item = (K, V)>,
-            S: AsRef<OsStr>,
-            K: AsRef<OsStr>,
-            V: AsRef<OsStr>,
-    {
+    pub fn execve<P: AsRef<Path>>(&self, args: ExternCommandArgs, envs: ExternCommandEnvs, current_dir: P) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
-        command.args(arg_list);
-        command.envs(env_list);
+        command.args(args.into_iter());
+        command.envs(envs.into_iter());
         command.current_dir(current_dir);
 
         self.execute_command(&mut command)
@@ -133,6 +211,6 @@ impl<'a> ExternCommand<'a> {
 
 impl std::fmt::Display for ExternCommand<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.path))
+        f.write_fmt(format_args!("{:?}", self.path))
     }
 }

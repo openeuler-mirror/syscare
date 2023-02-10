@@ -1,8 +1,9 @@
 use std::fs::File;
 use std::io::Write;
+use std::path::{Path, PathBuf};
 
 use log::info;
-use crate::cmd::ExternCommand;
+use crate::cmd::*;
 
 use super::Result;
 use super::Error;
@@ -13,26 +14,27 @@ const LINK_DIR_ENV: &str = "UPATCH_LINK_OUTPUT";
 const BUILD_SHELL: &str = "build.sh";
 
 pub struct Project {
-    project_dir: String,
+    project_dir: PathBuf,
 }
 
 impl Project {
-    pub fn new(project_dir: String) -> Self {
+    pub fn new<P: AsRef<Path>>(project_dir: P) -> Self {
         Self {
-            project_dir,
+            project_dir: project_dir.as_ref().to_path_buf()
         }
     }
 
-    pub fn build(&self, cmd: &str, assembler_output: &str, link_output: &str, build_command: String) -> Result<()> {
-        let command_shell_str = format!("{}/{}", assembler_output, BUILD_SHELL);
-        let mut command_shell = File::create(&command_shell_str)?;
+    pub fn build<P: AsRef<Path>>(&self, cmd: &str, assembler_output: P, link_output: P, build_command: String) -> Result<()> {
+        let assembler_output = assembler_output.as_ref();
+        let link_output = link_output.as_ref();
+        let command_shell_path = assembler_output.join(BUILD_SHELL);
+        let mut command_shell = File::create(&command_shell_path)?;
         command_shell.write_all((&build_command).as_ref())?;
-        let args_list = vec![&command_shell_str];
-        let envs_list = vec![
-            (COMPILER_CMD_ENV, cmd),
+        let args_list = ExternCommandArgs::new().arg(command_shell_path);
+        let envs_list = ExternCommandEnvs::new().env(COMPILER_CMD_ENV, cmd).envs([
             (ASSEMBLER_DIR_ENV, assembler_output),
             (LINK_DIR_ENV, link_output)
-        ];
+        ]);
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {
             return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr())))
@@ -40,11 +42,12 @@ impl Project {
         Ok(())
     }
 
-    pub fn patch(&self, patch: String, verbose: bool) -> Result<()> {
-        let args_list = vec!["-N", "-p1"];
-        let output = ExternCommand::new("patch").execvp_file(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch)))?;
+    pub fn patch<P: AsRef<Path>>(&self, patch: P, verbose: bool) -> Result<()> {
+        let patch = patch.as_ref();
+        let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
+        let output = ExternCommand::new("patch").execvp_stdio(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch.display())))?;
         match output.exit_status().success() {
-            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch,  output.exit_code(), output.stderr()))),
+            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch.display(), output.exit_code(), output.stderr()))),
             true => match verbose {
                 true => (),
                 false => info!("{}", output.stdout()),

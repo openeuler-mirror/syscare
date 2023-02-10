@@ -1,6 +1,9 @@
 use std::borrow::{Cow, Borrow};
 use std::collections::HashMap;
 use std::io;
+use std::path::{Path, PathBuf};
+use std::ffi::{OsString, OsStr};
+use std::os::unix::ffi::OsStrExt;
 
 use log::*;
 use gimli::{constants, Reader};
@@ -16,21 +19,21 @@ type RelocationMap = HashMap<usize, object::Relocation>;
 #[allow(non_snake_case)]
 pub struct DwarfCompileUnit {
     pub DW_AT_producer: String,
-    pub DW_AT_comp_dir: String,
-    pub DW_AT_name: String,
+    pub DW_AT_comp_dir: PathBuf,
+    pub DW_AT_name: PathBuf,
 }
 
 impl DwarfCompileUnit{
     pub fn new() -> Self{
         Self {
             DW_AT_producer: String::new(),
-            DW_AT_comp_dir: String::new(),
-            DW_AT_name: String::new(),
+            DW_AT_comp_dir: PathBuf::new(),
+            DW_AT_name: PathBuf::new(),
         }
     }
 
-    pub fn get_source(&self) -> String {
-        self.DW_AT_comp_dir.clone() + "/" + &self.DW_AT_name
+    pub fn get_source(&self) -> PathBuf {
+        self.DW_AT_comp_dir.join(&self.DW_AT_name)
     }
 
     pub fn get_compiler_version(&self) -> String {
@@ -45,34 +48,41 @@ impl Dwarf{
         Self {}
     }
 
-    pub fn file_in_binary(&self, dir_str: &str, binary: &str) -> io::Result<Vec<DwarfCompileUnit>> {
+    pub fn file_in_binary<P: AsRef<Path>>(&self, dir_str: P, binary: P) -> io::Result<Vec<DwarfCompileUnit>> {
         let path = self.find_binary(dir_str, binary)?;
         self.file_in_obj(path)
     }
 
-    pub fn file_in_obj(&self, elf: String) -> io::Result<Vec<DwarfCompileUnit>> {
+    pub fn file_in_obj<P: AsRef<Path>>(&self, elf: P) -> io::Result<Vec<DwarfCompileUnit>> {
         // TODO can use mmap here, but depend on some devices
-        let file = std::fs::read(&elf)?;
-        let object = object::File::parse(&*file).unwrap();
-        let endian = if object.is_little_endian() {
-            gimli::RunTimeEndian::Little
-        } else {
-            gimli::RunTimeEndian::Big
-        };
-        match self.get_files(&object, endian) {
-            Ok(res) => Ok(res),
-            Err(e) => Err(io::Error::new(io::ErrorKind::NotFound, e.to_string())),
+        let elf = elf.as_ref();
+        let file = std::fs::read(elf)?;
+        match object::File::parse(&*file) {
+            Ok(object) => {
+                let endian = if object.is_little_endian() {
+                    gimli::RunTimeEndian::Little
+                } else {
+                    gimli::RunTimeEndian::Big
+                };
+                match self.get_files(&object, endian) {
+                    Ok(res) => Ok(res),
+                    Err(e) => Err(io::Error::new(io::ErrorKind::NotFound, e.to_string())),
+                }
+            },
+            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))
         }
     }
 }
 
-impl Dwarf{
-    fn find_binary(&self, dir_str: &str, binary: &str) -> io::Result<String> {
-        let arr = find_files(&dir_str, &binary, false, true)?;
+impl Dwarf {
+    fn find_binary<P: AsRef<Path>>(&self, dir_str: P, binary: P) -> io::Result<String> {
+        let dir_str = dir_str.as_ref();
+        let binary = binary.as_ref();
+        let arr = find_files(dir_str, binary, false, true)?;
         match arr.len() {
-            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} don't have {}", &dir_str, &binary))),
+            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} don't have {}", dir_str.display(), binary.display()))),
             1 => Ok(stringtify(&arr[0])),
-            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} have {} {}", &dir_str, arr.len(), &binary))),
+            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} have {} {}", dir_str.display(), arr.len(), binary.display()))),
         }
     }
 
@@ -176,13 +186,13 @@ impl Dwarf{
                 while let Some(attr) = attrs.next()? {
                     match attr.name() {
                         constants::DW_AT_comp_dir => {
-                            element.DW_AT_comp_dir.push_str(&self.attr_value(&attr, &dwarf));
+                            element.DW_AT_comp_dir.push(&self.attr_value(&attr, &dwarf));
                         },
                         constants::DW_AT_name => {
-                            element.DW_AT_name.push_str(&self.attr_value(&attr, &dwarf));
+                            element.DW_AT_name.push(&self.attr_value(&attr, &dwarf));
                         },
                         constants::DW_AT_producer => {
-                            element.DW_AT_producer.push_str(&self.attr_value(&attr, &dwarf));
+                            element.DW_AT_producer.push_str(&self.attr_value(&attr, &dwarf).to_string_lossy());
                         }
                         _ => continue,
                     }
@@ -193,24 +203,24 @@ impl Dwarf{
         Ok(result)
     }
 
-    fn attr_value<R: Reader>(&self, attr: &gimli::Attribute<R>, dwarf: &gimli::Dwarf<R>) -> String {
+    fn attr_value<R: Reader>(&self, attr: &gimli::Attribute<R>, dwarf: &gimli::Dwarf<R>) -> OsString {
         let value = attr.value();
         match value {
             gimli::AttributeValue::DebugLineStrRef(offset) => {
                 if let Ok(s) = dwarf.debug_line_str.get_str(offset) {
-                    s.to_string_lossy().ok().unwrap_or_default().to_string()
+                    OsStr::from_bytes(&s.to_slice().ok().unwrap_or_default()).to_os_string()
                 } else {
-                    String::default()
+                    OsString::default()
                 }
             }
             gimli::AttributeValue::DebugStrRef(offset) => {
                 if let Ok(s) = dwarf.debug_str.get_str(offset) {
-                    s.to_string_lossy().ok().unwrap_or_default().to_string()
+                    OsStr::from_bytes(&s.to_slice().ok().unwrap_or_default()).to_os_string()
                 } else {
-                    String::default()
+                    OsString::default()
                 }
             }
-            _ =>  String::default()
+            _ =>  OsString::default()
         }
     }
 }

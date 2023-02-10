@@ -1,11 +1,12 @@
-use std::ffi::CString;
+use std::ffi::{CString, OsStr};
+use std::path::{Path, PathBuf};
+use std::os::unix::ffi::OsStrExt;
 
 use log::*;
 use which::which;
 
 use crate::dwarf::Dwarf;
-use crate::tool::*;
-use crate::cmd::ExternCommand;
+use crate::cmd::*;
 
 use super::Result;
 use super::Error;
@@ -20,45 +21,45 @@ use super::UPATCH_DEV_NAME;
 
 #[derive(Clone)]
 pub struct Compiler {
-    compiler_file: String,
-    as_file: String,
-    linker_file: String,
-    collect2_file: String,
+    compiler: PathBuf,
+    assembler: PathBuf,
+    linker: PathBuf,
+    collect2: PathBuf,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            compiler_file: String::new(),
-            as_file: String::new(),
-            linker_file: String::new(),
-            collect2_file: String::new(),
+            compiler: PathBuf::new(),
+            assembler: PathBuf::new(),
+            linker: PathBuf::new(),
+            collect2: PathBuf::new(),
         }
     }
 
-    pub fn readlink(&self, name: &str) -> Result<String> {
+    pub fn readlink(&self, name: &str) -> Result<PathBuf> {
         match which(name) {
-            Ok(result) => Ok(stringtify(result)),
+            Ok(result) => Ok(result),
             Err(e) => Err(Error::Compiler(format!("get {} failed: {}", name, e))),
         }
     }
 
     pub fn read_from_compiler(&self, name: &str) -> Result<String> {
-        let args_list = vec![&name];
-        let output = ExternCommand::new(&self.compiler_file).execvp(args_list)?;
+        let args_list = ExternCommandArgs::new().arg(&name);
+        let output = ExternCommand::new(&self.compiler).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("get {} from compiler {} failed", name, &self.compiler_file)));
+            return Err(Error::Compiler(format!("get {} from compiler {} failed", name, &self.compiler.display())));
         }
         Ok(output.stdout().to_string())
     }
 
-    pub fn analyze(&mut self, compiler_file: String) -> Result<()> {
-        self.compiler_file = compiler_file.clone();
-        info!("Using compiler at: {}", &self.compiler_file);
+    pub fn analyze<P: AsRef<Path>>(&mut self, compiler_file: P) -> Result<()> {
+        self.compiler = compiler_file.as_ref().to_path_buf();
+        info!("Using compiler at: {}", &self.compiler.display());
 
-        self.as_file = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
-        self.linker_file = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
-        self.collect2_file = self.readlink(&self.read_from_compiler("-print-prog-name=collect2")?)?;
+        self.assembler = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
+        self.linker = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
+        self.collect2 = self.readlink(&self.read_from_compiler("-print-prog-name=collect2")?)?;
         Ok(())
     }    
     
@@ -70,19 +71,21 @@ impl Compiler {
         self.__hack(false)
     }
 
-    pub fn check_version(&self, cache_dir: &str, debug_info: &str) -> Result<()> {
-        let test_obj = format!("{}/test.o", &cache_dir);
+    pub fn check_version<P: AsRef<Path>>(&self, cache_dir: P, debug_info: P) -> Result<()> {
+        let cache_dir = cache_dir.as_ref();
+        let debug_info = debug_info.as_ref();
+        let test_obj = Path::new(&cache_dir).join("test.o");
         let output = std::process::Command::new("echo").arg("int main() {return 0;}").stdout(std::process::Stdio::piped()).spawn().expect("exec echo failed");
 
-        let args_list = vec!["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o", &test_obj];
-        let output = ExternCommand::new(&self.compiler_file).execvp_file(args_list, &cache_dir, output.stdout.expect("get echo stdout failed"))?;
+        let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o"]).arg(&test_obj);
+        let output = ExternCommand::new(&self.compiler).execvp_stdio(args_list, cache_dir, output.stdout.expect("get echo stdout failed"))?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
         };
 
         let dwarf = Dwarf::new();
         let mut gcc_version = String::new();
-        for element in dwarf.file_in_obj(debug_info.to_string())? {
+        for element in dwarf.file_in_obj(&debug_info)? {
             gcc_version.push_str(&element.get_compiler_version());
             break;
         }
@@ -106,14 +109,15 @@ impl Compiler {
         Ok(())
     }
 
-    pub fn linker(&self, link_list: &Vec<String>, output_file: &str) -> Result<()> {
-        let mut args_list = vec!["-r", "-o", output_file];
-        for i in 0..link_list.len() {
-            args_list.push(&link_list[i]);
-        }
-        let output = ExternCommand::new(&self.linker_file).execvp(args_list)?;
+    pub fn linker<P, Q>(&self, link_list: &Vec<P>, output_file: Q) -> Result<()>
+    where
+        P: AsRef<OsStr>,
+        Q: AsRef<Path>,
+    {
+        let args_list = ExternCommandArgs::new().args(["-r", "-o"]).arg(output_file.as_ref()).args(link_list);
+        let output = ExternCommand::new(&self.linker).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("link obj error {}: {:?}", output.exit_code(), output.stderr())));
+            return Err(Error::Compiler(format!("link object file error {}: {}", output.exit_code(), output.stderr())));
         };
         Ok(())
     }
@@ -122,9 +126,9 @@ impl Compiler {
 impl Compiler {
     fn __hack(&self, register: bool) -> Result<()> {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
-        let compiler_str = CString::new(self.compiler_file.clone()).unwrap();
-        let assembler_str = CString::new(self.as_file.clone()).unwrap();
-        let collect2_str = CString::new(self.collect2_file.clone()).unwrap();
+        let compiler_str = CString::new(self.compiler.as_os_str().as_bytes()).unwrap();
+        let assembler_str = CString::new(self.assembler.as_os_str().as_bytes()).unwrap();
+        let collect2_str = CString::new(self.collect2.as_os_str().as_bytes()).unwrap();
 
         unsafe{
             let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
@@ -135,34 +139,34 @@ impl Compiler {
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
                     libc::close(fd);
-                    return Err(Error::Mod(format!("hack {} error {}", &self.compiler_file, ret)));
+                    return Err(Error::Mod(format!("hack {} error {}", &self.compiler.display(), ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
                     libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                     libc::close(fd);
-                    return Err(Error::Mod(format!("hack {} error {}", &self.as_file, ret)));
+                    return Err(Error::Mod(format!("hack {} error {}", &self.assembler.display(), ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_REGISTER_LINK, collect2_str.as_ptr());
                 if ret < 0 {
                     libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                     libc::ioctl(fd, UPATCH_UNREGISTER_ASSEMBLER, assembler_str.as_ptr());
                     libc::close(fd);
-                    return Err(Error::Mod(format!("hack {} error {}", &self.collect2_file, ret)));
+                    return Err(Error::Mod(format!("hack {} error {}", &self.collect2.display(), ret)));
                 }
             }
             else{
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_COMPILER, compiler_str.as_ptr());
                 if ret < 0 {
-                    return Err(Error::Mod(format!("unhack {} error {}", &self.compiler_file, ret)));
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.compiler.display(), ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_ASSEMBLER, assembler_str.as_ptr());
                 if ret < 0 {
-                    return Err(Error::Mod(format!("unhack {} error {}", &self.as_file, ret)));
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.assembler.display(), ret)));
                 }
                 let ret = libc::ioctl(fd, UPATCH_UNREGISTER_LINK, collect2_str.as_ptr());
                 if ret < 0 {
-                    return Err(Error::Mod(format!("unhack {} error {}", &self.collect2_file, ret)));
+                    return Err(Error::Mod(format!("unhack {} error {}", &self.collect2.display(), ret)));
                 }
             }
             libc::close(fd);

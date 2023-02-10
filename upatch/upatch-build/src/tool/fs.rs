@@ -1,5 +1,8 @@
-use std::ffi::OsStr;
+use std::ffi::{OsString, OsStr};
 use std::path::{Path, PathBuf};
+use std::os::unix::ffi::OsStrExt;
+
+use crate::tool::os_str::OsStrContains;
 
 const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
 
@@ -39,21 +42,21 @@ pub fn check_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<()> {
     if !path.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("'{}' is not a file", path.display())
+            format!("Path '{}' is not a file", path.display())
         ));
     }
 
     Ok(())
 }
 
-pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
+pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<OsString> {
     let file = file_path.as_ref();
 
     self::check_exist(file)?;
 
     match file.file_name() {
         Some(file_name) => {
-            Ok(self::stringtify(file_name))
+            Ok(file_name.to_os_string())
         },
         None => {
             Err(std::io::Error::new(
@@ -188,8 +191,9 @@ pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     path.as_ref().canonicalize()
 }
 
-pub fn find_files<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fuzz: bool, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
+    let file_name = file_name.as_ref();
     let mut file_list = Vec::new();
 
     self::check_dir(search_path)?;
@@ -199,7 +203,7 @@ pub fn find_files<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, rec
             if curr_file_name == file_name {
                 file_list.push(file);
             }
-            else if fuzz && curr_file_name.contains(file_name) {
+            else if fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes()) {
                 file_list.push(file);
             }
         }
@@ -207,29 +211,30 @@ pub fn find_files<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, rec
     Ok(file_list)
 }
 
-pub fn search_tool(tool_name: &str) -> std::io::Result<String> {
-    let current_tool = format!("./{}", tool_name);
+pub fn search_tool<P: AsRef<Path>>(tool_name: P) -> std::io::Result<PathBuf> {
+    let current_tool = tool_name.as_ref();
     match self::check_file(&current_tool) {
         Err(_) => {
-            let system_tool = format!("{}/{}", SYSTEM_TOOL_DIR, tool_name);
+            let system_tool = Path::new(SYSTEM_TOOL_DIR).join(current_tool);
             match self::check_file(&system_tool) {
                 Err(e) => Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("search '{}' in '{}' failed: {}", tool_name, SYSTEM_TOOL_DIR, e)
+                    format!("search '{}' in '{}' failed: {}", current_tool.display(), SYSTEM_TOOL_DIR, e)
                 )),
-                Ok(()) => Ok(system_tool.to_string()),
+                Ok(()) => Ok(system_tool),
             }
         },
-        Ok(()) => Ok(current_tool.to_string()),
+        Ok(()) => Ok(current_tool.to_path_buf()),
     }
 }
 
-pub fn real_arg(name: &str) -> std::io::Result<PathBuf> {
-    match realpath(name) {
+pub fn real_arg<P: AsRef<Path>>(name: P) -> std::io::Result<PathBuf> {
+    let path = name.as_ref();
+    match realpath(path) {
         Ok(result) => Ok(result),
         Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("{} is InvalidInput, {}", name, e),
+            format!("{} is InvalidInput, {}", path.display(), e),
         )),
     }
 }
