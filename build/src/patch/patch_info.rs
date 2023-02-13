@@ -10,7 +10,7 @@ use crate::cli::CliArguments;
 
 use crate::constants::*;
 
-use crate::util::{fs, sys};
+use crate::util::{fs, sys, sha256};
 use crate::util::os_str::OsStrContains;
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl PatchFile {
             ));
         }
 
-        let file_digest = &fs::sha256_digest_file(file_path.as_path())?[..PATCH_VERSION_DIGITS];
+        let file_digest = &sha256::file_digest(file_path.as_path())?[..PATCH_VERSION_DIGITS];
         if !file_digests.insert(file_digest.to_owned()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -150,7 +150,7 @@ impl PatchInfo {
         };
         let arch        = args.patch_arch.to_owned();
         let version     = args.patch_version;
-        let release     = fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string();
+        let release     = sha256::file_list_digest(&args.patches)?[..PATCH_VERSION_DIGITS].to_string();
         let target      = pkg_info.to_owned();
         let elf_name    = args.target_elfname.to_owned().unwrap();
         let license     = args.target_license.to_owned().unwrap();

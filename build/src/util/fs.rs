@@ -3,9 +3,6 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Write, BufWriter};
 
-use sha2::Digest;
-use sha2::Sha256;
-
 pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let path_ref = path.as_ref();
     if !path_ref.exists() {
@@ -342,22 +339,4 @@ where
     }
 
     writer.flush()
-}
-
-pub fn sha256_digest_file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
-    let mut hasher = Sha256::new();
-    hasher.update(std::fs::read(file)?);
-    Ok(format!("{:#x}", hasher.finalize()))
-}
-
-pub fn sha256_digest_file_list<I, P>(file_list: I) -> std::io::Result<String>
-where
-    I: IntoIterator<Item = P>,
-    P: AsRef<Path>
-{
-    let mut hasher = Sha256::new();
-    for file in file_list {
-        hasher.update(std::fs::read(file)?);
-    }
-    Ok(format!("{:#x}", hasher.finalize()))
 }
