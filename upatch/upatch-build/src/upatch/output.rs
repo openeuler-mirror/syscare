@@ -19,8 +19,8 @@ impl OutputConfig {
     }
 
     pub fn create<P: AsRef<Path>>(&self, output_dir: P) -> std::io::Result<()> {
-        let config = output_dir.as_ref().join("config");
-        fs::write(config, bincode::serialize(self).map_err(|e| std::io::Error::new(
+        let config = output_dir.as_ref().join("elf_names");
+        fs::write(config, bincode::serialize(&self.binarys).map_err(|e| std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Serialize binary name error: {}", e)
         ))?)

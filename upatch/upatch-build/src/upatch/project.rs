@@ -29,7 +29,7 @@ impl Project {
         let link_output = link_output.as_ref();
         let command_shell_path = assembler_output.join(BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_path)?;
-        command_shell.write_all((&build_command).as_ref())?;
+        command_shell.write_all(build_command.as_ref())?;
         let args_list = ExternCommandArgs::new().arg(command_shell_path);
         let envs_list = ExternCommandEnvs::new().env(COMPILER_CMD_ENV, cmd).envs([
             (ASSEMBLER_DIR_ENV, assembler_output),

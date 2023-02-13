@@ -3,7 +3,6 @@ use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 use std::fs::{self, File};
 use std::io::Read;
-use std::string::String;
 use std::process::exit;
 use std::thread;
 use std::sync::Arc;
@@ -13,14 +12,14 @@ use signal_hook::{iterator::Signals, consts::SIGINT};
 
 use crate::log::*;
 use crate::tool::*;
-use crate::dwarf::{Dwarf, DwarfCompileUnit};
-use crate::cmd::*;
+use crate::dwarf::Dwarf;
 
 use super::Arguments;
 use super::Compiler;
 use super::WorkDir;
 use super::Project;
 use super::OutputConfig;
+use super::Tool;
 use super::Result;
 use super::Error;
 
@@ -28,17 +27,12 @@ pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
 const CMD_SOURCE_ENTER: &str = "SE";
 const CMD_PATCHED_ENTER: &str = "PE";
-const SUPPORT_DIFF: &str = "upatch-diff";
-const SUPPORT_TOOL: &str = "upatch-tool";
-const SUPPORT_NOTES: &str = "upatch-notes";
 
 pub struct UpatchBuild {
     args: Arguments,
     work_dir: WorkDir,
     compiler: Compiler,
-    diff_file: PathBuf,
-    tool_file: PathBuf,
-    notes_file: PathBuf,
+    tool: Tool,
     hack_flag: Arc<AtomicBool>,
     dwarf: Dwarf,
     source_obj: HashMap<PathBuf, PathBuf>,
@@ -51,9 +45,7 @@ impl UpatchBuild {
             args: Arguments::new(),
             work_dir: WorkDir::new(),
             compiler: Compiler::new(),
-            diff_file: PathBuf::new(),
-            tool_file: PathBuf::new(),
-            notes_file: PathBuf::new(),
+            tool: Tool::new(),
             hack_flag: Arc::new(AtomicBool::new(false)),
             dwarf: Dwarf::new(),
             source_obj: HashMap::new(),
@@ -72,9 +64,7 @@ impl UpatchBuild {
         self.check_mod()?;
 
         // find upatch-diff and upatch-tool
-        self.diff_file = search_tool(SUPPORT_DIFF)?;
-        self.tool_file = search_tool(SUPPORT_TOOL)?;
-        self.notes_file = search_tool(SUPPORT_NOTES)?;
+        self.tool.check()?;
 
         // check compiler
         self.compiler.analyze(self.args.compiler.as_ref().unwrap())?;
@@ -113,9 +103,7 @@ impl UpatchBuild {
         // correlate obj name
         self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
         self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
-        let mut output_config = OutputConfig::new();
-        self.build_patches(&self.args.debug_infoes, &mut output_config)?;
-        output_config.create(self.args.output_dir.as_ref().unwrap())?;
+        self.build_patches(&self.args.debug_infoes)?;
         Ok(())
     }
 
@@ -168,69 +156,27 @@ impl UpatchBuild {
         Ok(map)
     }
 
-    fn create_diff<P: AsRef<Path>, Q: AsRef<Path>>(&self, binary_obj: &Vec<DwarfCompileUnit>, diff_dir: P, debug_info: Q) -> Result<()> {
+    fn create_diff<B, P, Q>(&self, binary_file: B, diff_dir: P, debug_info: Q) -> Result<()>
+    where
+        B: AsRef<Path>,
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
         let diff_dir = diff_dir.as_ref().to_path_buf();
-        for path in binary_obj {
+        let binary_obj = self.dwarf.file_in_obj(&binary_file)?;
+        for path in &binary_obj {
             let source_name = path.get_source();
             match &self.patch_obj.get(&source_name) {
                 Some(patch) => {
-                    let output_dir = diff_dir.join(file_name(patch)?);
+                    let output = diff_dir.join(file_name(&patch)?);
                     match &self.source_obj.get(&source_name) {
-                        Some(source) => self.upatch_diff(source, patch, &output_dir, &debug_info)?,
-                        None => { fs::copy(&patch, output_dir)?; },
+                        Some(source) => self.tool.upatch_diff(&source, &patch, &output, &debug_info, &self.work_dir.log_file(), self.args.verbose)?,
+                        None => { fs::copy(&patch, output)?; },
                     };
                 },
                 None => {},
             };
         }
-        Ok(())
-    }
-
-    fn upatch_diff<P, Q, O, D>(&self, source: P, patch: Q, output_dir: O, debug_info: D) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-        O: AsRef<Path>,
-        D: AsRef<Path>,
-    {
-        let mut args_list = ExternCommandArgs::new()
-            .arg("-s").arg(source.as_ref())
-            .arg("-p").arg(patch.as_ref())
-            .arg("-o").arg(output_dir.as_ref())
-            .arg("-r").arg(debug_info.as_ref());
-        if self.args.verbose {
-            args_list = args_list.arg("-d");
-        }
-        let output = ExternCommand::new(&self.diff_file).execvp(args_list)?;
-        if !output.exit_status().success() {
-            return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), self.work_dir.log_file().display())))
-        };
-        Ok(())
-    }
-
-    fn upatch_tool<P, Q>(&self, patch: P, debug_info: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let args_list = ExternCommandArgs::new().args(["resolve", "-b"]).arg(debug_info.as_ref()).arg("-p").arg(patch.as_ref());
-        let output = ExternCommand::new(&self.tool_file).execvp(args_list)?;
-        if !output.exit_status().success() {
-            return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
-        };
-        Ok(())
-    }
-
-    fn upatch_notes<P, Q>(&self, notes: P, debug_info: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let args_list = ExternCommandArgs::new().arg("-r").arg(debug_info.as_ref()).arg("-o").arg(notes.as_ref());
-        let output = ExternCommand::new(&self.notes_file).execvp(args_list)?;
-        if !output.exit_status().success() {
-            return Err(Error::NOTES(format!("{}: {}", output.exit_code(), output.stderr())))
-        };
         Ok(())
     }
 
@@ -257,17 +203,18 @@ impl UpatchBuild {
 
         // build notes.o
         let notes = diff_dir.join("notes.o");
-        self.upatch_notes(&notes, &debug_info)?;
+        self.tool.upatch_notes(&notes, &debug_info)?;
         link_args.push(notes);
 
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
-        self.upatch_tool(&output_file, &debug_info)?;
+        self.tool.upatch_tool(&output_file, &debug_info)?;
         output_config.push(&binary);
         Ok(())
     }
 
-    fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
+    fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
+        let mut output_config = OutputConfig::new();
         let binary_files = list_all_files(self.work_dir.binary_dir(), false)?;
         for debug_info in debug_infoes {
             let debug_info_name = file_name(debug_info)?;
@@ -277,9 +224,8 @@ impl UpatchBuild {
                 if debug_info_name.contains(binary_name.as_bytes()) {
                     let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
                     fs::create_dir(&diff_dir)?;
-                    let binary_obj = self.dwarf.file_in_obj(&binary_file)?;
-                    self.create_diff(&binary_obj, &diff_dir, debug_info)?;
-                    self.build_patch(debug_info, &binary_name, &diff_dir, output_config)?;
+                    self.create_diff(&binary_file, &diff_dir, debug_info)?;
+                    self.build_patch(debug_info, &binary_name, &diff_dir, &mut output_config)?;
                     not_found = false;
                     break;
                 }
@@ -288,6 +234,7 @@ impl UpatchBuild {
                 return Err(Error::Build(format!("don't have binary match {}", debug_info.as_ref().display())));
             }
         }
+        output_config.create(self.args.output_dir.as_ref().unwrap())?;
         Ok(())
     }
 

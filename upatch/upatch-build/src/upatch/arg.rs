@@ -79,12 +79,12 @@ impl Arguments {
         self.compiler = match &self.compiler {
             Some(compiler) => Some(real_arg(compiler)?),
             None => Some(match which("gcc") {
-                        Ok(compiler) => compiler,
-                        Err(e) => return Err(std::io::Error::new(
-                            std::io::ErrorKind::NotFound,
-                            format!("can't find gcc in system: {}", e),
-                        )),
-                    }),
+                Ok(compiler) => compiler,
+                Err(e) => return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("can't find gcc in system: {}", e),
+                )),
+            }),
         };
 
         self.debug_source = real_arg(&self.debug_source)?;
