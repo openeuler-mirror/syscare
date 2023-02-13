@@ -56,7 +56,7 @@ impl<'a> UserPatchAdapter<'a> {
 
     fn get_elf_file(&self) -> std::io::Result<String> {
         let patch_info = self.patch.get_info();
-        let pkg_name   = patch_info.get_target();
+        let pkg_name   = &patch_info.get_target().get_simple_name();
         let elf_name   = patch_info.get_elf_name();
 
         let exit_status = RPM.execvp(["-ql", pkg_name])?;
@@ -111,7 +111,7 @@ impl<'a> UserPatchAdapter<'a> {
 
 impl PatchActionAdapter for UserPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        let patch_target = self.patch.get_target();
+        let patch_target = self.patch.get_target().get_simple_name();
         let patch_arch   = self.patch.get_arch();
 
         let target_name = format!("{}.{}", patch_target, patch_arch);

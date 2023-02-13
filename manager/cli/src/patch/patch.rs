@@ -5,10 +5,8 @@ use log::debug;
 use lazy_static::lazy_static;
 use serde::{Serialize, Deserialize};
 
-use crate::util::fs;
-
-use super::patch_type::PatchType;
-use super::patch_info::PatchInfo;
+use super::package_info::PackageInfo;
+use super::patch_info::{PatchInfo, PatchType};
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;
 use super::user_patch::UserPatchAdapter;
@@ -16,7 +14,6 @@ use super::kernel_patch::KernelPatchAdapter;
 
 const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 pub struct Patch {
     root:   PathBuf,
@@ -30,7 +27,7 @@ impl Patch {
 
         Ok(Self {
             root:   patch_root.as_ref().to_path_buf(),
-            info:   fs::read_to_string(file_path)?.parse::<PatchInfo>()?,
+            info:   PatchInfo::read_from_file(file_path)?,
             status: PatchStatus::NotApplied,
         })
     }
@@ -51,16 +48,16 @@ impl Patch {
         self.get_info().get_name()
     }
 
-    pub fn get_target(&self) -> &str {
-        self.get_info().get_target()
+    pub fn get_full_name(&self) -> String {
+        format!("{}/{}", self.get_target().get_simple_name(), self.get_simple_name())
     }
 
     pub fn get_arch(&self) -> &str {
         self.get_info().get_arch()
     }
 
-    pub fn get_full_name(&self) -> String {
-        format!("{}/{}", self.get_target(), self.get_simple_name())
+    pub fn get_target(&self) -> &PackageInfo {
+        self.get_info().get_target()
     }
 }
 

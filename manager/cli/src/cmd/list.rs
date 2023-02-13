@@ -14,7 +14,7 @@ impl CommandExecutor for ListCommandExecutor {
         info!("{:<35} {:<35} {:<12}", "PackageName", "PatchName", "PatchStatus");
         for patch in patch_manager.get_patch_list() {
             info!("{:<35} {:<35} {:<12}",
-                patch.get_target(),
+                patch.get_target().get_simple_name(),
                 patch.get_simple_name(),
                 patch.get_status()
             );

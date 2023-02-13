@@ -1,6 +1,6 @@
-mod patch_type;
-mod patch_status;
+mod package_info;
 mod patch_info;
+mod patch_status;
 mod patch;
 mod patch_action;
 mod patch_manager;
