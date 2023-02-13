@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use std::io::BufReader;
 
-use crate::log::debug;
+use log::{trace, debug};
 
 use super::lossy_lines::LossyLines;
 
@@ -107,6 +107,7 @@ impl ExternCommand<'_> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
 
+        debug!("Executing command {:?}", command);
         let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -120,22 +121,22 @@ impl ExternCommand<'_> {
 
         let process_name = self.path;
         let process_id = child_process.id();
-        debug!("Process '{}' ({}) started", process_name, process_id);
+        trace!("Process '{}' ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
         for read_line in LossyLines::from(BufReader::new(process_stdout)) {
             last_stdout = read_line?;
-            debug!("{}", last_stdout);
+            trace!("{}", last_stdout);
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
         for read_line in LossyLines::from(BufReader::new(process_stderr)) {
             last_stderr = read_line?;
-            debug!("{}", last_stderr);
+            trace!("{}", last_stderr);
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        debug!("Process '{}' ({}) exited, exit_code={}\n", process_name, process_id, exit_code);
+        trace!("Process '{}' ({}) exited, exit_code={}\n", process_name, process_id, exit_code);
 
         Ok(ExternCommandExitStatus {
             exit_code,

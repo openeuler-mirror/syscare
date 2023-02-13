@@ -1,128 +1,88 @@
 use std::path::Path;
-use std::fs::File;
-use std::io::{Write, LineWriter};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use super::{Level, LevelFilter, Metadata, Record};
+use log::LevelFilter;
 
-pub struct Logger {
-    print_level: LevelFilter,
-    file_level:  LevelFilter,
-    file_writer: Option<Mutex<LineWriter<File>>>,
-}
+use log4rs::Config;
+use log4rs::config::{Root, Appender};
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::append::console::{ConsoleAppender, Target};
+use log4rs::append::file::FileAppender;
+
+use crate::cli::CliWorkDir;
+
+use super::LogLevelFilter;
+
+const LOG_PATTERN: &str = "{m}{n}";
+
+pub struct Logger;
+
+static LOGGER_INIT_FLAG: AtomicBool = AtomicBool::new(false);
 
 impl Logger {
-    pub fn init_logger(logger: Self) {
-        let max_log_level = logger.max_log_level();
-        let static_logger = Box::leak(Box::new(logger));
+    fn init_console_log(max_level: LevelFilter) -> Vec<Appender> {
+        const STDOUT_APPENDER_NAME: &str = "stdout";
+        const STDERR_APPENDER_NAME: &str = "stderr";
 
-        log::set_logger(static_logger)
-            .map(|_| log::set_max_level(max_log_level))
-            .expect("Set logger failed");
+        vec![
+            Appender::builder()
+                .filter(Box::new(LogLevelFilter::new(LevelFilter::Info, max_level)))
+                .build(
+                    STDOUT_APPENDER_NAME,
+                    Box::new(ConsoleAppender::builder()
+                        .target(Target::Stdout)
+                        .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
+                        .build())
+                ),
+            Appender::builder()
+                .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, LevelFilter::Warn)))
+                .build(
+                    STDERR_APPENDER_NAME,
+                    Box::new(ConsoleAppender::builder()
+                        .target(Target::Stderr)
+                        .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
+                        .build())
+                )
+        ]
     }
 
-    pub fn new() -> Self {
-        Self {
-            print_level: LevelFilter::Off,
-            file_level:  LevelFilter::Off,
-            file_writer: None
-        }
+    fn init_file_log<P: AsRef<Path>>(path: P, max_level: LevelFilter) -> std::io::Result<Appender> {
+        const FILE_APPENDER_NAME: &str = "log_file";
+
+        Ok(Appender::builder()
+            .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, max_level)))
+            .build(
+                FILE_APPENDER_NAME,
+                Box::new(FileAppender::builder()
+                    .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
+                    .append(false)
+                    .build(path)?)
+            )
+        )
     }
 
-    pub fn set_print_level(&mut self, log_level: LevelFilter) {
-        self.print_level = log_level;
+    pub fn is_inited() -> bool {
+        LOGGER_INIT_FLAG.load(Ordering::Relaxed)
     }
 
-    pub fn set_log_file<P: AsRef<Path>>(&mut self, log_level: LevelFilter, file_path: P) -> std::io::Result<()> {
-        let log_writter = LineWriter::new(
-            File::options()
-                .create(true)
-                .append(true)
-                .read(false)
-                .write(true)
-                .open(file_path)?
-        );
-        self.file_level  = log_level;
-        self.file_writer = Some(Mutex::new(log_writter));
+    pub fn initialize(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
+        let mut appenders = Vec::new();
+
+        appenders.extend(Self::init_console_log(max_level));
+        appenders.push(Self::init_file_log(work_dir.log_file_path(), LevelFilter::Trace)?);
+
+        let root = Root::builder()
+            .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
+            .build(LevelFilter::Trace);
+
+        let log_config = Config::builder()
+            .appenders(appenders)
+            .build(root)
+            .unwrap();
+
+        log4rs::init_config(log_config).unwrap();
+        LOGGER_INIT_FLAG.store(true, Ordering::Relaxed);
 
         Ok(())
-    }
-
-    fn max_log_level(&self) -> LevelFilter {
-        std::cmp::max(self.print_level, self.file_level)
-    }
-
-    fn create_log_content(&self, record: &Record) -> String {
-        match record.metadata().level() {
-            Level::Error | Level::Warn => {
-                format!("{}: {}", record.level(), record.args())
-            },
-            _=> {
-                format!("{}", record.args())
-            },
-        }
-    }
-
-    fn enabled_screen(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.print_level
-    }
-
-    fn enabled_file(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.file_level
-    }
-
-    fn write_screen(&self, level: Level, log_str: &str) {
-        match level {
-            Level::Error | Level::Warn => {
-                eprintln!("{}", log_str);
-            },
-            _=> {
-                println!("{}", log_str);
-            },
-        };
-    }
-
-    fn write_file(&self, log_str: &str) {
-        if let Some(writer_lock) = &self.file_writer {
-            let mut writer = writer_lock.lock().expect("Lock posioned");
-            writeln!(writer, "{}", log_str)
-                .expect("Write log to file failed");
-        }
-    }
-
-    fn flush_writer(&self) {
-        if let Some(writer_lock) = &self.file_writer {
-            let mut writer = writer_lock.lock().expect("Lock posioned");
-            writer.flush()
-                .expect("Flush log writer failed");
-        }
-    }
-}
-
-impl log::Log for Logger {
-    fn enabled(&self, metadata: &Metadata) -> bool {
-        self.enabled_screen(metadata) || self.enabled_file(metadata)
-    }
-
-    fn log(&self, record: &Record) {
-        let metadata = record.metadata();
-        if !self.enabled(metadata) {
-            return;
-        }
-
-        let log_level = metadata.level();
-        let log_str = self.create_log_content(record);
-
-        if self.enabled_screen(metadata) {
-            self.write_screen(log_level, &log_str);
-        }
-
-        if self.enabled_file(metadata) {
-            self.write_file(&log_str);
-        }
-    }
-
-    fn flush(&self) {
-        self.flush_writer();
     }
 }

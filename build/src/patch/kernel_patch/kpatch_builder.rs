@@ -1,5 +1,4 @@
 use crate::constants::*;
-use crate::log::debug;
 
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::cmd::{ExternCommandArgs, ExternCommandEnvs};
@@ -60,16 +59,11 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
 
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_build_dir  = source_pkg_build_root.build_dir();
-
         let kernel_source_dir = RpmHelper::find_source_directory(source_pkg_build_dir, patch_info)?;
-        debug!("source directory: '{}'", kernel_source_dir.display());
 
         KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
         let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
-        debug!("kernel config: '{}'", kernel_config_file.display());
-
         let debuginfo_file = KernelPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
-        debug!("debuginfo file: '{}'", debuginfo_file.display());
 
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),

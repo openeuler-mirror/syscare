@@ -1,13 +1,15 @@
 use regex::Regex;
 
+use log::LevelFilter;
+use log::{info, warn, error};
+
+use crate::log::Logger;
+
 use crate::package::{PackageInfo, PackageType};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 
 use crate::patch::PatchInfo;
 use crate::patch::{PatchHelper, PatchBuilderFactory};
-
-use crate::log::{Logger, LevelFilter};
-use crate::log::{info, warn, error};
 
 use crate::constants::*;
 use crate::util::{sys, fs};
@@ -21,28 +23,6 @@ pub struct PatchBuildCLI {
 }
 
 impl PatchBuildCLI {
-    pub fn new() -> Self {
-        Self {
-            workdir: CliWorkDir::new(),
-            args:    CliArguments::new(),
-        }
-    }
-
-    fn init_logger(&mut self) -> std::io::Result<()> {
-        let mut logger = Logger::new();
-
-        let log_level = match self.args.verbose {
-            false => LevelFilter::Info,
-            true  => LevelFilter::Debug,
-        };
-
-        logger.set_print_level(log_level);
-        logger.set_log_file(LevelFilter::Debug, self.workdir.log_file_path())?;
-        Logger::init_logger(logger);
-
-        Ok(())
-    }
-
     fn canonicalize_input_args(&mut self) -> std::io::Result<()> {
         let args = &mut self.args;
 
@@ -259,7 +239,7 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    pub fn main_process(&mut self) -> std::io::Result<()> {
+    fn build_patch(&mut self) -> std::io::Result<()> {
         info!("==============================");
         info!("{}", CLI_DESCRIPTION);
         info!("==============================\n");
@@ -275,26 +255,48 @@ impl PatchBuildCLI {
         info!("Done");
         Ok(())
     }
+}
 
-    pub fn run(&mut self) {
-        if let Err(e) = self.canonicalize_input_args() {
-            eprintln!("Error: {}", e);
-            return;
-        }
+impl PatchBuildCLI {
+    fn cli_main(&mut self) -> std::io::Result<()> {
+        self.canonicalize_input_args()?;
+        self.workdir.create(&self.args.workdir)?;
 
-        self.workdir.create(&self.args.workdir)
-            .expect("Create working directory failed");
+        Logger::initialize(
+            &self.workdir,
+            match &self.args.verbose {
+                false => LevelFilter::Info,
+                true  => LevelFilter::Debug,
+            }
+        )?;
 
-        self.init_logger().expect("Initialize logger failed");
-
-        if let Err(e) = self.main_process() {
-            error!("{}", e);
-            error!("For more information, please check '{}'", self.workdir.log_file_path().display());
-            return;
-        }
+        self.build_patch()?;
 
         if !self.args.skip_cleanup {
             self.workdir.remove().ok();
+        }
+
+        Ok(())
+    }
+
+    pub fn run() {
+        let mut cli = Self {
+            workdir: CliWorkDir::new(),
+            args:    CliArguments::new(),
+        };
+
+        if let Err(e) = cli.cli_main() {
+            match Logger::is_inited() {
+                false => {
+                    eprintln!("{}", e)
+                },
+                true => {
+                    error!("{}", e);
+                    eprintln!("For more information, please check '{}'",
+                        cli.workdir.log_file_path().display()
+                    );
+                },
+            }
         }
     }
 }

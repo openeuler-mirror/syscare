@@ -1,7 +1,6 @@
 use std::ffi::OsString;
 
 use crate::constants::*;
-use crate::log::debug;
 
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::cmd::ExternCommandArgs;
@@ -66,13 +65,8 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
         let pkg_specs_dir = pkg_root.specs_dir();
 
         let patch_source_dir = RpmHelper::find_source_directory(pkg_build_dir, patch_info)?;
-        debug!("source directory: '{}'", patch_source_dir.display());
-
         let spec_file_path = RpmHelper::find_spec_file(pkg_specs_dir)?;
-        debug!("spec file: '{}'", spec_file_path.display());
-
         let patch_debuginfo = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, patch_info)?;
-        debug!("debuginfo file: '{}'", patch_debuginfo.display());
 
         let mut build_original_cmd = OsString::from(RPM_BUILD.to_string());
         build_original_cmd.concat(" --define '_topdir ")
