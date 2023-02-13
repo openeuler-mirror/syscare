@@ -20,6 +20,7 @@ use super::Arguments;
 use super::Compiler;
 use super::WorkDir;
 use super::Project;
+use super::OutputConfig;
 use super::Result;
 use super::Error;
 
@@ -112,7 +113,9 @@ impl UpatchBuild {
         // correlate obj name
         self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
         self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
-        self.build_patches(&self.args.debug_infoes)?;
+        let mut output_config = OutputConfig::new();
+        self.build_patches(&self.args.debug_infoes, &mut output_config)?;
+        output_config.create(self.args.output_dir.as_ref().unwrap())?;
         Ok(())
     }
 
@@ -231,7 +234,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D) -> Result<()>
+    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D, output_config: &mut OutputConfig) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -260,10 +263,11 @@ impl UpatchBuild {
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
         self.upatch_tool(&output_file, &debug_info)?;
+        output_config.push(&binary);
         Ok(())
     }
 
-    fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
+    fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
         let binary_files = list_all_files(self.work_dir.binary_dir(), false)?;
         for debug_info in debug_infoes {
             let debug_info_name = file_name(debug_info)?;
@@ -275,7 +279,7 @@ impl UpatchBuild {
                     fs::create_dir(&diff_dir)?;
                     let binary_obj = self.dwarf.file_in_obj(&binary_file)?;
                     self.create_diff(&binary_obj, &diff_dir, debug_info)?;
-                    self.build_patch(debug_info, &binary_name, &diff_dir)?;
+                    self.build_patch(debug_info, &binary_name, &diff_dir, output_config)?;
                     not_found = false;
                     break;
                 }
