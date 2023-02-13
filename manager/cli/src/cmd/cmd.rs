@@ -16,6 +16,10 @@ pub enum Command {
     Info {
         patch_name: String
     },
+    /// Show patch target info
+    Target {
+        patch_name: String
+    },
     /// Show patch status
     Status {
         patch_name: String

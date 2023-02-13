@@ -36,12 +36,10 @@ impl PackageInfo {
 impl std::fmt::Display for PackageInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("name:    {}\n", self.name))?;
-        f.write_fmt(format_args!("type:    {}\n", self.kind))?;
         f.write_fmt(format_args!("arch:    {}\n", self.arch))?;
         f.write_fmt(format_args!("epoch:   {}\n", self.epoch))?;
         f.write_fmt(format_args!("version: {}\n", self.version))?;
-        f.write_fmt(format_args!("release: {}\n", self.release))?;
-        f.write_fmt(format_args!("license: {}",   self.license))?;
+        f.write_fmt(format_args!("release: {}",   self.release))?;
 
         Ok(())
     }

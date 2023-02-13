@@ -50,6 +50,11 @@ impl SyscareCLI {
                 cmd_executor = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_args = vec![patch_name.to_owned()];
             },
+            Command::Target { patch_name } => {
+                Self::check_root_permission()?;
+                cmd_executor = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_args = vec![patch_name.to_owned()];
+            },
             Command::Status { patch_name } => {
                 Self::check_root_permission()?;
                 cmd_executor = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;

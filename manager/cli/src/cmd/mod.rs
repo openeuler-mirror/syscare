@@ -2,6 +2,7 @@ mod cmd;
 
 mod build;
 mod info;
+mod target;
 mod status;
 mod list;
 mod apply;
@@ -13,6 +14,7 @@ mod restore;
 pub use build::*;
 pub use cmd::*;
 pub use info::*;
+pub use target::*;
 pub use status::*;
 pub use list::*;
 pub use apply::*;

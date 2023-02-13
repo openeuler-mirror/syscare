@@ -5,6 +5,7 @@ use log::{debug, warn};
 
 use crate::util::fs;
 
+use super::package_info::PackageInfo;
 use super::patch::Patch;
 use super::patch_info::PatchInfo;
 use super::patch_status::PatchStatus;
@@ -135,6 +136,10 @@ impl PatchManager {
 
     pub fn get_patch_info(&self, patch_name: &str) -> std::io::Result<&PatchInfo> {
         Ok(self.find_patch(patch_name)?.get_info())
+    }
+
+    pub fn get_patch_target(&self, patch_name: &str) -> std::io::Result<&PackageInfo> {
+        Ok(self.find_patch(patch_name)?.get_target())
     }
 
     pub fn get_patch_status(&self, patch_name: &str) -> std::io::Result<PatchStatus> {
