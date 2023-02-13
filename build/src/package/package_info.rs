@@ -1,9 +1,12 @@
 use std::path::Path;
 
+use serde::{Serialize, Deserialize};
+
 use crate::constants::*;
 
 use super::rpm_helper::RpmHelper;
 
+#[derive(Serialize, Deserialize)]
 #[derive(Clone, Copy)]
 #[derive(PartialEq)]
 #[derive(Debug)]
@@ -18,8 +21,8 @@ impl std::fmt::Display for PackageType {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Clone)]
-#[derive(Debug)]
 pub struct PackageInfo {
     name:       String,
     kind:       PackageType,
@@ -79,18 +82,6 @@ impl PackageInfo {
             pkg_path,
             "%{NAME}|%{ARCH}|%{EPOCH}|%{VERSION}|%{RELEASE}|%{LICENSE}|%{SOURCERPM}"
         )?.parse::<PackageInfo>()?)
-    }
-
-    pub fn to_query_str(&self) -> String {
-        format!("{}|{}|{}|{}|{}|{}|{}",
-            self.get_name(),
-            self.get_arch(),
-            self.get_epoch(),
-            self.get_version(),
-            self.get_release(),
-            self.get_license(),
-            self.get_source_rpm(),
-        )
     }
 }
 

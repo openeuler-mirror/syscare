@@ -43,7 +43,7 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn check_canonicalize_input_args(&mut self) -> std::io::Result<()> {
+    fn canonicalize_input_args(&mut self) -> std::io::Result<()> {
         let args = &mut self.args;
 
         if !Regex::new(PATCH_NAME_REGEX_STR).unwrap().is_match(&args.patch_name) {
@@ -122,11 +122,11 @@ impl PatchBuildCLI {
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
         info!("Collecting patch info");
 
-        let patch_info = PatchInfo::parse_from(pkg_info, &self.args)?;
-
+        let patch_info = PatchInfo::new(pkg_info, &self.args)?;
         info!("------------------------------");
         info!("{}", patch_info);
         info!("------------------------------\n");
+
         Ok(patch_info)
     }
 
@@ -143,53 +143,32 @@ impl PatchBuildCLI {
         let pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let pkg_source_dir = pkg_build_root.sources_dir();
 
-        // Collect patch version info from patched source package
-        let patch_version_file = fs::find_file(pkg_source_dir, PKG_VERSION_FILE_NAME, false, false);
-        if let Ok(file_path) = &patch_version_file {
-            let arg_version = args.patch_version.parse::<u32>();
-            let pkg_version = fs::read_file_to_string(file_path)?.parse::<u32>();
+        // Collect patch info from patched source package
+        if let Ok(path) = fs::find_file(pkg_source_dir, PATCH_INFO_FILE_NAME, false, false) {
+            let patched_path_info  = PatchInfo::read_from_file(path)?;
+            let patched_pkg_info  = patched_path_info.get_target();
 
-            if let (Ok(arg_ver), Ok(pkg_ver)) = (arg_version, pkg_version) {
-                let max_ver = u32::max(arg_ver, pkg_ver + 1);
-                if max_ver > arg_ver {
-                    args.patch_version = max_ver.to_string();
-                }
-            }
-        }
-
-        // Collect patch target info from patched source package
-        let patch_target_file = fs::find_file(pkg_source_dir, PKG_TARGET_FILE_NAME, false, false);
-        match &patch_target_file {
-            Ok(file_path) => {
-                let patch_target = fs::read_file_to_string(file_path)?.parse::<PackageInfo>()?;
-                args.target_name.get_or_insert(patch_target.get_name().to_owned());
-                args.target_arch.get_or_insert(patch_target.get_arch().to_owned());
-                args.target_epoch.get_or_insert(patch_target.get_epoch().to_owned());
-                args.target_version.get_or_insert(patch_target.get_version().to_owned());
-                args.target_release.get_or_insert(patch_target.get_release().to_owned());
-                // Override original package info with saved data in package
-                *pkg_info = patch_target;
-            },
-            Err(_) => {
-                args.target_name.get_or_insert(pkg_info.get_name().to_owned());
-                args.target_arch.get_or_insert(pkg_info.get_arch().to_owned());
-                args.target_epoch.get_or_insert(pkg_info.get_epoch().to_owned());
-                args.target_version.get_or_insert(pkg_info.get_version().to_owned());
-                args.target_release.get_or_insert(pkg_info.get_release().to_owned());
-            }
-        }
-        args.target_license.get_or_insert(pkg_info.get_license().to_owned());
-
-        // Collect patch list from patched source package
-        if patch_version_file.is_ok() && patch_target_file.is_ok() {
-            let current_patches = &mut args.patches;
+            // Override path version
+            let arg_version = args.patch_version;
+            let new_version = patched_path_info.get_version() + 1;
+            args.patch_version = u32::max(arg_version, new_version);
+            // Overide path list
             let mut package_patches = PatchHelper::collect_patches(pkg_source_dir)?;
-
             if !package_patches.is_empty() {
-                package_patches.append(current_patches);
+                package_patches.append(&mut args.patches);
                 args.patches = package_patches;
             }
+            // Override package info
+            *pkg_info = patched_pkg_info.to_owned();
         }
+
+        // Override other arguments
+        args.target_name.get_or_insert(pkg_info.get_name().to_owned());
+        args.target_arch.get_or_insert(pkg_info.get_arch().to_owned());
+        args.target_epoch.get_or_insert(pkg_info.get_epoch().to_owned());
+        args.target_version.get_or_insert(pkg_info.get_version().to_owned());
+        args.target_release.get_or_insert(pkg_info.get_release().to_owned());
+        args.target_license.get_or_insert(pkg_info.get_license().to_owned());
 
         Ok(())
     }
@@ -251,7 +230,7 @@ impl PatchBuildCLI {
 
         let rpm_builder = RpmBuilder::new(source_pkg_build_root);
         rpm_builder.copy_patch_file_to_source(patch_info)?;
-        rpm_builder.write_patch_target_info_to_source(patch_info)?;
+        rpm_builder.write_patch_info_to_source(patch_info)?;
         rpm_builder.build_source_package(pkg_output_dir)?;
 
         Ok(())
@@ -298,7 +277,7 @@ impl PatchBuildCLI {
     }
 
     pub fn run(&mut self) {
-        if let Err(e) = self.check_canonicalize_input_args() {
+        if let Err(e) = self.canonicalize_input_args() {
             eprintln!("Error: {}", e);
             return;
         }

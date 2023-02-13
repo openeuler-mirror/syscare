@@ -22,33 +22,13 @@ impl RpmBuilder {
     }
 
     pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let rpm_source_dir = self.build_root.sources_dir();
-        let patch_info_file_path = rpm_source_dir.join(PATCH_INFO_FILE_NAME);
-
-        fs::write_string_to_file(
-            patch_info_file_path,
-            format!("{}\n", patch_info).as_str()
+        patch_info.write_to_file(
+            self.build_root.sources_dir().join(PATCH_INFO_FILE_NAME)
         )
     }
 
-    pub fn write_patch_target_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let rpm_source_dir = self.build_root.sources_dir();
-        let version_file_path = rpm_source_dir.join(PKG_VERSION_FILE_NAME);
-        let target_file_path  = rpm_source_dir.join(PKG_TARGET_FILE_NAME);
-        fs::write_string_to_file(
-            version_file_path,
-            patch_info.get_version()
-        )?;
-        fs::write_string_to_file(
-            target_file_path,
-            &patch_info.get_target().to_query_str()
-        )?;
-
-        Ok(())
-    }
-
     pub fn copy_patch_file_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        for patch_file in patch_info.get_file_list() {
+        for patch_file in patch_info.get_patches() {
             let src_path = patch_file.get_path();
             fs::check_file(src_path)?;
 

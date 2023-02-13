@@ -32,14 +32,6 @@ impl RpmSpecGenerator {
             patch_info.get_name())
     }
 
-    fn parse_pkg_version(patch_info: &PatchInfo) -> String {
-        patch_info.get_version().to_owned()
-    }
-
-    fn parse_pkg_release(patch_info: &PatchInfo) -> String {
-        patch_info.get_release().to_owned()
-    }
-
     fn parse_requires(patch_info: &PatchInfo) -> String {
         let patch_target = patch_info.get_target();
 
@@ -62,10 +54,6 @@ impl RpmSpecGenerator {
         }
     }
 
-    fn parse_license(patch_info: &PatchInfo) -> String {
-        patch_info.get_license().to_owned()
-    }
-
     fn parse_summary(patch_info: &PatchInfo) -> String {
         format!("Syscare patch '{}' for {}",
             patch_info.get_name(),
@@ -73,7 +61,7 @@ impl RpmSpecGenerator {
         )
     }
 
-    fn write_patch_info<W, P>(mut writer: W, patch_info: &PatchInfo, source_dir: P) -> std::io::Result<()>
+    fn write_spec_file<W, P>(mut writer: W, patch_info: &PatchInfo, source_dir: P) -> std::io::Result<()>
     where
         W: Write,
         P: AsRef<Path>
@@ -91,10 +79,10 @@ impl RpmSpecGenerator {
         writeln!(writer, "%global patch_file_permission {}", PATCH_FILE_PERMISSION)?;
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "Version:  {}", Self::parse_pkg_version(patch_info))?;
-        writeln!(writer, "Release:  {}", Self::parse_pkg_release(patch_info))?;
+        writeln!(writer, "Version:  {}", patch_info.get_version())?;
+        writeln!(writer, "Release:  {}", patch_info.get_release())?;
         writeln!(writer, "Group:    {}", PKG_SPEC_TAG_VALUE_GROUP)?;
-        writeln!(writer, "License:  {}", Self::parse_license(patch_info))?;
+        writeln!(writer, "License:  {}", patch_info.get_license())?;
         writeln!(writer, "Summary:  {}", Self::parse_summary(patch_info))?;
         writeln!(writer, "Requires: {}", Self::parse_requires(patch_info))?;
         writeln!(writer, "Requires: {}", PKG_SPEC_TAG_VALUE_REQUIRES)?;
@@ -158,7 +146,7 @@ impl RpmSpecGenerator {
             std::fs::File::create(&pkg_spec_path)?
         );
 
-        Self::write_patch_info(writer, patch_info, source_dir)?;
+        Self::write_spec_file(writer, patch_info, source_dir)?;
 
         Ok(pkg_spec_path)
     }

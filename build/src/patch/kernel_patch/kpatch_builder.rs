@@ -80,7 +80,7 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
             jobs:                args.kjobs,
             output_dir:          patch_output_dir.to_owned(),
             skip_compiler_check: args.skip_compiler_check,
-            patch_list:          patch_info.get_file_list().to_owned(),
+            patch_list:          patch_info.get_patches().to_owned(),
         };
 
         Ok(PatchBuilderArguments::KernelPatch(builder_args))

@@ -1,11 +1,10 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::constants::*;
-use crate::util::os_str::OsStrContains;
-use crate::util::{sys, fs};
-
 use crate::patch::PatchInfo;
+
+use crate::constants::*;
+use crate::util::fs;
 
 use super::rpm_spec_parser::{RpmSpecParser, RpmSpecTag};
 
@@ -31,44 +30,28 @@ impl RpmSpecHelper {
         let tag_name = PKG_SPEC_TAG_NAME_SOURCE;
 
         let mut source_tag_list = Vec::new();
-
         let mut tag_id = start_tag_id + 1;
-        let mut is_patched_pkg = false;
+        let is_patched_pkg = patch_info.is_incremental();
 
-        for patch_file in patch_info.get_file_list() {
+        for patch_file in patch_info.get_patches() {
             // File path contains pid (in workdir) means some of patches are coming from source package
-            match patch_file.get_path().contains(sys::get_process_id().to_string()) {
-                true  => {
-                    // Exclude patches from patched source package
-                    // and leave a flag to identify this
-                    is_patched_pkg = true;
-                },
-                false => {
-                    source_tag_list.push(RpmSpecTag::new_id_tag(
-                        tag_name.to_owned(),
-                        tag_id,
-                        patch_file.get_name().to_owned()
-                    ));
-                }
+            if !patch_file.is_from_source_pkg() {
+                source_tag_list.push(RpmSpecTag::new_id_tag(
+                    tag_name.to_owned(),
+                    tag_id,
+                    patch_file.get_name().to_owned()
+                ));
             }
 
             tag_id += 1;
         }
 
-        // If the package is patched, generate files to record
-        // patch target name and patch version
+        // If the package is patched, generate files to record patch info
         if !is_patched_pkg {
             source_tag_list.push(RpmSpecTag::new_id_tag(
                 tag_name.to_owned(),
                 tag_id,
-                PKG_VERSION_FILE_NAME.to_owned()
-            ));
-            tag_id += 1;
-
-            source_tag_list.push(RpmSpecTag::new_id_tag(
-                tag_name.to_owned(),
-                tag_id,
-                PKG_TARGET_FILE_NAME.to_owned()
+                PATCH_INFO_FILE_NAME.to_owned()
             ));
         }
 

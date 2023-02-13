@@ -93,14 +93,14 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
             name:                patch_info.get_name().to_owned(),
             work_dir:            patch_build_root.to_owned(),
             debug_source:        patch_source_dir,
-            elf_name:            patch_info.get_target_elf_name().to_owned(),
+            elf_name:            patch_info.get_elf_name().to_owned(),
             debuginfo:           patch_debuginfo,
             build_source_cmd:    build_original_cmd,
             build_patch_cmd:     build_patched_cmd,
             output_dir:          patch_output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose:             args.verbose,
-            patch_list:          patch_info.get_file_list().to_owned(),
+            patch_list:          patch_info.get_patches().to_owned(),
         };
 
         Ok(PatchBuilderArguments::UserPatch(builder_args))

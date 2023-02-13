@@ -18,7 +18,7 @@ pub struct CliArguments {
 
     /// Patch version
     #[arg(long, default_value=CLI_DEFAULT_PATCH_VERSION)]
-    pub patch_version: String,
+    pub patch_version: u32,
 
     /// Patch description
     #[arg(long, default_value=CLI_DEFAULT_PATCH_DESCRIPTION)]

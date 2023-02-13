@@ -3,15 +3,19 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 use lazy_static::*;
-
-use crate::constants::*;
-use crate::util::fs;
+use serde::{Serialize, Deserialize};
 
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
 
-#[derive(Clone, Copy)]
+use crate::constants::*;
+
+use crate::util::{fs, sys};
+use crate::util::os_str::OsStrContains;
+
 #[derive(Debug)]
+#[derive(Serialize, Deserialize)]
+#[derive(Clone, Copy)]
 pub enum PatchType {
     UserPatch,
     KernelPatch,
@@ -23,26 +27,16 @@ impl std::fmt::Display for PatchType {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 #[derive(Clone)]
-#[derive(Debug)]
 pub struct PatchFile {
     name:   String,
     path:   PathBuf,
     digest: String,
 }
 
-impl std::fmt::Display for PatchFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("PatchFile {{ name: {}, path: {}, digest: ${} }}",
-            self.name,
-            self.path.display(),
-            self.digest
-        ))
-    }
-}
-
 impl PatchFile {
-    pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Option<Self>> {
+    pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         lazy_static! {
             static ref FILE_COUNTER: Mutex<usize>           = Mutex::new(1);
             static ref FILE_DIGESTS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
@@ -74,14 +68,13 @@ impl PatchFile {
                 format!("File {} is duplicated", file_name)
             ));
         }
-
         *file_id += 1;
 
-        Ok(Some(Self {
+        Ok(Self {
             name:   file_name,
             path:   file_path,
             digest: file_digest.to_owned()
-        }))
+        })
     }
 
     pub fn validate_naming_rule(file_name: &str) -> bool {
@@ -104,6 +97,10 @@ impl PatchFile {
         true
     }
 
+    pub fn is_from_source_pkg(&self) -> bool {
+        self.path.contains(sys::get_process_id().to_string())
+    }
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -117,21 +114,64 @@ impl PatchFile {
     }
 }
 
+impl std::fmt::Display for PatchFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("PatchFile {{ name: {}, path: {}, digest: ${} }}",
+            self.name,
+            self.path.display(),
+            self.digest
+        ))
+    }
+}
+
+#[derive(Serialize, Deserialize)]
 #[derive(Clone)]
-#[derive(Debug)]
 pub struct PatchInfo {
-    name:            String,
-    kind:            PatchType,
-    version:         String,
-    release:         String,
-    target:          PackageInfo,
-    target_elf_name: String,
-    description:     String,
-    builder:         String,
-    file_list:       Vec<PatchFile>,
+    name:        String,
+    kind:        PatchType,
+    arch:        String,
+    version:     u32,
+    release:     String,
+    target:      PackageInfo,
+    elf_name:    String,
+    license:     String,
+    description: String,
+    incremental: bool,
+    builder:     String,
+    patches:     Vec<PatchFile>,
 }
 
 impl PatchInfo {
+    pub fn new(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
+        let name        = args.patch_name.to_owned();
+        let kind        = match pkg_info.get_name() == KERNEL_PKG_NAME {
+            true  => PatchType::KernelPatch,
+            false => PatchType::UserPatch,
+        };
+        let arch        = args.patch_arch.to_owned();
+        let version     = args.patch_version;
+        let release     = fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string();
+        let target      = pkg_info.to_owned();
+        let elf_name    = args.target_elfname.to_owned().unwrap();
+        let license     = args.target_license.to_owned().unwrap();
+        let description = args.patch_description.to_owned();
+        let incremental = false;
+        let builder     = format!("{} {}", CLI_NAME, CLI_VERSION);
+        let patches     = args.patches
+            .iter()
+            .flat_map(|path| PatchFile::new(path))
+            .collect();
+
+        Ok(PatchInfo {
+            name, kind, arch,
+            version, release,
+            target,  elf_name,
+            license, description,
+            incremental, builder,
+            patches
+        })
+    }
+
     pub fn get_name(&self) -> &str {
         &self.name
     }
@@ -141,11 +181,11 @@ impl PatchInfo {
     }
 
     pub fn get_arch(&self) -> &str {
-        self.target.get_arch()
+        &self.arch
     }
 
-    pub fn get_version(&self) -> &str {
-        &self.version
+    pub fn get_version(&self) -> u32 {
+        self.version
     }
 
     pub fn get_release(&self) -> &str {
@@ -156,98 +196,48 @@ impl PatchInfo {
         &self.target
     }
 
-    pub fn get_target_elf_name(&self) -> &str {
-        &self.target_elf_name
+    pub fn get_elf_name(&self) -> &str {
+        &self.elf_name
     }
 
     pub fn get_license(&self) -> &str {
-        &self.target.get_license()
+        &self.license
     }
 
     pub fn get_description(&self) -> &str {
         &self.description
     }
 
+    pub fn is_incremental(&self) -> bool {
+        self.incremental
+    }
+
     pub fn get_builder(&self) -> &str {
         &self.builder
     }
 
-    pub fn get_file_list(&self) -> &[PatchFile] {
-        self.file_list.as_slice()
+    pub fn get_patches(&self) -> &[PatchFile] {
+        &self.patches
     }
 }
 
+/* Serialize & deserialize */
 impl PatchInfo {
-    fn parse_patch_name(args: &CliArguments) -> String {
-        args.patch_name.to_owned()
+    pub fn read_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        bincode::deserialize_from(std::fs::File::open(path)?).map_err(|e| std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!("Deserialize path info failed, {}", e)
+        ))
     }
 
-    fn parse_patch_version(args: &CliArguments) -> String {
-        args.patch_version.to_owned()
-    }
-
-    fn parse_patch_release(args: &CliArguments) -> std::io::Result<String> {
-        Ok(fs::sha256_digest_file_list(&args.patches)?[..PATCH_VERSION_DIGITS].to_string())
-    }
-
-    fn parse_patch_type(pkg_info: &PackageInfo) -> PatchType {
-        match pkg_info.get_name() == KERNEL_PKG_NAME {
-            true  => PatchType::KernelPatch,
-            false => PatchType::UserPatch,
-        }
-    }
-
-    fn parse_target(args: &CliArguments) -> std::io::Result<PackageInfo> {
-        let query_str = format!("{}|{}|{}|{}|{}|{}|{}",
-            args.target_name.as_ref().expect("Parse target name failed").to_owned(),
-            args.target_arch.as_ref().expect("Parse target arch failed").to_owned(),
-            args.target_epoch.as_ref().expect("Parse target epoch failed").to_owned(),
-            args.target_version.as_ref().expect("Parse target version failed").to_owned(),
-            args.target_release.as_ref().expect("Parse target release failed").to_owned(),
-            args.target_license.as_ref().expect("Parse target license failed").to_owned(),
-            PKG_FLAG_NONE
-        );
-        query_str.parse::<PackageInfo>()
-    }
-
-    fn parse_target_elf_name(args: &CliArguments) -> String {
-        args.target_elfname.as_ref()
-            .expect("Parse target elf name failed")
-            .to_owned()
-    }
-
-    fn parse_description(args: &CliArguments) -> String {
-        args.patch_description.to_owned()
-    }
-
-    fn parse_builder() -> String {
-        format!("{} {}", CLI_NAME, CLI_VERSION)
-    }
-
-    fn parse_file_list(args: &CliArguments) -> std::io::Result<Vec<PatchFile>> {
-        let mut patch_file_list = Vec::new();
-
-        for file_path in &args.patches {
-            if let Some(patch_file) = PatchFile::new(file_path)? {
-                patch_file_list.push(patch_file);
-            }
-        }
-
-        Ok(patch_file_list)
-    }
-
-    pub fn parse_from(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
-        Ok(PatchInfo {
-            name:            Self::parse_patch_name(args),
-            version:         Self::parse_patch_version(args),
-            release:         Self::parse_patch_release(args)?,
-            kind:            Self::parse_patch_type(pkg_info),
-            target:          Self::parse_target(args)?,
-            target_elf_name: Self::parse_target_elf_name(args),
-            description:     Self::parse_description(args),
-            builder:         Self::parse_builder(),
-            file_list:       Self::parse_file_list(args)?
-        })
+    pub fn write_to_file<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        std::fs::write(
+            path,
+            bincode::serialize(self).map_err(|e| std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Serialize path info failed, {}", e)
+            ))?
+        )
     }
 }
 
@@ -257,14 +247,14 @@ impl std::fmt::Display for PatchInfo {
         f.write_fmt(format_args!("type:        {}\n", self.get_type()))?;
         f.write_fmt(format_args!("arch:        {}\n", self.get_arch()))?;
         f.write_fmt(format_args!("target:      {}\n", self.get_target().get_simple_name()))?;
-        f.write_fmt(format_args!("elf_name:    {}\n", self.get_target_elf_name()))?;
+        f.write_fmt(format_args!("elf_name:    {}\n", self.get_elf_name()))?;
         f.write_fmt(format_args!("license:     {}\n", self.get_license()))?;
         f.write_fmt(format_args!("version:     {}\n", self.get_version()))?;
         f.write_fmt(format_args!("release:     {}\n", self.get_release()))?;
         f.write_fmt(format_args!("description: {}\n", self.get_description()))?;
         f.write_fmt(format_args!("builder:     {}\n", self.get_builder()))?;
         f.write_str("\npatch list:")?;
-        for patch_file in self.get_file_list() {
+        for patch_file in self.get_patches() {
             f.write_fmt(format_args!("\n{} {}", patch_file.get_name(), patch_file.get_digest()))?;
         }
 
