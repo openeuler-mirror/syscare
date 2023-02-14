@@ -35,7 +35,6 @@ pub const PATCH_VERSION_DIGITS:  usize = 8;
 pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
 pub const PKG_FILE_EXTENSION:               &str = "rpm";
 pub const PKG_FLAG_PATCH_BINARY:            &str = "patch";
-pub const PKG_FLAG_PATCHED_SOURCE:          &str = "patched";
 pub const PKG_FLAG_NONE:                    &str = "(none)";
 pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";
 pub const PKG_SPEC_TAG_NAME_RELEASE:        &str = "Release:";

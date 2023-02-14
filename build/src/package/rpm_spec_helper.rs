@@ -15,9 +15,8 @@ impl RpmSpecHelper {
         let target = patch_info.get_target();
 
         let tag_name  = orig_release_tag.get_name().to_string();
-        let tag_value = format!("{}.{}.{}.{}.{}",
+        let tag_value = format!("{}.{}.{}.{}",
             target.get_release(),
-            PKG_FLAG_PATCHED_SOURCE,
             patch_info.get_name(),
             patch_info.get_version(),
             patch_info.get_release()
