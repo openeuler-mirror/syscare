@@ -3,7 +3,7 @@ use std::io::Read;
 
 use log::debug;
 
-use crate::ext_cmd::ExternCommand;
+use crate::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::patch::Patch;
 use super::patch_status::PatchStatus;
@@ -59,7 +59,11 @@ impl<'a> UserPatchAdapter<'a> {
         let pkg_name   = &patch_info.get_target().get_simple_name();
         let elf_name   = patch_info.get_elf_name();
 
-        let exit_status = RPM.execvp(["-ql", pkg_name])?;
+        let exit_status = RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("-ql")
+                .arg(pkg_name)
+        )?;
         if exit_status.exit_code() != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
@@ -91,10 +95,22 @@ impl<'a> UserPatchAdapter<'a> {
         let exit_status = match action {
             UPATCH_ACTION_INSTALL => {
                 let elf_file = self.get_elf_file()?;
-                UPATCH_TOOL.execvp([action, "-p", &file_path, "-b", &elf_file])?
+                UPATCH_TOOL.execvp(
+                    ExternCommandArgs::new()
+                        .arg(action)
+                        .arg("-p")
+                        .arg(&*file_path)
+                        .arg("-b")
+                        .arg(&elf_file)
+                )?
             },
             _ => {
-                UPATCH_TOOL.execvp([action, "-p", &file_path])?
+                UPATCH_TOOL.execvp(
+                    ExternCommandArgs::new()
+                        .arg(action)
+                        .arg("-p")
+                        .arg(&*file_path)
+                )?
             }
         };
 
@@ -117,7 +133,11 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
         let target_name = format!("{}.{}", patch_target, patch_arch);
         debug!("target_name:  \"{}\"", target_name);
 
-        let exit_status = RPM.execvp(["-q", &target_name])?;
+        let exit_status = RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("-q")
+                .arg(target_name)
+        )?;
         if exit_status.exit_code() != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,

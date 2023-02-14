@@ -6,7 +6,7 @@ use crate::util::sys;
 use crate::util::fs;
 use crate::util::selinux;
 
-use crate::ext_cmd::ExternCommand;
+use crate::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::patch::Patch;
 use super::patch_status::PatchStatus;
@@ -139,7 +139,9 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
         self.set_patch_security_context()?;
 
         let patch_file = self.get_patch_file();
-        let exit_status = INSMOD.execvp([patch_file])?;
+        let exit_status = INSMOD.execvp(
+            ExternCommandArgs::new().arg(patch_file)
+        )?;
 
         if exit_status.exit_code() != 0 {
             debug!("{}", exit_status.stderr());
@@ -154,7 +156,9 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
 
     fn remove(&self) -> std::io::Result<()> {
         let patch_file  = self.get_patch_file();
-        let exit_status = RMMOD.execvp([patch_file])?;
+        let exit_status = RMMOD.execvp(
+            ExternCommandArgs::new().arg(patch_file)
+        )?;
 
         if exit_status.exit_code() != 0 {
             debug!("{}", exit_status.stderr());

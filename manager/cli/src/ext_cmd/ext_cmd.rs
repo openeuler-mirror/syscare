@@ -1,10 +1,178 @@
+use std::ffi::{OsStr, OsString};
+use std::collections::HashMap;
+
 use std::process::{Command, Stdio};
 use std::io::BufReader;
-use std::ffi::OsStr;
 
-use log::{info, error, trace};
+use log::{trace, debug};
 
-use crate::util::lossy_lines::LossyLines;
+use super::lossy_lines::LossyLines;
+
+pub struct ExternCommandArgs {
+    args: Vec<OsString>,
+}
+
+impl ExternCommandArgs {
+    pub fn new() -> Self {
+        Self { args: Vec::new() }
+    }
+
+    pub fn arg<S>(mut self, arg: S) -> Self
+    where
+        S: AsRef<OsStr>
+    {
+        self.args.push(arg.as_ref().to_os_string());
+        self
+    }
+
+    pub fn args<I, S>(mut self, args: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>
+    {
+        for arg in args {
+            self.args.push(arg.as_ref().to_os_string())
+        }
+
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandArgs {
+    type Item = OsString;
+
+    type IntoIter = std::vec::IntoIter<Self::Item>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.args.into_iter()
+    }
+}
+
+pub struct ExternCommandEnvs {
+    envs: HashMap<OsString, OsString>,
+}
+
+impl ExternCommandEnvs {
+    pub fn new() -> Self {
+        Self { envs: HashMap::new() }
+    }
+
+    pub fn env<K, V>(mut self, k: K, v: V) -> Self
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.envs.insert(
+            k.as_ref().to_os_string(),
+            v.as_ref().to_os_string()
+        );
+        self
+    }
+
+    pub fn envs<I, K, V>(mut self, envs: I) -> Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (k, v) in envs {
+            self.envs.insert(
+                k.as_ref().to_os_string(),
+                v.as_ref().to_os_string()
+            );
+        }
+        self
+    }
+}
+
+impl IntoIterator for ExternCommandEnvs {
+    type Item = (OsString, OsString);
+
+    type IntoIter = std::collections::hash_map::IntoIter<OsString, OsString>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.envs.into_iter()
+    }
+}
+
+#[derive(Debug)]
+#[derive(Clone)]
+pub struct ExternCommand<'a> {
+    path: &'a str,
+}
+
+impl ExternCommand<'_> {
+    #[inline(always)]
+    fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
+        let mut last_stdout = String::new();
+        let mut last_stderr = String::new();
+
+        debug!("executing {:?}", command);
+        let mut child_process = command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                std::io::Error::new(
+                    e.kind(),
+                    format!("Start process '{}' failed: {}", self.path, e.to_string())
+                )
+            })?;
+
+        let process_name = self.path;
+        let process_id = child_process.id();
+        trace!("process '{}' ({}) started", process_name, process_id);
+
+        let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
+        for read_line in LossyLines::from(BufReader::new(process_stdout)) {
+            last_stdout = read_line?;
+            trace!("{}", last_stdout);
+        }
+
+        let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
+        for read_line in LossyLines::from(BufReader::new(process_stderr)) {
+            last_stderr = read_line?;
+            trace!("{}", last_stderr);
+        }
+
+        let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
+        trace!("process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code);
+
+        Ok(ExternCommandExitStatus {
+            exit_code,
+            stdout: last_stdout,
+            stderr: last_stderr,
+        })
+    }
+}
+
+impl<'a> ExternCommand<'a> {
+    pub const fn new(path: &'a str) -> Self {
+        Self { path }
+    }
+
+    pub fn execvp(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
+        let mut command = Command::new(self.path);
+        command.args(args.into_iter());
+
+        self.execute_command(&mut command)
+    }
+
+    pub fn execve(&self, args: ExternCommandArgs, vars: ExternCommandEnvs) -> std::io::Result<ExternCommandExitStatus>
+    {
+        let mut command = Command::new(self.path);
+        command.args(args.into_iter());
+        command.envs(vars.into_iter());
+
+        self.execute_command(&mut command)
+    }
+}
+
+impl std::fmt::Display for ExternCommand<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.path))
+    }
+}
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
@@ -24,94 +192,5 @@ impl ExternCommandExitStatus {
 
     pub fn stderr(&self) -> &str {
         &self.stderr
-    }
-}
-
-#[derive(Debug)]
-#[derive(Clone)]
-pub struct ExternCommand<'a> {
-    path: &'a str,
-    print_screen: bool,
-}
-
-impl ExternCommand<'_> {
-    #[inline(always)]
-    fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        trace!("executing {:?}", command);
-
-        let mut stdout_buf = String::new();
-        let mut stderr_buf = String::new();
-
-        let mut child = command
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| {
-                std::io::Error::new(
-                    e.kind(),
-                    format!("start process \"{}\" failed, {}", self.path, e.to_string())
-                )
-            })?;
-
-        if let Some(stdout) = &mut child.stdout {
-            for read_line in LossyLines::from(BufReader::new(stdout)) {
-                let current_line = read_line?;
-                if self.print_screen {
-                    info!("{}", current_line);
-                }
-                stdout_buf.push_str(&current_line);
-                stdout_buf.push('\n');
-            }
-            stdout_buf.pop();
-        }
-
-        if let Some(stderr) = &mut child.stderr {
-            for read_line in LossyLines::from(BufReader::new(stderr)) {
-                let current_line = read_line?;
-                if self.print_screen {
-                    error!("{}", current_line);
-                }
-                stderr_buf.push_str(&current_line);
-                stderr_buf.push('\n');
-            }
-            stderr_buf.pop();
-        }
-
-        let exit_code = child.wait()?.code().expect("Get process exit code failed");
-        trace!("process {:?} ({}) exited, exit_code={}", command.get_program(), child.id(), exit_code);
-
-        Ok(ExternCommandExitStatus {
-            exit_code,
-            stdout: stdout_buf,
-            stderr: stderr_buf,
-        })
-    }
-}
-
-impl<'a> ExternCommand<'a> {
-    pub const fn new(path: &'a str) -> Self {
-        Self { path, print_screen: false }
-    }
-
-    pub fn set_print_screen(&mut self, value: bool) -> &Self {
-        self.print_screen = value;
-        self
-    }
-
-    pub fn execvp<I, S> (&self, arg_list: I) -> std::io::Result<ExternCommandExitStatus>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
-        let mut command = Command::new(self.path);
-        command.args(arg_list);
-
-        self.execute_command(&mut command)
-    }
-}
-
-impl std::fmt::Display for ExternCommand<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.path))
     }
 }
