@@ -12,7 +12,7 @@ use crate::patch::PatchInfo;
 use crate::patch::{PatchHelper, PatchBuilderFactory};
 
 use crate::constants::*;
-use crate::util::{sys, fs};
+use crate::util::{sys, fs, serde};
 
 use super::args::CliArguments;
 use super::workdir::CliWorkDir;
@@ -39,7 +39,6 @@ impl PatchBuildCLI {
                 format!("Source should be rpm package"),
             ));
         }
-        args.source = fs::realpath(&args.source)?;
 
         if fs::file_ext(&args.debuginfo)? != PKG_FILE_EXTENSION {
             return Err(std::io::Error::new(
@@ -47,10 +46,11 @@ impl PatchBuildCLI {
                 format!("Debuginfo should be rpm package"),
             ));
         }
-        args.debuginfo = fs::realpath(&args.debuginfo)?;
 
-        args.workdir = fs::realpath(&args.workdir)?;
-        args.output  = fs::realpath(&args.output)?;
+        args.source    = fs::realpath(&args.source)?;
+        args.debuginfo = fs::realpath(&args.debuginfo)?;
+        args.workdir   = fs::realpath(&args.workdir)?;
+        args.output    = fs::realpath(&args.output)?;
 
         for patch in &mut args.patches {
             if fs::file_ext(&patch)? != PATCH_FILE_EXTENSION {
@@ -65,58 +65,63 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn extract_packages(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
-        info!("Extracting source package");
-        let src_pkg_info = RpmExtractor::extract_package(
-            &self.args.source,
-            self.workdir.package_root().source_pkg_dir(),
-        )?;
+    fn collect_package_info(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
+        let src_pkg_info = PackageInfo::new(&self.args.source)?;
+        let dbg_pkg_info = PackageInfo::new(&self.args.debuginfo)?;
         if src_pkg_info.get_type() != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a source package", src_pkg_info),
+                format!("File '{}' is not a source package", self.args.source.display()),
             ));
         }
-        info!("------------------------------");
-        info!("{}", src_pkg_info);
-        info!("------------------------------\n");
-
-        info!("Extracting debuginfo package");
-        let dbg_pkg_info = RpmExtractor::extract_package(
-            &self.args.debuginfo,
-            self.workdir.package_root().debug_pkg_dir()
-        )?;
         if dbg_pkg_info.get_type() != PackageType::BinaryPackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a debuginfo package", dbg_pkg_info),
+                format!("File '{}' is not a debuginfo package", self.args.debuginfo.display()),
             ));
         }
+
+        info!("Source package");
         info!("------------------------------");
-        info!("{}", dbg_pkg_info);
-        info!("------------------------------\n");
+        src_pkg_info.print_log(log::Level::Info);
+        info!("------------------------------");
+        info!("Debuginfo package");
+        info!("------------------------------");
+        dbg_pkg_info.print_log(log::Level::Info);
+        info!("------------------------------");
 
         Ok((src_pkg_info, dbg_pkg_info))
     }
 
     fn collect_patch_info(&self, pkg_info: &PackageInfo) -> std::io::Result<PatchInfo> {
         info!("Collecting patch info");
-
         let patch_info = PatchInfo::new(pkg_info, &self.args)?;
+
         info!("------------------------------");
-        info!("{}", patch_info);
-        info!("------------------------------\n");
+        patch_info.print_log(log::Level::Info);
+        info!("------------------------------");
 
         Ok(patch_info)
     }
 
+    fn extract_packages(&self) -> std::io::Result<()> {
+        info!("Extracting source package");
+        RpmExtractor::extract_package(
+            &self.args.source,
+            self.workdir.package_root().source_pkg_dir(),
+        )?;
+
+        info!("Extracting debuginfo package");
+        RpmExtractor::extract_package(
+            &self.args.debuginfo,
+            self.workdir.package_root().debug_pkg_dir()
+        )?;
+
+        Ok(())
+    }
+
     fn complete_build_args(&mut self, pkg_info: &mut PackageInfo) -> std::io::Result<()> {
         let mut args = &mut self.args;
-
-        // If the source package is kernel, append target elf name 'vmlinux' to arguments
-        if pkg_info.get_name() == KERNEL_PKG_NAME {
-            args.target_elfname.get_or_insert(KERNEL_VMLINUX_FILE.to_owned());
-        }
 
         // Find source directory from extracted package root
         let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
@@ -125,7 +130,7 @@ impl PatchBuildCLI {
 
         // Collect patch info from patched source package
         if let Ok(path) = fs::find_file(pkg_source_dir, PATCH_INFO_FILE_NAME, false, false) {
-            let patched_path_info  = PatchInfo::read_from_file(path)?;
+            let patched_path_info  = serde::deserialize::<_, PatchInfo>(path)?;
             let patched_pkg_info  = patched_path_info.get_target();
 
             // Override path version
@@ -183,13 +188,6 @@ impl PatchBuildCLI {
             ));
         }
 
-        if args.target_elfname.is_none() {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Patch target elf name is empty"),
-            ));
-        }
-
         if args.skip_compiler_check {
             warn!("Warning: Skipped compiler version check");
         }
@@ -197,62 +195,66 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn build_source_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
-        let pkg_output_dir = &self.args.output;
+    fn build_patch(&self, patch_info: &mut PatchInfo) -> std::io::Result<()> {
+        info!("Pareparing to build patch");
+        let pkg_build_root = RpmHelper::find_build_root(self.workdir.package_root().source_pkg_dir())?;
+        let spec_file      = RpmHelper::find_spec_file(pkg_build_root.specs_dir())?;
+        RpmBuilder::new(pkg_build_root).build_prepare(spec_file)?;
 
-        info!("Building source package");
-        let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
-        let source_pkg_spec_dir  = source_pkg_build_root.specs_dir();
+        info!("Building patch, this may take a while");
+        let patch_builder = PatchBuilderFactory::get_builder(patch_info.get_type(), &self.workdir);
+        let builder_args  = patch_builder.parse_builder_args(patch_info, &self.args)?;
 
-        let spec_file_path = RpmHelper::find_spec_file(source_pkg_spec_dir)?;
-        RpmSpecHelper::modify_spec_file_by_patches(&spec_file_path, patch_info)?;
-
-        let rpm_builder = RpmBuilder::new(source_pkg_build_root);
-        rpm_builder.copy_patch_file_to_source(patch_info)?;
-        rpm_builder.write_patch_info_to_source(patch_info)?;
-        rpm_builder.build_source_package(pkg_output_dir)?;
+        patch_builder.build_patch(&builder_args)?;
+        patch_builder.write_patch_info(patch_info, &builder_args)?;
 
         Ok(())
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let workdir = &self.workdir;
-        let args    = &self.args;
-
-        let patch_output_dir = self.workdir.patch_root().output_dir();
-        let pkg_build_root   = self.workdir.package_root().build_root();
-        let pkg_output_dir   = &args.output;
-
-        info!("Building patch, this may take a while");
-        let patch_builder = PatchBuilderFactory::get_builder(patch_info);
-        let builder_args  = PatchBuilderFactory::parse_args(patch_info, workdir, args)?;
-        patch_builder.build_patch(builder_args)?;
-
         info!("Building patch package");
-        let rpm_builder = RpmBuilder::new(pkg_build_root.to_owned());
-        rpm_builder.copy_all_files_to_source(patch_output_dir)?;
+        let pkg_build_root = self.workdir.package_root().patch_pkg_dir();
+        let rpm_builder    = RpmBuilder::new(pkg_build_root.to_owned());
+
+        rpm_builder.copy_all_files_to_source(self.workdir.patch_root().output_dir())?;
         rpm_builder.write_patch_info_to_source(patch_info)?;
-        rpm_builder.generate_spec_file(patch_info)?;
-        rpm_builder.build_binary_package(pkg_output_dir)?;
+        rpm_builder.build_binary_package(
+            rpm_builder.generate_spec_file(patch_info)?,
+            &self.args.output
+        )?;
 
         Ok(())
     }
 
-    fn build_patch(&mut self) -> std::io::Result<()> {
+    fn build_source_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
+        info!("Building source package");
+        let pkg_build_root = RpmHelper::find_build_root(self.workdir.package_root().source_pkg_dir())?;
+        let rpm_builder    = RpmBuilder::new(pkg_build_root.to_owned());
+        let spec_file      = RpmHelper::find_spec_file(pkg_build_root.specs_dir())?;
+
+        RpmSpecHelper::modify_spec_file_by_patches(&spec_file, patch_info)?;
+        rpm_builder.copy_patch_file_to_source(patch_info)?;
+        rpm_builder.write_patch_info_to_source(patch_info)?;
+        rpm_builder.build_source_package(spec_file, &self.args.output)?;
+
+        Ok(())
+    }
+
+    fn build_all(&mut self) -> std::io::Result<()> {
         info!("==============================");
         info!("{}", CLI_DESCRIPTION);
-        info!("==============================\n");
-        let (mut src_pkg_info, dbg_pkg_info) = self.extract_packages()?;
+        info!("==============================");
+        let (mut src_pkg_info, dbg_pkg_info) = self.collect_package_info()?;
+        self.extract_packages()?;
         self.complete_build_args(&mut src_pkg_info)?;
-
         self.check_build_args(&src_pkg_info, &dbg_pkg_info)?;
 
-        let patch_info = self.collect_patch_info(&src_pkg_info)?;
+        let mut patch_info = self.collect_patch_info(&src_pkg_info)?;
+        self.build_patch(&mut patch_info)?;
         self.build_patch_package(&patch_info)?;
         self.build_source_package(&patch_info)?;
-
         info!("Done");
+
         Ok(())
     }
 }
@@ -270,7 +272,7 @@ impl PatchBuildCLI {
             }
         )?;
 
-        self.build_patch()?;
+        self.build_all()?;
 
         if !self.args.skip_cleanup {
             self.workdir.remove().ok();
@@ -288,12 +290,12 @@ impl PatchBuildCLI {
         if let Err(e) = cli.cli_main() {
             match Logger::is_inited() {
                 false => {
-                    eprintln!("{}", e)
+                    eprintln!("Error: {}", e)
                 },
                 true => {
-                    error!("{}", e);
+                    error!("Error: {}", e);
                     eprintln!("For more information, please check '{}'",
-                        cli.workdir.log_file_path().display()
+                        cli.workdir.log_file().display()
                     );
                 },
             }

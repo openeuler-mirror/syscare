@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use log::debug;
+
 use crate::constants::*;
 use crate::util::fs;
 
@@ -33,6 +35,8 @@ impl RpmHelper {
     }
 
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
+        debug!("Finding package build root from '{}'", directory.as_ref().display());
+
         Ok(PackageBuildRoot::new(
             fs::find_directory(
                 directory,
@@ -44,6 +48,8 @@ impl RpmHelper {
     }
 
     pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+        debug!("Finding package spec file from '{}'", directory.as_ref().display());
+
         let spec_file = fs::find_file_ext(
             directory,
             PKG_SPEC_FILE_EXTENSION,
@@ -54,6 +60,8 @@ impl RpmHelper {
     }
 
     pub fn find_source_directory<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
+        debug!("Finding build source from '{}'", directory.as_ref().display());
+
         let search_name = match patch_info.get_type() {
             PatchType::UserPatch   => patch_info.get_target().get_name(),
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,

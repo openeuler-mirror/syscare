@@ -6,7 +6,7 @@ pub struct KernelPatchBuilderArguments {
     pub build_root:          PathBuf,
     pub patch_name:          String,
     pub source_dir:          PathBuf,
-    pub config_file:         PathBuf,
+    pub config:              PathBuf,
     pub vmlinux:             PathBuf,
     pub jobs:                usize,
     pub output_dir:          PathBuf,

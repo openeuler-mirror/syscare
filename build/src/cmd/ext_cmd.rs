@@ -107,7 +107,7 @@ impl ExternCommand<'_> {
         let mut last_stdout = String::new();
         let mut last_stderr = String::new();
 
-        debug!("Executing command {:?}", command);
+        debug!("Executing {:?}", command);
         let mut child_process = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
@@ -136,7 +136,7 @@ impl ExternCommand<'_> {
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        trace!("Process '{}' ({}) exited, exit_code={}\n", process_name, process_id, exit_code);
+        trace!("Process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code);
 
         Ok(ExternCommandExitStatus {
             exit_code,
@@ -164,7 +164,6 @@ impl<'a> ExternCommand<'a> {
         command.args(args.into_iter());
         command.envs(vars.into_iter());
 
-        debug!("Executing {:?}", command);
         self.execute_command(&mut command)
     }
 }

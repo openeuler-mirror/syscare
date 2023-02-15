@@ -3,12 +3,10 @@ use std::path::Path;
 use crate::constants::*;
 use crate::cmd::ExternCommandArgs;
 
-use super::{PackageInfo, PackageType, RpmBuilder, RpmHelper};
-
 pub struct RpmExtractor;
 
 impl RpmExtractor {
-    fn install_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<()> {
+    pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<()> {
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()
                 .arg("--install")
@@ -33,20 +31,5 @@ impl RpmExtractor {
         }
 
         Ok(())
-    }
-
-    pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<PackageInfo> {
-        Self::install_package(&pkg_path, &output_dir)?;
-
-        let pkg_info = PackageInfo::query_from(&pkg_path)?;
-        if pkg_info.get_type() == PackageType::SourcePackage {
-            RpmBuilder::new(
-                RpmHelper::find_build_root(
-                    &output_dir
-                )?
-            ).build_prepare()?;
-        }
-
-        Ok(pkg_info)
     }
 }

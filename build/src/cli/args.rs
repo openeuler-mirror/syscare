@@ -28,10 +28,6 @@ pub struct CliArguments {
     #[arg(long)]
     pub target_name: Option<String>,
 
-    /// Patch target executable name
-    #[arg(short, long)]
-    pub target_elfname: Option<String>,
-
     /// parch target architecture
     #[arg(long)]
     pub target_arch: Option<String>,

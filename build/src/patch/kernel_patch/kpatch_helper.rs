@@ -1,5 +1,7 @@
 use std::path::{PathBuf, Path};
 
+use log::debug;
+
 use crate::constants::*;
 use crate::util::fs;
 
@@ -27,6 +29,8 @@ impl KernelPatchHelper {
     }
 
     pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+        debug!("Finding kernel config from '{}'", directory.as_ref().display());
+
         fs::find_file(
             directory,
             KERNEL_CONFIG_NAME,
@@ -35,7 +39,9 @@ impl KernelPatchHelper {
         )
     }
 
-    pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+    pub fn find_vmlinux_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+        debug!("Finding vmlinux from '{}'", directory.as_ref().display());
+
         fs::find_file(
             directory,
             KERNEL_VMLINUX_FILE,

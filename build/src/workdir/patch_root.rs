@@ -8,21 +8,21 @@ use super::workdir::ManageWorkDir;
 
 pub struct PatchRoot {
     path:       PathBuf,
-    build_root: PathBuf,
+    build: PathBuf,
     output:     PathBuf,
 }
 
 impl PatchRoot {
     pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
-        let path       = base_dir.as_ref().to_path_buf();
-        let build_root = path.join("build");
-        let output     = path.join("output");
+        let path   = base_dir.as_ref().to_path_buf();
+        let build  = path.join("build");
+        let output = path.join("output");
 
-        Self { path, build_root, output }
+        Self { path, build, output }
     }
 
-    pub fn build_root_dir(&self) -> &Path {
-        &self.build_root
+    pub fn build_dir(&self) -> &Path {
+        &self.build
     }
 
     pub fn output_dir(&self) -> &Path {
@@ -33,7 +33,7 @@ impl PatchRoot {
 impl ManageWorkDir for PatchRoot {
     fn create_all(&self) -> std::io::Result<()> {
         fs::create_dir(&self.path)?;
-        fs::create_dir(self.build_root_dir())?;
+        fs::create_dir(self.build_dir())?;
         fs::create_dir(self.output_dir())?;
 
         Ok(())

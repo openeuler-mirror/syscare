@@ -1,5 +1,7 @@
 use std::path::{Path, PathBuf};
 
+use log::debug;
+
 use crate::constants::*;
 use crate::util::fs;
 
@@ -9,6 +11,8 @@ pub struct PatchHelper;
 
 impl PatchHelper {
     pub fn collect_patches<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
+        debug!("Collecting patches from '{}'", directory.as_ref().display());
+
         let patch_filter_fn = |file_path: PathBuf| {
             let file_name = fs::file_name(&file_path).unwrap();
             match PatchFile::validate_naming_rule(file_name.as_str()) {

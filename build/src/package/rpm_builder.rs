@@ -2,14 +2,13 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::constants::*;
-use crate::util::fs;
+use crate::util::{fs, serde};
+use crate::util::os_str::OsStrConcat;
 
 use crate::patch::PatchInfo;
-use crate::util::os_str::OsStrConcat;
 use crate::workdir::PackageBuildRoot;
 use crate::cmd::ExternCommandArgs;
 
-use super::rpm_helper::RpmHelper;
 use super::rpm_spec_generator::RpmSpecGenerator;
 
 pub struct RpmBuilder {
@@ -22,7 +21,8 @@ impl RpmBuilder {
     }
 
     pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        patch_info.write_to_file(
+        serde::serialize(
+            patch_info,
             self.build_root.sources_dir().join(PATCH_INFO_FILE_NAME)
         )
     }
@@ -51,16 +51,15 @@ impl RpmBuilder {
         )
     }
 
-    pub fn build_prepare(&self) -> std::io::Result<()> {
-        let spec_file_path = RpmHelper::find_spec_file(self.build_root.specs_dir())?;
-
+    pub fn build_prepare<P: AsRef<Path>>(&self, spec_file: P) -> std::io::Result<()> {
         let exit_status = RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bp")
-                .arg(spec_file_path)
+                .arg(spec_file.as_ref())
         )?;
+
         let exit_code = exit_status.exit_code();
         if exit_code != 0 {
             return Err(std::io::Error::new(
@@ -72,16 +71,15 @@ impl RpmBuilder {
         Ok(())
     }
 
-    pub fn build_source_package<P: AsRef<Path>>(&self, output_dir: P) -> std::io::Result<()> {
+    pub fn build_source_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
         fs::check_dir(&output_dir)?;
 
-        let spec_file_path = RpmHelper::find_spec_file(self.build_root.specs_dir())?;
         let exit_status = RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bs")
-                .arg(spec_file_path)
+                .arg(spec_file.as_ref())
         )?;
 
         let exit_code = exit_status.exit_code();
@@ -97,16 +95,15 @@ impl RpmBuilder {
         Ok(())
     }
 
-    pub fn build_binary_package<P: AsRef<Path>>(&self, output_dir: P) -> std::io::Result<()> {
+    pub fn build_binary_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
         fs::check_dir(&output_dir)?;
 
-        let spec_file_path = RpmHelper::find_spec_file(self.build_root.specs_dir())?;
         let exit_status = RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bb")
-                .arg(spec_file_path)
+                .arg(spec_file.as_ref())
         )?;
 
         let exit_code = exit_status.exit_code();

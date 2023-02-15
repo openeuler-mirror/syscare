@@ -1,7 +1,6 @@
-use crate::cli::{CliWorkDir, CliArguments};
+use crate::cli::CliWorkDir;
 
-use super::{PatchBuilder, PatchBuilderArguments, PatchBuilderArgumentsParser};
-use super::{PatchInfo, PatchType};
+use super::{PatchType, PatchBuilder};
 
 use super::user_patch::UserPatchBuilder;
 use super::kernel_patch::KernelPatchBuilder;
@@ -9,17 +8,10 @@ use super::kernel_patch::KernelPatchBuilder;
 pub struct PatchBuilderFactory;
 
 impl PatchBuilderFactory {
-    pub fn get_builder(patch_info: &PatchInfo) -> Box<dyn PatchBuilder> {
-        match patch_info.get_type() {
-            PatchType::KernelPatch => Box::new(KernelPatchBuilder::new()),
-            PatchType::UserPatch   => Box::new(UserPatchBuilder::new()),
-        }
-    }
-
-    pub fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        match patch_info.get_type() {
-            PatchType::KernelPatch => KernelPatchBuilder::parse_args(patch_info, workdir, args),
-            PatchType::UserPatch   => UserPatchBuilder::parse_args(patch_info, workdir, args),
+    pub fn get_builder(patch_type: PatchType, workdir: &CliWorkDir) -> Box<dyn PatchBuilder + '_> {
+        match patch_type {
+            PatchType::KernelPatch => Box::new(KernelPatchBuilder::new(workdir)),
+            PatchType::UserPatch   => Box::new(UserPatchBuilder::new(workdir)),
         }
     }
 }

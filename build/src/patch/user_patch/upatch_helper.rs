@@ -1,23 +1,31 @@
 use std::path::{Path, PathBuf};
 
-use crate::patch::PatchInfo;
+use log::debug;
 
+use crate::package::RpmHelper;
 use crate::util::fs;
+use crate::constants::*;
 
 pub struct UserPatchHelper;
 
 impl UserPatchHelper {
-    pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
-        let target = patch_info.get_target();
-        let file_name = format!("{}-{}-{}.{}.debug",
-            patch_info.get_elf_name(), target.get_version(), target.get_release(), patch_info.get_arch()
-        );
+    pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
+        debug!("Finding debuginfo from '{}'", directory.as_ref().display());
 
-        fs::find_file(
+        fs::list_all_files_ext(
             directory,
-            file_name.as_str(),
-            false,
-            true
+            PATCH_DEBUG_INFO_EXTENSION,
+            true,
         )
+    }
+
+    pub fn query_pkg_file_list<P: AsRef<Path>>(pkg_path: P) -> std::io::Result<Vec<PathBuf>> {
+        let file_list_str = RpmHelper::query_package_info(pkg_path, "[%{FILENAMES} ]")?;
+        let file_list = file_list_str.trim_end()
+            .split(" ")
+            .map(PathBuf::from)
+            .collect::<Vec<_>>();
+
+        Ok(file_list)
     }
 }

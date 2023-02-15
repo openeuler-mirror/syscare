@@ -11,8 +11,7 @@ pub struct PackageRoot {
     path:       PathBuf,
     source_pkg: PathBuf,
     debug_pkg:  PathBuf,
-    binary_pkg: PathBuf,
-    build_root: PackageBuildRoot,
+    patch_pkg: PackageBuildRoot,
 }
 
 impl PackageRoot {
@@ -20,10 +19,9 @@ impl PackageRoot {
         let path       = path.as_ref().to_path_buf();
         let source_pkg = path.join("source");
         let debug_pkg  = path.join("debuginfo");
-        let binary_pkg = path.join("binary");
-        let build_root = PackageBuildRoot::new(path.join("rpmbuild"));
+        let patch_pkg = PackageBuildRoot::new(path.join("patch"));
 
-        Self { path, source_pkg, debug_pkg, binary_pkg, build_root }
+        Self { path, source_pkg, debug_pkg, patch_pkg }
     }
 
     pub fn source_pkg_dir(&self) -> &Path {
@@ -34,12 +32,8 @@ impl PackageRoot {
         &self.debug_pkg
     }
 
-    pub fn binary_pkg_dir(&self) -> &Path {
-        &self.binary_pkg
-    }
-
-    pub fn build_root(&self) -> &PackageBuildRoot {
-        &self.build_root
+    pub fn patch_pkg_dir(&self) -> &PackageBuildRoot {
+        &self.patch_pkg
     }
 }
 
@@ -48,14 +42,13 @@ impl ManageWorkDir for PackageRoot {
         fs::create_dir(&self.path)?;
         fs::create_dir(&self.source_pkg)?;
         fs::create_dir(&self.debug_pkg)?;
-        fs::create_dir(&self.binary_pkg)?;
-        self.build_root().create_all()?;
+        self.patch_pkg_dir().create_all()?;
 
         Ok(())
     }
 
     fn remove_all(&self) -> std::io::Result<()> {
-        self.build_root().remove_all()?;
+        self.patch_pkg_dir().remove_all()?;
         std::fs::remove_dir_all(&self.path)?;
 
         Ok(())

@@ -24,7 +24,7 @@ impl WorkDir {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         let path         = path.as_ref().to_path_buf();
         let log_file     = path.join(CLI_LOG_FILE_NAME);
-        let patch_root   = PatchRoot::new(path.join("path"));
+        let patch_root   = PatchRoot::new(path.join("patch"));
         let package_root = PackageRoot::new(path.join("package"));
         Self { path, log_file, patch_root, package_root }
     }

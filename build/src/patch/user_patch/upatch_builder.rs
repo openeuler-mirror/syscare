@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsString, OsStr};
 
 use crate::constants::*;
 
@@ -6,22 +6,24 @@ use crate::cli::{CliWorkDir, CliArguments};
 use crate::cmd::ExternCommandArgs;
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchFile};
-use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
+use crate::patch::{PatchBuilder, PatchBuilderArguments};
+
+use crate::util::{serde, fs};
 use crate::util::os_str::OsStrConcat;
 
 use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
-// use crate::constants::*;
+pub struct UserPatchBuilder<'a> {
+    workdir: &'a CliWorkDir
+}
 
-pub struct UserPatchBuilder;
-
-impl UserPatchBuilder {
-    pub fn new() -> Self {
-        Self {}
+impl<'a> UserPatchBuilder<'a> {
+    pub fn new(workdir: &'a CliWorkDir) -> Self {
+        Self { workdir }
     }
 
-    fn parse_cmd_args<'a>(&self, args: &'a UserPatchBuilderArguments) -> ExternCommandArgs {
+    fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
             .arg("--name")
             .arg(&args.name)
@@ -33,12 +35,12 @@ impl UserPatchBuilder {
             .arg(&args.build_source_cmd)
             .arg("--build-patch-cmd")
             .arg(&args.build_patch_cmd)
-            .arg("--debug-info")
-            .arg(&args.debuginfo)
-            .arg("--elf-name")
-            .arg(&args.elf_name)
             .arg("--output-dir")
             .arg(&args.output_dir);
+
+        for debuginfo in &args.debuginfo {
+            cmd_args = cmd_args.arg("--debug-info").arg(debuginfo);
+        }
 
         if args.skip_compiler_check {
             cmd_args = cmd_args.arg("--skip-compiler-check");
@@ -52,42 +54,40 @@ impl UserPatchBuilder {
     }
 }
 
-impl PatchBuilderArgumentsParser for UserPatchBuilder {
-    fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = workdir.patch_root().build_root_dir();
-        let patch_output_dir = workdir.patch_root().output_dir();
+impl PatchBuilder for UserPatchBuilder<'_> {
+    fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+        let patch_build_root = self.workdir.patch_root().build_dir();
+        let patch_output_dir = self.workdir.patch_root().output_dir();
 
-        let source_pkg_dir = workdir.package_root().source_pkg_dir();
-        let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
+        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
+        let debug_pkg_dir  = self.workdir.package_root().debug_pkg_dir();
 
-        let pkg_root = RpmHelper::find_build_root(source_pkg_dir)?;
-        let pkg_build_dir = pkg_root.build_dir();
-        let pkg_specs_dir = pkg_root.specs_dir();
-
-        let patch_source_dir = RpmHelper::find_source_directory(pkg_build_dir, patch_info)?;
-        let spec_file_path = RpmHelper::find_spec_file(pkg_specs_dir)?;
-        let patch_debuginfo = UserPatchHelper::find_debuginfo_file(debug_pkg_dir, patch_info)?;
+        let pkg_build_root   = RpmHelper::find_build_root(source_pkg_dir)?;
+        let spec_file        = RpmHelper::find_spec_file(pkg_build_root.specs_dir())?;
+        let patch_source_dir = RpmHelper::find_source_directory(pkg_build_root.build_dir(), patch_info)?;
+        let patch_debuginfo  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
 
         let mut build_original_cmd = OsString::from(RPM_BUILD.to_string());
         build_original_cmd.concat(" --define '_topdir ")
-            .concat(&pkg_root)
-            .concat("' -bc")
-            .concat(" --noclean ")
-            .concat(&spec_file_path);
+            .concat(&pkg_build_root)
+            .concat("' -bb ")
+            .concat("--nodebuginfo ")
+            .concat("--noclean ")
+            .concat(&spec_file);
 
         let mut build_patched_cmd  = OsString::from(RPM_BUILD.to_string());
         build_patched_cmd.concat(" --define '_topdir ")
-            .concat(&pkg_root)
-            .concat("' -bc")
-            .concat(" --noclean")
-            .concat(" --noprep ")
-            .concat(&spec_file_path);
+            .concat(&pkg_build_root)
+            .concat("' -bc ")
+            .concat("--noprep ")
+            .concat("--nodebuginfo ")
+            .concat("--noclean ")
+            .concat(&spec_file);
 
         let builder_args = UserPatchBuilderArguments {
             name:                patch_info.get_name().to_owned(),
             work_dir:            patch_build_root.to_owned(),
             debug_source:        patch_source_dir,
-            elf_name:            patch_info.get_elf_name().to_owned(),
             debuginfo:           patch_debuginfo,
             build_source_cmd:    build_original_cmd,
             build_patch_cmd:     build_patched_cmd,
@@ -99,13 +99,11 @@ impl PatchBuilderArgumentsParser for UserPatchBuilder {
 
         Ok(PatchBuilderArguments::UserPatch(builder_args))
     }
-}
 
-impl PatchBuilder for UserPatchBuilder {
-    fn build_patch(&self, args: PatchBuilderArguments) -> std::io::Result<()> {
+    fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
-                let exit_status = UPATCH_BUILD.execvp(self.parse_cmd_args(&uargs))?;
+                let exit_status = UPATCH_BUILD.execvp(self.parse_cmd_args(uargs))?;
 
                 let exit_code = exit_status.exit_code();
                 if exit_code != 0 {
@@ -114,9 +112,47 @@ impl PatchBuilder for UserPatchBuilder {
                         format!("Process '{}' exited unsuccessfully, exit_code={}", UPATCH_BUILD, exit_code),
                     ));
                 }
+
                 Ok(())
             },
-            _ => unreachable!(),
+            PatchBuilderArguments::KernelPatch(_) => unreachable!(),
+        }
+    }
+
+    fn write_patch_info(&self, patch_info: &mut PatchInfo, args: &PatchBuilderArguments) -> std::io::Result<()> {
+        match args {
+            PatchBuilderArguments::UserPatch(uargs) => {
+                let elf_names = serde::deserialize::<_, Vec<OsString>>(
+                    uargs.output_dir.join(PATCH_ELF_NAME_FILE)
+                )?;
+
+                let src_pkg_dir = self.workdir.package_root().source_pkg_dir();
+                let pkg_name = format!("{}.{}.{}",
+                    patch_info.get_target().get_simple_name(),
+                    patch_info.get_target().get_arch(),
+                    PKG_FILE_EXTENSION
+                );
+                let pkg_path = fs::find_file(src_pkg_dir, &pkg_name, false, true)?;
+                let pkg_file_list = UserPatchHelper::query_pkg_file_list(pkg_path)?;
+
+                let elf_map = pkg_file_list.into_iter()
+                    .filter_map(|elf_path| {
+                        elf_path.file_name()
+                            .map(OsStr::to_os_string)
+                            .and_then(|elf_name| {
+                                if !elf_names.contains(&elf_name) {
+                                    return None;
+                                }
+                                Some((elf_name.to_os_string(), elf_path))
+                            })
+                    })
+                    .collect::<Vec<_>>();
+
+                patch_info.add_target_elfs(elf_map);
+
+                Ok(())
+            },
+            PatchBuilderArguments::KernelPatch(_) => unreachable!(),
         }
     }
 }

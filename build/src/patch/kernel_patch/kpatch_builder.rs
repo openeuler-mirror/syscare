@@ -1,21 +1,28 @@
+use std::ffi::OsString;
+use std::path::PathBuf;
+
 use crate::constants::*;
 
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::cmd::{ExternCommandArgs, ExternCommandEnvs};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchFile};
-use crate::patch::{PatchBuilder, PatchBuilderArgumentsParser, PatchBuilderArguments};
+use crate::patch::{PatchBuilder, PatchBuilderArguments};
 
 use super::kpatch_helper::KernelPatchHelper;
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 
-pub struct KernelPatchBuilder;
+pub struct KernelPatchBuilder<'a> {
+    workdir: &'a CliWorkDir
+}
 
-impl KernelPatchBuilder {
-    pub fn new() -> Self {
-        Self {}
+impl<'a> KernelPatchBuilder<'a> {
+    pub fn new(workdir: &'a CliWorkDir) -> Self {
+        Self { workdir }
     }
+}
 
+impl KernelPatchBuilder<'_> {
     fn parse_cmd_args(&self, args: &KernelPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
             .arg("--name")
@@ -23,7 +30,7 @@ impl KernelPatchBuilder {
             .arg("--sourcedir")
             .arg(&args.source_dir)
             .arg("--config")
-            .arg(&args.config_file)
+            .arg(&args.config)
             .arg("--vmlinux")
             .arg(&args.vmlinux)
             .arg("--jobs")
@@ -49,13 +56,13 @@ impl KernelPatchBuilder {
     }
 }
 
-impl PatchBuilderArgumentsParser for KernelPatchBuilder {
-    fn parse_args(patch_info: &PatchInfo, workdir: &CliWorkDir, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = workdir.patch_root().build_root_dir();
-        let patch_output_dir = workdir.patch_root().output_dir();
+impl PatchBuilder for KernelPatchBuilder<'_> {
+    fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+        let patch_build_root = self.workdir.patch_root().build_dir();
+        let patch_output_dir = self.workdir.patch_root().output_dir();
 
-        let source_pkg_dir = workdir.package_root().source_pkg_dir();
-        let debug_pkg_dir  = workdir.package_root().debug_pkg_dir();
+        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
+        let debug_pkg_dir  = self.workdir.package_root().debug_pkg_dir();
 
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_build_dir  = source_pkg_build_root.build_dir();
@@ -63,14 +70,14 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
 
         KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
         let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
-        let debuginfo_file = KernelPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
+        let vmlinux_file = KernelPatchHelper::find_vmlinux_file(debug_pkg_dir)?;
 
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),
             patch_name:          patch_info.get_name().to_owned(),
             source_dir:          kernel_source_dir,
-            config_file:         kernel_config_file,
-            vmlinux:             debuginfo_file,
+            config:              kernel_config_file,
+            vmlinux:             vmlinux_file,
             jobs:                args.kjobs,
             output_dir:          patch_output_dir.to_owned(),
             skip_compiler_check: args.skip_compiler_check,
@@ -79,15 +86,13 @@ impl PatchBuilderArgumentsParser for KernelPatchBuilder {
 
         Ok(PatchBuilderArguments::KernelPatch(builder_args))
     }
-}
 
-impl PatchBuilder for KernelPatchBuilder {
-    fn build_patch(&self, args: PatchBuilderArguments) -> std::io::Result<()> {
+    fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => {
                 let exit_status = KPATCH_BUILD.execve(
-                    self.parse_cmd_args(&kargs),
-                    self.parse_cmd_envs(&kargs)
+                    self.parse_cmd_args(kargs),
+                    self.parse_cmd_envs(kargs)
                 )?;
 
                 let exit_code = exit_status.exit_code();
@@ -97,9 +102,16 @@ impl PatchBuilder for KernelPatchBuilder {
                         format!("Process '{}' exited unsuccessfully, exit_code={}", KPATCH_BUILD, exit_code),
                     ));
                 }
+
                 Ok(())
             },
-            _ => unreachable!(),
+            PatchBuilderArguments::UserPatch(_) => unreachable!(),
         }
+    }
+
+    fn write_patch_info(&self, patch_info: &mut PatchInfo, _args: &PatchBuilderArguments) -> std::io::Result<()> {
+        patch_info.add_target_elfs([(OsString::from(KERNEL_VMLINUX_FILE), PathBuf::from(""))]);
+
+        Ok(())
     }
 }
