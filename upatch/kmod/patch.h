@@ -127,7 +127,7 @@ struct running_elf_info {
     struct {
         unsigned int sym, symstr;
         unsigned int dynsym, dynsymstr;
-        unsigned int reloplt;
+        unsigned int relaplt, reladyn;
 	} index;
     struct upatch_load_info *load_info;
 };

@@ -361,7 +361,6 @@ void upatch_compare_sections(struct upatch_elf *uelf)
 				sec->base->sym->status = sec->status;
 		} else {
 			struct symbol *sym = sec->sym;
-
 			if (sym && sym->status != CHANGED)
 				sym->status = sec->status;
                 /* TODO: handle child func */

@@ -263,6 +263,9 @@ static void bundle_symbols(struct upatch_elf *uelf)
                     sym->name, sym->sym.st_value, sym->sec->name);
             }
             sym->sec->sym = sym;
+        /* except handler is also a kind of bundle symbol */
+        } else if (sym->type == STT_SECTION && is_except_section(sym->sec)) {
+            sym->sec->sym = sym;
         }
     }
 }
@@ -595,6 +598,7 @@ static void include_symbol(struct symbol *sym)
 
     if (!sym->sec)
         return;
+
     /*
      * For a function/object symbol, if it has a section, we only need to
      * include the section if it has changed. Otherwise the symbol will be
@@ -674,6 +678,15 @@ static int include_changed_functions(struct upatch_elf *uelf)
             include_symbol(sym);
         }
 
+        /* exception handler is a special function */
+        if (sym->status == CHANGED &&
+            sym->type == STT_SECTION &&
+            sym->sec && is_except_section(sym->sec)) {
+            log_warn("found changed exeception section %s \n", sym->sec->name);
+            changed_nr++;
+            include_symbol(sym);
+        }
+
         if (sym->type == STT_FILE)
             sym->include = 1;
     }
@@ -731,7 +744,7 @@ static void verify_patchability(struct upatch_elf *uelf)
     int errs = 0;
 
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->status == CHANGED && !sec->include && !is_eh_frame_section(sec)) {
+        if (sec->status == CHANGED && !sec->include) {
             log_normal("changed section %s not selected for inclusion\n", sec->name);
             errs++;
         }
@@ -747,7 +760,8 @@ static void verify_patchability(struct upatch_elf *uelf)
         }
 
         if (sec->include && sec->status != NEW &&
-            (!strncmp(sec->name, ".data", 5) || !strncmp(sec->name, ".bss", 4))) {
+            (!strncmp(sec->name, ".data", 5) || !strncmp(sec->name, ".bss", 4)) &&
+            (strcmp(sec->name, ".data.unlikely") && strcmp(sec->name, ".data.once"))) {
             log_normal("data section %s selected for inclusion\n", sec->name);
             errs++;
         }

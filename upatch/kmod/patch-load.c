@@ -26,7 +26,8 @@
 #include "patch.h"
 #include "arch/patch-load.h"
 
-#define PLT_RELO_NAME ".rela.plt"
+#define GOT_RELA_NAME ".rela.dyn"
+#define PLT_RELA_NAME ".rela.plt"
 
 #ifndef ARCH_SHF_SMALL
 #define ARCH_SHF_SMALL 0
@@ -508,6 +509,7 @@ static int find_upatch_module_sections(struct upatch_module *mod, struct upatch_
     return 0;
 }
 
+/* Used for both PLT/GOT */
 static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr)
 {
     struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
@@ -534,6 +536,7 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
     Elf_Sym *sym;
     Elf64_Rela *rela;
 
+    /* handle symbol table first, in most cases, symbol table does not exist */
     sechdr = &elf_info->sechdrs[elf_info->index.sym];
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
     for (i = 0; i < sechdr->sh_size / sizeof(Elf_Sym); i++) {
@@ -549,46 +552,86 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
         }
     }
 
-    /* TODO: is that necessary to support rel? */
-    if (!elf_info->index.reloplt)
-        goto out;
-
-    /* Several possible solutions here:
-     * 1. use symbol address from .dynsym, it works in limited situations
+    /*
+     * Handle external symbol, several possible solutions here:
+     * 1. use symbol address from .dynsym, but most of its address is still undefined
      * 2. use address from PLT/GOT, problems are:
-     *      1) range limit(use jmp table?)
-     *      2) only support existed symbols
+     *    1) range limit(use jmp table?)
+     *    2) only support existed symbols
      * 3. read symbol from library, combined with load_bias, calculate it directly
      *    and then worked with jmp table.
      *
-     * Currently, we choose approach 2.
-     *
+     * Currently, we will try approach 1 and approach 2.
+     * Approach 3 is more general, but difficulty to implement.
      */
-    /* .rela.plt is relocations for .dynsym */
+    if (!elf_info->index.dynsym)
+        goto out;
+
     sechdr = &elf_info->sechdrs[elf_info->index.dynsym];
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
 
-    sechdr = &elf_info->sechdrs[elf_info->index.reloplt];
+    /* handle external function */
+    if (!elf_info->index.relaplt)
+        goto out_got;
+
+    sechdr = &elf_info->sechdrs[elf_info->index.relaplt];
     rela = (void *)elf_info->hdr + sechdr->sh_offset;
     for (i = 0; i < sechdr->sh_size / sizeof(Elf64_Rela); i ++) {
         unsigned long r_sym = ELF64_R_SYM (rela[i].r_info);
-        /* for executable file, r_offset is virtual address */
+        /* for executable file, r_offset is virtual address of PLT table */
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
         unsigned long addr;
+
+        /* TODO: should we consider the relocation type ? */
+        sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
+        if (!streql(sym_name, name)
+            || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_FUNC)
+            continue;
+
+        /* this address is used for R_X86_64_PLT32  */
+        if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
+            pr_err("copy address failed \n");
+            goto out;
+        }
+        elf_addr = setup_jmp_table(elf_info->load_info, addr);
+        pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
+            sym_name, rela[i].r_offset, addr, elf_addr);
+        goto out;
+    }
+
+out_got:
+    /* handle external object, we need get it's address, used for R_X86_64_REX_GOTPCRELX */
+    if (!elf_info->index.reladyn)
+        goto out;
+
+    sechdr = &elf_info->sechdrs[elf_info->index.reladyn];
+    rela = (void *)elf_info->hdr + sechdr->sh_offset;
+    for (i = 0; i < sechdr->sh_size / sizeof(Elf64_Rela); i ++) {
+        unsigned long r_sym = ELF64_R_SYM (rela[i].r_info);
+        /* for executable file, r_offset is virtual address of GOT table */
+        void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
+        unsigned long addr;
+
+        sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
+        /* TODO: don't care about its version here */
+        tmp = strchr(sym_name, '@');
+        if (tmp != NULL)
+            *tmp = '\0';
+
+        if (!streql(sym_name, name)
+            || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_OBJECT)
+            continue;
 
         if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
             pr_err("copy address failed \n");
             goto out;
         }
-
-        sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
-        if (streql(sym_name, name)) {
-            elf_addr = setup_jmp_table(elf_info->load_info, addr);
-            pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
-                sym_name, rela[i].r_offset, addr, elf_addr);
-            goto out;
-        }
+        /* used for R_X86_64_REX_GOTPCRELX */
+        elf_addr = addr;
+        pr_debug("found unresolved .got %s at 0x%lx \n", sym_name, elf_addr);
+        goto out;
     }
+
 
 out:
     if (!elf_addr) {
@@ -758,11 +801,14 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
                 + elf_info->sechdrs[elf_info->index.dynsymstr].sh_offset;
         } else if (elf_info->sechdrs[i].sh_type == SHT_DYNAMIC) {
             /* Currently, we don't utilize it */
-        } else if (streql(name, PLT_RELO_NAME)
+        } else if (streql(name, PLT_RELA_NAME)
             && elf_info->sechdrs[i].sh_type == SHT_RELA) {
-            /* TODO: GOT is also need to be handled */
-            elf_info->index.reloplt = i;
-            pr_debug("found %s with %d \n", PLT_RELO_NAME, i);
+            elf_info->index.relaplt = i;
+            pr_debug("found %s with %d \n", PLT_RELA_NAME, i);
+        } else if (streql(name, GOT_RELA_NAME)
+            && elf_info->sechdrs[i].sh_type == SHT_RELA) {
+            elf_info->index.reladyn = i;
+            pr_debug("found %s with %d \n", GOT_RELA_NAME, i);
         }
     }
 
@@ -784,6 +830,7 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
         }
     }
 
+    /* TODO: it is possible that no symbol resolve is needed */
     if (!elf_info->index.sym && !elf_info->index.dynsym) {
         pr_err("no symtab/dynsym found \n");
         ret = -ENOEXEC;
