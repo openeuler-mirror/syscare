@@ -1,5 +1,6 @@
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::fs::{Metadata, Permissions, ReadDir};
+use std::fs::{Metadata, Permissions, ReadDir, File};
 
 trait RewriteError {
     fn rewrite_err(self, err_msg: String) -> Self;
@@ -182,6 +183,36 @@ pub fn set_permissions<P: AsRef<Path>>(path: P, perm: Permissions) -> std::io::R
 }
 
 /* Extended functions */
+pub fn create_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+    std::fs::File::create(&path).rewrite_err(
+        format!("cannot create file \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+    std::fs::File::open(&path).rewrite_err(
+        format!("cannot open file \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+pub fn file_name<P: AsRef<Path>>(path: P) -> OsString {
+    path.as_ref()
+        .file_name()
+        .map(OsStr::to_os_string)
+        .unwrap_or_default()
+}
+
+pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
+    path.as_ref()
+        .extension()
+        .map(OsStr::to_os_string)
+        .unwrap_or_default()
+}
+
 pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
     let mut dir_list = Vec::new();
 
