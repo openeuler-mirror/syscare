@@ -37,7 +37,7 @@ impl WorkDir {
         &self.package_root
     }
 
-    pub fn log_file_path(&self) -> &Path {
+    pub fn log_file(&self) -> &Path {
         &self.log_file
     }
 }

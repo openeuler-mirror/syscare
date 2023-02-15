@@ -69,7 +69,7 @@ impl Logger {
         let mut appenders = Vec::new();
 
         appenders.extend(Self::init_console_log(max_level));
-        appenders.push(Self::init_file_log(work_dir.log_file_path(), LevelFilter::Trace)?);
+        appenders.push(Self::init_file_log(work_dir.log_file(), LevelFilter::Trace)?);
 
         let root = Root::builder()
             .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
