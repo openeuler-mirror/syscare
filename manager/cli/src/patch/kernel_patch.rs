@@ -35,7 +35,7 @@ impl<'a> KernelPatchAdapter<'a> {
 
     fn get_patch_file(&self) -> PathBuf {
         let patch_name = format!("{}.{}",
-            self.patch.get_simple_name(),
+            self.patch.get_name(),
             KPATCH_PATCH_SUFFIX
         );
         self.patch.get_root().join(patch_name)
@@ -62,7 +62,7 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn patch_sys_interface(&self) -> PathBuf {
-        let patch_name = self.patch.get_simple_name().replace('-', "_");
+        let patch_name = self.patch.get_name().replace('-', "_");
 
         PathBuf::from(KPATCH_MGNT_DIR)
             .join(patch_name)
@@ -112,7 +112,7 @@ impl<'a> KernelPatchAdapter<'a> {
 
 impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        let patch_target = self.patch.get_target().get_simple_name();
+        let patch_target = self.patch.get_target().get_name();
         let patch_arch   = self.patch.get_arch();
 
         let kernel_version = sys::get_kernel_version()?;

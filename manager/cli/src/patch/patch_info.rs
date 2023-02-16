@@ -1,4 +1,8 @@
-use std::path::{Path, PathBuf};
+use std::ffi::OsString;
+use std::path::PathBuf;
+use std::collections::HashMap;
+
+use log::log;
 use serde::{Serialize, Deserialize};
 
 use super::package_info::PackageInfo;
@@ -35,12 +39,12 @@ impl std::fmt::Display for PatchFile {
 #[derive(Clone)]
 pub struct PatchInfo {
     name:        String,
-    kind:        PatchType,
-    arch:        String,
     version:     u32,
     release:     String,
+    arch:        String,
+    kind:        PatchType,
     target:      PackageInfo,
-    elf_name:    String,
+    target_elfs: HashMap<OsString, PathBuf>,
     license:     String,
     description: String,
     incremental: bool,
@@ -53,14 +57,6 @@ impl PatchInfo {
         &self.name
     }
 
-    pub fn get_type(&self) -> PatchType {
-        self.kind
-    }
-
-    pub fn get_arch(&self) -> &str {
-        &self.arch
-    }
-
     pub fn get_version(&self) -> u32 {
         self.version
     }
@@ -69,12 +65,20 @@ impl PatchInfo {
         &self.release
     }
 
+    pub fn get_arch(&self) -> &str {
+        &self.arch
+    }
+
+    pub fn get_type(&self) -> PatchType {
+        self.kind
+    }
+
     pub fn get_target(&self) -> &PackageInfo {
         &self.target
     }
 
-    pub fn get_elf_name(&self) -> &str {
-        &self.elf_name
+    pub fn get_target_elfs(&self) -> &HashMap<OsString, PathBuf> {
+        &self.target_elfs
     }
 
     pub fn get_license(&self) -> &str {
@@ -94,33 +98,39 @@ impl PatchInfo {
     }
 }
 
-/* Serialize & deserialize */
 impl PatchInfo {
-    pub fn read_from_file<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        bincode::deserialize_from(std::fs::File::open(path)?).map_err(|e| std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("deserialize path info failed, {}", e)
-        ))
-    }
-}
+    fn get_target_elfs_str(&self) -> String {
+        const PATCH_FLAG_NONE: &str = "(none)";
 
-impl std::fmt::Display for PatchInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("name:        {}\n", self.get_name()))?;
-        f.write_fmt(format_args!("type:        {}\n", self.get_type()))?;
-        f.write_fmt(format_args!("arch:        {}\n", self.get_arch()))?;
-        f.write_fmt(format_args!("target:      {}\n", self.get_target().get_simple_name()))?;
-        f.write_fmt(format_args!("elf_name:    {}\n", self.get_elf_name()))?;
-        f.write_fmt(format_args!("license:     {}\n", self.get_license()))?;
-        f.write_fmt(format_args!("version:     {}\n", self.get_version()))?;
-        f.write_fmt(format_args!("release:     {}\n", self.get_release()))?;
-        f.write_fmt(format_args!("description: {}\n", self.get_description()))?;
-        f.write_fmt(format_args!("builder:     {}\n", self.get_builder()))?;
-        f.write_str("\npatch list:")?;
-        for patch_file in self.get_patches() {
-            f.write_fmt(format_args!("\n{}", patch_file))?;
+        let elf_list = self.get_target_elfs();
+        if elf_list.is_empty() {
+            return PATCH_FLAG_NONE.to_owned();
         }
 
-        Ok(())
+        let mut str = String::new();
+        for (elf_name, _) in elf_list.into_iter() {
+            str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
+        }
+        str.pop();
+        str.pop();
+        str
+    }
+
+    pub fn print_log(&self, level: log::Level) {
+        log!(level, "name:        {}", self.get_name());
+        log!(level, "version:     {}", self.get_version());
+        log!(level, "release:     {}", self.get_release());
+        log!(level, "arch:        {}", self.get_arch());
+        log!(level, "type:        {}", self.get_type());
+        log!(level, "target:      {}", self.get_target().get_name());
+        log!(level, "target_elfs: {}", self.get_target_elfs_str());
+        log!(level, "license:     {}", self.get_license());
+        log!(level, "description: {}", self.get_description());
+        log!(level, "builder:     {}", self.get_builder());
+        log!(level, "");
+        log!(level, "patch list:");
+        for patch_file in self.get_patches() {
+            log!(level, "{} {}", patch_file.name, patch_file.digest);
+        }
     }
 }

@@ -37,7 +37,7 @@ impl PatchManager {
         let pkg_list = fs::list_all_dirs(scan_root, false)?;
         for pkg_root in &pkg_list {
             for patch_root in fs::list_all_dirs(&pkg_root, false)? {
-                match Patch::parse_from(&patch_root) {
+                match Patch::new(&patch_root) {
                     Ok(patch) => {
                         debug!("detected patch \"{}\"", patch);
                         patch_list.push(patch);
@@ -60,15 +60,14 @@ impl PatchManager {
     }
 
     fn is_matched_patch<T: AsRef<Patch>>(patch: &T, pattern: &str) -> bool {
-        let patch_ref   = patch.as_ref();
-        let full_name   = patch_ref.get_full_name();
-        let simple_name = patch_ref.get_simple_name();
+        let patch_name      = patch.as_ref().get_name();
+        let patch_full_name = patch.as_ref().get_full_name();
 
-        if (pattern != full_name) && (pattern != simple_name) {
+        if (pattern != patch_name) && (pattern != patch_full_name) {
             return false;
         }
 
-        debug!("matched patch \"{}\"", full_name);
+        debug!("matched patch \"{}\"", patch_full_name);
         true
     }
 

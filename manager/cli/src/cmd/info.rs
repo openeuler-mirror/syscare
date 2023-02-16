@@ -1,4 +1,4 @@
-use log::{info, debug};
+use log::debug;
 
 use crate::patch::PatchManager;
 
@@ -11,7 +11,8 @@ impl CommandExecutor for InfoCommandExecutor {
         let patch_manager = PatchManager::new()?;
         debug!("handle command \"info {}\"", args[0]);
 
-        info!("{}", patch_manager.get_patch_info(&args[0])?);
+        patch_manager.get_patch_info(&args[0])?
+                     .print_log(log::Level::Info);
 
         debug!("command \"info {}\" done", args[0]);
         Ok(0)

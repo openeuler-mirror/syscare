@@ -3,33 +3,37 @@ use std::path::{Path, PathBuf};
 
 use log::debug;
 use lazy_static::lazy_static;
-use serde::{Serialize, Deserialize};
 
-use super::package_info::PackageInfo;
+use crate::util::serde;
+
 use super::patch_info::{PatchInfo, PatchType};
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;
 use super::user_patch::UserPatchAdapter;
 use super::kernel_patch::KernelPatchAdapter;
 
-const PATCH_INFO_FILE_NAME: &str = "patch_info";
-
-#[derive(Serialize, Deserialize)]
 pub struct Patch {
-    root:   PathBuf,
     info:   PatchInfo,
     status: PatchStatus,
+    root:   PathBuf,
 }
 
 impl Patch {
-    pub fn parse_from<P: AsRef<Path>>(patch_root: P) -> std::io::Result<Self> {
-        let file_path = patch_root.as_ref().join(PATCH_INFO_FILE_NAME);
+    pub fn new<P: AsRef<Path>>(path_root: P) -> std::io::Result<Self> {
+        const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-        Ok(Self {
-            root:   patch_root.as_ref().to_path_buf(),
-            info:   PatchInfo::read_from_file(file_path)?,
+        let path     = path_root.as_ref();
+        let instance = Self {
+            root:   path.to_path_buf(),
+            info:   serde::deserialize(path.join(PATCH_INFO_FILE_NAME))?,
             status: PatchStatus::NotApplied,
-        })
+        };
+
+        Ok(instance)
+    }
+
+    pub fn get_full_name(&self) -> String {
+        format!("{}/{}", self.get_target().get_name(), self.get_name())
     }
 
     pub fn get_root(&self) -> &Path {
@@ -42,22 +46,6 @@ impl Patch {
 
     pub fn get_status(&self) -> PatchStatus {
         self.status
-    }
-
-    pub fn get_simple_name(&self) -> &str {
-        self.get_info().get_name()
-    }
-
-    pub fn get_full_name(&self) -> String {
-        format!("{}/{}", self.get_target().get_simple_name(), self.get_simple_name())
-    }
-
-    pub fn get_arch(&self) -> &str {
-        self.get_info().get_arch()
-    }
-
-    pub fn get_target(&self) -> &PackageInfo {
-        self.get_info().get_target()
     }
 }
 
@@ -261,6 +249,14 @@ impl Patch {
 impl AsRef<Patch> for Patch {
     fn as_ref(&self) -> &Patch {
         self
+    }
+}
+
+impl std::ops::Deref for Patch {
+    type Target = PatchInfo;
+
+    fn deref(&self) -> &Self::Target {
+        self.get_info()
     }
 }
 
