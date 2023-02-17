@@ -35,7 +35,7 @@ impl<'a> UserPatchAdapter<'a> {
         self.patch.root_dir.join(patch_file_name)
     }
 
-    fn do_action<P: AsRef<Path>>(&self, action: &str, patch: P) -> std::io::Result<String> {
+    fn do_action<P: AsRef<Path>>(&self, action: &str, patch: P) -> std::io::Result<OsString> {
         let exit_status = UPATCH_TOOL.execvp(
             ExternCommandArgs::new()
                     .arg(action)
@@ -43,10 +43,10 @@ impl<'a> UserPatchAdapter<'a> {
                     .arg(patch.as_ref())
         )?;
 
-        Ok(exit_status.stdout().trim().to_owned())
+        Ok(exit_status.stdout().to_owned())
     }
 
-    fn do_action_to_elf<P: AsRef<Path>, Q: AsRef<Path>>(&self, action: &str, patch: P, elf: Q) -> std::io::Result<String> {
+    fn do_action_to_elf<P: AsRef<Path>, Q: AsRef<Path>>(&self, action: &str, patch: P, elf: Q) -> std::io::Result<OsString> {
         let exit_status = UPATCH_TOOL.execvp(
             ExternCommandArgs::new()
                     .arg(action)
@@ -56,24 +56,30 @@ impl<'a> UserPatchAdapter<'a> {
                     .arg(elf.as_ref())
         )?;
 
-        Ok(exit_status.stdout().trim().to_owned())
+        Ok(exit_status.stdout().to_owned())
     }
 
     fn get_patch_status<S: AsRef<OsStr>>(&self, elf_name: S) -> std::io::Result<PatchStatus> {
         let patch  = self.get_patch_file(&elf_name);
 
         let stdout = self.do_action(UPATCH_ACTION_STATUS, patch)?;
-        match stdout.as_str() {
-            UPATCH_STATUS_NOT_APPLY => Ok(PatchStatus::NotApplied),
-            UPATCH_STATUS_INSTALLED => Ok(PatchStatus::Deactived),
-            UPATCH_STATUS_DEACTIVED => Ok(PatchStatus::Deactived),
-            UPATCH_STATUS_ACTIVED   => Ok(PatchStatus::Actived),
-            _ => {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!("status \"{}\" is invalid", stdout)
-                ))
-            }
+        if stdout == UPATCH_STATUS_NOT_APPLY {
+            Ok(PatchStatus::NotApplied)
+        }
+        else if stdout == UPATCH_STATUS_INSTALLED  {
+            Ok(PatchStatus::Deactived)
+        }
+        else if stdout == UPATCH_STATUS_DEACTIVED  {
+            Ok(PatchStatus::Deactived)
+        }
+        else if stdout == UPATCH_STATUS_ACTIVED  {
+            Ok(PatchStatus::Actived)
+        }
+        else {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("status \"{}\" is invalid", stdout.to_string_lossy())
+            ))
         }
     }
 }

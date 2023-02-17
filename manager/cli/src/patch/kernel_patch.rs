@@ -142,10 +142,10 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
         )?;
 
         if exit_status.exit_code() != 0 {
-            debug!("{}", exit_status.stderr());
+            debug!("{}", exit_status.stderr().to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                exit_status.stderr(),
+                "insmod patch failed",
             ));
         }
 
@@ -159,10 +159,10 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
         )?;
 
         if exit_status.exit_code() != 0 {
-            debug!("{}", exit_status.stderr());
+            debug!("{}", exit_status.stderr().to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                exit_status.stderr(),
+                "rmmod patch failed",
             ));
         }
 

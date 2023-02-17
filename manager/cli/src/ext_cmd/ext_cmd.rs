@@ -6,7 +6,7 @@ use std::io::BufReader;
 
 use log::{trace, debug};
 
-use super::lossy_lines::LossyLines;
+use super::raw_line::RawLine;
 
 pub struct ExternCommandArgs {
     args: Vec<OsString>,
@@ -104,8 +104,8 @@ pub struct ExternCommand<'a> {
 impl ExternCommand<'_> {
     #[inline(always)]
     fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        let mut last_stdout = String::new();
-        let mut last_stderr = String::new();
+        let mut last_stdout = OsString::new();
+        let mut last_stderr = OsString::new();
 
         debug!("executing {:?}", command);
         let mut child_process = command
@@ -124,15 +124,15 @@ impl ExternCommand<'_> {
         trace!("process '{}' ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
-        for read_line in LossyLines::from(BufReader::new(process_stdout)) {
+        for read_line in RawLine::from(BufReader::new(process_stdout)) {
             last_stdout = read_line?;
-            trace!("{}", last_stdout);
+            trace!("{}", last_stdout.to_string_lossy());
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
-        for read_line in LossyLines::from(BufReader::new(process_stderr)) {
+        for read_line in RawLine::from(BufReader::new(process_stderr)) {
             last_stderr = read_line?;
-            trace!("{}", last_stderr);
+            trace!("{}", last_stderr.to_string_lossy());
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
@@ -177,8 +177,8 @@ impl std::fmt::Display for ExternCommand<'_> {
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
     exit_code: i32,
-    stdout: String,
-    stderr: String,
+    stdout:    OsString,
+    stderr:    OsString,
 }
 
 impl ExternCommandExitStatus {
@@ -186,11 +186,11 @@ impl ExternCommandExitStatus {
         self.exit_code
     }
 
-    pub fn stdout(&self) -> &str {
+    pub fn stdout(&self) -> &OsStr {
         &self.stdout
     }
 
-    pub fn stderr(&self) -> &str {
+    pub fn stderr(&self) -> &OsStr {
         &self.stderr
     }
 }
