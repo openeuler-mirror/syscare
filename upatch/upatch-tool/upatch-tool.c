@@ -218,7 +218,7 @@ void info(const char *file) {
     default:
         break;
     }
-    printf("Status: %s \n", status);
+    printf("Status: %s\n", status);
 }
 
 int main(int argc, char*argv[])
