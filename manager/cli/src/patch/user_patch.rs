@@ -28,11 +28,11 @@ impl<'a> UserPatchAdapter<'a> {
     }
 
     fn get_patch_file<S: AsRef<OsStr>>(&self, elf_name: S) -> PathBuf {
-        let mut patch_file_name = OsString::from(self.patch.get_name());
+        let mut patch_file_name = OsString::from(&self.patch.short_name());
         patch_file_name.push("-");
         patch_file_name.push(elf_name);
 
-        self.patch.get_root().join(patch_file_name)
+        self.patch.root_dir.join(patch_file_name)
     }
 
     fn do_action<P: AsRef<Path>>(&self, action: &str, patch: P) -> std::io::Result<String> {
@@ -80,19 +80,19 @@ impl<'a> UserPatchAdapter<'a> {
 
 impl PatchActionAdapter for UserPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        self.patch.get_target().check_installed()
+        self.patch.target.check_installed()
     }
 
     fn status(&self) -> std::io::Result<PatchStatus> {
         let mut status_list = Vec::new();
-        for (elf_name, _) in self.patch.get_target_elfs() {
+        for (elf_name, _) in &self.patch.target_elfs {
             status_list.push(self.get_patch_status(elf_name)?);
         }
         Ok(status_list[0])
     }
 
     fn apply(&self) -> std::io::Result<()> {
-        for (elf_name, elf_path) in self.patch.get_target_elfs() {
+        for (elf_name, elf_path) in &self.patch.target_elfs {
             self.do_action_to_elf(
                 UPATCH_ACTION_INSTALL,
                 self.get_patch_file(&elf_name),
@@ -103,7 +103,7 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     }
 
     fn remove(&self) -> std::io::Result<()> {
-        for (elf_name, _) in self.patch.get_target_elfs() {
+        for (elf_name, _) in &self.patch.target_elfs {
             self.do_action(
                 UPATCH_ACTION_UNINSTALL,
                 self.get_patch_file(&elf_name)
@@ -113,7 +113,7 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     }
 
     fn active(&self) -> std::io::Result<()> {
-        for (elf_name, _) in self.patch.get_target_elfs() {
+        for (elf_name, _) in &self.patch.target_elfs {
             self.do_action(
                 UPATCH_ACTION_ACTIVE,
                 self.get_patch_file(&elf_name)
@@ -123,7 +123,7 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     }
 
     fn deactive(&self) -> std::io::Result<()> {
-        for (elf_name, _) in self.patch.get_target_elfs() {
+        for (elf_name, _) in &self.patch.target_elfs {
             self.do_action(
                 UPATCH_ACTION_DEACTIVE,
                 self.get_patch_file(&elf_name)

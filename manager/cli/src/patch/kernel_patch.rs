@@ -35,10 +35,10 @@ impl<'a> KernelPatchAdapter<'a> {
 
     fn get_patch_file(&self) -> PathBuf {
         let patch_name = format!("{}.{}",
-            self.patch.get_name(),
+            self.patch.name,
             KPATCH_PATCH_SUFFIX
         );
-        self.patch.get_root().join(patch_name)
+        self.patch.root_dir.join(patch_name)
     }
 
     fn set_patch_security_context(&self) -> std::io::Result<()> {
@@ -62,7 +62,7 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn patch_sys_interface(&self) -> PathBuf {
-        let patch_name = self.patch.get_name().replace('-', "_");
+        let patch_name = self.patch.short_name().replace('-', "_");
 
         PathBuf::from(KPATCH_MGNT_DIR)
             .join(patch_name)
@@ -112,16 +112,14 @@ impl<'a> KernelPatchAdapter<'a> {
 
 impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        let patch_target = self.patch.get_target().get_name();
-        let patch_arch   = self.patch.get_arch();
-
         let kernel_version = sys::get_kernel_version()?;
-        let patch_kernel   = format!("{}.{}", patch_target, patch_arch);
         let current_kernel = format!("kernel-{}", kernel_version);
         debug!("current kernel: \"{}\"", current_kernel);
-        debug!("target kernel:  \"{}\"", patch_kernel);
 
-        if patch_kernel != current_kernel {
+        let patch_target = self.patch.target.full_name();
+        debug!("patch target:  \"{}\"", patch_target);
+
+        if patch_target != current_kernel {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("current kernel \"{}\" is incompatible", kernel_version)

@@ -31,16 +31,13 @@ impl PatchManager {
     }
 
     fn scan_patch_list(&mut self) -> std::io::Result<()> {
-        let scan_root  = self.patch_install_dir;
-        let patch_list = &mut self.patch_list;
-
-        let pkg_list = fs::list_all_dirs(scan_root, false)?;
+        let pkg_list = fs::list_all_dirs(self.patch_install_dir, false)?;
         for pkg_root in &pkg_list {
             for patch_root in fs::list_all_dirs(&pkg_root, false)? {
                 match Patch::new(&patch_root) {
                     Ok(patch) => {
                         debug!("detected patch \"{}\"", patch);
-                        patch_list.push(patch);
+                        self.patch_list.push(patch);
                     },
                     Err(e) => {
                         debug!("failed to parse patch info, {}", e);
@@ -60,14 +57,12 @@ impl PatchManager {
     }
 
     fn is_matched_patch<T: AsRef<Patch>>(patch: &T, pattern: &str) -> bool {
-        let patch_name      = patch.as_ref().get_name();
-        let patch_full_name = patch.as_ref().get_full_name();
-
-        if (pattern != patch_name) && (pattern != patch_full_name) {
+        let patch = patch.as_ref();
+        if (pattern != patch.short_name()) && (pattern != patch.full_name()) {
             return false;
         }
 
-        debug!("matched patch \"{}\"", patch_full_name);
+        debug!("matched patch \"{}\"", patch);
         true
     }
 
@@ -134,15 +129,15 @@ impl PatchManager {
     }
 
     pub fn get_patch_info(&self, patch_name: &str) -> std::io::Result<&PatchInfo> {
-        Ok(self.find_patch(patch_name)?.get_info())
+        Ok(&self.find_patch(patch_name)?.info)
     }
 
     pub fn get_patch_target(&self, patch_name: &str) -> std::io::Result<&PackageInfo> {
-        Ok(self.find_patch(patch_name)?.get_target())
+        Ok(&self.find_patch(patch_name)?.info.target)
     }
 
     pub fn get_patch_status(&self, patch_name: &str) -> std::io::Result<PatchStatus> {
-        Ok(self.find_patch(patch_name)?.get_status())
+        Ok(self.find_patch(patch_name)?.status)
     }
 
     pub fn apply_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
@@ -164,7 +159,7 @@ impl PatchManager {
     pub fn save_all_patch_status(&self) -> std::io::Result<()> {
         let patch_status_file = self.patch_status_file;
         let patch_status_list = self.patch_list.iter().map(|patch| {
-            (patch.get_full_name(), patch.get_status())
+            (patch.short_name(), patch.status)
         }).collect::<Vec<_>>();
 
         let buf = bincode::serialize(&patch_status_list).map_err(|e| {

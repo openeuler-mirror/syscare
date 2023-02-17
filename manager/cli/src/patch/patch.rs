@@ -13,45 +13,34 @@ use super::user_patch::UserPatchAdapter;
 use super::kernel_patch::KernelPatchAdapter;
 
 pub struct Patch {
-    info:   PatchInfo,
-    status: PatchStatus,
-    root:   PathBuf,
+    pub info:     PatchInfo,
+    pub status:   PatchStatus,
+    pub root_dir: PathBuf,
 }
 
 impl Patch {
     pub fn new<P: AsRef<Path>>(path_root: P) -> std::io::Result<Self> {
         const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-        let path     = path_root.as_ref();
-        let instance = Self {
-            root:   path.to_path_buf(),
-            info:   serde::deserialize(path.join(PATCH_INFO_FILE_NAME))?,
-            status: PatchStatus::NotApplied,
-        };
+        let info     = serde::deserialize::<_, PatchInfo>(path_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
+        let status   = PatchStatus::NotApplied;
+        let root_dir = path_root.as_ref().to_path_buf();
 
-        Ok(instance)
+        Ok(Self { info, status, root_dir })
     }
 
-    pub fn get_full_name(&self) -> String {
-        format!("{}/{}", self.get_target().get_name(), self.get_name())
+    pub fn short_name(&self) -> String {
+        self.name.to_owned()
     }
 
-    pub fn get_root(&self) -> &Path {
-        &self.root
-    }
-
-    pub fn get_info(&self) -> &PatchInfo {
-        &self.info
-    }
-
-    pub fn get_status(&self) -> PatchStatus {
-        self.status
+    pub fn full_name(&self) -> String {
+        format!("{}/{}", self.target.short_name(), self.short_name())
     }
 }
 
 impl Patch {
     fn get_adapter(&self) -> Box<dyn PatchActionAdapter + '_> {
-        match self.get_info().get_type() {
+        match &self.kind {
             PatchType::UserPatch   => Box::new(UserPatchAdapter::new(self)),
             PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(self)),
         }
@@ -144,7 +133,7 @@ impl Patch {
     }
 
     pub fn apply(&mut self) -> std::io::Result<()> {
-        match self.get_status() {
+        match &self.status {
             PatchStatus::NotApplied => {
                 self.do_apply()?;
                 self.do_active()?;
@@ -158,7 +147,7 @@ impl Patch {
     }
 
     pub fn remove(&mut self) -> std::io::Result<()> {
-        match self.get_status() {
+        match &self.status {
             PatchStatus::NotApplied => {
                 debug!("patch \"{}\" is already removed", self);
             },
@@ -175,7 +164,7 @@ impl Patch {
     }
 
     pub fn active(&mut self) -> std::io::Result<()> {
-        match self.get_status() {
+        match &self.status {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -194,7 +183,7 @@ impl Patch {
     }
 
     pub fn deactive(&mut self) -> std::io::Result<()> {
-        match self.get_status() {
+        match &self.status {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -234,7 +223,7 @@ impl Patch {
             ].into_iter().collect();
         }
 
-        let transition = (self.get_status(), status);
+        let transition = (self.status, status);
         debug!("restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
 
         match PATCH_TRANSITION_MAP.get(&transition) {
@@ -256,12 +245,12 @@ impl std::ops::Deref for Patch {
     type Target = PatchInfo;
 
     fn deref(&self) -> &Self::Target {
-        self.get_info()
+        &self.info
     }
 }
 
 impl std::fmt::Display for Patch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.get_full_name())
+        f.write_str(&self.full_name())
     }
 }

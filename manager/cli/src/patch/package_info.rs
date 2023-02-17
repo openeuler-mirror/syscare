@@ -22,18 +22,26 @@ impl std::fmt::Display for PackageType {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PackageInfo {
-    name:    String,
-    kind:    PackageType,
-    arch:    String,
-    epoch:   String,
-    version: String,
-    release: String,
-    license: String,
+    pub name:      String,
+    pub kind:      PackageType,
+    pub arch:      String,
+    pub epoch:     String,
+    pub version:   String,
+    pub release:   String,
+    pub license:   String,
 }
 
 impl PackageInfo {
+    pub fn short_name(&self) -> String {
+        format!("{}-{}-{}", self.name, self.version, self.release)
+    }
+
+    pub fn full_name(&self) -> String {
+        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+    }
+
     pub fn check_installed(&self) -> std::io::Result<()> {
-        let pkg_name = self.get_name();
+        let pkg_name = self.short_name();
 
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()
@@ -49,10 +57,6 @@ impl PackageInfo {
         }
 
         Ok(())
-    }
-
-    pub fn get_name(&self) -> String {
-        format!("{}-{}-{}", self.name, self.version, self.release)
     }
 }
 
