@@ -23,16 +23,16 @@ impl RpmBuilder {
     pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         serde::serialize(
             patch_info,
-            self.build_root.sources_dir().join(PATCH_INFO_FILE_NAME)
+            self.build_root.sources.join(PATCH_INFO_FILE_NAME)
         )
     }
 
     pub fn copy_patch_file_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        for patch_file in patch_info.get_patches() {
-            let src_path = patch_file.get_path();
+        for patch_file in &patch_info.patches {
+            let src_path = patch_file.path.as_path();
             fs::check_file(src_path)?;
 
-            let dst_path = self.build_root.sources_dir().join(patch_file.get_name());
+            let dst_path = self.build_root.sources.join(&patch_file.name);
             std::fs::copy(src_path, dst_path)?;
         }
 
@@ -40,14 +40,14 @@ impl RpmBuilder {
     }
 
     pub fn copy_all_files_to_source<P: AsRef<Path>>(&self, src_dir: P) -> std::io::Result<()> {
-        fs::copy_all_files(src_dir, self.build_root.sources_dir())
+        fs::copy_all_files(src_dir, &self.build_root.sources)
     }
 
     pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
         RpmSpecGenerator::generate_from_patch_info(
             patch_info,
-            self.build_root.sources_dir(),
-            self.build_root.specs_dir()
+            &self.build_root.sources,
+            &self.build_root.specs
         )
     }
 
@@ -90,7 +90,7 @@ impl RpmBuilder {
             ));
         }
 
-        fs::copy_all_files(self.build_root.srpms_dir(), &output_dir)?;
+        fs::copy_all_files(&self.build_root.srpms, &output_dir)?;
 
         Ok(())
     }
@@ -114,7 +114,7 @@ impl RpmBuilder {
             ));
         }
 
-        fs::copy_all_files(self.build_root.rpms_dir(), &output_dir)?;
+        fs::copy_all_files(&self.build_root.rpms, &output_dir)?;
 
         Ok(())
     }

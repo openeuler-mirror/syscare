@@ -33,9 +33,9 @@ impl std::fmt::Display for PatchType {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchFile {
-    name:   String,
-    path:   PathBuf,
-    digest: String,
+    pub name:   String,
+    pub path:   PathBuf,
+    pub digest: String,
 }
 
 impl PatchFile {
@@ -101,19 +101,7 @@ impl PatchFile {
     }
 
     pub fn is_from_source_pkg(&self) -> bool {
-        self.path.contains(sys::get_process_id().to_string())
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn get_path(&self) -> &Path {
-        &self.path
-    }
-
-    pub fn get_digest(&self) -> &str {
-        &self.digest
+        self.path.contains(sys::process_id().to_string())
     }
 }
 
@@ -130,24 +118,24 @@ impl std::fmt::Display for PatchFile {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchInfo {
-    name:        String,
-    version:     u32,
-    release:     String,
-    arch:        String,
-    kind:        PatchType,
-    target:      PackageInfo,
-    target_elfs: HashMap<OsString, PathBuf>,
-    license:     String,
-    description: String,
-    incremental: bool,
-    builder:     String,
-    patches:     Vec<PatchFile>,
+    pub name:        String,
+    pub version:     u32,
+    pub release:     String,
+    pub arch:        String,
+    pub kind:        PatchType,
+    pub target:      PackageInfo,
+    pub target_elfs: HashMap<OsString, PathBuf>,
+    pub license:     String,
+    pub description: String,
+    pub is_patched:  bool,
+    pub builder:     String,
+    pub patches:     Vec<PatchFile>,
 }
 
 impl PatchInfo {
     pub fn new(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
         let name        = args.patch_name.to_owned();
-        let kind        = match pkg_info.get_name() == KERNEL_PKG_NAME {
+        let kind        = match pkg_info.name == KERNEL_PKG_NAME {
             true  => PatchType::KernelPatch,
             false => PatchType::UserPatch,
         };
@@ -158,7 +146,7 @@ impl PatchInfo {
         let target_elfs = HashMap::new();
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
-        let incremental = false;
+        let is_patched  = false;
         let builder     = CLI_VERSION.to_owned();
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
 
@@ -167,75 +155,20 @@ impl PatchInfo {
             version, release, arch,
             target, target_elfs,
             license, description,
-            incremental, builder,
+            is_patched, builder,
             patches
         })
-    }
-
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn get_version(&self) -> u32 {
-        self.version
-    }
-
-    pub fn get_release(&self) -> &str {
-        &self.release
-    }
-
-    pub fn get_arch(&self) -> &str {
-        &self.arch
-    }
-
-    pub fn get_type(&self) -> PatchType {
-        self.kind
-    }
-
-    pub fn get_target(&self) -> &PackageInfo {
-        &self.target
-    }
-
-    pub fn get_target_elfs(&self) -> &HashMap<OsString, PathBuf> {
-        &self.target_elfs
-    }
-
-    pub fn get_license(&self) -> &str {
-        &self.license
-    }
-
-    pub fn get_description(&self) -> &str {
-        &self.description
-    }
-
-    pub fn is_incremental(&self) -> bool {
-        self.incremental
-    }
-
-    pub fn get_builder(&self) -> &str {
-        &self.builder
-    }
-
-    pub fn get_patches(&self) -> &[PatchFile] {
-        &self.patches
-    }
-}
-
-impl PatchInfo {
-    pub fn add_target_elfs<I: IntoIterator<Item = (OsString, PathBuf)>>(&mut self, elfs: I) {
-        self.target_elfs.extend(elfs);
     }
 }
 
 impl PatchInfo {
     fn get_target_elfs_str(&self) -> String {
-        let elf_list = self.get_target_elfs();
-        if elf_list.is_empty() {
+        if self.target_elfs.is_empty() {
             return PATCH_FLAG_UNKNOWN.to_owned();
         }
 
         let mut str = String::new();
-        for (elf_name, _) in elf_list.into_iter() {
+        for (elf_name, _) in self.target_elfs.iter() {
             str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
         }
         str.pop();
@@ -244,20 +177,20 @@ impl PatchInfo {
     }
 
     pub fn print_log(&self, level: log::Level) {
-        log!(level, "name:        {}", self.get_name());
-        log!(level, "version:     {}", self.get_version());
-        log!(level, "release:     {}", self.get_release());
-        log!(level, "arch:        {}", self.get_arch());
-        log!(level, "type:        {}", self.get_type());
-        log!(level, "target:      {}", self.get_target().get_simple_name());
+        log!(level, "name:        {}", self.name);
+        log!(level, "version:     {}", self.version);
+        log!(level, "release:     {}", self.release);
+        log!(level, "arch:        {}", self.arch);
+        log!(level, "type:        {}", self.kind);
+        log!(level, "target:      {}", self.target.short_name());
         log!(level, "target_elfs: {}", self.get_target_elfs_str());
-        log!(level, "license:     {}", self.get_license());
-        log!(level, "description: {}", self.get_description());
-        log!(level, "builder:     {}", self.get_builder());
+        log!(level, "license:     {}", self.license);
+        log!(level, "description: {}", self.description);
+        log!(level, "builder:     {}", self.builder);
         log!(level, "");
         log!(level, "patch list:");
-        for patch_file in self.get_patches() {
-            log!(level, "{} {}", patch_file.get_name(), patch_file.get_digest());
+        for patch_file in &self.patches {
+            log!(level, "{} {}", patch_file.name, patch_file.digest);
         }
     }
 }

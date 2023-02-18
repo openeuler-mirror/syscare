@@ -65,7 +65,7 @@ pub struct CliArguments {
     pub output: PathBuf,
 
     /// Kernel make jobs
-    #[arg(long, value_name="N", default_value=sys::get_cpu_num())]
+    #[arg(long, value_name="N", default_value=sys::cpu_num())]
     pub kjobs: usize,
 
     /// Skip compiler version check (not recommended)

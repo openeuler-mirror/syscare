@@ -5,8 +5,7 @@ use crate::constants::*;
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::cmd::ExternCommandArgs;
 use crate::package::RpmHelper;
-use crate::patch::{PatchInfo, PatchFile};
-use crate::patch::{PatchBuilder, PatchBuilderArguments};
+use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
 use crate::util::{serde, fs};
 use crate::util::os_str::OsStrConcat;
@@ -48,7 +47,7 @@ impl<'a> UserPatchBuilder<'a> {
         if args.verbose {
             cmd_args = cmd_args.arg("--verbose");
         }
-        cmd_args = cmd_args.args(&mut args.patch_list.iter().map(PatchFile::get_path));
+        cmd_args = cmd_args.args(args.patch_list.iter().map(|patch| &patch.name));
 
         cmd_args
     }
@@ -56,15 +55,15 @@ impl<'a> UserPatchBuilder<'a> {
 
 impl PatchBuilder for UserPatchBuilder<'_> {
     fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = self.workdir.patch_root().build_dir();
-        let patch_output_dir = self.workdir.patch_root().output_dir();
+        let patch_build_root = self.workdir.patch.build.as_path();
+        let patch_output_dir = self.workdir.patch.output.as_path();
 
-        let source_pkg_dir = self.workdir.package_root().source_pkg_dir();
-        let debug_pkg_dir  = self.workdir.package_root().debug_pkg_dir();
+        let source_pkg_dir = self.workdir.package.source.as_path();
+        let debug_pkg_dir  = self.workdir.package.debug.as_path();
 
         let pkg_build_root   = RpmHelper::find_build_root(source_pkg_dir)?;
-        let spec_file        = RpmHelper::find_spec_file(pkg_build_root.specs_dir())?;
-        let patch_source_dir = RpmHelper::find_source_directory(pkg_build_root.build_dir(), patch_info)?;
+        let spec_file        = RpmHelper::find_spec_file(&pkg_build_root.specs)?;
+        let patch_source_dir = RpmHelper::find_source_directory(&pkg_build_root.build, patch_info)?;
         let patch_debuginfo  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
 
         let mut build_original_cmd = OsString::from(RPM_BUILD.to_string());
@@ -85,7 +84,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .concat(&spec_file);
 
         let builder_args = UserPatchBuilderArguments {
-            name:                patch_info.get_name().to_owned(),
+            name:                patch_info.name.to_owned(),
             work_dir:            patch_build_root.to_owned(),
             debug_source:        patch_source_dir,
             debuginfo:           patch_debuginfo,
@@ -94,7 +93,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             output_dir:          patch_output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose:             args.verbose,
-            patch_list:          patch_info.get_patches().to_owned(),
+            patch_list:          patch_info.patches.to_owned(),
         };
 
         Ok(PatchBuilderArguments::UserPatch(builder_args))
@@ -126,10 +125,9 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     uargs.output_dir.join(PATCH_ELF_NAME_FILE)
                 )?;
 
-                let src_pkg_dir = self.workdir.package_root().source_pkg_dir();
-                let pkg_name = format!("{}.{}.{}",
-                    patch_info.get_target().get_simple_name(),
-                    patch_info.get_target().get_arch(),
+                let src_pkg_dir = self.workdir.package.source.as_path();
+                let pkg_name = format!("{}.{}",
+                    patch_info.target.full_name(),
                     PKG_FILE_EXTENSION
                 );
                 let pkg_path = fs::find_file(src_pkg_dir, &pkg_name, false, true)?;
@@ -148,7 +146,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     })
                     .collect::<Vec<_>>();
 
-                patch_info.add_target_elfs(elf_map);
+                    patch_info.target_elfs.extend(elf_map);
 
                 Ok(())
             },

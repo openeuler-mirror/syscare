@@ -4,18 +4,18 @@ use std::ops::Deref;
 
 use crate::util::fs;
 
-use super::workdir::ManageWorkDir;
+use super::workdir::WorkDirManager;
 
 #[derive(Clone)]
 #[derive(Debug)]
 pub struct PackageBuildRoot {
-    path:       PathBuf,
-    build:      PathBuf,
-    build_root: PathBuf,
-    rpms:       PathBuf,
-    sources:    PathBuf,
-    specs:      PathBuf,
-    srpms:      PathBuf,
+    pub path:       PathBuf,
+    pub build:      PathBuf,
+    pub build_root: PathBuf,
+    pub rpms:       PathBuf,
+    pub sources:    PathBuf,
+    pub specs:      PathBuf,
+    pub srpms:      PathBuf,
 }
 
 impl PackageBuildRoot {
@@ -30,34 +30,9 @@ impl PackageBuildRoot {
 
         Self { path, build, build_root, rpms, sources, specs, srpms }
     }
-
-    pub fn build_dir(&self) -> &Path {
-        &self.build
-    }
-
-    pub fn build_root_dir(&self) -> &Path {
-        &self.build_root
-    }
-
-    pub fn sources_dir(&self) -> &Path {
-        &self.sources
-    }
-
-    pub fn specs_dir(&self) -> &Path {
-        &self.specs
-    }
-
-    pub fn rpms_dir(&self) -> &Path {
-        &self.rpms
-    }
-
-    pub fn srpms_dir(&self) -> &Path {
-        &self.srpms
-    }
-
 }
 
-impl ManageWorkDir for PackageBuildRoot {
+impl WorkDirManager for PackageBuildRoot {
     fn create_all(&self) -> std::io::Result<()> {
         fs::create_dir(&self.path)?;
         fs::create_dir(&self.build)?;

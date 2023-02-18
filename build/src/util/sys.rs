@@ -42,22 +42,22 @@ impl SysInitializer {
     }
 }
 
-pub const fn get_cpu_arch() -> &'static str {
+pub const fn cpu_arch() -> &'static str {
     std::env::consts::ARCH
 }
 
-pub fn get_cpu_num() -> &'static str {
+pub fn cpu_num() -> &'static str {
     CPU_NUM.as_str()
 }
 
-pub fn get_process_id() -> u32 {
+pub fn process_id() -> u32 {
     std::process::id()
 }
 
-pub fn get_process_path() -> &'static Path {
+pub fn process_path() -> &'static Path {
     PROCESS_PATH.as_path()
 }
 
-pub fn get_process_name() -> &'static str {
+pub fn process_name() -> &'static str {
     PROCESS_NAME.as_str()
 }

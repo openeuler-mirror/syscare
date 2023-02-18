@@ -11,44 +11,42 @@ pub struct RpmSpecGenerator;
 impl RpmSpecGenerator {
     fn parse_pkg_root(patch_info: &PatchInfo) -> PathBuf {
         Path::new(PATCH_INSTALL_PATH).join(
-            patch_info.get_target().get_simple_name()
+            patch_info.target.short_name()
         )
     }
 
     fn parse_patch_name(patch_info: &PatchInfo) -> String {
-        patch_info.get_name().to_owned()
+        patch_info.name.to_owned()
     }
 
     fn parse_patch_root(patch_info: &PatchInfo) -> PathBuf {
         Path::new(PATCH_INSTALL_PATH)
-            .join(patch_info.get_target().get_simple_name())
-            .join(patch_info.get_name())
+            .join(patch_info.target.short_name())
+            .join(&patch_info.name)
     }
 
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
         format!("{}-{}-{}",
             PKG_FLAG_PATCH_BINARY,
-            patch_info.get_target().get_simple_name(),
-            patch_info.get_name())
+            patch_info.target.short_name(),
+            patch_info.name)
     }
 
     fn parse_requires(patch_info: &PatchInfo) -> String {
-        let patch_target = patch_info.get_target();
-
-        match patch_target.get_epoch() == PKG_FLAG_NONE {
+        match &patch_info.target.epoch == PKG_FLAG_NONE {
             true => {
                 format!("{} = {}-{}",
-                    patch_target.get_name(),
-                    patch_target.get_version(),
-                    patch_target.get_release()
+                    patch_info.target.name,
+                    patch_info.target.version,
+                    patch_info.target.release
                 )
             },
             false => {
                 format!("{} = {}:{}-{}",
-                    patch_target.get_name(),
-                    patch_target.get_epoch(),
-                    patch_target.get_version(),
-                    patch_target.get_release()
+                    patch_info.target.name,
+                    patch_info.target.epoch,
+                    patch_info.target.version,
+                    patch_info.target.release
                 )
             }
         }
@@ -56,8 +54,8 @@ impl RpmSpecGenerator {
 
     fn parse_summary(patch_info: &PatchInfo) -> String {
         format!("Syscare patch '{}' for {}",
-            patch_info.get_name(),
-            patch_info.get_target().get_simple_name()
+            patch_info.name,
+            patch_info.target.short_name()
         )
     }
 
@@ -79,10 +77,10 @@ impl RpmSpecGenerator {
         writeln!(writer, "%global patch_file_permission {}", PATCH_FILE_PERMISSION)?;
 
         writeln!(writer, "Name:     {}", Self::parse_pkg_name(patch_info))?;
-        writeln!(writer, "Version:  {}", patch_info.get_version())?;
-        writeln!(writer, "Release:  {}", patch_info.get_release())?;
+        writeln!(writer, "Version:  {}", patch_info.version)?;
+        writeln!(writer, "Release:  {}", patch_info.release)?;
         writeln!(writer, "Group:    {}", PKG_SPEC_TAG_VALUE_GROUP)?;
-        writeln!(writer, "License:  {}", patch_info.get_license())?;
+        writeln!(writer, "License:  {}", patch_info.license)?;
         writeln!(writer, "Summary:  {}", Self::parse_summary(patch_info))?;
         writeln!(writer, "Requires: {}", Self::parse_requires(patch_info))?;
         writeln!(writer, "Requires: {}", PKG_SPEC_TAG_VALUE_REQUIRES)?;
@@ -94,7 +92,7 @@ impl RpmSpecGenerator {
         writeln!(writer)?;
 
         writeln!(writer, "%description")?;
-        writeln!(writer, "{}", patch_info.get_description())?;
+        writeln!(writer, "{}", patch_info.description)?;
         writeln!(writer)?;
 
         writeln!(writer, "%prep")?;

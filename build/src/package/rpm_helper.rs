@@ -62,8 +62,8 @@ impl RpmHelper {
     pub fn find_source_directory<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
         debug!("Finding build source from '{}'", directory.as_ref().display());
 
-        let search_name = match patch_info.get_type() {
-            PatchType::UserPatch   => patch_info.get_target().get_name(),
+        let search_name = match patch_info.kind {
+            PatchType::UserPatch   => &patch_info.target.name,
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 

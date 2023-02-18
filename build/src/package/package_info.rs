@@ -25,13 +25,13 @@ impl std::fmt::Display for PackageType {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PackageInfo {
-    name:    String,
-    kind:    PackageType,
-    arch:    String,
-    epoch:   String,
-    version: String,
-    release: String,
-    license: String,
+    pub name:    String,
+    pub kind:    PackageType,
+    pub arch:    String,
+    pub epoch:   String,
+    pub version: String,
+    pub release: String,
+    pub license: String,
 }
 
 impl PackageInfo {
@@ -64,47 +64,23 @@ impl PackageInfo {
         Ok(Self { name, kind, arch, epoch, version, release, license })
     }
 
-    pub fn get_name(&self) -> &str {
-        &self.name
-    }
-
-    pub fn get_simple_name(&self) -> String {
+    pub fn short_name(&self) -> String {
         format!("{}-{}-{}", self.name, self.version, self.release)
     }
 
-    pub fn get_type(&self) -> PackageType {
-        self.kind
-    }
-
-    pub fn get_arch(&self) -> &str {
-        &self.arch
-    }
-
-    pub fn get_epoch(&self) -> &str {
-        &self.epoch
-    }
-
-    pub fn get_version(&self) -> &str {
-        &self.version
-    }
-
-    pub fn get_release(&self) -> &str {
-        &self.release
-    }
-
-    pub fn get_license(&self) -> &str {
-        &self.license
+    pub fn full_name(&self) -> String {
+        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
     }
 }
 
 impl PackageInfo {
     pub fn print_log(&self, level: log::Level) {
-        log!(level, "name:    {}", self.get_name());
-        log!(level, "type:    {}", self.get_type());
-        log!(level, "arch:    {}", self.get_arch());
-        log!(level, "epoch:   {}", self.get_epoch());
-        log!(level, "version: {}", self.get_version());
-        log!(level, "release: {}", self.get_release());
-        log!(level, "license: {}", self.get_license());
+        log!(level, "name:    {}", self.name);
+        log!(level, "type:    {}", self.kind);
+        log!(level, "arch:    {}", self.arch);
+        log!(level, "epoch:   {}", self.epoch);
+        log!(level, "version: {}", self.version);
+        log!(level, "release: {}", self.release);
+        log!(level, "license: {}", self.license);
     }
 }

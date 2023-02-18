@@ -12,14 +12,12 @@ pub struct RpmSpecHelper;
 
 impl RpmSpecHelper {
     fn create_new_release_tag(orig_release_tag: RpmSpecTag, patch_info: &PatchInfo) -> RpmSpecTag {
-        let target = patch_info.get_target();
-
         let tag_name  = orig_release_tag.get_name().to_string();
         let tag_value = format!("{}.{}.{}.{}",
-            target.get_release(),
-            patch_info.get_name(),
-            patch_info.get_version(),
-            patch_info.get_release()
+            patch_info.target.release,
+            patch_info.name,
+            patch_info.version,
+            patch_info.release
         );
 
         RpmSpecTag::new_tag(tag_name, tag_value)
@@ -30,15 +28,13 @@ impl RpmSpecHelper {
 
         let mut source_tag_list = Vec::new();
         let mut tag_id = start_tag_id + 1;
-        let is_patched_pkg = patch_info.is_incremental();
-
-        for patch_file in patch_info.get_patches() {
+        for patch_file in &patch_info.patches {
             // File path contains pid (in workdir) means some of patches are coming from source package
             if !patch_file.is_from_source_pkg() {
                 source_tag_list.push(RpmSpecTag::new_id_tag(
                     tag_name.to_owned(),
                     tag_id,
-                    patch_file.get_name().to_owned()
+                    patch_file.name.to_owned()
                 ));
             }
 
@@ -46,7 +42,7 @@ impl RpmSpecHelper {
         }
 
         // If the package is patched, generate files to record patch info
-        if !is_patched_pkg {
+        if !patch_info.is_patched {
             source_tag_list.push(RpmSpecTag::new_id_tag(
                 tag_name.to_owned(),
                 tag_id,

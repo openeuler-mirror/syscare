@@ -4,12 +4,12 @@ use std::ops::Deref;
 
 use crate::util::fs;
 
-use super::workdir::ManageWorkDir;
+use super::workdir::WorkDirManager;
 
 pub struct PatchRoot {
-    path:       PathBuf,
-    build: PathBuf,
-    output:     PathBuf,
+    pub path:   PathBuf,
+    pub build:  PathBuf,
+    pub output: PathBuf,
 }
 
 impl PatchRoot {
@@ -20,21 +20,13 @@ impl PatchRoot {
 
         Self { path, build, output }
     }
-
-    pub fn build_dir(&self) -> &Path {
-        &self.build
-    }
-
-    pub fn output_dir(&self) -> &Path {
-        &self.output
-    }
 }
 
-impl ManageWorkDir for PatchRoot {
+impl WorkDirManager for PatchRoot {
     fn create_all(&self) -> std::io::Result<()> {
         fs::create_dir(&self.path)?;
-        fs::create_dir(self.build_dir())?;
-        fs::create_dir(self.output_dir())?;
+        fs::create_dir(&self.build)?;
+        fs::create_dir(&self.output)?;
 
         Ok(())
     }

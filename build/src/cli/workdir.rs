@@ -3,7 +3,7 @@ use std::path::Path;
 
 use crate::util::sys;
 
-use crate::workdir::{WorkDir, ManageWorkDir};
+use crate::workdir::{WorkDir, WorkDirManager};
 
 pub struct CliWorkDir {
     inner: Option<WorkDir>,
@@ -15,7 +15,7 @@ impl CliWorkDir {
     }
 
     pub fn create<P: AsRef<Path>>(&mut self, workdir: P) -> std::io::Result<()> {
-        let dir_name = format!("{}.{}", sys::get_process_name(), sys::get_process_id());
+        let dir_name = format!("{}.{}", sys::process_name(), sys::process_id());
         let workdir = WorkDir::new(workdir.as_ref().join(dir_name));
 
         workdir.create_all()?;
