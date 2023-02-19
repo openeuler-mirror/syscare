@@ -162,7 +162,7 @@ impl PatchInfo {
 }
 
 impl PatchInfo {
-    fn get_target_elfs_str(&self) -> String {
+    fn target_elfs_str(&self) -> String {
         if self.target_elfs.is_empty() {
             return PATCH_FLAG_UNKNOWN.to_owned();
         }
@@ -183,7 +183,7 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elfs: {}", self.get_target_elfs_str());
+        log!(level, "target_elfs: {}", self.target_elfs_str());
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "builder:     {}", self.builder);

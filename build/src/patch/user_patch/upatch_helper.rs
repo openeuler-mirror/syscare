@@ -20,6 +20,8 @@ impl UserPatchHelper {
     }
 
     pub fn query_pkg_file_list<P: AsRef<Path>>(pkg_path: P) -> std::io::Result<Vec<PathBuf>> {
+        debug!("Reading package file list from \"{}\"", pkg_path.as_ref().display());
+
         let file_list_str = RpmHelper::query_package_info(pkg_path, "[%{FILENAMES} ]")?;
         let file_list = file_list_str.trim_end()
             .split(" ")
