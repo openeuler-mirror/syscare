@@ -27,7 +27,7 @@ impl RpmHelper {
         if exit_code != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Process '{}' exited unsuccessfully, exit_code={}", RPM, exit_code),
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM, exit_code),
             ));
         }
 
@@ -35,7 +35,7 @@ impl RpmHelper {
     }
 
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
-        debug!("Finding package build root from '{}'", directory.as_ref().display());
+        debug!("Finding package build root from \"{}\"", directory.as_ref().display());
 
         Ok(PackageBuildRoot::new(
             fs::find_directory(
@@ -48,7 +48,7 @@ impl RpmHelper {
     }
 
     pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
-        debug!("Finding package spec file from '{}'", directory.as_ref().display());
+        debug!("Finding package spec file from \"{}\"", directory.as_ref().display());
 
         let spec_file = fs::find_file_ext(
             directory,
@@ -60,7 +60,7 @@ impl RpmHelper {
     }
 
     pub fn find_source_directory<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
-        debug!("Finding build source from '{}'", directory.as_ref().display());
+        debug!("Finding build source from \"{}\"", directory.as_ref().display());
 
         let search_name = match patch_info.kind {
             PatchType::UserPatch   => &patch_info.target.name,

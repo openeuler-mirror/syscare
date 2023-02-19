@@ -93,7 +93,7 @@ impl RpmSpecHelper {
             None => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("Parse rpm spec file '{}' failed, cannot find tag 'Release'",
+                    format!("Parse rpm spec file \"{}\" failed, cannot find tag 'Release'",
                         spec_file.as_ref().display()
                     ),
                 ));

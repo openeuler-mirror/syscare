@@ -115,13 +115,13 @@ impl ExternCommand<'_> {
             .map_err(|e| {
                 std::io::Error::new(
                     e.kind(),
-                    format!("Start process '{}' failed: {}", self.path, e.to_string())
+                    format!("Start process \"{}\" failed: {}", self.path, e.to_string())
                 )
             })?;
 
         let process_name = self.path;
         let process_id = child_process.id();
-        trace!("Process '{}' ({}) started", process_name, process_id);
+        trace!("Process \"{}\" ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
         for read_line in LossyLines::from(BufReader::new(process_stdout)) {
@@ -136,7 +136,7 @@ impl ExternCommand<'_> {
         }
 
         let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        trace!("Process '{}' ({}) exited, exit_code={}", process_name, process_id, exit_code);
+        trace!("Process \"{}\" ({}) exited, exit_code={}", process_name, process_id, exit_code);
 
         Ok(ExternCommandExitStatus {
             exit_code,

@@ -10,7 +10,7 @@ pub struct UserPatchHelper;
 
 impl UserPatchHelper {
     pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
-        debug!("Finding debuginfo from '{}'", directory.as_ref().display());
+        debug!("Finding debuginfo from \"{}\"", directory.as_ref().display());
 
         fs::list_all_files_ext(
             directory,

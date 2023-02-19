@@ -11,7 +11,7 @@ pub struct PatchHelper;
 
 impl PatchHelper {
     pub fn collect_patches<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
-        debug!("Collecting patches from '{}'", directory.as_ref().display());
+        debug!("Collecting patches from \"{}\"", directory.as_ref().display());
 
         let patch_filter_fn = |file_path: PathBuf| {
             let file_name = fs::file_name(&file_path).unwrap();

@@ -71,13 +71,13 @@ impl PatchBuildCLI {
         if src_pkg_info.kind != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a source package", self.args.source.display()),
+                format!("File \"{}\" is not a source package", self.args.source.display()),
             ));
         }
         if dbg_pkg_info.kind != PackageType::BinaryPackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File '{}' is not a debuginfo package", self.args.debuginfo.display()),
+                format!("File \"{}\" is not a debuginfo package", self.args.debuginfo.display()),
             ));
         }
 
@@ -171,7 +171,7 @@ impl PatchBuildCLI {
         if patch_arch != sys::cpu_arch() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Patch arch '{}' is unsupported", patch_arch),
+                format!("Patch arch \"{}\" is unsupported", patch_arch),
             ));
         }
 
@@ -179,7 +179,7 @@ impl PatchBuildCLI {
         if self.args.patch_arch.as_str() != target_arch {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Target arch '{}' is not match patch arch '{}'", target_arch, patch_arch),
+                format!("Target arch \"{}\" is not match patch arch \"{}\"", target_arch, patch_arch),
             ));
         }
 
@@ -289,7 +289,7 @@ impl PatchBuildCLI {
                 },
                 true => {
                     error!("Error: {}", e);
-                    eprintln!("For more information, please check '{}'",
+                    eprintln!("For more information, please check \"{}\"",
                         cli.workdir.log_file.display()
                     );
                 },

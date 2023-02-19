@@ -53,7 +53,7 @@ impl RpmSpecGenerator {
     }
 
     fn parse_summary(patch_info: &PatchInfo) -> String {
-        format!("Syscare patch '{}' for {}",
+        format!("Syscare patch \"{}\" for {}",
             patch_info.name,
             patch_info.target.short_name()
         )

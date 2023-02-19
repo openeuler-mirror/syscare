@@ -64,7 +64,7 @@ impl RpmBuilder {
         if exit_code != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Process '{}' exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
             ));
         }
 
@@ -86,7 +86,7 @@ impl RpmBuilder {
         if exit_code != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Process '{}' exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
             ));
         }
 
@@ -110,7 +110,7 @@ impl RpmBuilder {
         if exit_code != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Process '{}' exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
             ));
         }
 

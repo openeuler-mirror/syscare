@@ -8,7 +8,7 @@ pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     if !path_ref.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Path '{}' is not exist", path_ref.display())
+            format!("Path \"{}\" is not exist", path_ref.display())
         ));
     }
     Ok(())
@@ -21,7 +21,7 @@ pub fn check_dir<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
     if !path.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("Path '{}' is not a directory", path.display())
+            format!("Path \"{}\" is not a directory", path.display())
         ));
     }
 
@@ -35,7 +35,7 @@ pub fn check_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<()> {
     if !path.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("Path '{}' is not a file", path.display())
+            format!("Path \"{}\" is not a file", path.display())
         ));
     }
 
@@ -176,8 +176,8 @@ pub fn find_directory<P: AsRef<Path>>(directory: P, dir_name: &str, fuzz: bool, 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         match fuzz {
-            true  => format!("Cannot find directory '*{}*' in '{}'", dir_name, search_path.display()),
-            false => format!("Cannot find directory '{}' in '{}'",   dir_name, search_path.display()),
+            true  => format!("Cannot find directory '*{}*' in \"{}\"", dir_name, search_path.display()),
+            false => format!("Cannot find directory \"{}\" in \"{}\"",   dir_name, search_path.display()),
         }
     ))
 }
@@ -201,8 +201,8 @@ pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recu
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         match fuzz {
-            true  => format!("Cannot find file '*{}*' in '{}'", file_name, search_path.display()),
-            false => format!("Cannot find file '{}' in '{}'",   file_name, search_path.display()),
+            true  => format!("Cannot find file '*{}*' in \"{}\"", file_name, search_path.display()),
+            false => format!("Cannot find file \"{}\" in \"{}\"",   file_name, search_path.display()),
         }
     ))
 }
@@ -222,7 +222,7 @@ pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bo
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Cannot find '*.{}' file in '{}'", file_ext, search_path.display())
+        format!("Cannot find '*.{}' file in \"{}\"", file_ext, search_path.display())
     ))
 }
 
@@ -252,7 +252,7 @@ pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
         None => {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Parse file name from '{}' failed", file.display())
+                format!("Parse file name from \"{}\" failed", file.display())
             ))
         }
     }
@@ -270,7 +270,7 @@ pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
         None => {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Parse file extension from '{}' failed", file.display())
+                format!("Parse file extension from \"{}\" failed", file.display())
             ))
         }
     }
