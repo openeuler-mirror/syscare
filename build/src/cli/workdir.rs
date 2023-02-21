@@ -1,6 +1,9 @@
-use std::ops::Deref;
+use std::ffi::OsString;
 use std::path::Path;
 
+use std::ops::Deref;
+
+use crate::util::os_str::OsStrConcat;
 use crate::util::sys;
 
 use crate::workdir::{WorkDir, WorkDirManager};
@@ -15,9 +18,14 @@ impl CliWorkDir {
     }
 
     pub fn create<P: AsRef<Path>>(&mut self, workdir: P) -> std::io::Result<()> {
-        let dir_name = format!("{}.{}", sys::process_name(), sys::process_id());
-        let workdir = WorkDir::new(workdir.as_ref().join(dir_name));
-
+        let workdir = WorkDir::new(
+            workdir.as_ref().join(
+                OsString::new()
+                    .concat(sys::process_name())
+                    .concat(".")
+                    .concat(sys::process_id().to_string())
+            )
+        );
         workdir.create_all()?;
 
         self.inner = Some(workdir);

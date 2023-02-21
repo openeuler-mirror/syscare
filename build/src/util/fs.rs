@@ -1,81 +1,229 @@
-use std::collections::VecDeque;
-use std::ffi::OsStr;
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::io::{BufRead, BufReader, Write, BufWriter};
+use std::fs::{Metadata, Permissions, ReadDir, File};
 
-use super::os_str::OsStrContains;
-
-pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
-    let path_ref = path.as_ref();
-    if !path_ref.exists() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Path \"{}\" is not exist", path_ref.display())
-        ));
-    }
-    Ok(())
+trait RewriteError {
+    fn rewrite_err(self, err_msg: String) -> Self;
 }
 
-pub fn check_dir<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
-    let path = dir_path.as_ref();
-
-    self::check_exist(path)?;
-    if !path.is_dir() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Path \"{}\" is not a directory", path.display())
-        ));
+impl<T> RewriteError for std::io::Result<T> {
+    #[inline]
+    fn rewrite_err(self, err_msg: String) -> Self {
+        self.map_err(|e| {
+            std::io::Error::new(
+                e.kind(),
+                format!("{}, {}", err_msg, e.to_string().to_lowercase())
+            )
+        })
     }
-
-    Ok(())
 }
 
-pub fn check_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<()> {
-    let path = file_path.as_ref();
-
-    self::check_exist(path)?;
-    if !path.is_file() {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("Path \"{}\" is not a file", path.display())
-        ));
-    }
-
-    Ok(())
+/* std::fs functions */
+#[inline]
+pub fn read<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
+    std::fs::read(path.as_ref()).rewrite_err(
+        format!("Cannot read \"{}\"",
+            path.as_ref().display()
+        )
+    )
 }
 
-pub fn create_dir<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
-    if self::check_dir(dir_path.as_ref()).is_err() {
-        std::fs::create_dir(dir_path.as_ref())?;
-    }
-    Ok(())
+#[inline]
+pub fn read_to_string<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
+    std::fs::read_to_string(path.as_ref()).rewrite_err(
+        format!("Cannot read \"{}\"",
+            path.as_ref().display()
+        )
+    )
 }
 
-pub fn create_dir_all<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
-    if self::check_dir(dir_path.as_ref()).is_err() {
-        std::fs::create_dir_all(dir_path.as_ref())?;
-    }
-    Ok(())
+#[inline]
+pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> std::io::Result<()> {
+    std::fs::write(path.as_ref(), contents).rewrite_err(
+        format!("Cannot write \"{}\"",
+            path.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    std::fs::remove_file(path.as_ref()).rewrite_err(
+        format!("Cannot remove \"{}\"",
+            path.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn metadata<P: AsRef<Path>>(path: P) -> std::io::Result<Metadata> {
+    std::fs::metadata(path.as_ref()).rewrite_err(
+        format!("Cannot access \"{}\"", path.as_ref().display())
+    )
+}
+
+#[inline]
+pub fn symlink_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<Metadata> {
+    std::fs::symlink_metadata(path.as_ref()).rewrite_err(
+        format!("Cannot access \"{}\"", path.as_ref().display())
+    )
+}
+
+#[inline]
+pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<()> {
+    std::fs::rename(&from, &to).rewrite_err(
+        format!("Cannot rename \"{}\" to \"{}\"",
+            from.as_ref().display(),
+            to.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<u64> {
+    std::fs::copy(&from, &to).rewrite_err(
+        format!("Cannot rename \"{}\" to \"{}\"",
+            from.as_ref().display(),
+            to.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    std::fs::hard_link(original.as_ref(), link.as_ref()).rewrite_err(
+        format!("Cannot link \"{}\" to \"{}\"",
+            original.as_ref().display(),
+            link.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn soft_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
+    // std::fs::soft_link() is deprecated, use std::os::unix::fs::symlink instead
+    std::os::unix::fs::symlink(original.as_ref(), link.as_ref()).rewrite_err(
+        format!("Cannot link \"{}\" to \"{}\"",
+            original.as_ref().display(),
+            link.as_ref().display()
+        )
+    )
+}
+
+#[inline]
+pub fn read_link<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    std::fs::read_link(path.as_ref()).rewrite_err(
+        format!("Cannot read symbol link \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn canonicalize<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    std::fs::canonicalize(path.as_ref()).rewrite_err(
+        format!("Cannot canonicalize \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn create_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    std::fs::create_dir(path.as_ref()).rewrite_err(
+        format!("Cannot create directory \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn create_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    std::fs::create_dir_all(path.as_ref()).rewrite_err(
+        format!("Cannot create directory \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn remove_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    std::fs::remove_dir(path.as_ref()).rewrite_err(
+        format!("Cannot remove directory \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
+    std::fs::remove_dir_all(path.as_ref()).rewrite_err(
+        format!("Cannot remove directory \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn read_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ReadDir> {
+    std::fs::read_dir(path.as_ref()).rewrite_err(
+        format!("Cannot read directory \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+#[inline]
+pub fn set_permissions<P: AsRef<Path>>(path: P, perm: Permissions) -> std::io::Result<()> {
+    std::fs::set_permissions(path.as_ref(), perm).rewrite_err(
+        format!("Cannot set permission to \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+/* Extended functions */
+pub fn create_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+    std::fs::File::create(&path).rewrite_err(
+        format!("Cannot create file \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
+    std::fs::File::open(&path).rewrite_err(
+        format!("Cannot open file \"{}\"",
+            path.as_ref().display(),
+        )
+    )
+}
+
+pub fn file_name<P: AsRef<Path>>(path: P) -> OsString {
+    path.as_ref()
+        .file_name()
+        .map(OsStr::to_os_string)
+        .unwrap_or_default()
+}
+
+pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
+    path.as_ref()
+        .extension()
+        .map(OsStr::to_os_string)
+        .unwrap_or_default()
 }
 
 pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
     let mut dir_list = Vec::new();
-    for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
+    for dir_entry in self::read_dir(directory)? {
+        if let Ok(entry) = dir_entry {
+            let path = entry.path();
+
+            if !self::symlink_metadata(&path)?.file_type().is_dir() {
                 continue;
             }
-            if !current_path_type.is_dir() {
-                continue;
-            }
-            dir_list.push(self::realpath(current_path.as_path())?);
+            dir_list.push(path);
         }
     }
 
@@ -89,25 +237,22 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
 }
 
 pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
     let mut file_list = Vec::new();
     let mut dir_list = Vec::new();
-    for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
+    for dir_entry in self::read_dir(directory)? {
+        if let Ok(entry) = dir_entry {
+            let path = entry.path();
+
+            let path_type = self::symlink_metadata(&path)?.file_type();
+            if path_type.is_symlink() {
                 continue;
             }
-            if current_path_type.is_file() {
-                file_list.push(self::realpath(current_path.as_path())?);
+            else if path_type.is_file() {
+                file_list.push(path);
             }
-            if current_path_type.is_dir() {
-                dir_list.push(self::realpath(current_path.as_path())?);
+            else if path_type.is_dir() {
+                dir_list.push(path);
             }
         }
     }
@@ -122,28 +267,24 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
 }
 
 pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
     let mut file_list = Vec::new();
     let mut dir_list = Vec::new();
-    for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
+    for dir_entry in self::read_dir(directory)? {
+        if let Ok(entry) = dir_entry {
+            let path = entry.path();
+
+            let path_type = self::symlink_metadata(&path)?.file_type();
+            if path_type.is_symlink() {
                 continue;
             }
-            if current_path_type.is_file() {
-                let current_path_ext = current_path.extension().unwrap_or_default();
-                if current_path_ext == file_ext {
-                    file_list.push(self::realpath(current_path.as_path())?);
+            else if path_type.is_file() {
+                if file_ext == path.extension().unwrap_or_default() {
+                    file_list.push(path);
                 }
             }
-            if current_path_type.is_dir() {
-                dir_list.push(self::realpath(current_path.as_path())?);
+            else if path_type.is_dir() {
+                dir_list.push(path);
             }
         }
     }
@@ -159,186 +300,64 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
     Ok(file_list)
 }
 
-pub fn find_directory<P: AsRef<Path>, S: AsRef<OsStr>>(directory: P, dir_name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
-    let search_path = directory.as_ref();
-    let search_name = dir_name.as_ref();
-
-    for dir in self::list_all_dirs(search_path, recursive)? {
-        if let Some(curr_dir_name) = dir.file_name() {
-            if curr_dir_name == search_name {
-                return Ok(dir);
+pub fn find_dir<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
+    for path in self::list_all_dirs(&directory, recursive)? {
+        if let Some(dir_name) = path.file_name() {
+            if dir_name == name {
+                return Ok(self::canonicalize(path)?);
             }
-            if fuzz && curr_dir_name.contains(search_name) {
-                return Ok(dir);
+            // FIXME: OsStr::to_string_lossy() may loss non UTF-8 chars
+            else if fuzz && dir_name.to_string_lossy().contains(name) {
+                return Ok(self::canonicalize(path)?);
             }
         }
     }
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        match fuzz {
-            true  => format!("Cannot find directory '*{}*' in \"{}\"", search_name.to_string_lossy(), search_path.display()),
-            false => format!("Cannot find directory \"{}\" in \"{}\"", search_name.to_string_lossy(), search_path.display()),
-        }
+        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
     ))
 }
 
-pub fn find_file<P: AsRef<Path>, S: AsRef<OsStr>>(directory: P, file_name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
-    let search_path = directory.as_ref();
-    let search_name = file_name.as_ref();
-
-    self::check_dir(search_path)?;
-
-    for file in self::list_all_files(search_path, recursive)? {
-        if let Some(curr_file_name) = file.file_name() {
-            if curr_file_name == search_name {
-                return Ok(file);
+pub fn find_file<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
+    for path in self::list_all_files(&directory, recursive)? {
+        if let Some(file_name) = path.file_name() {
+            if file_name == name {
+                return Ok(self::canonicalize(path)?);
             }
-            if fuzz && curr_file_name.contains(search_name) {
-                return Ok(file);
+            // FIXME: OsStr::to_string_lossy() may loss non UTF-8 chars
+            else if fuzz && file_name.to_string_lossy().contains(name) {
+                return Ok(self::canonicalize(path)?);
             }
         }
     }
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        match fuzz {
-            true  => format!("Cannot find file '*{}*' in \"{}\"", search_name.to_string_lossy(), search_path.display()),
-            false => format!("Cannot find file \"{}\" in \"{}\"", search_name.to_string_lossy(), search_path.display()),
-        }
+        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
     ))
 }
 
-pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<PathBuf> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
-    for file in self::list_all_files_ext(search_path, file_ext, recursive)? {
-        if let Some(currrent_file_ext) = file.extension().and_then(OsStr::to_str) {
-            if currrent_file_ext == file_ext {
-                return Ok(file);
-            }
-        }
+pub fn find_file_ext<P: AsRef<Path>>(directory: P, ext: &str, recursive: bool) -> std::io::Result<PathBuf> {
+    for file in self::list_all_files_ext(&directory, ext, recursive)? {
+        return Ok(self::canonicalize(file)?);
     }
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Cannot find '*.{}' file in \"{}\"", file_ext, search_path.display())
+        format!("Cannot find '*.{}' file in \"{}\"", ext, directory.as_ref().display())
     ))
 }
 
-pub fn copy_all_files<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> std::io::Result<()> {
-    self::check_dir(&src_dir)?;
-    self::check_dir(&dst_dir)?;
+pub fn copy_dir_all<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> std::io::Result<()> {
+    let dst_buf = dst_dir.as_ref().to_path_buf();
 
     for src_file in self::list_all_files(src_dir, true)? {
-        let mut dst_file = dst_dir.as_ref().to_path_buf();
-        dst_file.push(self::file_name(src_file.as_path())?);
+        let mut dst_file = dst_buf.clone();
+        dst_file.push(src_file.file_name().unwrap_or_default());
 
-        std::fs::copy(src_file, dst_file)?;
+        self::copy(src_file, dst_file)?;
     }
 
     Ok(())
-}
-
-pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
-    let file = file_path.as_ref();
-
-    self::check_exist(file)?;
-
-    match file.file_name() {
-        Some(file_name) => {
-            Ok(self::stringtify(file_name))
-        },
-        None => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Parse file name from \"{}\" failed", file.display())
-            ))
-        }
-    }
-}
-
-pub fn file_ext<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
-    let file = file_path.as_ref();
-
-    self::check_file(file)?;
-
-    match file.extension() {
-        Some(file_ext) => {
-            Ok(self::stringtify(file_ext))
-        },
-        None => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Parse file extension from \"{}\" failed", file.display())
-            ))
-        }
-    }
-}
-
-pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
-    format!("{}", path.as_ref().display())
-}
-
-pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
-    path.as_ref().canonicalize()
-}
-
-pub fn read_file_to_string<P: AsRef<Path>>(file_path: P) -> std::io::Result<String> {
-    self::check_file(file_path.as_ref())?;
-
-    let file = std::fs::File::open(file_path)?;
-
-    let mut file_content = String::new();
-    for read_line in BufReader::new(file).lines() {
-        file_content.push_str(read_line?.as_str());
-    }
-
-    Ok(file_content.trim().to_owned())
-}
-
-pub fn write_string_to_file<P: AsRef<Path>>(file_path: P, str: &str) -> std::io::Result<()> {
-    let mut file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(file_path)?;
-
-    write!(file, "{}", str)?;
-
-    file.flush()
-}
-
-pub fn read_file_content<P: AsRef<Path>>(file_path: P) -> std::io::Result<VecDeque<String>> {
-    self::check_file(file_path.as_ref())?;
-
-    let file = std::fs::File::open(file_path)?;
-
-    let mut file_content = VecDeque::new();
-    for read_line in BufReader::new(file).lines() {
-        file_content.push_back(read_line?)
-    }
-
-    Ok(file_content)
-}
-
-pub fn write_file_content<P, I>(file_path: P, file_content: I) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-    I: IntoIterator<Item = String>
-{
-    let file = std::fs::OpenOptions::new()
-        .create(true)
-        .truncate(true)
-        .write(true)
-        .open(file_path)?;
-
-    let mut writer = BufWriter::new(file);
-    for line in file_content {
-        writeln!(writer, "{}", line)?;
-    }
-
-    writer.flush()
 }

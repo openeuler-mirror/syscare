@@ -63,7 +63,6 @@ impl RpmSpecGenerator {
         let pkg_file_list = fs::list_all_files(source_dir, true)?
             .into_iter()
             .map(fs::file_name)
-            .filter_map(Result::ok)
             .collect::<Vec<_>>();
 
         writeln!(writer, "%global pkg_root              {}", Self::parse_pkg_root(patch_info).display())?;
@@ -82,7 +81,7 @@ impl RpmSpecGenerator {
         writeln!(writer, "Requires: {}", Self::parse_requires(patch_info))?;
         writeln!(writer, "Requires: {}", PKG_SPEC_TAG_VALUE_REQUIRES)?;
         for file_name in &pkg_file_list {
-            writeln!(writer, "Source: {}", file_name)?;
+            writeln!(writer, "Source: {}", file_name.to_string_lossy())?;
         }
         writeln!(writer)?;
 
@@ -97,7 +96,7 @@ impl RpmSpecGenerator {
         writeln!(writer, "%install")?;
         writeln!(writer, "install -m %{{patch_dir_permission}} -d %{{buildroot}}%{{patch_root}}")?;
         for file_name in &pkg_file_list {
-            writeln!(writer, "install -m %{{patch_file_permission}} %{{_builddir}}/{} %{{buildroot}}%{{patch_root}}", file_name)?;
+            writeln!(writer, "install -m %{{patch_file_permission}} %{{_builddir}}/{} %{{buildroot}}%{{patch_root}}", file_name.to_string_lossy())?;
         }
         writeln!(writer)?;
 
@@ -123,9 +122,6 @@ impl RpmSpecGenerator {
     }
 
     pub fn generate_from_patch_info<P: AsRef<Path>, Q: AsRef<Path>>(patch_info: &PatchInfo, source_dir: P, output_dir: Q) -> std::io::Result<PathBuf> {
-        fs::check_dir(&source_dir)?;
-        fs::check_dir(&output_dir)?;
-
         let spec_name = format!("{}.{}", Self::parse_pkg_name(patch_info), PKG_SPEC_FILE_EXTENSION);
         let pkg_spec_path = output_dir.as_ref().join(spec_name);
         let writer = LineWriter::new(

@@ -14,8 +14,6 @@ pub struct RpmHelper;
 
 impl RpmHelper {
     pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> std::io::Result<OsString> {
-        fs::check_file(&pkg_path)?;
-
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()
                 .arg("--query")
@@ -39,7 +37,7 @@ impl RpmHelper {
         debug!("Finding package build root from \"{}\"", directory.as_ref().display());
 
         Ok(PackageBuildRoot::new(
-            fs::find_directory(
+            fs::find_dir(
                 directory,
                 PKG_BUILD_ROOT_DIR_NAME,
                 false,
@@ -68,7 +66,7 @@ impl RpmHelper {
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 
-        let find_source_result = fs::find_directory(
+        let find_source_result = fs::find_dir(
             &directory,
             search_name,
             true,
@@ -80,7 +78,7 @@ impl RpmHelper {
                 Ok(source_dir)
             },
             Err(_) => {
-                fs::find_directory(
+                fs::find_dir(
                     &directory,
                     "",
                     true,

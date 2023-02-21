@@ -32,7 +32,7 @@ impl WorkDirManager for PatchRoot {
     }
 
     fn remove_all(&self) -> std::io::Result<()> {
-        std::fs::remove_dir_all(&self.path)?;
+        fs::remove_dir_all(&self.path)?;
 
         Ok(())
     }

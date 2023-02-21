@@ -33,33 +33,33 @@ impl PatchBuildCLI {
             ));
         }
 
-        if fs::file_ext(&args.source)? != PKG_FILE_EXTENSION {
+        if fs::file_ext(&args.source) != PKG_FILE_EXTENSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Source should be rpm package"),
             ));
         }
 
-        if fs::file_ext(&args.debuginfo)? != PKG_FILE_EXTENSION {
+        if fs::file_ext(&args.debuginfo) != PKG_FILE_EXTENSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Debuginfo should be rpm package"),
             ));
         }
 
-        args.source    = fs::realpath(&args.source)?;
-        args.debuginfo = fs::realpath(&args.debuginfo)?;
-        args.workdir   = fs::realpath(&args.workdir)?;
-        args.output    = fs::realpath(&args.output)?;
+        args.source    = fs::canonicalize(&args.source)?;
+        args.debuginfo = fs::canonicalize(&args.debuginfo)?;
+        args.workdir   = fs::canonicalize(&args.workdir)?;
+        args.output    = fs::canonicalize(&args.output)?;
 
         for patch in &mut args.patches {
-            if fs::file_ext(&patch)? != PATCH_FILE_EXTENSION {
+            if fs::file_ext(&patch) != PATCH_FILE_EXTENSION {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("Patches should be patch file"),
                 ));
             }
-            *patch = fs::realpath(&patch)?;
+            *patch = fs::canonicalize(&patch)?;
         }
 
         Ok(())

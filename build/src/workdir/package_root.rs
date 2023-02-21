@@ -37,7 +37,7 @@ impl WorkDirManager for PackageRoot {
 
     fn remove_all(&self) -> std::io::Result<()> {
         self.patch.remove_all()?;
-        std::fs::remove_dir_all(&self.path)?;
+        fs::remove_dir_all(&self.path)?;
 
         Ok(())
     }

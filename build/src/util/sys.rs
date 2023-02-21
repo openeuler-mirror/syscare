@@ -1,3 +1,4 @@
+use std::ffi::{OsString, OsStr};
 use std::path::{Path, PathBuf};
 
 use lazy_static::*;
@@ -5,16 +6,16 @@ use lazy_static::*;
 use super::fs;
 
 lazy_static! {
-    static ref CPU_NUM:      String  = SysInitializer::init_cpu_num();
-    static ref PROCESS_PATH: PathBuf = SysInitializer::init_process_path();
-    static ref PROCESS_NAME: String  = SysInitializer::init_process_name();
+    static ref CPU_NUM:      String   = SysInitializer::init_cpu_num();
+    static ref PROCESS_PATH: PathBuf  = SysInitializer::init_process_path();
+    static ref PROCESS_NAME: OsString = SysInitializer::init_process_name();
 }
 
 struct SysInitializer;
 
 impl SysInitializer {
     pub fn init_cpu_num() -> String {
-        let cpu_online_info = fs::read_file_to_string("/sys/devices/system/cpu/online")
+        let cpu_online_info = fs::read_to_string("/sys/devices/system/cpu/online")
             .expect("Read cpu number failed");
 
         let max_cpu_id = cpu_online_info
@@ -30,15 +31,11 @@ impl SysInitializer {
     }
 
     pub fn init_process_path() -> PathBuf {
-        std::fs::read_link("/proc/self/exe")
-            .expect("Read process path failed")
+        std::env::current_exe().expect("Read process path failed")
     }
 
-    pub fn init_process_name() -> String {
-        fs::file_name(
-            std::fs::read_link("/proc/self/exe")
-                .expect("Read process name failed")
-        ).expect("Parse process name failed")
+    pub fn init_process_name() -> OsString {
+        fs::file_name(std::env::current_exe().expect("Read process path failed"))
     }
 }
 
@@ -58,6 +55,6 @@ pub fn process_path() -> &'static Path {
     PROCESS_PATH.as_path()
 }
 
-pub fn process_name() -> &'static str {
-    PROCESS_NAME.as_str()
+pub fn process_name() -> &'static OsStr {
+    PROCESS_NAME.as_os_str()
 }

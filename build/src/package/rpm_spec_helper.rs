@@ -57,7 +57,11 @@ impl RpmSpecHelper {
     }
 
     pub fn modify_spec_file_by_patches<P: AsRef<Path>>(spec_file: P, patch_info: &PatchInfo) -> std::io::Result<()> {
-        let mut spec_file_content = fs::read_file_content(&spec_file)?;
+        let mut spec_file_content = fs::read_to_string(&spec_file)?
+            .split('\n')
+            .map(String::from)
+            .collect::<Vec<_>>();
+
         let mut orig_release_tag = None;
         let mut source_tags = BTreeSet::new();
         // Parse whole file
@@ -119,8 +123,15 @@ impl RpmSpecHelper {
         }
 
         // Write to file
-        fs::write_file_content(&spec_file, spec_file_content)?;
-
-        Ok(())
+        fs::write(
+            spec_file,
+            spec_file_content.into_iter()
+                .flat_map(|mut s| {
+                    if !s.ends_with('\n') {
+                        s.push('\n');
+                    }
+                    s.into_bytes()
+                }).collect::<Vec<_>>()
+        )
     }
 }

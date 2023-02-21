@@ -30,17 +30,16 @@ impl RpmBuilder {
     pub fn copy_patch_file_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         for patch_file in &patch_info.patches {
             let src_path = patch_file.path.as_path();
-            fs::check_file(src_path)?;
-
             let dst_path = self.build_root.sources.join(&patch_file.name);
-            std::fs::copy(src_path, dst_path)?;
+
+            fs::copy(src_path, dst_path)?;
         }
 
         Ok(())
     }
 
     pub fn copy_all_files_to_source<P: AsRef<Path>>(&self, src_dir: P) -> std::io::Result<()> {
-        fs::copy_all_files(src_dir, &self.build_root.sources)
+        fs::copy_dir_all(src_dir, &self.build_root.sources)
     }
 
     pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
@@ -72,8 +71,6 @@ impl RpmBuilder {
     }
 
     pub fn build_source_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
-        fs::check_dir(&output_dir)?;
-
         let exit_status = RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
@@ -90,14 +87,12 @@ impl RpmBuilder {
             ));
         }
 
-        fs::copy_all_files(&self.build_root.srpms, &output_dir)?;
+        fs::copy_dir_all(&self.build_root.srpms, &output_dir)?;
 
         Ok(())
     }
 
     pub fn build_binary_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
-        fs::check_dir(&output_dir)?;
-
         let exit_status = RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
@@ -114,7 +109,7 @@ impl RpmBuilder {
             ));
         }
 
-        fs::copy_all_files(&self.build_root.rpms, &output_dir)?;
+        fs::copy_dir_all(&self.build_root.rpms, &output_dir)?;
 
         Ok(())
     }

@@ -43,9 +43,9 @@ impl PatchFile {
             static ref FILE_DIGESTS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
         }
 
-        let file_path = fs::realpath(path)?;
-        let file_name = file_path.file_name().unwrap_or_default();
-        let file_ext  = file_path.extension().unwrap_or_default();
+        let file_path = fs::canonicalize(path)?;
+        let file_name = fs::file_name(&file_path);
+        let file_ext  = fs::file_ext(&file_path);
 
         if file_ext != PATCH_FILE_EXTENSION {
             return Err(std::io::Error::new(
