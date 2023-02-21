@@ -78,7 +78,7 @@ impl PatchInfo {
         log!(level, "");
         log!(level, "patch list:");
         for patch_file in &self.patches {
-            log!(level, "{} {}", patch_file.name.to_string_lossy(), patch_file.digest);
+            log!(level, "{} {}", patch_file.digest, patch_file.name.to_string_lossy());
         }
     }
 }
