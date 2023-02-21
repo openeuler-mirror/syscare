@@ -9,7 +9,7 @@ pub struct ListCommandExecutor;
 impl CommandExecutor for ListCommandExecutor {
     fn invoke(&self, _args: &[String]) -> std::io::Result<i32> {
         let patch_manager = PatchManager::new()?;
-        debug!("handle command \"list\"");
+        debug!("Handle Command \"list\"");
 
         info!("{:<35} {:<35} {:<12}", "PackageName", "PatchName", "PatchStatus");
         for patch in patch_manager.get_patch_list() {
@@ -20,7 +20,7 @@ impl CommandExecutor for ListCommandExecutor {
             );
         }
 
-        debug!("command \"list\" done");
+        debug!("Command \"list\" done");
         Ok(0)
     }
 }

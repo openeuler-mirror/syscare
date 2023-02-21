@@ -1,9 +1,8 @@
 use std::collections::VecDeque;
-use std::io::{BufReader, BufWriter, Write};
 
-use log::{debug, warn};
+use log::{debug, warn, trace};
 
-use crate::util::fs;
+use crate::util::{fs, serde};
 
 use super::package_info::PackageInfo;
 use super::patch::Patch;
@@ -21,10 +20,10 @@ pub struct PatchManager {
 
 impl PatchManager {
     fn initialize(&mut self) -> std::io::Result<()> {
-        debug!("scanning patch list");
+        debug!("Scanning patch list");
         self.scan_patch_list()?;
 
-        debug!("updating all patch status");
+        debug!("Updating all patch status");
         self.update_all_patch_status()?;
 
         Ok(())
@@ -36,11 +35,12 @@ impl PatchManager {
             for patch_root in fs::list_all_dirs(&pkg_root, false)? {
                 match Patch::new(&patch_root) {
                     Ok(patch) => {
-                        debug!("detected patch \"{}\"", patch);
+                        debug!("Detected patch \"{}\"", patch);
                         self.patch_list.push(patch);
                     },
                     Err(e) => {
-                        debug!("failed to parse patch from \"{}\", {}", patch_root.to_string_lossy(), e);
+                        trace!("{}", e);
+                        debug!("Cannot read patch info from \"{}\"", patch_root.to_string_lossy());
                     }
                 }
             }
@@ -62,7 +62,7 @@ impl PatchManager {
             return false;
         }
 
-        debug!("matched patch \"{}\"", patch);
+        debug!("Matched patch \"{}\"", patch);
         true
     }
 
@@ -72,14 +72,14 @@ impl PatchManager {
         F: Fn(&R, &str) -> bool,
         R: AsRef<T>,
     {
-        debug!("matching patch \"{}\"", pattern);
+        debug!("Matching patch \"{}\"", pattern);
 
         let mut list = iter.filter(|obj| is_matched(obj, pattern)).collect::<VecDeque<_>>();
         match list.len().cmp(&1) {
             std::cmp::Ordering::Less => {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("cannot find patch \"{}\"", pattern)
+                    format!("Cannot find patch \"{}\"", pattern)
                 ))
             },
             std::cmp::Ordering::Equal => {
@@ -88,7 +88,7 @@ impl PatchManager {
             std::cmp::Ordering::Greater => {
                 Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("found multiple patch named \"{}\", please use 'pkg_name/patch_name' instead", pattern)
+                format!("Found multiple patch named \"{}\", please use 'pkg_name/patch_name' instead", pattern)
                 ))
             },
         }
@@ -157,56 +157,22 @@ impl PatchManager {
     }
 
     pub fn save_all_patch_status(&self) -> std::io::Result<()> {
-        let patch_status_file = self.patch_status_file;
         let patch_status_list = self.patch_list.iter().map(|patch| {
             (patch.short_name(), patch.status)
         }).collect::<Vec<_>>();
 
-        let buf = bincode::serialize(&patch_status_list).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("serialize patch status records failed, {}", e.to_string())
-            )
-        })?;
-
-        let mut writer = BufWriter::new(
-            std::fs::OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(patch_status_file)?
-        );
-
-        writer.write_all(&buf)?;
-        writer.flush()?;
-        writer.into_inner()?.sync_all()?;
+        serde::serialize(&patch_status_list, self.patch_status_file)?;
 
         Ok(())
     }
 
     pub fn restore_all_patch_status(&mut self) -> std::io::Result<()> {
-        let patch_status_file = self.patch_status_file;
-        let reader = BufReader::new(
-            match std::fs::File::open(patch_status_file) {
-                Ok(file) => file,
-                Err(e) => {
-                    debug!("cannot open file \"{}\", {}", patch_status_file, e.to_string());
-                    return Ok(());
-                },
-            }
-        );
-
-        let saved_patch_status = bincode::deserialize_from::<_, Vec<(String, PatchStatus)>>(reader).map_err(|e| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("deserialize patch status records from \"{}\" failed, {}", patch_status_file, e.to_string())
-            )
-        })?;
+        let saved_patch_status = serde::deserialize::<_, Vec<(String, PatchStatus)>>(self.patch_status_file)?;
 
         for (patch_name, status) in saved_patch_status {
             match self.find_patch_mut(&patch_name) {
                 Ok(patch) => patch.restore(status)?,
-                Err(e)    => warn!("{}", e.to_string())
+                Err(e)    => warn!("{}", e)
             }
         }
 

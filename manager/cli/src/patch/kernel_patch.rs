@@ -52,7 +52,7 @@ impl<'a> KernelPatchAdapter<'a> {
         let patch_file = self.get_patch_file();
         let sec_type   = selinux::get_security_context_type(patch_file.as_path())?;
         if sec_type != KPATCH_PATCH_SEC_TYPE {
-            debug!("set patch \"{}\" security context type to \"{}\"",
+            debug!("Set patch \"{}\" security context type to \"{}\"",
                 patch, KPATCH_PATCH_SEC_TYPE
             );
             selinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
@@ -76,7 +76,7 @@ impl<'a> KernelPatchAdapter<'a> {
         match read_result {
             Ok(s) => {
                 let status = s.trim();
-                trace!("read file \"{}\": {}", sys_file_path.display(), status);
+                trace!("Read file \"{}\": {}", sys_file_path.display(), status);
 
                 let patch_status = match status {
                     KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
@@ -84,7 +84,7 @@ impl<'a> KernelPatchAdapter<'a> {
                     _ => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            format!("status \"{}\" is invalid", status)
+                            format!("Status \"{}\" is invalid", status)
                         ));
                     }
                 };
@@ -104,7 +104,7 @@ impl<'a> KernelPatchAdapter<'a> {
             PatchStatus::NotApplied | PatchStatus::Deactived => KPATCH_STATUS_DISABLED,
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
         };
-        trace!("write file \"{}\": {}", sys_file_path.display(), status_str);
+        trace!("Write file \"{}\": {}", sys_file_path.display(), status_str);
 
         fs::write(&sys_file_path, status_str)
     }
@@ -114,15 +114,15 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
         let kernel_version = sys::get_kernel_version()?;
         let current_kernel = format!("kernel-{}", kernel_version);
-        debug!("current kernel: \"{}\"", current_kernel);
+        debug!("Current kernel: \"{}\"", current_kernel);
 
         let patch_target = self.patch.target.full_name();
-        debug!("patch target:  \"{}\"", patch_target);
+        debug!("Patch target:   \"{}\"", patch_target);
 
         if patch_target != current_kernel {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("current kernel \"{}\" is incompatible", kernel_version)
+                format!("Current kernel \"{}\" is incompatible", kernel_version)
             ));
         }
 
@@ -145,7 +145,10 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
             debug!("{}", exit_status.stderr().to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                "insmod patch failed",
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}",
+                    INSMOD,
+                    exit_status.exit_code()
+                ),
             ));
         }
 
@@ -162,7 +165,10 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
             debug!("{}", exit_status.stderr().to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                "rmmod patch failed",
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}",
+                    RMMOD,
+                    exit_status.exit_code()
+                ),
             ));
         }
 

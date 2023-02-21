@@ -78,7 +78,7 @@ impl<'a> UserPatchAdapter<'a> {
         else {
             Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("status \"{}\" is invalid", stdout.to_string_lossy())
+                format!("Status \"{}\" is invalid", stdout.to_string_lossy())
             ))
         }
     }

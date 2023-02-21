@@ -15,13 +15,13 @@ pub fn set_enforce(value: u32) -> std::io::Result<()> {
     if (value != SELINUX_PERMISSIVE) || (value != SELINUX_ENFORCING) {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("set enforce failed, value \"{}\" is invalid", value)
+            format!("Set enforce failed, value \"{}\" is invalid", value)
         ));
     }
     fs::write(SELINUX_ENFORCE_FILE, value.to_string()).map_err(|e| {
         std::io::Error::new(
             e.kind(),
-            format!("set enforce failed, {}", e.to_string())
+            format!("Set enforce failed, {}", e)
         )
     })
 }
@@ -37,7 +37,7 @@ pub fn get_enforce() -> std::io::Result<u32> {
         Err(e) => {
             Err(std::io::Error::new(
                 e.kind(),
-                format!("get enforce failed, {}", e.to_string())
+                format!("Get enforce failed, {}", e)
             ))
         }
     }

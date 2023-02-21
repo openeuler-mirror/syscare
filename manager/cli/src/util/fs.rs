@@ -12,7 +12,7 @@ impl<T> RewriteError for std::io::Result<T> {
         self.map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("{}, {}", err_msg, e.to_string()).to_lowercase()
+                format!("{}, {}", err_msg, e.to_string().to_lowercase())
             )
         })
     }
@@ -22,7 +22,7 @@ impl<T> RewriteError for std::io::Result<T> {
 #[inline]
 pub fn read<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
     std::fs::read(path.as_ref()).rewrite_err(
-        format!("cannot read \"{}\"",
+        format!("Cannot read \"{}\"",
             path.as_ref().display()
         )
     )
@@ -31,7 +31,7 @@ pub fn read<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<u8>> {
 #[inline]
 pub fn read_to_string<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
     std::fs::read_to_string(path.as_ref()).rewrite_err(
-        format!("cannot read \"{}\"",
+        format!("Cannot read \"{}\"",
             path.as_ref().display()
         )
     )
@@ -40,7 +40,7 @@ pub fn read_to_string<P: AsRef<Path>>(path: P) -> std::io::Result<String> {
 #[inline]
 pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> std::io::Result<()> {
     std::fs::write(path.as_ref(), contents).rewrite_err(
-        format!("cannot write \"{}\"",
+        format!("Cannot write \"{}\"",
             path.as_ref().display()
         )
     )
@@ -49,7 +49,7 @@ pub fn write<P: AsRef<Path>, C: AsRef<[u8]>>(path: P, contents: C) -> std::io::R
 #[inline]
 pub fn remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     std::fs::remove_file(path.as_ref()).rewrite_err(
-        format!("cannot remove \"{}\"",
+        format!("Cannot remove \"{}\"",
             path.as_ref().display()
         )
     )
@@ -58,21 +58,21 @@ pub fn remove_file<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 #[inline]
 pub fn metadata<P: AsRef<Path>>(path: P) -> std::io::Result<Metadata> {
     std::fs::metadata(path.as_ref()).rewrite_err(
-        format!("cannot access \"{}\"", path.as_ref().display())
+        format!("Cannot access \"{}\"", path.as_ref().display())
     )
 }
 
 #[inline]
 pub fn symlink_metadata<P: AsRef<Path>>(path: P) -> std::io::Result<Metadata> {
     std::fs::symlink_metadata(path.as_ref()).rewrite_err(
-        format!("cannot access \"{}\"", path.as_ref().display())
+        format!("Cannot access \"{}\"", path.as_ref().display())
     )
 }
 
 #[inline]
 pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<()> {
     std::fs::rename(&from, &to).rewrite_err(
-        format!("cannot rename \"{}\" to \"{}\"",
+        format!("Cannot rename \"{}\" to \"{}\"",
             from.as_ref().display(),
             to.as_ref().display()
         )
@@ -82,7 +82,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result
 #[inline]
 pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<u64> {
     std::fs::copy(&from, &to).rewrite_err(
-        format!("cannot rename \"{}\" to \"{}\"",
+        format!("Cannot rename \"{}\" to \"{}\"",
             from.as_ref().display(),
             to.as_ref().display()
         )
@@ -92,7 +92,7 @@ pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<u
 #[inline]
 pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
     std::fs::hard_link(original.as_ref(), link.as_ref()).rewrite_err(
-        format!("cannot link \"{}\" to \"{}\"",
+        format!("Cannot link \"{}\" to \"{}\"",
             original.as_ref().display(),
             link.as_ref().display()
         )
@@ -103,7 +103,7 @@ pub fn hard_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::i
 pub fn soft_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::io::Result<()> {
     // std::fs::soft_link() is deprecated, use std::os::unix::fs::symlink instead
     std::os::unix::fs::symlink(original.as_ref(), link.as_ref()).rewrite_err(
-        format!("cannot link \"{}\" to \"{}\"",
+        format!("Cannot link \"{}\" to \"{}\"",
             original.as_ref().display(),
             link.as_ref().display()
         )
@@ -113,7 +113,7 @@ pub fn soft_link<P: AsRef<Path>, Q: AsRef<Path>>(original: P, link: Q) -> std::i
 #[inline]
 pub fn read_link<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     std::fs::read_link(path.as_ref()).rewrite_err(
-        format!("cannot read symbol link \"{}\"",
+        format!("Cannot read symbol link \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -122,7 +122,7 @@ pub fn read_link<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
 #[inline]
 pub fn canonicalize<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     std::fs::canonicalize(path.as_ref()).rewrite_err(
-        format!("cannot canonicalize \"{}\"",
+        format!("Cannot canonicalize \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -131,7 +131,7 @@ pub fn canonicalize<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
 #[inline]
 pub fn create_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     std::fs::create_dir(path.as_ref()).rewrite_err(
-        format!("cannot create directory \"{}\"",
+        format!("Cannot create directory \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -140,7 +140,7 @@ pub fn create_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 #[inline]
 pub fn create_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     std::fs::create_dir_all(path.as_ref()).rewrite_err(
-        format!("cannot create directory \"{}\"",
+        format!("Cannot create directory \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -149,7 +149,7 @@ pub fn create_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 #[inline]
 pub fn remove_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     std::fs::remove_dir(path.as_ref()).rewrite_err(
-        format!("cannot remove directory \"{}\"",
+        format!("Cannot remove directory \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -158,7 +158,7 @@ pub fn remove_dir<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 #[inline]
 pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     std::fs::remove_dir_all(path.as_ref()).rewrite_err(
-        format!("cannot remove directory \"{}\"",
+        format!("Cannot remove directory \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -167,7 +167,7 @@ pub fn remove_dir_all<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
 #[inline]
 pub fn read_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ReadDir> {
     std::fs::read_dir(path.as_ref()).rewrite_err(
-        format!("cannot read directory \"{}\"",
+        format!("Cannot read directory \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -176,7 +176,7 @@ pub fn read_dir<P: AsRef<Path>>(path: P) -> std::io::Result<ReadDir> {
 #[inline]
 pub fn set_permissions<P: AsRef<Path>>(path: P, perm: Permissions) -> std::io::Result<()> {
     std::fs::set_permissions(path.as_ref(), perm).rewrite_err(
-        format!("cannot set permission to \"{}\"",
+        format!("Cannot set permission to \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -185,7 +185,7 @@ pub fn set_permissions<P: AsRef<Path>>(path: P, perm: Permissions) -> std::io::R
 /* Extended functions */
 pub fn create_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
     std::fs::File::create(&path).rewrite_err(
-        format!("cannot create file \"{}\"",
+        format!("Cannot create file \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -193,7 +193,7 @@ pub fn create_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
 
 pub fn open_file<P: AsRef<Path>>(path: P) -> std::io::Result<File> {
     std::fs::File::open(&path).rewrite_err(
-        format!("cannot open file \"{}\"",
+        format!("Cannot open file \"{}\"",
             path.as_ref().display(),
         )
     )
@@ -315,7 +315,7 @@ pub fn find_dir<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive:
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
+        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
     ))
 }
 
@@ -334,7 +334,7 @@ pub fn find_file<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
+        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
     ))
 }
 
@@ -345,7 +345,7 @@ pub fn find_file_ext<P: AsRef<Path>>(directory: P, ext: &str, recursive: bool) -
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("cannot find '*.{}' file in \"{}\"", ext, directory.as_ref().display())
+        format!("Cannot find '*.{}' file in \"{}\"", ext, directory.as_ref().display())
     ))
 }
 

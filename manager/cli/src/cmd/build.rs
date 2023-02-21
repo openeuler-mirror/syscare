@@ -24,12 +24,12 @@ impl CommandExecutor for BuildCommandExecutor {
                 std::io::ErrorKind::NotFound => {
                     std::io::Error::new(
                         e.kind(),
-                        format!("package \"syscare-build\" is not installed")
+                        format!("Package \"syscare-build\" is not installed")
                     )
                 },
                 _ => std::io::Error::new(
                     e.kind(),
-                    format!("start process \"{}\" failed, {}", SYSCARE_BUILD_PATH, e.to_string())
+                    format!("Start process \"{}\" failed, {}", SYSCARE_BUILD_PATH, e.to_string())
                 )
             }
         })

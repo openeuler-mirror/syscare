@@ -54,24 +54,24 @@ impl Patch {
             return;
         }
 
-        debug!("patch \"{}\" status changed from \"{}\" to \"{}\"", self, current_status, target_tatus);
+        debug!("Patch \"{}\" status changed from \"{}\" to \"{}\"", self, current_status, target_tatus);
         self.status = target_tatus;
     }
 
     fn do_apply(&mut self) -> std::io::Result<()> {
-        debug!("applying patch \"{}\"", self);
+        debug!("Applying patch \"{}\"", self);
 
         self.get_adapter().check_compatibility().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("check patch \"{}\" failed, {}", self, e.to_string())
+                format!("Check patch \"{}\" failed, {}", self, e)
             )
         })?;
 
         self.get_adapter().apply().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("patch \"{}\" apply failed, {}", self, e.to_string())
+                format!("Patch \"{}\" apply failed, {}", self, e)
             )
         })?;
 
@@ -80,12 +80,12 @@ impl Patch {
     }
 
     fn do_remove(&mut self) -> std::io::Result<()> {
-        debug!("removing patch \"{}\"", self);
+        debug!("Removing patch \"{}\"", self);
 
         self.get_adapter().remove().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("patch \"{}\" remove failed, {}", self, e.to_string())
+                format!("Patch \"{}\" remove failed, {}", self, e)
             )
         })?;
 
@@ -94,12 +94,12 @@ impl Patch {
     }
 
     fn do_active(&mut self) -> std::io::Result<()> {
-        debug!("activing patch \"{}\"", self);
+        debug!("Activing patch \"{}\"", self);
 
         self.get_adapter().active().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("patch \"{}\" active failed, {}", self, e.to_string())
+                format!("Patch \"{}\" active failed, {}", self, e)
             )
         })?;
 
@@ -108,12 +108,12 @@ impl Patch {
     }
 
     fn do_deactive(&mut self) -> std::io::Result<()> {
-        debug!("deactiving patch \"{}\"", self);
+        debug!("Deactiving patch \"{}\"", self);
 
         self.get_adapter().deactive().map_err(|e| {
             std::io::Error::new(
                 e.kind(),
-                format!("patch \"{}\" deactive failed, {}", self, e.to_string())
+                format!("Patch \"{}\" deactive failed, {}", self, e)
             )
         })?;
 
@@ -127,7 +127,7 @@ impl Patch {
         let patch_status = self.get_adapter().status()?;
 
         self.status = patch_status;
-        debug!("patch \"{}\" is \"{}\"", self, patch_status);
+        debug!("Patch \"{}\" is \"{}\"", self, patch_status);
 
         Ok(())
     }
@@ -139,7 +139,7 @@ impl Patch {
                 self.do_active()?;
             },
             _ => {
-                debug!("patch \"{}\" is already applied", self);
+                debug!("Patch \"{}\" is already applied", self);
             },
         }
 
@@ -149,7 +149,7 @@ impl Patch {
     pub fn remove(&mut self) -> std::io::Result<()> {
         match &self.status {
             PatchStatus::NotApplied => {
-                debug!("patch \"{}\" is already removed", self);
+                debug!("Patch \"{}\" is already removed", self);
             },
             PatchStatus::Deactived => {
                 self.do_remove()?;
@@ -168,14 +168,14 @@ impl Patch {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("patch \"{}\" is not applied", self)
+                    format!("Patch \"{}\" is not applied", self)
                 ));
             },
             PatchStatus::Deactived => {
                 self.do_active()?;
             },
             PatchStatus::Actived => {
-                debug!("patch \"{}\" is already actived", self);
+                debug!("Patch \"{}\" is already actived", self);
             },
         }
 
@@ -187,11 +187,11 @@ impl Patch {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("patch \"{}\" is not applied", self)
+                    format!("Patch \"{}\" is not applied", self)
                 ));
             },
             PatchStatus::Deactived => {
-                debug!("patch \"{}\" is already deactived", self);
+                debug!("Patch \"{}\" is already deactived", self);
             },
             PatchStatus::Actived => {
                 self.do_deactive()?;
@@ -224,11 +224,11 @@ impl Patch {
         }
 
         let transition = (self.status, status);
-        debug!("restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
+        debug!("Restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
 
         match PATCH_TRANSITION_MAP.get(&transition) {
             Some(action) => action(self)?,
-            None         => debug!("patch \"{}\" status not change", self),
+            None         => debug!("Patch \"{}\" status not change", self),
         }
 
         Ok(())

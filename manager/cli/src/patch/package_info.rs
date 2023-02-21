@@ -52,7 +52,7 @@ impl PackageInfo {
         if exit_status.exit_code() != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("package \"{}\" is not installed", pkg_name)
+                format!("Package \"{}\" is not installed", pkg_name)
             ));
         }
 

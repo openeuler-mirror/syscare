@@ -29,7 +29,7 @@ impl SyscareCLI {
         if sys::get_uid() != ROOT_UID {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
-                "this command has to be run with superuser privileges (under the root user on most systems)."
+                "This command has to be run with superuser privileges (under the root user on most systems)."
             ));
         }
 
