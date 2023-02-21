@@ -1,4 +1,5 @@
-use std::{path::PathBuf, ffi::OsString};
+use std::ffi::OsString;
+use std::path::PathBuf;
 
 use crate::patch::PatchFile;
 

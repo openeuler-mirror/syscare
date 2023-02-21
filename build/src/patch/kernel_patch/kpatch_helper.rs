@@ -5,7 +5,7 @@ use log::debug;
 use crate::constants::*;
 use crate::util::fs;
 
-use crate::cmd::ExternCommandArgs;
+use crate::ext_cmd::ExternCommandArgs;
 
 pub struct KernelPatchHelper;
 

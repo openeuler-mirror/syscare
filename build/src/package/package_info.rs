@@ -38,9 +38,9 @@ impl PackageInfo {
     pub fn new<P: AsRef<Path>>(pkg_path: P) -> std::io::Result<Self> {
         let query_result = RpmHelper::query_package_info(pkg_path,
             "%{NAME}|%{ARCH}|%{EPOCH}|%{VERSION}|%{RELEASE}|%{LICENSE}|%{SOURCERPM}"
-        )?;
+        )?.to_string_lossy().to_string();
 
-        let pkg_info = query_result.split('|').collect::<Vec<&str>>();
+        let pkg_info = query_result.split('|').collect::<Vec<_>>();
         if pkg_info.len() < 7 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,

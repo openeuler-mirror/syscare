@@ -1,4 +1,5 @@
-use crate::{cmd::ExternCommand, util::sys};
+use crate::ext_cmd::ExternCommand;
+use crate::util::sys;
 
 // CLI Strings
 pub const CLI_NAME:                        &str = env!("CARGO_PKG_NAME");

@@ -5,6 +5,7 @@ use log::debug;
 use crate::package::RpmHelper;
 use crate::util::fs;
 use crate::constants::*;
+use crate::util::os_str::OsStrSplit;
 
 pub struct UserPatchHelper;
 
@@ -23,8 +24,9 @@ impl UserPatchHelper {
         debug!("Reading package file list from \"{}\"", pkg_path.as_ref().display());
 
         let file_list_str = RpmHelper::query_package_info(pkg_path, "[%{FILENAMES} ]")?;
-        let file_list = file_list_str.trim_end()
-            .split(" ")
+        let file_list = file_list_str
+            .split(' ')
+            .into_iter()
             .map(PathBuf::from)
             .collect::<Vec<_>>();
 

@@ -1,13 +1,18 @@
+use std::ffi::{OsString, OsStr};
+
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Debug)]
 pub struct SpecTag {
     name:  String,
-    value: String,
+    value: OsString,
 }
 
 impl std::fmt::Display for SpecTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}: {}", self.name, self.value))
+        f.write_fmt(format_args!("{}: {}",
+            self.name,
+            self.value.to_string_lossy()
+        ))
     }
 }
 
@@ -16,12 +21,16 @@ impl std::fmt::Display for SpecTag {
 pub struct SpecIdTag {
     name:  String,
     id:    usize,
-    value: String,
+    value: OsString,
 }
 
 impl std::fmt::Display for SpecIdTag {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}{}: {}", self.name, self.id, self.value))
+        f.write_fmt(format_args!("{}{}: {}",
+            self.name,
+            self.id,
+            self.value.to_string_lossy()
+        ))
     }
 }
 
@@ -33,12 +42,19 @@ pub enum RpmSpecTag {
 }
 
 impl RpmSpecTag {
-    pub fn new_tag(name: String, value: String) -> Self {
-        Self::Tag(SpecTag { name, value})
+    pub fn new_tag<S: AsRef<OsStr>>(name: String, value: S) -> Self {
+        Self::Tag(SpecTag {
+            name,
+            value: value.as_ref().to_owned()
+        })
     }
 
-    pub fn new_id_tag(name: String, id: usize, value: String) -> Self {
-        Self::IdTag(SpecIdTag { name, id, value})
+    pub fn new_id_tag<S: AsRef<OsStr>>(name: String, id: usize, value: S) -> Self {
+        Self::IdTag(SpecIdTag {
+            name,
+            id,
+            value: value.as_ref().to_owned()
+        })
     }
 
     pub fn get_name(&self) -> &str {
@@ -55,7 +71,7 @@ impl RpmSpecTag {
         }
     }
 
-    pub fn get_value(&self) -> &str {
+    pub fn get_value(&self) -> &OsStr {
         match self {
             Self::Tag(tag)   => &tag.value,
             Self::IdTag(tag) => &tag.value,

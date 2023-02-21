@@ -12,7 +12,7 @@ pub struct RpmSpecHelper;
 
 impl RpmSpecHelper {
     fn create_new_release_tag(orig_release_tag: RpmSpecTag, patch_info: &PatchInfo) -> RpmSpecTag {
-        let tag_name  = orig_release_tag.get_name().to_string();
+        let tag_name  = orig_release_tag.get_name();
         let tag_value = format!("{}.{}.{}.{}",
             patch_info.target.release,
             patch_info.name,
@@ -20,7 +20,10 @@ impl RpmSpecHelper {
             patch_info.release
         );
 
-        RpmSpecTag::new_tag(tag_name, tag_value)
+        RpmSpecTag::new_tag(
+            tag_name.to_owned(),
+            tag_value
+        )
     }
 
     fn create_new_source_tags(start_tag_id: usize, patch_info: &PatchInfo) -> Vec<RpmSpecTag> {
@@ -41,7 +44,7 @@ impl RpmSpecHelper {
             tag_id += 1;
         }
 
-        // If the package is patched, generate files to record patch info
+        // If the source package is not patched, generate files to record patch info
         if !patch_info.is_patched {
             source_tag_list.push(RpmSpecTag::new_id_tag(
                 tag_name.to_owned(),
@@ -57,7 +60,6 @@ impl RpmSpecHelper {
         let mut spec_file_content = fs::read_file_content(&spec_file)?;
         let mut orig_release_tag = None;
         let mut source_tags = BTreeSet::new();
-
         // Parse whole file
         let mut current_line_num = 0usize;
         for current_line in &spec_file_content {

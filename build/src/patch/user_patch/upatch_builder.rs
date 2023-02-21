@@ -3,12 +3,12 @@ use std::ffi::{OsString, OsStr};
 use crate::constants::*;
 
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::cmd::ExternCommandArgs;
+use crate::ext_cmd::ExternCommandArgs;
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
-use crate::util::{serde, fs};
 use crate::util::os_str::OsStrConcat;
+use crate::util::{serde, fs};
 
 use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;
@@ -47,7 +47,7 @@ impl<'a> UserPatchBuilder<'a> {
         if args.verbose {
             cmd_args = cmd_args.arg("--verbose");
         }
-        cmd_args = cmd_args.args(args.patch_list.iter().map(|patch| &patch.name));
+        cmd_args = cmd_args.args(args.patch_list.iter().map(|patch| &patch.path));
 
         cmd_args
     }
@@ -66,16 +66,16 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let patch_source_dir = RpmHelper::find_source_directory(&pkg_build_root.build, patch_info)?;
         let patch_debuginfo  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
 
-        let mut build_original_cmd = OsString::from(RPM_BUILD.to_string());
-        build_original_cmd.concat(" --define '_topdir ")
+        let build_original_cmd = OsString::from(RPM_BUILD.to_string())
+            .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
             .concat("' -bb ")
             .concat("--nodebuginfo ")
             .concat("--noclean ")
             .concat(&spec_file);
 
-        let mut build_patched_cmd  = OsString::from(RPM_BUILD.to_string());
-        build_patched_cmd.concat(" --define '_topdir ")
+        let build_patched_cmd = OsString::from(RPM_BUILD.to_string())
+            .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
             .concat("' -bc ")
             .concat("--noprep ")

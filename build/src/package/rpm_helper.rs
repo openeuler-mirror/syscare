@@ -1,3 +1,4 @@
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use log::debug;
@@ -7,12 +8,12 @@ use crate::util::fs;
 
 use crate::workdir::PackageBuildRoot;
 use crate::patch::{PatchType, PatchInfo};
-use crate::cmd::ExternCommandArgs;
+use crate::ext_cmd::ExternCommandArgs;
 
 pub struct RpmHelper;
 
 impl RpmHelper {
-    pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> std::io::Result<String> {
+    pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> std::io::Result<OsString> {
         fs::check_file(&pkg_path)?;
 
         let exit_status = RPM.execvp(

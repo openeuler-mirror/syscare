@@ -3,6 +3,8 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::io::{BufRead, BufReader, Write, BufWriter};
 
+use super::os_str::OsStrContains;
+
 pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let path_ref = path.as_ref();
     if !path_ref.exists() {
@@ -157,17 +159,16 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
     Ok(file_list)
 }
 
-pub fn find_directory<P: AsRef<Path>>(directory: P, dir_name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
+pub fn find_directory<P: AsRef<Path>, S: AsRef<OsStr>>(directory: P, dir_name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
     let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
+    let search_name = dir_name.as_ref();
 
     for dir in self::list_all_dirs(search_path, recursive)? {
-        if let Some(curr_dir_name) = dir.file_name().and_then(OsStr::to_str) {
-            if curr_dir_name == dir_name {
+        if let Some(curr_dir_name) = dir.file_name() {
+            if curr_dir_name == search_name {
                 return Ok(dir);
             }
-            if fuzz && curr_dir_name.contains(dir_name) {
+            if fuzz && curr_dir_name.contains(search_name) {
                 return Ok(dir);
             }
         }
@@ -176,23 +177,24 @@ pub fn find_directory<P: AsRef<Path>>(directory: P, dir_name: &str, fuzz: bool, 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         match fuzz {
-            true  => format!("Cannot find directory '*{}*' in \"{}\"", dir_name, search_path.display()),
-            false => format!("Cannot find directory \"{}\" in \"{}\"",   dir_name, search_path.display()),
+            true  => format!("Cannot find directory '*{}*' in \"{}\"", search_name.to_string_lossy(), search_path.display()),
+            false => format!("Cannot find directory \"{}\" in \"{}\"", search_name.to_string_lossy(), search_path.display()),
         }
     ))
 }
 
-pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
+pub fn find_file<P: AsRef<Path>, S: AsRef<OsStr>>(directory: P, file_name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
     let search_path = directory.as_ref();
+    let search_name = file_name.as_ref();
 
     self::check_dir(search_path)?;
 
     for file in self::list_all_files(search_path, recursive)? {
-        if let Ok(curr_file_name) = self::file_name(file.as_path()) {
-            if curr_file_name == file_name {
+        if let Some(curr_file_name) = file.file_name() {
+            if curr_file_name == search_name {
                 return Ok(file);
             }
-            if fuzz && curr_file_name.contains(file_name) {
+            if fuzz && curr_file_name.contains(search_name) {
                 return Ok(file);
             }
         }
@@ -201,8 +203,8 @@ pub fn find_file<P: AsRef<Path>>(directory: P, file_name: &str, fuzz: bool, recu
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
         match fuzz {
-            true  => format!("Cannot find file '*{}*' in \"{}\"", file_name, search_path.display()),
-            false => format!("Cannot find file \"{}\" in \"{}\"",   file_name, search_path.display()),
+            true  => format!("Cannot find file '*{}*' in \"{}\"", search_name.to_string_lossy(), search_path.display()),
+            false => format!("Cannot find file \"{}\" in \"{}\"", search_name.to_string_lossy(), search_path.display()),
         }
     ))
 }

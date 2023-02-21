@@ -4,7 +4,7 @@ use std::path::PathBuf;
 use crate::constants::*;
 
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::cmd::{ExternCommandArgs, ExternCommandEnvs};
+use crate::ext_cmd::{ExternCommandArgs, ExternCommandEnvs};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
@@ -41,7 +41,7 @@ impl KernelPatchBuilder<'_> {
         if args.skip_compiler_check {
             cmd_args = cmd_args.arg("--skip-compiler-check");
         }
-        cmd_args = cmd_args.args(args.patch_list.iter().map(|patch| &patch.name));
+        cmd_args = cmd_args.args(args.patch_list.iter().map(|patch| &patch.path));
 
         cmd_args
     }

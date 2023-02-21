@@ -156,6 +156,8 @@ impl PatchBuildCLI {
     }
 
     fn check_build_args(&self, src_pkg_info: &PackageInfo, dbg_pkg_info: &PackageInfo) -> std::io::Result<()> {
+        let args = &self.args;
+
         if !dbg_pkg_info.name.contains(&src_pkg_info.name) ||
            (src_pkg_info.arch    != dbg_pkg_info.arch)    ||
            (src_pkg_info.epoch   != dbg_pkg_info.epoch)   ||
@@ -167,19 +169,18 @@ impl PatchBuildCLI {
             ));
         }
 
-        let patch_arch = self.args.patch_arch.as_str();
-        if patch_arch != sys::cpu_arch() {
+        if args.patch_arch != sys::cpu_arch() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Patch arch \"{}\" is unsupported", patch_arch),
+                format!("Patch arch \"{}\" is unsupported", args.patch_arch),
             ));
         }
 
         let target_arch = self.args.target_arch.as_deref().unwrap();
-        if self.args.patch_arch.as_str() != target_arch {
+        if args.patch_arch != target_arch {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Target arch \"{}\" is not match patch arch \"{}\"", target_arch, patch_arch),
+                format!("Target arch \"{}\" is not match patch arch \"{}\"", target_arch, args.patch_arch),
             ));
         }
 

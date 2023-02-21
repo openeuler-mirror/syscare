@@ -7,7 +7,7 @@ use crate::util::os_str::OsStrConcat;
 
 use crate::patch::PatchInfo;
 use crate::workdir::PackageBuildRoot;
-use crate::cmd::ExternCommandArgs;
+use crate::ext_cmd::ExternCommandArgs;
 
 use super::rpm_spec_generator::RpmSpecGenerator;
 
