@@ -36,16 +36,16 @@ pub const PATCH_ELF_NAME_FILE:        &str  = "elf_names";
 pub const PATCH_VERSION_DIGITS:       usize = 8;
 
 // Package
-pub const PKG_BUILD_ROOT_DIR_NAME:          &str = "rpmbuild";
-pub const PKG_FILE_EXTENSION:               &str = "rpm";
-pub const PKG_FLAG_PATCH_BINARY:            &str = "patch";
-pub const PKG_FLAG_NONE:                    &str = "(none)";
-pub const PKG_SPEC_FILE_EXTENSION:          &str = "spec";
-pub const PKG_SPEC_TAG_NAME_RELEASE:        &str = "Release:";
-pub const PKG_SPEC_TAG_NAME_SOURCE:         &str = "Source";
-pub const PKG_SPEC_TAG_NAME_BUILD_REQUIRES: &str = "BuildRequires:";
-pub const PKG_SPEC_TAG_VALUE_GROUP:         &str = "Patch";
-pub const PKG_SPEC_TAG_VALUE_REQUIRES:      &str = "syscare";
+pub const PKG_FILE_EXTENSION:          &str = "rpm";
+pub const PKG_FLAG_NONE:               &str = "(none)";
+pub const PKG_BUILD_ROOT:              &str = "rpmbuild";
+pub const PKG_SPEC_EXTENSION:          &str = "spec";
+pub const PKG_SPEC_TAG_RELEASE:        &str = "Release:";
+pub const PKG_SPEC_TAG_SOURCE:         &str = "Source";
+pub const PKG_SPEC_TAG_BUILD_REQUIRES: &str = "BuildRequires:";
+pub const PKG_PATCH_PKG_PREFIX:        &str = "patch";
+pub const PKG_PATCH_PKG_GROUP:         &str = "Patch";
+pub const PKG_PATCH_PKG_REQUIRE:       &str = "syscare";
 
 // Kernel
 pub const KERNEL_PKG_NAME:          &str = "kernel";

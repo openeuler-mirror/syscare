@@ -27,7 +27,7 @@ impl RpmSpecHelper {
     }
 
     fn create_new_source_tags(start_tag_id: usize, patch_info: &PatchInfo) -> Vec<RpmSpecTag> {
-        let tag_name = PKG_SPEC_TAG_NAME_SOURCE;
+        let tag_name = PKG_SPEC_TAG_SOURCE;
 
         let mut source_tag_list = Vec::new();
         let mut tag_id = start_tag_id + 1;
@@ -67,13 +67,13 @@ impl RpmSpecHelper {
         // Parse whole file
         let mut current_line_num = 0usize;
         for current_line in &spec_file_content {
-            if let Some(_) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_BUILD_REQUIRES) {
+            if let Some(_) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_BUILD_REQUIRES) {
                 break;
             }
 
             // If the release tag is not parsed, do parse
             if orig_release_tag.is_none() {
-                if let Some(tag) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_NAME_RELEASE) {
+                if let Some(tag) = RpmSpecParser::parse_tag(&current_line, PKG_SPEC_TAG_RELEASE) {
                     orig_release_tag = Some((current_line_num, tag));
                     current_line_num += 1;
                     continue; // Since parsed release tag, the other tag would not be parsed
@@ -81,7 +81,7 @@ impl RpmSpecHelper {
             }
 
             // Add parsed source tag into the btree set
-            if let Some(tag) = RpmSpecParser::parse_id_tag(&current_line, PKG_SPEC_TAG_NAME_SOURCE) {
+            if let Some(tag) = RpmSpecParser::parse_id_tag(&current_line, PKG_SPEC_TAG_SOURCE) {
                 source_tags.insert(tag);
                 current_line_num += 1;
                 continue;
@@ -127,9 +127,7 @@ impl RpmSpecHelper {
             spec_file,
             spec_file_content.into_iter()
                 .flat_map(|mut s| {
-                    if !s.ends_with('\n') {
-                        s.push('\n');
-                    }
+                    s.push('\n');
                     s.into_bytes()
                 }).collect::<Vec<_>>()
         )

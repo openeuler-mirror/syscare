@@ -39,7 +39,7 @@ impl RpmHelper {
         Ok(PackageBuildRoot::new(
             fs::find_dir(
                 directory,
-                PKG_BUILD_ROOT_DIR_NAME,
+                PKG_BUILD_ROOT,
                 false,
                 true
             )?
@@ -51,7 +51,7 @@ impl RpmHelper {
 
         let spec_file = fs::find_file_ext(
             directory,
-            PKG_SPEC_FILE_EXTENSION,
+            PKG_SPEC_EXTENSION,
             false
         )?;
 

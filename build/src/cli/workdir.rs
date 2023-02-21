@@ -20,8 +20,7 @@ impl CliWorkDir {
     pub fn create<P: AsRef<Path>>(&mut self, workdir: P) -> std::io::Result<()> {
         let workdir = WorkDir::new(
             workdir.as_ref().join(
-                OsString::new()
-                    .concat(sys::process_name())
+                OsString::from(sys::process_name())
                     .concat(".")
                     .concat(sys::process_id().to_string())
             )
