@@ -40,7 +40,7 @@ impl PatchManager {
                         self.patch_list.push(patch);
                     },
                     Err(e) => {
-                        debug!("failed to parse patch info, {}", e);
+                        debug!("failed to parse patch from \"{}\", {}", patch_root.to_string_lossy(), e);
                     }
                 }
             }

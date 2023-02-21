@@ -17,6 +17,6 @@ pub fn serialize<P: AsRef<Path>, T: Serialize>(obj: T, path: P) -> std::io::Resu
 pub fn deserialize<P: AsRef<Path>, T: DeserializeOwned>(path: P) -> std::io::Result<T> {
     bincode::deserialize_from(fs::open_file(&path)?).map_err(|_| std::io::Error::new(
         std::io::ErrorKind::Other,
-        format!("deserialize \"{}\" from \"{}\" failed", std::any::type_name::<T>(), path.as_ref().display())
+        format!("deserialize \"{}\" failed", std::any::type_name::<T>())
     ))
 }

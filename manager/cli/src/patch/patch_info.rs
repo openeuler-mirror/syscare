@@ -24,9 +24,9 @@ impl std::fmt::Display for PatchType {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchFile {
-    name:   String,
-    path:   PathBuf,
-    digest: String,
+    pub name:   OsString,
+    pub path:   PathBuf,
+    pub digest: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -41,7 +41,7 @@ pub struct PatchInfo {
     pub target_elfs: HashMap<OsString, PathBuf>,
     pub license:     String,
     pub description: String,
-    pub incremental: bool,
+    pub is_patched:  bool,
     pub builder:     String,
     pub patches:     Vec<PatchFile>,
 }
@@ -78,7 +78,7 @@ impl PatchInfo {
         log!(level, "");
         log!(level, "patch list:");
         for patch_file in &self.patches {
-            log!(level, "{} {}", patch_file.name, patch_file.digest);
+            log!(level, "{} {}", patch_file.name.to_string_lossy(), patch_file.digest);
         }
     }
 }

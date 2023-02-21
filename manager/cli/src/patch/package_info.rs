@@ -22,13 +22,13 @@ impl std::fmt::Display for PackageType {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PackageInfo {
-    pub name:      String,
-    pub kind:      PackageType,
-    pub arch:      String,
-    pub epoch:     String,
-    pub version:   String,
-    pub release:   String,
-    pub license:   String,
+    pub name:    String,
+    pub kind:    PackageType,
+    pub arch:    String,
+    pub epoch:   String,
+    pub version: String,
+    pub release: String,
+    pub license: String,
 }
 
 impl PackageInfo {
