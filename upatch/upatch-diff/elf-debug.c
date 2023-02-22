@@ -88,7 +88,112 @@ next:
     }
 }
 
+/* debuginfo releated */
+static inline bool skip_bytes(unsigned char **iter, unsigned char *end, unsigned int len)
+{
+    if ((unsigned int)(end - *iter) < len) {
+        *iter = end;
+        return false;
+    }
+    *iter += len;
+    return true;
+}
 
+void upatch_rebuild_eh_frame(struct section *sec)
+{
+    void *eh_frame;
+    unsigned long long frame_size;
+    struct rela *rela;
+    unsigned char *data, *data_end;
+    unsigned int hdr_length, hdr_id;
+    unsigned int current_offset;
+    unsigned int count = 0;
+
+    /* sanity check */
+    if (!is_eh_frame(sec) || is_rela_section(sec))
+        return;
+
+    list_for_each_entry(rela, &sec->rela->relas, list)
+        count ++;
+
+    /* currently, only delete is possible */
+    if (sec->rela->sh.sh_entsize != 0 &&
+        count == sec->rela->sh.sh_size / sec->rela->sh.sh_entsize)
+        return;
+
+    log_debug("sync modification for eh_frame \n");
+
+    data = sec->data->d_buf;
+    data_end = sec->data->d_buf + sec->data->d_size;
+
+    /* in this time, some relcation entries may have been deleted */
+    frame_size = 0;
+    eh_frame = malloc(sec->data->d_size);
+    if (!eh_frame)
+        ERROR("malloc eh_frame failed \n");
+
+    /* 8 is the offset of PC begin */
+    current_offset = 8;
+    list_for_each_entry(rela, &sec->rela->relas, list) {
+        unsigned int offset = rela->offset;
+        bool found_rela = false;
+        log_debug("handle relocaton offset at 0x%x \n", offset);
+        while (data != data_end) {
+            void *__src = data;
+
+            log_debug("current handle offset is 0x%x \n", current_offset);
+
+            REQUIRE(skip_bytes(&data, data_end, 4), "no length to be read");
+            hdr_length = *(unsigned int *)(data - 4);
+
+            REQUIRE(hdr_length != 0xffffffff, "64 bit .eh_frame is not supported");
+            /* if it is 0, we reach the end. */
+            if (hdr_length == 0)
+                break;
+
+            REQUIRE(skip_bytes(&data, data_end, 4), "no length to be read");
+            hdr_id = *(unsigned int *)(data - 4);
+
+            REQUIRE(skip_bytes(&data, data_end, hdr_length - 4), "no length to be read");
+
+            if (current_offset == offset)
+                found_rela = true;
+
+            /* CIE or relocation releated FDE */
+            if (hdr_id == 0 || found_rela) {
+                memcpy(eh_frame + frame_size, __src, hdr_length + 4);
+                /* update rela offset to point to new offset, and also hdr_id */
+                if (found_rela) {
+                    /* 4 is the offset of hdr_id and 8 is the offset of PC begin */
+                    *(unsigned int *)(eh_frame + frame_size + 4) = frame_size + 4;
+                    rela->offset = frame_size + 8;
+                }
+
+                frame_size += (hdr_length + 4);
+            } else {
+                log_debug("remove FDE at 0x%x \n", current_offset);
+            }
+
+            /* hdr_length(value) + hdr_length(body) */
+            current_offset += (4 + hdr_length);
+
+            if (found_rela)
+                break;
+        }
+        if (!found_rela)
+            ERROR("No FDE found for relocation at 0x%x \n", offset);
+    }
+
+    /*
+     * FIXME: data may not reach the data_end, since we have found
+     *        all FDE for relocation entries, the only problem here is
+     *        we may miss the CIE, but CIE is in the beginning ?
+     */
+
+    sec->data->d_buf = eh_frame;
+    sec->data->d_size = frame_size;
+    sec->sh.sh_size = frame_size;
+}
 
 
 

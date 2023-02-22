@@ -42,7 +42,6 @@ enum exit_status{
 #define ERROR(format, ...) \
 	error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
-
 #define DIFF_FATAL(format, ...) \
 	error(EXIT_STATUS_DIFF_FATAL, 0, "ERROR: %s: %s: %d: " format, logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
@@ -56,6 +55,12 @@ enum exit_status{
 	if (loglevel <= (level)) \
 		printf(format, ##__VA_ARGS__); \
 })
+
+#define REQUIRE(COND, message) \
+	do	\
+		if (!(COND)) \
+			ERROR(message); \
+	while (0)
 
 enum loglevel {
 	DEBUG,

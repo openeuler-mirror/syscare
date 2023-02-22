@@ -712,19 +712,27 @@ static int include_new_globals(struct upatch_elf *uelf)
 
 static void include_debug_sections(struct upatch_elf *uelf)
 {
-    struct section *sec;
     struct rela *rela, *saferela;
+    struct section *sec = NULL, *eh_sec = NULL;
 
     /* include all .debug_* sections */
     list_for_each_entry(sec, &uelf->sections, list) {
         if (is_debug_section(sec)) {
             sec->include = 1;
+
             if (!is_rela_section(sec) && sec->secsym)
                 sec->secsym->include = 1;
+
+            if (!is_rela_section(sec) && is_eh_frame(sec))
+                eh_sec = sec;
         }
     }
 
-    /* modify relocation entry here, remove unincluded symbol in debug relocation section */
+    /*
+     * modify relocation entry here
+     * remove unincluded symbol in debug relocation section
+     * for eh_frame section, sync the FDE at the same time
+     */
     list_for_each_entry(sec, &uelf->sections, list) {
         if (!is_rela_section(sec) || !is_debug_section(sec))
             continue;
@@ -733,6 +741,9 @@ static void include_debug_sections(struct upatch_elf *uelf)
             if (!rela->sym->sec->include)
                 list_del(&rela->list);
     }
+
+    if (eh_sec)
+        upatch_rebuild_eh_frame(eh_sec);
 }
 
 /* currently, there si no special section need to be handled */

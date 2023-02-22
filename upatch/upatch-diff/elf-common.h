@@ -71,6 +71,17 @@ static inline bool is_except_section(struct section *sec)
 	return !strncmp(sec->name, ".gcc_except_table", 17);
 }
 
+static inline bool is_eh_frame(struct section *sec)
+{
+	char *name;
+	if (is_rela_section(sec))
+		name = sec->base->name;
+	else
+		name = sec->name;
+
+	return !strncmp(name, ".eh_frame", 9);
+}
+
 static inline bool is_debug_section(struct section *sec)
 {
 	char *name;

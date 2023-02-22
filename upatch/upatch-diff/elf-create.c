@@ -429,7 +429,6 @@ void upatch_rebuild_relocations(struct upatch_elf *uelf)
     if (!symtab)
         ERROR("missing .symtab section in rebuild relocations. \n");
 
-
     list_for_each_entry(relasec, &uelf->sections, list) {
         if (!is_rela_section(relasec))
             continue;
