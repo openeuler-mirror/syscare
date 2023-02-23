@@ -1,12 +1,15 @@
+use std::ffi::OsString;
+use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 
 use log::{trace, debug};
 
+use crate::os::{SELinux, SELinuxStatus};
+use crate::ext_cmd::{ExternCommand, ExternCommandArgs};
+
 use crate::util::sys;
 use crate::util::fs;
-use crate::util::selinux;
-
-use crate::ext_cmd::{ExternCommand, ExternCommandArgs};
+use crate::util::os_str::OsStrConcat;
 
 use super::patch::Patch;
 use super::patch_status::PatchStatus;
@@ -42,20 +45,20 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn set_patch_security_context(&self) -> std::io::Result<()> {
-        if selinux::get_enforce()? == 0 {
-            debug!("SELinux is permissive");
+        if SELinux::get_enforce()? != SELinuxStatus::Enforcing {
+            debug!("SELinux is disabled");
             return Ok(());
         }
         debug!("SELinux is enforcing");
 
         let patch      = self.patch;
         let patch_file = self.get_patch_file();
-        let sec_type   = selinux::get_security_context_type(patch_file.as_path())?;
+        let sec_type   = SELinux::get_security_context_type(patch_file.as_path())?;
         if sec_type != KPATCH_PATCH_SEC_TYPE {
-            debug!("Set patch \"{}\" security context type to \"{}\"",
+            debug!("Setting patch \"{}\" security context type to \"{}\"",
                 patch, KPATCH_PATCH_SEC_TYPE
             );
-            selinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
+            SELinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
         }
 
         Ok(())
@@ -113,16 +116,19 @@ impl<'a> KernelPatchAdapter<'a> {
 impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
         let kernel_version = sys::get_kernel_version()?;
-        let current_kernel = format!("kernel-{}", kernel_version);
-        debug!("Current kernel: \"{}\"", current_kernel);
 
-        let patch_target = self.patch.target.full_name();
+        let current_kernel = OsString::from("kernel-").concat(&kernel_version);
+        let patch_target   = self.patch.target.full_name();
+        debug!("Current kernel: \"{}\"", current_kernel.to_string_lossy());
         debug!("Patch target:   \"{}\"", patch_target);
 
-        if patch_target != current_kernel {
+        if patch_target.as_bytes() != current_kernel.as_bytes() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Current kernel \"{}\" is incompatible", kernel_version)
+                format!("Current kernel \"{}\" is incompatible with \"{}\"",
+                    current_kernel.to_string_lossy(),
+                    patch_target
+                )
             ));
         }
 
