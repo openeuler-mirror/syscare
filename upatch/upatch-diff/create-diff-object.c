@@ -210,6 +210,7 @@ static bool is_bundleable(struct symbol *sym)
     /* handle .text.unlikely. and then .text. */
     char *func_prefix[] = {
         ".text.unlikely.",
+        ".text.startup.", /* used for cold startup main function */
         ".text.hot.",
         ".text.",
         NULL,
@@ -338,7 +339,7 @@ static bool locals_match(struct running_elf *relf, int idx,
         }
 
         if (!found){
-            log_debug("can't find %s - in running_sym", running_sym->name);
+            log_debug("can't find %s - in running_sym \n", running_sym->name);
             return false;
         }
     }
@@ -368,7 +369,7 @@ static bool locals_match(struct running_elf *relf, int idx,
         }
 
         if (!found){
-            log_debug("can't find %s - in sym", sym->name);
+            log_debug("can't find %s - in sym \n", sym->name);
             return false;
         }
     }

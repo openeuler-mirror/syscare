@@ -187,7 +187,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
     /*
      * FIXME: data may not reach the data_end, since we have found
      *        all FDE for relocation entries, the only problem here is
-     *        we may miss the CIE, but CIE is in the beginning ?
+     *        we may miss the CIE, but CIE is always in the beginning ?
      */
 
     sec->data->d_buf = eh_frame;

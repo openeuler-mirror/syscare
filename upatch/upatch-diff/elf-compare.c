@@ -28,7 +28,7 @@
 #include "elf-compare.h"
 #include "elf-insn.h"
 
-static int compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin)
+static void compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin)
 {
     // compare bind and type info
     if (sym->sym.st_info != symtwin->sym.st_info ||
@@ -51,8 +51,6 @@ static int compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin)
     /*
      * For local symbols, we handle them based on their matching sections.
      */
-
-    return 0;
 }
 
 void upatch_compare_symbols(struct upatch_elf *uelf)
