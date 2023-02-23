@@ -3,12 +3,12 @@ use std::ffi::{OsString, OsStr};
 use crate::constants::*;
 
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::ext_cmd::ExternCommandArgs;
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
-use crate::util::os_str::OsStrConcat;
 use crate::util::{serde, fs};
+use crate::util::os_str::OsStrConcat;
+use crate::util::ext_cmd::ExternCommandArgs;
 
 use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;

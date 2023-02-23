@@ -8,7 +8,7 @@ use crate::util::fs;
 
 use crate::workdir::PackageBuildRoot;
 use crate::patch::{PatchType, PatchInfo};
-use crate::ext_cmd::ExternCommandArgs;
+use crate::util::ext_cmd::ExternCommandArgs;
 
 pub struct RpmHelper;
 

@@ -4,9 +4,9 @@ use std::path::PathBuf;
 use crate::constants::*;
 
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::ext_cmd::{ExternCommandArgs, ExternCommandEnvs};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
+use crate::util::ext_cmd::{ExternCommandArgs, ExternCommandEnvs};
 
 use super::kpatch_helper::KernelPatchHelper;
 use super::kpatch_builder_args::KernelPatchBuilderArguments;

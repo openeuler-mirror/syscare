@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use crate::constants::*;
-use crate::ext_cmd::ExternCommandArgs;
+use crate::util::ext_cmd::ExternCommandArgs;
 
 pub struct RpmExtractor;
 

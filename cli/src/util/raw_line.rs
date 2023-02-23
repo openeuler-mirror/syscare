@@ -2,11 +2,11 @@ use std::ffi::OsString;
 use std::io::BufRead;
 use std::os::unix::prelude::OsStringExt;
 
-pub struct RawLine<B> {
+pub struct RawLines<B> {
     buf: B,
 }
 
-impl <B: BufRead> Iterator for RawLine<B> {
+impl <B: BufRead> Iterator for RawLines<B> {
     type Item = std::io::Result<OsString>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -30,7 +30,7 @@ impl <B: BufRead> Iterator for RawLine<B> {
     }
 }
 
-impl<B: BufRead> From<B> for RawLine<B> {
+impl<B: BufRead> From<B> for RawLines<B> {
     fn from(buf: B) -> Self {
         Self { buf }
     }

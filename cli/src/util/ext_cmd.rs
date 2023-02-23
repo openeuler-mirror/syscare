@@ -6,7 +6,7 @@ use std::io::BufReader;
 
 use log::{trace, debug};
 
-use super::raw_line::RawLine;
+use super::raw_line::RawLines;
 
 pub struct ExternCommandArgs {
     args: Vec<OsString>,
@@ -124,13 +124,13 @@ impl ExternCommand<'_> {
         trace!("Process \"{}\" ({}) started", process_name, process_id);
 
         let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
-        for read_line in RawLine::from(BufReader::new(process_stdout)) {
+        for read_line in RawLines::from(BufReader::new(process_stdout)) {
             last_stdout = read_line?;
             trace!("{}", last_stdout.to_string_lossy());
         }
 
         let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
-        for read_line in RawLine::from(BufReader::new(process_stderr)) {
+        for read_line in RawLines::from(BufReader::new(process_stderr)) {
             last_stderr = read_line?;
             trace!("{}", last_stderr.to_string_lossy());
         }

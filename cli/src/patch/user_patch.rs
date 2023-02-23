@@ -1,7 +1,7 @@
 use std::ffi::{OsString, OsStr};
 use std::path::{Path, PathBuf};
 
-use crate::ext_cmd::{ExternCommand, ExternCommandArgs};
+use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::patch::Patch;
 use super::patch_status::PatchStatus;

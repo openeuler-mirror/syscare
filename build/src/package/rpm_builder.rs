@@ -2,12 +2,12 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use crate::constants::*;
-use crate::util::{fs, serde};
-use crate::util::os_str::OsStrConcat;
 
 use crate::patch::PatchInfo;
 use crate::workdir::PackageBuildRoot;
-use crate::ext_cmd::ExternCommandArgs;
+use crate::util::{fs, serde};
+use crate::util::os_str::OsStrConcat;
+use crate::util::ext_cmd::ExternCommandArgs;
 
 use super::rpm_spec_generator::RpmSpecGenerator;
 
