@@ -1,6 +1,8 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
-use std::fs::{Metadata, Permissions, ReadDir, File};
+use std::fs::{Metadata, Permissions, ReadDir, File, FileType};
+
+use super::os_str::OsStrContains;
 
 trait RewriteError {
     fn rewrite_err(self, err_msg: String) -> Self;
@@ -213,140 +215,228 @@ pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
         .unwrap_or_default()
 }
 
-pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut dir_list = Vec::new();
+pub fn traverse<P, F>(directory: P, recursive: bool, predicate: F) -> std::io::Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+    F: Fn(&FileType, &Path) -> bool + Copy
+{
+    let mut results = Vec::new();
+    let mut subdirs = Vec::new();
 
     for dir_entry in self::read_dir(directory)? {
         if let Ok(entry) = dir_entry {
-            let path = entry.path();
+            let file_path = entry.path();
+            let file_type = self::symlink_metadata(&file_path)?.file_type();
 
-            if !self::symlink_metadata(&path)?.file_type().is_dir() {
-                continue;
+            if predicate(&file_type, &file_path) {
+                results.push(self::canonicalize(&file_path)?);
             }
-            dir_list.push(path);
+            if recursive && file_type.is_dir() {
+                subdirs.push(file_path);
+            }
         }
     }
 
-    if recursive {
-        for dir in dir_list.clone() {
-            dir_list.append(&mut self::list_all_dirs(dir, recursive)?);
-        }
+    for subdir in subdirs {
+        results.append(&mut self::traverse(subdir, recursive, predicate)?);
     }
 
-    Ok(dir_list)
+    Ok(results)
 }
 
-pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut file_list = Vec::new();
-    let mut dir_list = Vec::new();
-
-    for dir_entry in self::read_dir(directory)? {
-        if let Ok(entry) = dir_entry {
-            let path = entry.path();
-
-            let path_type = self::symlink_metadata(&path)?.file_type();
-            if path_type.is_symlink() {
-                continue;
-            }
-            else if path_type.is_file() {
-                file_list.push(path);
-            }
-            else if path_type.is_dir() {
-                dir_list.push(path);
-            }
-        }
-    }
-
-    if recursive {
-        for dir in dir_list.as_slice() {
-            file_list.append(&mut self::list_all_files(dir, recursive)?);
-        }
-    }
-
-    Ok(file_list)
+pub fn list_all_dirs<P>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+{
+    self::traverse(directory, recursive, |file_type, _| file_type.is_dir())
 }
 
-pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
-    let mut file_list = Vec::new();
-    let mut dir_list = Vec::new();
+pub fn list_all_files<P>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+{
+    self::traverse(directory, recursive, |file_type, _| file_type.is_file())
+}
+
+pub fn list_all_files_ext<P, S>(directory: P, ext: S, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
+{
+    self::traverse(directory, recursive,
+        |file_type, file_path| {
+            if !file_type.is_file() {
+                return false;
+            }
+            return file_path.extension()
+                .map(|s| s == ext.as_ref())
+                .unwrap_or(false);
+        }
+    )
+}
+
+pub fn find<P, F>(directory: P, recursive: bool, predicate: F)  -> std::io::Result<Option<PathBuf>>
+where
+    P: AsRef<Path>,
+    F: Fn(&FileType, &Path) -> bool + Copy
+{
+    let mut subdirs = Vec::new();
 
     for dir_entry in self::read_dir(directory)? {
         if let Ok(entry) = dir_entry {
-            let path = entry.path();
+            let file_path = entry.path();
+            let file_type = self::symlink_metadata(&file_path)?.file_type();
 
-            let path_type = self::symlink_metadata(&path)?.file_type();
-            if path_type.is_symlink() {
-                continue;
+            if predicate(&file_type, &file_path) {
+                return Ok(Some(self::canonicalize(&file_path)?));
             }
-            else if path_type.is_file() {
-                if file_ext == path.extension().unwrap_or_default() {
-                    file_list.push(path);
+            if recursive && file_type.is_dir() {
+                subdirs.push(file_path);
+            }
+        }
+    }
+
+    for subdir in subdirs {
+        if let Some(path) = self::find(subdir, recursive, predicate)? {
+            return Ok(Some(path));
+        }
+    }
+
+    Ok(None)
+}
+
+pub fn find_dir<P, S>(directory: P, name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+where
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
+{
+    let result = self::find(&directory, recursive,
+        |file_type, file_path| -> bool {
+            if !file_type.is_dir() {
+                return false;
+            }
+            if let Some(file_name) = file_path.file_name() {
+                if file_name == name.as_ref() {
+                    return true;
+                }
+                else if fuzz && file_name.contains(&name) {
+                    return true;
                 }
             }
-            else if path_type.is_dir() {
-                dir_list.push(path);
-            }
+            return false;
         }
-    }
+    )?;
 
-    if recursive {
-        for dir in dir_list.as_slice() {
-            file_list.append(
-                &mut self::list_all_files_ext(dir, file_ext, recursive)?
-            );
-        }
-    }
-
-    Ok(file_list)
+    result.ok_or(
+        std::io::Error::new(
+	        std::io::ErrorKind::NotFound,
+	        format!("Cannot find directory \"{}\" in \"{}\"",
+	            name.as_ref().to_string_lossy(),
+	            directory.as_ref().display()
+	        )
+       )
+    )
 }
 
-pub fn find_dir<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
-    for path in self::list_all_dirs(&directory, recursive)? {
-        if let Some(dir_name) = path.file_name() {
-            if dir_name == name {
-                return Ok(self::canonicalize(path)?);
+pub fn find_file<P, S>(directory: P, name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+where
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
+{
+    let result = self::find(&directory, recursive,
+        |file_type, file_path| -> bool {
+            if !file_type.is_file() {
+                return false;
             }
-            // FIXME: OsStr::to_string_lossy() may loss non UTF-8 chars
-            else if fuzz && dir_name.to_string_lossy().contains(name) {
-                return Ok(self::canonicalize(path)?);
+            if let Some(file_name) = file_path.file_name() {
+                if file_name == name.as_ref() {
+                    return true;
+                }
+                else if fuzz && file_name.contains(&name) {
+                    return true;
+                }
             }
+            return false;
         }
-    }
+    )?;
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
-    ))
+    result.ok_or(
+        std::io::Error::new(
+	        std::io::ErrorKind::NotFound,
+	        format!("Cannot find file \"{}\" in \"{}\"",
+	            name.as_ref().to_string_lossy(),
+	            directory.as_ref().display()
+	        )
+       )
+    )
 }
 
-pub fn find_file<P: AsRef<Path>>(directory: P, name: &str, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf> {
-    for path in self::list_all_files(&directory, recursive)? {
-        if let Some(file_name) = path.file_name() {
-            if file_name == name {
-                return Ok(self::canonicalize(path)?);
+pub fn find_file_ext<P, S>(directory: P, ext: S, recursive: bool) -> std::io::Result<PathBuf>
+where
+    P: AsRef<Path>,
+    S: AsRef<OsStr>,
+{
+    let result = self::find(&directory, recursive,
+        |file_type: &FileType, file_path: &Path| -> bool {
+            if !file_type.is_file() {
+                return false;
             }
-            // FIXME: OsStr::to_string_lossy() may loss non UTF-8 chars
-            else if fuzz && file_name.to_string_lossy().contains(name) {
-                return Ok(self::canonicalize(path)?);
+            if let Some(file_name) = file_path.extension() {
+                if file_name == ext.as_ref() {
+                    return true;
+                }
             }
+            return false;
         }
-    }
+    )?;
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("Cannot find file \"{}\" in \"{}\"", name, directory.as_ref().display())
-    ))
+    result.ok_or(
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Cannot find \"*.{}\" in \"{}\"",
+                ext.as_ref().to_string_lossy(),
+                directory.as_ref().display()
+            )
+       )
+    )
 }
 
-pub fn find_file_ext<P: AsRef<Path>>(directory: P, ext: &str, recursive: bool) -> std::io::Result<PathBuf> {
-    for file in self::list_all_files_ext(&directory, ext, recursive)? {
-        return Ok(self::canonicalize(file)?);
-    }
+pub fn find_file_with_ext<P, N, E>(directory: P, name: N, ext: E, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+where
+    P: AsRef<Path>,
+    N: AsRef<OsStr>,
+    E: AsRef<OsStr>,
+{
+    let result = self::find(&directory, recursive,
+        |file_type, file_path| -> bool {
+            if !file_type.is_file() {
+                return false;
+            }
+            if let (Some(file_name), Some(file_ext)) = (file_path.file_name(), file_path.extension()) {
+                if file_ext != ext.as_ref() {
+                    return false;
+                }
+                if file_name == name.as_ref() {
+                    return true;
+                }
+                else if fuzz && file_name.contains(&name) {
+                    return true;
+                }
+            }
+            return false;
+        }
+    )?;
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!("Cannot find '*.{}' file in \"{}\"", ext, directory.as_ref().display())
-    ))
+    result.ok_or(
+        std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Cannot find \"{}.{}\" in \"{}\"",
+                name.as_ref().to_string_lossy(),
+                ext.as_ref().to_string_lossy(),
+                directory.as_ref().display()
+            )
+       )
+    )
 }
 
 pub fn copy_dir_all<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> std::io::Result<()> {
