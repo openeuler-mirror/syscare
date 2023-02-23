@@ -87,7 +87,7 @@ impl<'a> KernelPatchAdapter<'a> {
                     _ => {
                         return Err(std::io::Error::new(
                             std::io::ErrorKind::InvalidData,
-                            format!("Status \"{}\" is invalid", status)
+                            format!("Patch status \"{}\" is invalid", status)
                         ));
                     }
                 };
@@ -125,8 +125,8 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
         if patch_target.as_bytes() != current_kernel.as_bytes() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Current kernel \"{}\" is incompatible with \"{}\"",
-                    current_kernel.to_string_lossy(),
+                format!("Current kernel \"{}\" is incompatible with patch target \"{}\"",
+                    kernel_version.to_string_lossy(),
                     patch_target
                 )
             ));

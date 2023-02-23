@@ -4,7 +4,7 @@ use std::path::Path;
 
 use std::os::unix::prelude::OsStrExt;
 
-use log::trace;
+use log::{trace, error};
 
 use crate::util::os_str::OsStrSplit;
 use crate::util::fs;
@@ -50,15 +50,17 @@ pub struct SELinux;
 impl SELinux {
     pub fn set_enforce(value: SELinuxStatus) -> std::io::Result<()> {
         if (value != SELinuxStatus::Permissive) || (value != SELinuxStatus::Enforcing) {
+            error!("value \"{}\" is invalid", value);
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Set enforce failed, value \"{}\" is invalid", value)
+                format!("Set enforce failed")
             ));
         }
         fs::write(SELINUX_ENFORCE_FILE, value.to_string()).map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Set enforce failed, {}", e)
+                format!("Set enforce failed")
             )
         })
     }
@@ -72,22 +74,22 @@ impl SELinux {
                 Ok(SELinuxStatus::Disabled)
             },
             Err(e) => {
+                error!("{}", e);
                 Err(std::io::Error::new(
                     e.kind(),
-                    format!("Get enforce failed, {}", e)
+                    format!("Get enforce failed")
                 ))
             }
         }
     }
 
-    pub fn read_security_context<P>(file_path: P) -> std::io::Result<OsString>
+    pub fn read_security_context<P>(path: P) -> std::io::Result<OsString>
     where
         P: AsRef<Path>
     {
         let mut buf = [0u8; libc::PATH_MAX as usize];
 
-        let file = fs::canonicalize(file_path)?;
-        let sec_cxt_path  = CString::new(file.as_os_str().as_bytes()).unwrap();
+        let sec_cxt_path  = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         let sec_cxt_name  = CString::new(SELINUX_SECURITY_CONTEXT).unwrap();
         let sec_cxt_value = buf.as_mut_ptr();
         let sec_cxt_size  = libc::PATH_MAX as usize;
@@ -100,7 +102,14 @@ impl SELinux {
                 sec_cxt_size
             );
             if len <= 0 {
-                return Err(std::io::Error::last_os_error());
+                let e = std::io::Error::last_os_error();
+                return Err(std::io::Error::new(
+                    e.kind(),
+                    format!("Cannot read security context from \"{}\", {}",
+                        path.as_ref().display(),
+                        e.to_string().to_lowercase()
+                    )
+                ));
             }
             OsStr::from_bytes(
                 CStr::from_bytes_with_nul(
@@ -113,13 +122,12 @@ impl SELinux {
         Ok(result)
     }
 
-    pub fn write_security_context<P, S>(file_path: P, scontext: S) -> std::io::Result<()>
+    pub fn write_security_context<P, S>(path: P, scontext: S) -> std::io::Result<()>
     where
         P: AsRef<Path>,
         S: AsRef<OsStr>,
     {
-        let file = fs::canonicalize(file_path)?;
-        let sec_cxt_path  = CString::new(file.as_os_str().as_bytes()).unwrap();
+        let sec_cxt_path  = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
         let sec_cxt_name  = CString::new(SELINUX_SECURITY_CONTEXT).unwrap();
         let sec_cxt_value = CString::new(scontext.as_ref().as_bytes()).unwrap();
         let sec_cxt_size  = scontext.as_ref().len();
@@ -134,7 +142,14 @@ impl SELinux {
                 0
             );
             if ret != 0 {
-                return Err(std::io::Error::last_os_error());
+                let e = std::io::Error::last_os_error();
+                return Err(std::io::Error::new(
+                    e.kind(),
+                    format!("Cannot write security context to \"{}\", {}",
+                        path.as_ref().display(),
+                        e.to_string().to_lowercase()
+                    )
+                ));
             }
         }
 

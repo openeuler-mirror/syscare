@@ -115,7 +115,7 @@ impl ExternCommand<'_> {
             .map_err(|e| {
                 std::io::Error::new(
                     e.kind(),
-                    format!("Start process \"{}\" failed, {}", self.path, e)
+                    format!("Start process \"{}\" failed, {}", self.path, e.to_string().to_lowercase())
                 )
             })?;
 

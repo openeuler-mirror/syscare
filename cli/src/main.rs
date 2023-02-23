@@ -10,7 +10,7 @@ fn main() {
             exit(exit_code);
         },
         Err(e) => {
-            error!("{}: {}", SyscareCLI::name(), e);
+            error!("{}", e);
             exit(-1);
         }
     }

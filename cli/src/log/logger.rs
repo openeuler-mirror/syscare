@@ -13,27 +13,28 @@ pub struct Logger;
 
 impl Logger {
     fn init_console_log(max_level: LevelFilter) -> Vec<Appender> {
-        const CONSOLE_LOG_PATTERN:  &str = "{m}{n}";
-        const STDOUT_APPENDER_NAME: &str = "stdout";
-        const STDERR_APPENDER_NAME: &str = "stderr";
+        const STD_LOG_PATTERN: &str = "{m}{n}";
+        const ERR_LOG_PATTERN: &str = "{l}: {m}{n}";
+        const STDOUT_APPENDER: &str = "stdout";
+        const STDERR_APPENDER: &str = "stderr";
 
         vec![
             Appender::builder()
                 .filter(Box::new(LogLevelFilter::new(LevelFilter::Info, max_level)))
                 .build(
-                    STDOUT_APPENDER_NAME,
+                    STDOUT_APPENDER,
                     Box::new(ConsoleAppender::builder()
                         .target(Target::Stdout)
-                        .encoder(Box::new(PatternEncoder::new(CONSOLE_LOG_PATTERN)))
+                        .encoder(Box::new(PatternEncoder::new(STD_LOG_PATTERN)))
                         .build())
                 ),
             Appender::builder()
                 .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, LevelFilter::Warn)))
                 .build(
-                    STDERR_APPENDER_NAME,
+                    STDERR_APPENDER,
                     Box::new(ConsoleAppender::builder()
                         .target(Target::Stderr)
-                        .encoder(Box::new(PatternEncoder::new(CONSOLE_LOG_PATTERN)))
+                        .encoder(Box::new(PatternEncoder::new(ERR_LOG_PATTERN)))
                         .build())
                 )
         ]

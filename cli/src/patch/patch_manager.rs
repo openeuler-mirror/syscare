@@ -1,6 +1,6 @@
 use std::collections::VecDeque;
 
-use log::{debug, warn, trace};
+use log::{debug, error};
 
 use crate::util::{fs, serde};
 
@@ -39,8 +39,8 @@ impl PatchManager {
                         self.patch_list.push(patch);
                     },
                     Err(e) => {
-                        trace!("{}", e);
-                        debug!("Cannot read patch info from \"{}\"", patch_root.to_string_lossy());
+                        error!("{}", e);
+                        error!("Cannot read patch info from \"{}\"", patch_root.to_string_lossy());
                     }
                 }
             }
@@ -87,8 +87,8 @@ impl PatchManager {
             },
             std::cmp::Ordering::Greater => {
                 Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Found multiple patch named \"{}\", please use 'pkg_name/patch_name' instead", pattern)
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Found multiple patch named \"{}\", please use 'pkg_name/patch_name' instead", pattern)
                 ))
             },
         }
@@ -172,7 +172,7 @@ impl PatchManager {
         for (patch_name, status) in saved_patch_status {
             match self.find_patch_mut(&patch_name) {
                 Ok(patch) => patch.restore(status)?,
-                Err(e)    => warn!("{}", e)
+                Err(e)    => error!("{}", e)
             }
         }
 

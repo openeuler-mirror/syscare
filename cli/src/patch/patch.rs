@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use log::debug;
+use log::{debug, error};
 use lazy_static::lazy_static;
 
 use crate::util::serde;
@@ -62,16 +62,18 @@ impl Patch {
         debug!("Applying patch \"{}\"", self);
 
         self.get_adapter().check_compatibility().map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Check patch \"{}\" failed, {}", self, e)
+                format!("Patch \"{}\" check failed", self)
             )
         })?;
 
         self.get_adapter().apply().map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" apply failed, {}", self, e)
+                format!("Patch \"{}\" apply failed", self)
             )
         })?;
 
@@ -83,9 +85,10 @@ impl Patch {
         debug!("Removing patch \"{}\"", self);
 
         self.get_adapter().remove().map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" remove failed, {}", self, e)
+                format!("Patch \"{}\" remove failed", self)
             )
         })?;
 
@@ -97,9 +100,10 @@ impl Patch {
         debug!("Activing patch \"{}\"", self);
 
         self.get_adapter().active().map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" active failed, {}", self, e)
+                format!("Patch \"{}\" active failed", self)
             )
         })?;
 
@@ -111,9 +115,10 @@ impl Patch {
         debug!("Deactiving patch \"{}\"", self);
 
         self.get_adapter().deactive().map_err(|e| {
+            error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" deactive failed, {}", self, e)
+                format!("Patch \"{}\" deactive failed", self)
             )
         })?;
 

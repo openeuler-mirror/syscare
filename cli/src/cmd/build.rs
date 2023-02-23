@@ -29,7 +29,7 @@ impl CommandExecutor for BuildCommandExecutor {
                 },
                 _ => std::io::Error::new(
                     e.kind(),
-                    format!("Start process \"{}\" failed, {}", SYSCARE_BUILD_PATH, e.to_string())
+                    format!("Start process \"{}\" failed, {}", SYSCARE_BUILD_PATH, e)
                 )
             }
         })
