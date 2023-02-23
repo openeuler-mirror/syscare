@@ -7,11 +7,9 @@ use super::Result;
 use super::Error;
 
 const SUPPORT_DIFF: &str = "upatch-diff";
-const SUPPORT_TOOL: &str = "upatch-tool";
 const SUPPORT_NOTES: &str = "upatch-notes";
 pub struct Tool {
     diff: PathBuf,
-    tool: PathBuf,
     notes: PathBuf,
 }
 
@@ -19,14 +17,12 @@ impl Tool {
     pub fn new() -> Self {
         Self {
             diff: PathBuf::new(),
-            tool: PathBuf::new(),
             notes: PathBuf::new(),
         }
     }
 
     pub fn check(&mut self) -> std::io::Result<()> {
         self.diff = search_tool(SUPPORT_DIFF)?;
-        self.tool = search_tool(SUPPORT_TOOL)?;
         self.notes = search_tool(SUPPORT_NOTES)?;
         Ok(())
     }
@@ -50,19 +46,6 @@ impl Tool {
         let output = ExternCommand::new(&self.diff).execvp(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), log_file.as_ref().display())))
-        };
-        Ok(())
-    }
-
-    pub fn upatch_tool<P, Q>(&self, patch: P, debug_info: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let args_list = ExternCommandArgs::new().args(["resolve", "-b"]).arg(debug_info.as_ref()).arg("-p").arg(patch.as_ref());
-        let output = ExternCommand::new(&self.tool).execvp(args_list)?;
-        if !output.exit_status().success() {
-            return Err(Error::TOOL(format!("{}: {}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }

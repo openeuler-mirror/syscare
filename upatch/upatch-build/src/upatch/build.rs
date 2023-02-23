@@ -22,6 +22,7 @@ use super::OutputConfig;
 use super::Tool;
 use super::Result;
 use super::Error;
+use super::resolve;
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -208,7 +209,7 @@ impl UpatchBuild {
 
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
-        self.tool.upatch_tool(&output_file, &debug_info)?;
+        resolve(&debug_info, &output_file)?;
         output_config.push(&binary);
         Ok(())
     }
