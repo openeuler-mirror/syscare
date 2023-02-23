@@ -22,7 +22,7 @@ use super::OutputConfig;
 use super::Tool;
 use super::Result;
 use super::Error;
-use super::resolve;
+use super::{resolve, create_note};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -204,7 +204,7 @@ impl UpatchBuild {
 
         // build notes.o
         let notes = diff_dir.join("notes.o");
-        self.tool.upatch_notes(&notes, &debug_info)?;
+        create_note(&debug_info, &notes)?;
         link_args.push(notes);
 
         // ld patchs

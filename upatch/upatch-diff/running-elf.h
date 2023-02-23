@@ -29,7 +29,6 @@
 #include <errno.h>
 #include <gelf.h>
 
-#include "list.h"
 #include "upatch-elf.h"
 
 struct symbol;
@@ -51,7 +50,6 @@ struct object_symbol {
 struct running_elf {
     int obj_nr;
     struct object_symbol *obj_syms;
-    struct list_head sections;
     int fd;
     Elf *elf;
 };

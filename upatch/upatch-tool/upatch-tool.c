@@ -22,11 +22,10 @@
 
 #include "upatch-manage.h"
 #include "upatch-ioctl.h"
-#include "upatch-resolve.h"
 
 #define COMMAND_SIZE 9
 char* command[COMMAND_SIZE] =
-    {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info", "resolve"};
+    {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info"};
 enum Command {
     DEFAULT,
     ACTIVE,
@@ -36,7 +35,6 @@ enum Command {
     APPLY,
     REMOVE,
     INFO,
-    RESOLVE,
 };
 
 struct arguments {
@@ -54,7 +52,6 @@ static struct argp_option options[] = {
         {"cmd", 0, "uninstall", 0, "Uninstall the patch (require binary or patch)"},
         {"cmd", 0, "apply", 0, "Equivalent to: install and active"},
         {"cmd", 0, "remove", 0, "Equivalent to: deactive and uninstall"},
-        {"cmd", 0, "resolve", 0, "Resolve the patch"},
         {"cmd", 0, "info", 0, "Show status of the patch (require binary or patch)"},
         {NULL}
 };
@@ -76,7 +73,6 @@ static error_t check_opt(struct argp_state *state)
     switch (arguments->cmd) {
         case APPLY:
         case INSTALL:
-        case RESOLVE:
             if (arguments->upatch.binary == NULL || arguments->upatch.patch == NULL) {
                 argp_usage(state);
                 return ARGP_ERR_UNKNOWN;
@@ -141,9 +137,6 @@ void __tool_exit(const char *str)
 void prepare_env(struct arguments *arguments)
 {
     char path[PATH_MAX];
-
-    if (arguments->cmd == RESOLVE)
-        return;
 
     snprintf(path, PATH_MAX, "/dev/%s", UPATCH_DEV_NAME);
     upatch_fd = open(path, O_RDWR);
@@ -261,11 +254,6 @@ int main(int argc, char*argv[])
             break;
         case INFO:
             info(file);
-            break;
-        case RESOLVE:
-            ret = resolve_patch(arguments.upatch.binary, arguments.upatch.patch);
-            if (ret)
-                printf("resolv patch failed - %d \n", ret);
             break;
         default:
             fprintf(stderr, "unsupported command\n");
