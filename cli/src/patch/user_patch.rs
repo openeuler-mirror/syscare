@@ -28,11 +28,7 @@ impl<'a> UserPatchAdapter<'a> {
     }
 
     fn get_patch_file<S: AsRef<OsStr>>(&self, elf_name: S) -> PathBuf {
-        let mut patch_file_name = OsString::from(&self.patch.short_name());
-        patch_file_name.push("-");
-        patch_file_name.push(elf_name);
-
-        self.patch.root_dir.join(patch_file_name)
+        self.patch.root_dir.join(elf_name.as_ref())
     }
 
     fn do_action<P: AsRef<Path>>(&self, action: &str, patch: P) -> std::io::Result<OsString> {

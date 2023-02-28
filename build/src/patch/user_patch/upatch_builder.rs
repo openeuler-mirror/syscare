@@ -24,8 +24,6 @@ impl<'a> UserPatchBuilder<'a> {
 
     fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
-            .arg("--name")
-            .arg(&args.name)
             .arg("--work-dir")
             .arg(&args.work_dir)
             .arg("--debug-source")
@@ -84,7 +82,6 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .concat(&spec_file);
 
         let builder_args = UserPatchBuilderArguments {
-            name:                patch_info.name.to_owned(),
             work_dir:            patch_build_root.to_owned(),
             debug_source:        patch_source_dir,
             debuginfo:           patch_debuginfo,
