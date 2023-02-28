@@ -129,6 +129,14 @@ impl PatchInfo {
             patches
         })
     }
+
+    pub fn short_name(&self) -> String {
+        format!("{}-{}-{}", self.name, self.version, self.release)
+    }
+
+    pub fn full_name(&self) -> String {
+        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+    }
 }
 
 impl PatchInfo {

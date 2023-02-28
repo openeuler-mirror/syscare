@@ -60,7 +60,11 @@ impl RpmBuilder {
         )?.check_exit_code()
     }
 
-    pub fn build_source_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
+    pub fn build_source_package<P, Q>(&self, patch_info: &PatchInfo, spec_file: P, output_dir: Q) -> std::io::Result<()>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
         RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
@@ -69,7 +73,20 @@ impl RpmBuilder {
                 .arg(spec_file.as_ref())
         )?.check_exit_code()?;
 
-        fs::copy_dir_all(&self.build_root.srpms, &output_dir)?;
+        let src_pkg_file = fs::find_file_ext(
+            &self.build_root.srpms,
+            PKG_FILE_EXTENSION,
+            false
+        )?;
+
+        let dst_pkg_name = format!("{}-{}.src.{}",
+            patch_info.target.short_name(),
+            patch_info.full_name(),
+            PKG_FILE_EXTENSION
+        );
+        let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);
+
+        fs::copy(src_pkg_file, dst_pkg_file)?;
 
         Ok(())
     }

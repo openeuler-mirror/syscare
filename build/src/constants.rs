@@ -40,7 +40,6 @@ pub const PKG_FILE_EXTENSION:          &str = "rpm";
 pub const PKG_FLAG_NONE:               &str = "(none)";
 pub const PKG_BUILD_ROOT:              &str = "rpmbuild";
 pub const PKG_SPEC_EXTENSION:          &str = "spec";
-pub const PKG_SPEC_TAG_RELEASE:        &str = "Release:";
 pub const PKG_SPEC_TAG_SOURCE:         &str = "Source";
 pub const PKG_SPEC_TAG_BUILD_REQUIRES: &str = "BuildRequires:";
 pub const PKG_PATCH_PKG_PREFIX:        &str = "patch";

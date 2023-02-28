@@ -11,6 +11,8 @@ pub struct KernelPatchHelper;
 
 impl KernelPatchHelper {
     pub fn generate_defconfig<P: AsRef<Path>>(source_dir: P) -> std::io::Result<()> {
+        debug!("Generating kernel default config");
+
         MAKE.execvp(ExternCommandArgs::new()
             .arg("-C")
             .arg(source_dir.as_ref())
