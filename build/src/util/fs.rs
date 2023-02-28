@@ -84,7 +84,7 @@ pub fn rename<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result
 #[inline]
 pub fn copy<P: AsRef<Path>, Q: AsRef<Path>>(from: P, to: Q) -> std::io::Result<u64> {
     std::fs::copy(&from, &to).rewrite_err(
-        format!("Cannot rename \"{}\" to \"{}\"",
+        format!("Cannot copy \"{}\" to \"{}\"",
             from.as_ref().display(),
             to.as_ref().display()
         )
@@ -450,4 +450,8 @@ pub fn copy_dir_all<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> s
     }
 
     Ok(())
+}
+
+pub fn sync() {
+    unsafe { libc::sync() }
 }

@@ -1,8 +1,9 @@
 use std::ffi::{OsStr, OsString};
 use std::collections::HashMap;
 
+use std::io::{BufReader, Read};
 use std::process::{Command, Stdio};
-use std::io::BufReader;
+use std::thread::JoinHandle;
 
 use log::{trace, debug};
 
@@ -103,12 +104,27 @@ pub struct ExternCommand<'a> {
 
 impl ExternCommand<'_> {
     #[inline(always)]
-    fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        let mut last_stdout = OsString::new();
-        let mut last_stderr = OsString::new();
+    fn create_stdio_thread<R>(stdio: R) -> JoinHandle<std::io::Result<OsString>>
+    where
+        R: Read + Send + Sync + 'static
+    {
+        std::thread::spawn(move || -> std::io::Result<OsString> {
+            let mut last_line = OsString::new();
 
+            for read_line in RawLines::from(BufReader::new(stdio)) {
+                last_line = read_line?;
+                trace!("{}", last_line.to_string_lossy());
+            }
+
+            Ok(last_line)
+        })
+    }
+
+    #[inline(always)]
+    fn execute_command(&self, mut command: Command) -> std::io::Result<ExternCommandExitStatus> {
         debug!("Executing {:?}", command);
-        let mut child_process = command
+
+        let mut child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -119,29 +135,23 @@ impl ExternCommand<'_> {
                 )
             })?;
 
-        let process_name = self.path;
-        let process_id = child_process.id();
-        trace!("Process \"{}\" ({}) started", process_name, process_id);
+        let child_name = self.path.to_owned();
+        let child_pid  = child.id();
+        trace!("Process \"{}\" ({}) started", child_name, child_pid);
 
-        let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
-        for read_line in RawLines::from(BufReader::new(process_stdout)) {
-            last_stdout = read_line?;
-            trace!("{}", last_stdout.to_string_lossy());
-        }
+        let stdout_thread = child.stdout.take().map(Self::create_stdio_thread).expect("Pipe stdout failed");
+        let stderr_thread = child.stderr.take().map(Self::create_stdio_thread).expect("Pipe stderr failed");
 
-        let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
-        for read_line in RawLines::from(BufReader::new(process_stderr)) {
-            last_stderr = read_line?;
-            trace!("{}", last_stderr.to_string_lossy());
-        }
-
-        let exit_code = child_process.wait()?.code().expect("Get process exit code failed");
-        trace!("Process \"{}\" ({}) exited, exit_code={}", process_name, process_id, exit_code);
+        let child_retval = child.wait()?.code().expect("Get process exit code failed");
+        let child_stdout = stdout_thread.join().expect("Join stdout thread failed")?;
+        let child_stderr = stderr_thread.join().expect("Join stderr thread failed")?;
+        trace!("Process \"{}\" ({}) exited, exit_code={}", child_name, child_pid, child_retval);
 
         Ok(ExternCommandExitStatus {
-            exit_code,
-            stdout: last_stdout,
-            stderr: last_stderr,
+            cmd_name:  child_name,
+            exit_code: child_retval,
+            stdout:    child_stdout,
+            stderr:    child_stderr,
         })
     }
 }
@@ -155,7 +165,7 @@ impl<'a> ExternCommand<'a> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
 
-        self.execute_command(&mut command)
+        self.execute_command(command)
     }
 
     pub fn execve(&self, args: ExternCommandArgs, vars: ExternCommandEnvs) -> std::io::Result<ExternCommandExitStatus>
@@ -164,7 +174,7 @@ impl<'a> ExternCommand<'a> {
         command.args(args.into_iter());
         command.envs(vars.into_iter());
 
-        self.execute_command(&mut command)
+        self.execute_command(command)
     }
 }
 
@@ -176,9 +186,10 @@ impl std::fmt::Display for ExternCommand<'_> {
 
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
-    exit_code: i32,
-    stdout:    OsString,
-    stderr:    OsString,
+    cmd_name: String,
+    exit_code:    i32,
+    stdout:       OsString,
+    stderr:       OsString,
 }
 
 impl ExternCommandExitStatus {
@@ -192,5 +203,20 @@ impl ExternCommandExitStatus {
 
     pub fn stderr(&self) -> &OsStr {
         &self.stderr
+    }
+
+    pub fn check_exit_code(&self) -> std::io::Result<()> {
+        if self.exit_code != 0 {
+            debug!("{}", self.stderr.to_string_lossy());
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Process \"{}\" exited unsuccessfully, exit_code={}",
+                    self.cmd_name,
+                    self.exit_code
+                ),
+            ));
+        }
+
+        Ok(())
     }
 }

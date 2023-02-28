@@ -9,6 +9,7 @@ build       = "build.rs"
 
 [dependencies]
 lazy_static = { version = "1.4.0" }
+libc        = { version = "0.2.139" }
 log         = { version = "0.4.17" }
 log4rs      = { version = "1.2.0" }
 regex       = { version = "1" }
