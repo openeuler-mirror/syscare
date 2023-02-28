@@ -1,5 +1,7 @@
 use clap::Subcommand;
 
+use crate::util::sys;
+
 #[derive(Debug)]
 #[derive(Subcommand)]
 pub enum Command {
@@ -44,8 +46,24 @@ pub enum Command {
     },
     /// Restore all patch status from record
     Restore,
+    /// Reboot the system
+    FastReboot {
+        /// Target kernel version
+        #[arg(short, long, default_value=sys::kernel_version())]
+        kernel_version: String,
+        #[arg(short, long, default_value="false")]
+        /// Skip all checks, force reboot
+        force: bool,
+    },
+}
+
+pub enum CommandArguments {
+    None,
+    CommandLineArguments(Vec<String>),
+    PatchOperationArguments(String),
+    RebootArguments(String, bool),
 }
 
 pub trait CommandExecutor {
-    fn invoke(&self, args: &[String]) -> std::io::Result<i32>;
+    fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32>;
 }

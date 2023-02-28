@@ -1,15 +1,14 @@
-use log::{info, debug};
+use log::info;
 
 use crate::patch::PatchManager;
 
-use super::CommandExecutor;
+use super::{CommandExecutor, CommandArguments};
 
 pub struct ListCommandExecutor;
 
 impl CommandExecutor for ListCommandExecutor {
-    fn invoke(&self, _args: &[String]) -> std::io::Result<i32> {
+    fn invoke(&self, _args: &CommandArguments) -> std::io::Result<i32> {
         let patch_manager = PatchManager::new()?;
-        debug!("Handle Command \"list\"");
 
         info!("{:<35} {:<35} {:<12}", "PackageName", "PatchName", "PatchStatus");
         for patch in patch_manager.get_patch_list() {
@@ -20,7 +19,6 @@ impl CommandExecutor for ListCommandExecutor {
             );
         }
 
-        debug!("Command \"list\" done");
         Ok(0)
     }
 }

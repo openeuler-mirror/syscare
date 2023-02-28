@@ -1,19 +1,13 @@
-use log::debug;
-
 use crate::patch::PatchManager;
 
-use super::CommandExecutor;
+use super::{CommandExecutor, CommandArguments};
 
 pub struct RestoreCommandExecutor;
 
 impl CommandExecutor for RestoreCommandExecutor {
-    fn invoke(&self, _args: &[String]) -> std::io::Result<i32> {
-        let mut patch_manager = PatchManager::new()?;
-        debug!("Handle Command \"restore\"");
+    fn invoke(&self, _args: &CommandArguments) -> std::io::Result<i32> {
+        PatchManager::new()?.restore_all_patch_status()?;
 
-        patch_manager.restore_all_patch_status()?;
-
-        debug!("Command \"restore\" done");
         Ok(0)
     }
 }

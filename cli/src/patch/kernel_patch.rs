@@ -115,7 +115,7 @@ impl<'a> KernelPatchAdapter<'a> {
 
 impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        let kernel_version = sys::get_kernel_version()?;
+        let kernel_version = sys::kernel_version();
 
         let current_kernel = OsString::from("kernel-").concat(&kernel_version);
         let patch_target   = self.patch.target.full_name();

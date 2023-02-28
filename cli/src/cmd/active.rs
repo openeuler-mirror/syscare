@@ -1,20 +1,20 @@
-use log::debug;
-
 use crate::patch::PatchManager;
 
-use super::CommandExecutor;
+use super::{CommandExecutor, CommandArguments};
 
 pub struct ActiveCommandExecutor;
 
 impl CommandExecutor for ActiveCommandExecutor {
-    fn invoke(&self, args: &[String]) -> std::io::Result<i32> {
-        let mut patch_manager = PatchManager::new()?;
-        debug!("Handle Command \"active {}\"", args[0]);
+    fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
+        match args {
+            CommandArguments::PatchOperationArguments(patch_name) => {
+                let mut patch_manager = PatchManager::new()?;
+                patch_manager.active_patch(&patch_name)?;
+                patch_manager.save_all_patch_status()?;
 
-        patch_manager.active_patch(&args[0])?;
-        patch_manager.save_all_patch_status()?;
-
-        debug!("Command \"active {}\" done", args[0]);
-        Ok(0)
+                Ok(0)
+            },
+            _ => unreachable!(),
+        }
     }
 }

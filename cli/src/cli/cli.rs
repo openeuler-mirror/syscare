@@ -1,5 +1,5 @@
 use clap::Parser;
-use log::LevelFilter;
+use log::{LevelFilter, debug};
 
 use crate::log::Logger;
 use crate::util::sys;
@@ -26,7 +26,7 @@ impl SyscareCLI {
     fn check_root_permission() -> std::io::Result<()> {
         const ROOT_UID: u32 = 0;
 
-        if sys::get_uid() != ROOT_UID {
+        if sys::user_id() != ROOT_UID {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "This command has to be run with superuser privileges (under the root user on most systems)."
@@ -37,62 +37,71 @@ impl SyscareCLI {
     }
 
     fn cli_main(cmd: &Command) -> std::io::Result<i32> {
-        let cmd_args;
+        let cmd_arguments;
         let cmd_executor;
 
         match cmd {
             Command::Build { args } => {
-                cmd_executor = Box::new(BuildCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = args.to_owned();
+                cmd_executor  = Box::new(BuildCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::CommandLineArguments(args.to_owned());
             }
             Command::Info { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Target { patch_name } => {
                 Self::check_root_permission()?;
                 cmd_executor = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Status { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::List => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(ListCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![];
+                cmd_executor  = Box::new(ListCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::None;
             },
             Command::Apply { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(ApplyCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(ApplyCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Remove { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(RemoveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(RemoveCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Active { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(ActiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(ActiveCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Deactive { patch_name } => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![patch_name.to_owned()];
+                cmd_executor  = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
             Command::Restore => {
                 Self::check_root_permission()?;
-                cmd_executor = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_args = vec![];
+                cmd_executor  = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::None;
+            },
+            Command::FastReboot { kernel_version, force } => {
+                Self::check_root_permission()?;
+                cmd_executor  = Box::new(FastRebootCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::RebootArguments(kernel_version.to_owned(), force.to_owned());
             },
         };
 
-        Ok(cmd_executor.invoke(&cmd_args)?)
+        debug!("Handle Command \"{:?}\"", cmd);
+        let exit_code = cmd_executor.invoke(&cmd_arguments)?;
+        debug!("Command \"{:?}\" done", cmd);
+
+        Ok(exit_code)
     }
 }
 

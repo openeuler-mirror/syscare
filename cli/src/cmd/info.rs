@@ -1,20 +1,20 @@
-use log::debug;
-
 use crate::patch::PatchManager;
 
-use super::CommandExecutor;
+use super::{CommandExecutor, CommandArguments};
 
 pub struct InfoCommandExecutor;
 
 impl CommandExecutor for InfoCommandExecutor {
-    fn invoke(&self, args: &[String]) -> std::io::Result<i32> {
-        let patch_manager = PatchManager::new()?;
-        debug!("Handle Command \"info {}\"", args[0]);
+    fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
+        match args {
+            CommandArguments::PatchOperationArguments(patch_name) => {
+                PatchManager::new()?
+                    .get_patch_info(&patch_name)?
+                    .print_log(log::Level::Info);
 
-        patch_manager.get_patch_info(&args[0])?
-                     .print_log(log::Level::Info);
-
-        debug!("Command \"info {}\" done", args[0]);
-        Ok(0)
+                Ok(0)
+            },
+            _ => unreachable!(),
+        }
     }
 }
