@@ -89,20 +89,10 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
     fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => {
-                let exit_status = KPATCH_BUILD.execve(
+                KPATCH_BUILD.execve(
                     self.parse_cmd_args(kargs),
                     self.parse_cmd_envs(kargs)
-                )?;
-
-                let exit_code = exit_status.exit_code();
-                if exit_code != 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        format!("Process \"{}\" exited unsuccessfully, exit_code={}", KPATCH_BUILD, exit_code),
-                    ));
-                }
-
-                Ok(())
+                )?.check_exit_code()
             },
             PatchBuilderArguments::UserPatch(_) => unreachable!(),
         }

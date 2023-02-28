@@ -21,14 +21,7 @@ impl RpmHelper {
                 .arg(format)
                 .arg(pkg_path.as_ref().as_os_str())
         )?;
-
-        let exit_code = exit_status.exit_code();
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM, exit_code),
-            ));
-        }
+        exit_status.check_exit_code()?;
 
         Ok(exit_status.stdout().to_owned())
     }

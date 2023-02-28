@@ -51,41 +51,23 @@ impl RpmBuilder {
     }
 
     pub fn build_prepare<P: AsRef<Path>>(&self, spec_file: P) -> std::io::Result<()> {
-        let exit_status = RPM_BUILD.execvp(
+        RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bp")
                 .arg(spec_file.as_ref())
-        )?;
-
-        let exit_code = exit_status.exit_code();
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
-            ));
-        }
-
-        Ok(())
+        )?.check_exit_code()
     }
 
     pub fn build_source_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
-        let exit_status = RPM_BUILD.execvp(
+        RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bs")
                 .arg(spec_file.as_ref())
-        )?;
-
-        let exit_code = exit_status.exit_code();
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
-            ));
-        }
+        )?.check_exit_code()?;
 
         fs::copy_dir_all(&self.build_root.srpms, &output_dir)?;
 
@@ -93,21 +75,13 @@ impl RpmBuilder {
     }
 
     pub fn build_binary_package<P: AsRef<Path>, Q: AsRef<Path>>(&self, spec_file: P, output_dir: Q) -> std::io::Result<()> {
-        let exit_status = RPM_BUILD.execvp(
+        RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
                 .arg(OsString::from("_topdir ").concat(&self.build_root))
                 .arg("-bb")
                 .arg(spec_file.as_ref())
-        )?;
-
-        let exit_code = exit_status.exit_code();
-        if exit_code != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Process \"{}\" exited unsuccessfully, exit_code={}", RPM_BUILD, exit_code),
-            ));
-        }
+        )?.check_exit_code()?;
 
         fs::copy_dir_all(&self.build_root.rpms, &output_dir)?;
 

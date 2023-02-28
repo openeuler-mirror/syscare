@@ -99,17 +99,9 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
-                let exit_status = UPATCH_BUILD.execvp(self.parse_cmd_args(uargs))?;
-
-                let exit_code = exit_status.exit_code();
-                if exit_code != 0 {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::BrokenPipe,
-                        format!("Process \"{}\" exited unsuccessfully, exit_code={}", UPATCH_BUILD, exit_code),
-                    ));
-                }
-
-                Ok(())
+                UPATCH_BUILD.execvp(
+                    self.parse_cmd_args(uargs)
+                )?.check_exit_code()
             },
             PatchBuilderArguments::KernelPatch(_) => unreachable!(),
         }
