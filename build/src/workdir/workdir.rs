@@ -2,7 +2,6 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::ops::Deref;
 
-use crate::constants::*;
 use crate::util::fs;
 
 use super::patch_root::PatchRoot;
@@ -23,9 +22,10 @@ pub struct WorkDir {
 impl WorkDir {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
         let path     = path.as_ref().to_path_buf();
-        let log_file = path.join(CLI_LOG_FILE_NAME);
+        let log_file = path.join("build.log");
         let patch    = PatchRoot::new(path.join("patch"));
         let package  = PackageRoot::new(path.join("package"));
+
         Self { path, log_file, patch, package }
     }
 }

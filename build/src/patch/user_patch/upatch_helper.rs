@@ -4,18 +4,18 @@ use log::debug;
 
 use crate::package::RpmHelper;
 use crate::util::fs;
-use crate::constants::*;
 use crate::util::os_str::OsStrSplit;
 
 pub struct UserPatchHelper;
 
 impl UserPatchHelper {
     pub fn find_debuginfo_file<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
-        debug!("Finding debuginfo from \"{}\"", directory.as_ref().display());
+        const DEBUGINFO_FILE_EXT: &str  = "debug";
 
+        debug!("Finding debuginfo from \"{}\"", directory.as_ref().display());
         fs::list_all_files_ext(
             directory,
-            PATCH_DEBUG_INFO_EXTENSION,
+            DEBUGINFO_FILE_EXT,
             true,
         )
     }

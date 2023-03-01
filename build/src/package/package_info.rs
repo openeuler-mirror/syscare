@@ -3,9 +3,8 @@ use std::path::Path;
 use log::log;
 use serde::{Serialize, Deserialize};
 
-use crate::constants::*;
-
 use super::rpm_helper::RpmHelper;
+use super::rpm_spec_helper::TAG_VALUE_NONE;
 
 #[derive(Serialize, Deserialize)]
 #[derive(Clone, Copy)]
@@ -56,7 +55,7 @@ impl PackageInfo {
         let license    = pkg_info[5].to_owned();
         let source_rpm = pkg_info[6].to_owned();
 
-        let kind = match source_rpm == PKG_FLAG_NONE {
+        let kind = match source_rpm == TAG_VALUE_NONE {
             true  => PackageType::SourcePackage,
             false => PackageType::BinaryPackage,
         };

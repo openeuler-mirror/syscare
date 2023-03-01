@@ -1,14 +1,13 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use crate::constants::*;
-
-use crate::patch::PatchInfo;
+use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
 use crate::workdir::PackageBuildRoot;
 use crate::util::{fs, serde};
 use crate::util::os_str::OsStrConcat;
 use crate::util::ext_cmd::ExternCommandArgs;
 
+use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
 use super::rpm_spec_generator::RpmSpecGenerator;
 
 pub struct RpmBuilder {
@@ -43,7 +42,7 @@ impl RpmBuilder {
     }
 
     pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
-        RpmSpecGenerator::generate_from_patch_info(
+        RpmSpecGenerator::generate_spec_file(
             patch_info,
             &self.build_root.sources,
             &self.build_root.specs
@@ -75,14 +74,14 @@ impl RpmBuilder {
 
         let src_pkg_file = fs::find_file_ext(
             &self.build_root.srpms,
-            PKG_FILE_EXTENSION,
+            PKG_FILE_EXT,
             false
         )?;
 
         let dst_pkg_name = format!("{}-{}.src.{}",
             patch_info.target.short_name(),
             patch_info.full_name(),
-            PKG_FILE_EXTENSION
+            PKG_FILE_EXT
         );
         let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);
 

@@ -8,12 +8,12 @@ use lazy_static::*;
 use serde::{Serialize, Deserialize};
 
 use crate::package::PackageInfo;
-use crate::cli::CliArguments;
-
-use crate::constants::*;
+use crate::cli::{CliArguments, CLI_VERSION};
 
 use crate::util::{fs, sys, digest};
 use crate::util::os_str::OsStrContains;
+
+const PATCH_VERSION_LENGTH: usize = 8;
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
@@ -45,17 +45,9 @@ impl PatchFile {
 
         let file_path = fs::canonicalize(path)?;
         let file_name = fs::file_name(&file_path);
-        let file_ext  = fs::file_ext(&file_path);
-
-        if file_ext != PATCH_FILE_EXTENSION {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("File \"{}\" is not a patch", file_path.display())
-            ));
-        }
 
         let mut file_digests = FILE_DIGESTS.lock().unwrap();
-        let file_digest = &digest::file_digest(file_path.as_path())?[..PATCH_VERSION_DIGITS];
+        let file_digest = &digest::file_digest(file_path.as_path())?[..PATCH_VERSION_LENGTH];
         if !file_digests.insert(file_digest.to_owned()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -103,16 +95,18 @@ pub struct PatchInfo {
 }
 
 impl PatchInfo {
-    pub fn new(pkg_info: &PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
+    pub fn new(target_pkg_info: PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
+        const KERNEL_PKG_NAME: &str = "kernel";
+
         let name        = args.patch_name.to_owned();
-        let kind        = match pkg_info.name == KERNEL_PKG_NAME {
+        let kind        = match target_pkg_info.name == KERNEL_PKG_NAME {
             true  => PatchType::KernelPatch,
             false => PatchType::UserPatch,
         };
         let version     = args.patch_version;
-        let release     = digest::file_list_digest(&args.patches)?[..PATCH_VERSION_DIGITS].to_owned();
+        let release     = digest::file_list_digest(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
         let arch        = args.patch_arch.to_owned();
-        let target      = pkg_info.to_owned();
+        let target      = target_pkg_info;
         let target_elfs = HashMap::new();
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
@@ -141,8 +135,10 @@ impl PatchInfo {
 
 impl PatchInfo {
     fn target_elfs_str(&self) -> String {
+        const UNKNOWN_ELF_NAME: &str = "(unknown)";
+
         if self.target_elfs.is_empty() {
-            return PATCH_FLAG_UNKNOWN.to_owned();
+            return UNKNOWN_ELF_NAME.to_owned();
         }
 
         let mut str = String::new();

@@ -3,12 +3,18 @@ use std::path::{Path, PathBuf};
 
 use log::debug;
 
-use crate::constants::*;
-use crate::util::fs;
-
 use crate::workdir::PackageBuildRoot;
 use crate::patch::{PatchType, PatchInfo};
-use crate::util::ext_cmd::ExternCommandArgs;
+
+use crate::util::fs;
+use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+
+use super::rpm_spec_helper::SPEC_FILE_EXT;
+
+pub const PKG_FILE_EXT: &str = "rpm";
+
+pub(super) const RPM:       ExternCommand = ExternCommand::new("rpm");
+pub(super) const RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
 
 pub struct RpmHelper;
 
@@ -27,8 +33,9 @@ impl RpmHelper {
     }
 
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
-        debug!("Finding package build root from \"{}\"", directory.as_ref().display());
+        const PKG_BUILD_ROOT: &str = "rpmbuild";
 
+        debug!("Finding package build root from \"{}\"", directory.as_ref().display());
         Ok(PackageBuildRoot::new(
             fs::find_dir(
                 directory,
@@ -44,7 +51,7 @@ impl RpmHelper {
 
         let spec_file = fs::find_file_ext(
             directory,
-            PKG_SPEC_EXTENSION,
+            SPEC_FILE_EXT,
             false
         )?;
 
@@ -52,8 +59,9 @@ impl RpmHelper {
     }
 
     pub fn find_source_directory<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
-        debug!("Finding build source from \"{}\"", directory.as_ref().display());
+        const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 
+        debug!("Finding build source from \"{}\"", directory.as_ref().display());
         let search_name = match patch_info.kind {
             PatchType::UserPatch   => &patch_info.target.name,
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,

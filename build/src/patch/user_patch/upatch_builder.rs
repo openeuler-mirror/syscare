@@ -1,14 +1,12 @@
 use std::ffi::{OsString, OsStr};
 
-use crate::constants::*;
-
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::package::RpmHelper;
+use crate::package::{RpmHelper, PKG_FILE_EXT};
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
-use crate::util::{serde, fs};
+use crate::util::{fs, serde};
 use crate::util::os_str::OsStrConcat;
-use crate::util::ext_cmd::ExternCommandArgs;
+use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;
@@ -64,7 +62,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let patch_source_dir = RpmHelper::find_source_directory(&pkg_build_root.build, patch_info)?;
         let patch_debuginfo  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
 
-        let build_original_cmd = OsString::from(RPM_BUILD.to_string())
+        let build_original_cmd = OsString::from("rpmbuild")
             .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
             .concat("' -bb ")
@@ -72,7 +70,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .concat("--noclean ")
             .concat(&spec_file);
 
-        let build_patched_cmd = OsString::from(RPM_BUILD.to_string())
+        let build_patched_cmd = OsString::from("rpmbuild")
             .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
             .concat("' -bc ")
@@ -97,6 +95,8 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     }
 
     fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
+        const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-build");
+
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
                 UPATCH_BUILD.execvp(
@@ -108,6 +108,8 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     }
 
     fn write_patch_info(&self, patch_info: &mut PatchInfo, args: &PatchBuilderArguments) -> std::io::Result<()> {
+        pub const PATCH_ELF_NAME_FILE: &str  = "elf_names";
+
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
                 let elf_names = serde::deserialize::<_, Vec<OsString>>(
@@ -117,7 +119,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                 let src_pkg_dir = self.workdir.package.source.as_path();
                 let pkg_name = format!("{}.{}",
                     patch_info.target.full_name(),
-                    PKG_FILE_EXTENSION
+                    PKG_FILE_EXT
                 );
                 let pkg_path = fs::find_file(src_pkg_dir, &pkg_name, false, true)?;
                 let pkg_file_list = UserPatchHelper::query_pkg_file_list(pkg_path)?;
