@@ -87,10 +87,21 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     }
 
     fn status(&self) -> std::io::Result<PatchStatus> {
+        // Fetch all patches status
         let mut status_list = Vec::new();
         for (elf_name, _) in &self.patch.target_elfs {
             status_list.push(self.get_patch_status(elf_name)?);
         }
+        // Check if all patch status are same
+        status_list.sort();
+        status_list.dedup();
+        if status_list.len() != 1 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("Patch \"{}\" status is out of sync", self.patch)
+            ));
+        }
+
         Ok(status_list[0])
     }
 

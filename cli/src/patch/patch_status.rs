@@ -8,7 +8,7 @@ pub const PATCH_STATUS_ACTIVED:     &str = "ACTIVED";
 #[derive(Debug)]
 #[derive(Hash)]
 #[derive(Clone, Copy)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
 #[derive(Serialize, Deserialize)]
 pub enum PatchStatus {
     Unknown,
