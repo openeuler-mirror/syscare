@@ -106,6 +106,7 @@ impl<'a> KernelPatchAdapter<'a> {
         let status_str = match status {
             PatchStatus::NotApplied | PatchStatus::Deactived => KPATCH_STATUS_DISABLED,
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
+            _ => unreachable!("Patch status is unknown"),
         };
         trace!("Write file \"{}\": {}", sys_file_path.display(), status_str);
 

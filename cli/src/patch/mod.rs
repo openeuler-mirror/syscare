@@ -9,4 +9,5 @@ mod user_patch;
 mod kernel_patch;
 
 pub use patch::*;
+pub use patch_status::*;
 pub use patch_manager::*;

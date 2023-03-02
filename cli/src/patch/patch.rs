@@ -1,5 +1,6 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU8, Ordering};
 
 use log::{debug, error};
 use lazy_static::lazy_static;
@@ -14,8 +15,8 @@ use super::kernel_patch::KernelPatchAdapter;
 
 pub struct Patch {
     pub info:     PatchInfo,
-    pub status:   PatchStatus,
     pub root_dir: PathBuf,
+    status:       AtomicU8,
 }
 
 impl Patch {
@@ -23,8 +24,8 @@ impl Patch {
         const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
         let info     = serde::deserialize::<_, PatchInfo>(path_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
-        let status   = PatchStatus::NotApplied;
         let root_dir = path_root.as_ref().to_path_buf();
+        let status   = AtomicU8::new(PatchStatus::default() as u8);
 
         Ok(Self { info, status, root_dir })
     }
@@ -36,32 +37,46 @@ impl Patch {
     pub fn full_name(&self) -> String {
         format!("{}/{}", self.target.short_name(), self.short_name())
     }
+
+    pub fn status(&self) -> std::io::Result<PatchStatus> {
+        let status = PatchStatus::from(self.status.load(Ordering::Relaxed));
+        if status == PatchStatus::Unknown {
+            let new_status = self.fetch_status()?;
+
+            self.update_status(new_status);
+            return Ok(new_status);
+        }
+        Ok(status)
+    }
 }
 
 impl Patch {
-    fn get_adapter(&self) -> Box<dyn PatchActionAdapter + '_> {
+    fn adapter(&self) -> Box<dyn PatchActionAdapter + '_> {
         match &self.kind {
             PatchType::UserPatch   => Box::new(UserPatchAdapter::new(self)),
             PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(self)),
         }
     }
 
-    fn set_status(&mut self, status: PatchStatus) {
-        let current_status = self.status;
-        let target_tatus   = status;
+    fn fetch_status(&self) -> std::io::Result<PatchStatus> {
+        debug!("Updating patch \"{}\" status", self);
+        self.adapter().status()
+    }
 
-        if current_status == target_tatus {
+    fn update_status(&self, status: PatchStatus) {
+        let old_status = PatchStatus::from(self.status.load(Ordering::Relaxed));
+        if old_status == status {
             return;
         }
 
-        debug!("Patch \"{}\" status changed from \"{}\" to \"{}\"", self, current_status, target_tatus);
-        self.status = target_tatus;
+        debug!("Patch \"{}\" status changed from \"{}\" to \"{}\"", self, old_status, status);
+        self.status.store(status as u8, Ordering::Relaxed);
     }
 
     fn do_apply(&mut self) -> std::io::Result<()> {
         debug!("Applying patch \"{}\"", self);
 
-        self.get_adapter().check_compatibility().map_err(|e| {
+        self.adapter().check_compatibility().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -69,7 +84,7 @@ impl Patch {
             )
         })?;
 
-        self.get_adapter().apply().map_err(|e| {
+        self.adapter().apply().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -77,14 +92,14 @@ impl Patch {
             )
         })?;
 
-        self.set_status(PatchStatus::Deactived);
+        self.update_status(PatchStatus::Deactived);
         Ok(())
     }
 
     fn do_remove(&mut self) -> std::io::Result<()> {
         debug!("Removing patch \"{}\"", self);
 
-        self.get_adapter().remove().map_err(|e| {
+        self.adapter().remove().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -92,14 +107,14 @@ impl Patch {
             )
         })?;
 
-        self.set_status(PatchStatus::NotApplied);
+        self.update_status(PatchStatus::NotApplied);
         Ok(())
     }
 
     fn do_active(&mut self) -> std::io::Result<()> {
         debug!("Activing patch \"{}\"", self);
 
-        self.get_adapter().active().map_err(|e| {
+        self.adapter().active().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -107,14 +122,14 @@ impl Patch {
             )
         })?;
 
-        self.set_status(PatchStatus::Actived);
+        self.update_status(PatchStatus::Actived);
         Ok(())
     }
 
     fn do_deactive(&mut self) -> std::io::Result<()> {
         debug!("Deactiving patch \"{}\"", self);
 
-        self.get_adapter().deactive().map_err(|e| {
+        self.adapter().deactive().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -122,37 +137,29 @@ impl Patch {
             )
         })?;
 
-        self.set_status(PatchStatus::Deactived);
+        self.update_status(PatchStatus::Deactived);
         Ok(())
     }
 }
 
 impl Patch {
-    pub fn update_status(&mut self) -> std::io::Result<()> {
-        let patch_status = self.get_adapter().status()?;
-
-        self.status = patch_status;
-        debug!("Patch \"{}\" is \"{}\"", self, patch_status);
-
-        Ok(())
-    }
-
     pub fn apply(&mut self) -> std::io::Result<()> {
-        match &self.status {
+        match self.status()? {
             PatchStatus::NotApplied => {
                 self.do_apply()?;
                 self.do_active()?;
             },
-            _ => {
+            PatchStatus::Deactived | PatchStatus::Actived => {
                 debug!("Patch \"{}\" is already applied", self);
             },
+            _ => unreachable!("Patch status is unknown")
         }
 
         Ok(())
     }
 
     pub fn remove(&mut self) -> std::io::Result<()> {
-        match &self.status {
+        match self.status()? {
             PatchStatus::NotApplied => {
                 debug!("Patch \"{}\" is already removed", self);
             },
@@ -163,13 +170,14 @@ impl Patch {
                 self.do_deactive()?;
                 self.do_remove()?;
             },
+            _ => unreachable!("Patch status is unknown")
         }
 
         Ok(())
     }
 
     pub fn active(&mut self) -> std::io::Result<()> {
-        match &self.status {
+        match self.status()? {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -182,13 +190,14 @@ impl Patch {
             PatchStatus::Actived => {
                 debug!("Patch \"{}\" is already actived", self);
             },
+            _ => unreachable!("Patch status is unknown")
         }
 
         Ok(())
     }
 
     pub fn deactive(&mut self) -> std::io::Result<()> {
-        match &self.status {
+        match self.status()? {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
@@ -201,6 +210,7 @@ impl Patch {
             PatchStatus::Actived => {
                 self.do_deactive()?;
             },
+            _ => unreachable!("Patch status is unknown")
         }
 
         Ok(())
@@ -228,12 +238,14 @@ impl Patch {
             ].into_iter().collect();
         }
 
-        let transition = (self.status, status);
+        let transition = (self.status()?, status);
         debug!("Restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
 
         match PATCH_TRANSITION_MAP.get(&transition) {
-            Some(action) => action(self)?,
-            None         => debug!("Patch \"{}\" status not change", self),
+            Some(action) => {
+                action(self)?
+            },
+            None => debug!("Patch \"{}\" status not change", self),
         }
 
         Ok(())

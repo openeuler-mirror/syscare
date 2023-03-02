@@ -39,6 +39,7 @@ impl<'a> UserPatchAdapter<'a> {
                     .arg(patch.as_ref())
         )?;
 
+        exit_status.check_exit_code()?;
         Ok(exit_status.stdout().to_owned())
     }
 

@@ -15,7 +15,7 @@ impl CommandExecutor for ListCommandExecutor {
             info!("{:<35} {:<35} {:<12}",
                 patch.target.short_name(),
                 patch.short_name(),
-                patch.status
+                patch.status().unwrap_or_default(),
             );
         }
 
