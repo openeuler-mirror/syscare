@@ -1,11 +1,13 @@
+use std::ffi::OsString;
 use std::io::BufRead;
+use std::os::unix::prelude::OsStringExt;
 
 pub struct LossyLines<B> {
     buf: B,
 }
 
 impl <B: BufRead> Iterator for LossyLines<B> {
-    type Item = std::io::Result<String>;
+    type Item = std::io::Result<OsString>;
 
     fn next(&mut self) -> Option<Self::Item> {
         const CHAR_LF: [u8; 1] = [b'\n'];
@@ -21,7 +23,7 @@ impl <B: BufRead> Iterator for LossyLines<B> {
                         buf.pop();
                     }
                 }
-                Some(Ok(String::from_utf8_lossy(&buf).to_string()))
+                Some(Ok(OsString::from_vec(buf)))
             },
             Err(e) => Some(Err(e))
         }

@@ -1,4 +1,4 @@
-use std::ffi::{CString, OsStr};
+use std::ffi::{CString, OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::os::unix::ffi::OsStrExt;
 
@@ -37,20 +37,20 @@ impl Compiler {
         }
     }
 
-    pub fn readlink(&self, name: &str) -> Result<PathBuf> {
+    pub fn readlink(&self, name: &OsStr) -> Result<PathBuf> {
         match which(name) {
             Ok(result) => Ok(result),
-            Err(e) => Err(Error::Compiler(format!("get {} failed: {}", name, e))),
+            Err(e) => Err(Error::Compiler(format!("get {:?} failed: {}", name, e))),
         }
     }
 
-    pub fn read_from_compiler(&self, name: &str) -> Result<String> {
+    pub fn read_from_compiler(&self, name: &str) -> Result<OsString> {
         let args_list = ExternCommandArgs::new().arg(&name);
         let output = ExternCommand::new(&self.compiler).execvp(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("get {} from compiler {} failed", name, &self.compiler.display())));
         }
-        Ok(output.stdout().to_string())
+        Ok(output.stdout().to_os_string())
     }
 
     pub fn analyze<P: AsRef<Path>>(&mut self, compiler_file: P) -> Result<()> {
@@ -80,7 +80,7 @@ impl Compiler {
         let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o"]).arg(&test_obj);
         let output = ExternCommand::new(&self.compiler).execvp_stdio(args_list, cache_dir, output.stdout.expect("get echo stdout failed"))?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr())))
+            return Err(Error::Compiler(format!("compiler build test error {}: {:?}", output.exit_code(), output.stderr())))
         };
 
         let dwarf = Dwarf::new();
@@ -117,7 +117,7 @@ impl Compiler {
         let args_list = ExternCommandArgs::new().args(["-r", "-o"]).arg(output_file.as_ref()).args(link_list);
         let output = ExternCommand::new(&self.linker).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("link object file error {}: {}", output.exit_code(), output.stderr())));
+            return Err(Error::Compiler(format!("link object file error {}: {:?}", output.exit_code(), output.stderr())));
         };
         Ok(())
     }

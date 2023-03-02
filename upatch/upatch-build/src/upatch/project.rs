@@ -2,7 +2,8 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use log::info;
+use log::Level;
+
 use crate::cmd::*;
 
 use super::Result;
@@ -37,21 +38,17 @@ impl Project {
         ]);
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr())))
+            return Err(Error::Project(format!("build project error {}: {:?}", output.exit_code(), output.stderr())))
         };
         Ok(())
     }
 
-    pub fn patch<P: AsRef<Path>>(&self, patch: P, verbose: bool) -> Result<()> {
+    pub fn patch<P: AsRef<Path>>(&self, patch: P, level: Level) -> Result<()> {
         let patch = patch.as_ref();
         let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
-        let output = ExternCommand::new("patch").execvp_stdio(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch.display())))?;
-        match output.exit_status().success() {
-            false => return Err(Error::Project(format!("patch file {} error {}: {}", patch.display(), output.exit_code(), output.stderr()))),
-            true => match verbose {
-                true => (),
-                false => info!("{}", output.stdout()),
-            }
+        let output = ExternCommand::new("patch").execvp_stdio_level(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch.display())), level)?;
+        if !output.exit_status().success() {
+            return Err(Error::Project(format!("patch file {} error {}: {:?}", patch.display(), output.exit_code(), output.stderr())));
         };
         Ok(())
     }

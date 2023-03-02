@@ -89,7 +89,7 @@ impl UpatchBuild {
         // build patch
         for patch in &self.args.patches {
             info!("Patching file: {}", patch.display());
-            project.patch(patch, self.args.verbose)?;
+            project.patch(patch, Level::Info)?;
         }
 
         info!("Building patched {:?}", project_name);

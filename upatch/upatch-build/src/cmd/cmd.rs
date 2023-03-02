@@ -1,8 +1,9 @@
 use std::process::{Command, ExitStatus, Stdio};
 use std::ffi::{OsStr, OsString};
-use std::io::BufReader;
+use std::io::{BufReader, Read};
 use std::path::Path;
 use std::collections::HashMap;
+use std::thread::JoinHandle;
 
 use log::*;
 
@@ -99,8 +100,8 @@ impl IntoIterator for ExternCommandEnvs {
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
     exit_status: ExitStatus,
-    stdout: String,
-    stderr: String,
+    stdout: OsString,
+    stderr: OsString,
 }
 
 impl ExternCommandExitStatus {
@@ -115,11 +116,11 @@ impl ExternCommandExitStatus {
         self.exit_status
     }
 
-    pub fn stdout(&self) -> &str {
+    pub fn stdout(&self) -> &OsStr {
         &self.stdout
     }
 
-    pub fn stderr(&self) -> &str {
+    pub fn stderr(&self) -> &OsStr {
         &self.stderr
     }
 }
@@ -132,9 +133,7 @@ pub struct ExternCommand<'a> {
 
 impl ExternCommand<'_> {
     #[inline(always)]
-    pub fn execute_command(&self, command: &mut Command) -> std::io::Result<ExternCommandExitStatus> {
-        let mut last_stdout = String::new();
-        let mut last_stderr = String::new();
+    pub fn execute_command(&self, command: &mut Command, filter: Level) -> std::io::Result<ExternCommandExitStatus> {
         let mut child_process = match command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
             Ok(child_process) => child_process,
             Err(e) => {
@@ -146,30 +145,36 @@ impl ExternCommand<'_> {
         };
 
         trace!("Executing '{}' ({:?}):", &self, command);
-        let process_stdout = child_process.stdout.as_mut().expect("Pipe stdout failed");
-        for read_line in LossyLines::from(BufReader::new(process_stdout)) {
-            let out = read_line?;
-            last_stdout.push_str(&format!("{}\n", &out));
-            debug!("{}", out);
-        }
-
-        let process_stderr = child_process.stderr.as_mut().expect("Pipe stderr failed");
-        for read_line in LossyLines::from(BufReader::new(process_stderr)) {
-            let err = read_line?;
-            last_stderr.push_str(&format!("{}\n", &err));
-            trace!("{}", last_stderr);
-        }
+        let stdout_thread = Self::create_stdio_thread(child_process.stdout.take().expect("Pipe stdout failed"), filter);
+        let stderr_thread = Self::create_stdio_thread(child_process.stderr.take().expect("Pipe stderr failed"), Level::Trace);
 
         let exit_status = child_process.wait()?;
+        let last_stdout = stdout_thread.join().expect("join stdout thread failed")?;
+        let last_stderr = stderr_thread.join().expect("join stdout thread failed")?;
         match exit_status.code() {
             Some(code) => trace!("Process ({}) exited, exit_code={}\n", &self, code),
-            None => trace!("Process ({}) exited, exit_code=None\n", &self),
+            None => trace!("Process ({}) exited, exit_code = None\n", &self),
         }
 
         Ok(ExternCommandExitStatus {
             exit_status,
-            stdout: last_stdout.trim().to_string(),
-            stderr: last_stderr.trim().to_string(),
+            stdout: last_stdout,
+            stderr: last_stderr,
+        })
+    }
+
+    #[inline(always)]
+    fn create_stdio_thread<R>(stdio: R, filter: Level) ->JoinHandle<std::io::Result<OsString>>
+    where
+        R: Read + Send + Sync + 'static
+    {
+        std::thread::spawn(move || -> std::io::Result<OsString> {
+            let mut last_line = OsString::new();
+            for read_line in LossyLines::from(BufReader::new(stdio)) {
+                last_line = read_line?;
+                log!(filter, "{:?}", last_line);
+            }
+            Ok(last_line)
         })
     }
 }
@@ -183,10 +188,18 @@ impl<'a> ExternCommand<'a> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
 
-        self.execute_command(&mut command)
+        self.execute_command(&mut command, Level::Debug)
     }
 
     pub fn execvp_stdio<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T) -> std::io::Result<ExternCommandExitStatus>
+    where
+        P: AsRef<Path>,
+        T: Into<Stdio>,
+    {
+        self.execvp_stdio_level(args, current_dir, stdio, Level::Debug)
+    }
+
+    pub fn execvp_stdio_level<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T, level: Level) -> std::io::Result<ExternCommandExitStatus>
     where
         P: AsRef<Path>,
         T: Into<Stdio>,
@@ -196,7 +209,7 @@ impl<'a> ExternCommand<'a> {
         command.current_dir(current_dir);
         command.stdin(stdio);
 
-        self.execute_command(&mut command)
+        self.execute_command(&mut command, level)
     }
 
     pub fn execve<P: AsRef<Path>>(&self, args: ExternCommandArgs, envs: ExternCommandEnvs, current_dir: P) -> std::io::Result<ExternCommandExitStatus> {
@@ -205,7 +218,7 @@ impl<'a> ExternCommand<'a> {
         command.envs(envs.into_iter());
         command.current_dir(current_dir);
 
-        self.execute_command(&mut command)
+        self.execute_command(&mut command, Level::Debug)
     }
 }
 
