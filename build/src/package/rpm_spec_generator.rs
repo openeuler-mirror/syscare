@@ -13,8 +13,8 @@ pub struct RpmSpecGenerator;
 const SYSCARE_PKG_NAME:    &str = "syscare";
 const PKG_GROUP:           &str = "Patch";
 const PKG_INSTALL_DIR:     &str = "/usr/lib/syscare/patches";
-const PKG_FILE_PERMISSION: &str = "660";
-const PKG_DIR_PERMISSION:  &str = "750";
+const PKG_FILE_PERMISSION: &str = "664";
+const PKG_DIR_PERMISSION:  &str = "775";
 
 const RPM_SPEC_PKG_INFO: &str = r#"
 Name:     %{pkg_name}
