@@ -42,7 +42,6 @@ pub struct PatchInfo {
     pub license:     String,
     pub description: String,
     pub is_patched:  bool,
-    pub builder:     String,
     pub patches:     Vec<PatchFile>,
 }
 
@@ -71,12 +70,10 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elfs: {}", target_elfs);
+        log!(level, "target_elf:  {}", target_elfs);
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
-        log!(level, "builder:     {}", self.builder);
-        log!(level, "");
-        log!(level, "patch list:");
+        log!(level, "patch:");
         for patch_file in &self.patches {
             log!(level, "{} {}", patch_file.digest, patch_file.name.to_string_lossy());
         }

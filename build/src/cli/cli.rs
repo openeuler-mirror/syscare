@@ -7,13 +7,13 @@ use crate::package::{PackageInfo, PackageType, PKG_FILE_EXT};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 use crate::patch::{PatchInfo, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME};
 use crate::patch::{PatchHelper, PatchBuilderFactory};
-use crate::util::{sys, fs, serde};
+use crate::util::{sys, fs, serde::serde_versioned};
 
 use super::args::CliArguments;
 use super::workdir::CliWorkDir;
 
-pub const CLI_NAME:          &str = "syscare build";
-pub const CLI_VERSION:       &str = env!("CARGO_PKG_VERSION");
+pub const CLI_NAME:    &str = "syscare build";
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const CLI_BANNER: &str = env!("CARGO_PKG_DESCRIPTION");
 
@@ -128,7 +128,7 @@ impl PatchBuildCLI {
 
         // Collect patch info from patched source package
         if let Ok(path) = fs::find_file(&pkg_source_dir, PATCH_INFO_FILE_NAME, false, false) {
-            let old_patch_info  = serde::deserialize::<_, PatchInfo>(path)?;
+            let old_patch_info = serde_versioned::deserialize::<_, PatchInfo>(path)?;
             // Override path version
             args.patch_version = u32::max(args.patch_version, old_patch_info.version + 1);
             // Overide path list

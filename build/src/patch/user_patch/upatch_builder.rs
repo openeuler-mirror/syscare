@@ -4,7 +4,7 @@ use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::{RpmHelper, PKG_FILE_EXT};
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
-use crate::util::{fs, serde};
+use crate::util::{fs, serde::serde_unversioned};
 use crate::util::os_str::OsStrConcat;
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
@@ -112,7 +112,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
 
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
-                let elf_names = serde::deserialize::<_, Vec<OsString>>(
+                let elf_names = serde_unversioned::deserialize::<_, Vec<OsString>>(
                     uargs.output_dir.join(PATCH_ELF_NAME_FILE)
                 )?;
 

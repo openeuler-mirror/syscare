@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
 use crate::workdir::PackageBuildRoot;
-use crate::util::{fs, serde};
+use crate::util::{fs, serde::serde_versioned};
 use crate::util::os_str::OsStrConcat;
 use crate::util::ext_cmd::ExternCommandArgs;
 
@@ -20,7 +20,7 @@ impl RpmBuilder {
     }
 
     pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        serde::serialize(
+        serde_versioned::serialize(
             patch_info,
             self.build_root.sources.join(PATCH_INFO_FILE_NAME)
         )

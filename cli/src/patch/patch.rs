@@ -5,7 +5,7 @@ use std::sync::atomic::{AtomicU8, Ordering};
 use log::{debug, error};
 use lazy_static::lazy_static;
 
-use crate::util::serde;
+use crate::util::serde::serde_versioned;
 
 use super::patch_info::{PatchInfo, PatchType};
 use super::patch_status::PatchStatus;
@@ -23,7 +23,7 @@ impl Patch {
     pub fn new<P: AsRef<Path>>(path_root: P) -> std::io::Result<Self> {
         const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-        let info     = serde::deserialize::<_, PatchInfo>(path_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
+        let info     = serde_versioned::deserialize::<_, PatchInfo>(path_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
         let root_dir = path_root.as_ref().to_path_buf();
         let status   = AtomicU8::new(PatchStatus::default() as u8);
 

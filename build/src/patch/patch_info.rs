@@ -8,7 +8,7 @@ use lazy_static::*;
 use serde::{Serialize, Deserialize};
 
 use crate::package::PackageInfo;
-use crate::cli::{CliArguments, CLI_VERSION};
+use crate::cli::CliArguments;
 
 use crate::util::{fs, sys, digest};
 use crate::util::os_str::OsStrContains;
@@ -90,7 +90,6 @@ pub struct PatchInfo {
     pub license:     String,
     pub description: String,
     pub is_patched:  bool,
-    pub builder:     String,
     pub patches:     Vec<PatchFile>,
 }
 
@@ -111,7 +110,6 @@ impl PatchInfo {
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
         let is_patched  = false;
-        let builder     = CLI_VERSION.to_owned();
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
 
         Ok(PatchInfo {
@@ -119,8 +117,7 @@ impl PatchInfo {
             version, release, arch,
             target, target_elfs,
             license, description,
-            is_patched, builder,
-            patches
+            is_patched, patches
         })
     }
 
@@ -157,12 +154,10 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elfs: {}", self.target_elfs_str());
+        log!(level, "target_elf:  {}", self.target_elfs_str());
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
-        log!(level, "builder:     {}", self.builder);
-        log!(level, "");
-        log!(level, "patch list:");
+        log!(level, "patch:");
         for patch_file in &self.patches {
             log!(level, "{} {}", patch_file.digest, patch_file.name.to_string_lossy());
         }

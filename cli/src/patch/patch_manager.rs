@@ -3,7 +3,7 @@ use std::path::Path;
 
 use log::{debug, error, warn};
 
-use crate::util::{fs, serde};
+use crate::util::{fs, serde::serde_versioned};
 
 use super::package_info::PackageInfo;
 use super::patch::Patch;
@@ -30,8 +30,11 @@ impl PatchManager {
                         patch_list.push(patch);
                     },
                     Err(e) => {
-                        error!("{}", e);
-                        error!("Cannot read patch info from \"{}\"", patch_root.to_string_lossy());
+                        error!("Cannot read patch info for \"{}/{}\", {}",
+                            fs::file_name(&pkg_root).to_string_lossy(),
+                            fs::file_name(&patch_root).to_string_lossy(),
+                            e.to_string().to_lowercase()
+                        );
                     }
                 }
             }
@@ -140,13 +143,13 @@ impl PatchManager {
         for patch in &mut self.patch_list {
             status_list.push((patch.short_name(), patch.status()?))
         }
-        serde::serialize(&status_list, PATCH_STATUS_FILE)?;
+        serde_versioned::serialize(&status_list, PATCH_STATUS_FILE)?;
 
         Ok(())
     }
 
     pub fn restore_all_patch_status(&mut self) -> std::io::Result<()> {
-        let saved_patch_status = serde::deserialize::<_, Vec<(String, PatchStatus)>>(PATCH_STATUS_FILE)?;
+        let saved_patch_status = serde_versioned::deserialize::<_, Vec<(String, PatchStatus)>>(PATCH_STATUS_FILE)?;
         for (patch_name, status) in saved_patch_status {
             match self.find_patch_mut(&patch_name) {
                 Ok(patch) => {

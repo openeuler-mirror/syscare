@@ -5,6 +5,6 @@ fn main() {
         if value.is_empty() {
             return;
         }
-        println!("cargo:rustc-env=CARGO_PKG_VERSION={}", value);
+        println!("cargo:rustc-env=CARGO_PKG_VERSION={}", value.to_lowercase());
     }
 }

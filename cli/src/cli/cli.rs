@@ -5,14 +5,14 @@ use crate::log::Logger;
 use crate::util::sys;
 use crate::cmd::*;
 
-const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
-const CLI_AUTHOR:  &str = env!("CARGO_PKG_AUTHORS");
-const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
-const CLI_ABOUT:   &str = env!("CARGO_PKG_DESCRIPTION");
+pub const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 
 #[derive(Debug)]
 #[derive(Parser)]
-#[command(bin_name=CLI_NAME, author=CLI_AUTHOR, version=CLI_VERSION, about=CLI_ABOUT)]
+#[command(bin_name=CLI_NAME, version=CLI_VERSION, about=CLI_ABOUT)]
 #[command(disable_help_subcommand(true))]
 pub struct SyscareCLI {
     #[command(subcommand)]
