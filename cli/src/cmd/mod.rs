@@ -9,6 +9,7 @@ mod apply;
 mod remove;
 mod active;
 mod deactive;
+mod save;
 mod restore;
 mod fast_reboot;
 
@@ -22,5 +23,6 @@ pub use apply::*;
 pub use remove::*;
 pub use active::*;
 pub use deactive::*;
+pub use save::*;
 pub use restore::*;
 pub use fast_reboot::*;

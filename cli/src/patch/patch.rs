@@ -73,7 +73,7 @@ impl Patch {
         self.status.store(status as u8, Ordering::Relaxed);
     }
 
-    fn do_apply(&mut self) -> std::io::Result<()> {
+    fn do_apply(&self) -> std::io::Result<()> {
         debug!("Applying patch \"{}\"", self);
 
         self.adapter().check_compatibility().map_err(|e| {
@@ -96,7 +96,7 @@ impl Patch {
         Ok(())
     }
 
-    fn do_remove(&mut self) -> std::io::Result<()> {
+    fn do_remove(&self) -> std::io::Result<()> {
         debug!("Removing patch \"{}\"", self);
 
         self.adapter().remove().map_err(|e| {
@@ -111,7 +111,7 @@ impl Patch {
         Ok(())
     }
 
-    fn do_active(&mut self) -> std::io::Result<()> {
+    fn do_active(&self) -> std::io::Result<()> {
         debug!("Activing patch \"{}\"", self);
 
         self.adapter().active().map_err(|e| {
@@ -126,7 +126,7 @@ impl Patch {
         Ok(())
     }
 
-    fn do_deactive(&mut self) -> std::io::Result<()> {
+    fn do_deactive(&self) -> std::io::Result<()> {
         debug!("Deactiving patch \"{}\"", self);
 
         self.adapter().deactive().map_err(|e| {
@@ -143,7 +143,7 @@ impl Patch {
 }
 
 impl Patch {
-    pub fn apply(&mut self) -> std::io::Result<()> {
+    pub fn apply(&self) -> std::io::Result<()> {
         match self.status()? {
             PatchStatus::NotApplied => {
                 self.do_apply()?;
@@ -158,7 +158,7 @@ impl Patch {
         Ok(())
     }
 
-    pub fn remove(&mut self) -> std::io::Result<()> {
+    pub fn remove(&self) -> std::io::Result<()> {
         match self.status()? {
             PatchStatus::NotApplied => {
                 debug!("Patch \"{}\" is already removed", self);
@@ -176,7 +176,7 @@ impl Patch {
         Ok(())
     }
 
-    pub fn active(&mut self) -> std::io::Result<()> {
+    pub fn active(&self) -> std::io::Result<()> {
         match self.status()? {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
@@ -196,7 +196,7 @@ impl Patch {
         Ok(())
     }
 
-    pub fn deactive(&mut self) -> std::io::Result<()> {
+    pub fn deactive(&self) -> std::io::Result<()> {
         match self.status()? {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
@@ -216,9 +216,9 @@ impl Patch {
         Ok(())
     }
 
-    pub fn restore(&mut self, status: PatchStatus) -> std::io::Result<()> {
+    pub fn restore(&self, status: PatchStatus) -> std::io::Result<()> {
         type Transition  = (PatchStatus, PatchStatus);
-        type TransitionAction = dyn Fn(&mut Patch) -> std::io::Result<()> + Sync;
+        type TransitionAction = dyn Fn(&Patch) -> std::io::Result<()> + Sync;
 
         const PATCH_APPLY:         &TransitionAction = &Patch::apply;
         const PATCH_REMOVE:        &TransitionAction = &Patch::remove;

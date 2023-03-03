@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::HashMap;
 use std::path::Path;
 
 use log::{debug, error, warn};
@@ -61,16 +61,16 @@ impl PatchManager {
     {
         debug!("Matching patch \"{}\"", pattern);
 
-        let mut list = iter.filter(|obj| is_matched(obj, pattern)).collect::<VecDeque<_>>();
+        let mut list = iter.filter(|obj| is_matched(obj, pattern)).collect::<Vec<_>>();
         match list.len().cmp(&1) {
+            std::cmp::Ordering::Equal => {
+                Ok(list.swap_remove(0))
+            },
             std::cmp::Ordering::Less => {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     format!("Cannot find patch \"{}\"", pattern)
                 ))
-            },
-            std::cmp::Ordering::Equal => {
-                Ok(list.pop_front().unwrap())
             },
             std::cmp::Ordering::Greater => {
                 Err(std::io::Error::new(
@@ -84,14 +84,6 @@ impl PatchManager {
     fn find_patch(&self, patch_name: &str) -> std::io::Result<&Patch> {
         Self::match_patch(
             self.patch_list.iter(),
-            Self::is_matched_patch,
-            patch_name
-        )
-    }
-
-    fn find_patch_mut(&mut self, patch_name: &str) -> std::io::Result<&mut Patch> {
-        Self::match_patch(
-            self.patch_list.iter_mut(),
             Self::is_matched_patch,
             patch_name
         )
@@ -121,37 +113,41 @@ impl PatchManager {
         self.find_patch(patch_name)?.status()
     }
 
-    pub fn apply_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.apply()
+    pub fn apply_patch(&self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch(patch_name)?.apply()
     }
 
-    pub fn remove_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.remove()
+    pub fn remove_patch(&self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch(patch_name)?.remove()
     }
 
-    pub fn active_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.active()
+    pub fn active_patch(&self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch(patch_name)?.active()
     }
 
-    pub fn deactive_patch(&mut self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch_mut(patch_name)?.deactive()
+    pub fn deactive_patch(&self, patch_name: &str) -> std::io::Result<()> {
+        self.find_patch(patch_name)?.deactive()
     }
 
-    pub fn save_all_patch_status(&mut self) -> std::io::Result<()> {
-        let mut status_list = Vec::with_capacity(self.patch_list.len());
+    pub fn save_all_patch_status(&self) -> std::io::Result<()> {
+        let mut status_map = HashMap::with_capacity(self.patch_list.len());
 
-        for patch in &mut self.patch_list {
-            status_list.push((patch.short_name(), patch.status()?))
+        for patch in &self.patch_list {
+            status_map.insert(patch.short_name(), patch.status()?);
         }
-        serde_versioned::serialize(&status_list, PATCH_STATUS_FILE)?;
+
+        debug!("Saving all patch status");
+        serde_versioned::serialize(&status_map, PATCH_STATUS_FILE)?;
 
         Ok(())
     }
 
-    pub fn restore_all_patch_status(&mut self) -> std::io::Result<()> {
-        let saved_patch_status = serde_versioned::deserialize::<_, Vec<(String, PatchStatus)>>(PATCH_STATUS_FILE)?;
-        for (patch_name, status) in saved_patch_status {
-            match self.find_patch_mut(&patch_name) {
+    pub fn restore_all_patch_status(&self) -> std::io::Result<()> {
+        debug!("Reading all patch status");
+        let status_map: HashMap<String, PatchStatus> = serde_versioned::deserialize(PATCH_STATUS_FILE)?;
+
+        for (patch_name, status) in status_map {
+            match self.find_patch(&patch_name) {
                 Ok(patch) => {
                     if let Err(_) = patch.restore(status) {
                         warn!("Patch \"{}\" restore failed", patch);

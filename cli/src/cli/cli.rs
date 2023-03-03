@@ -81,6 +81,11 @@ impl SyscareCLI {
                 cmd_executor  = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
             },
+            Command::Save => {
+                Self::check_root_permission()?;
+                cmd_executor  = Box::new(SaveCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::None;
+            },
             Command::Restore => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;

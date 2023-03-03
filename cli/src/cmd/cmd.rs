@@ -44,7 +44,9 @@ pub enum Command {
     Deactive {
         patch_name: String
     },
-    /// Restore all patch status from record
+    /// Save all patch status
+    Save,
+    /// Restore all patch status
     Restore,
     /// Reboot the system
     FastReboot {
