@@ -50,27 +50,11 @@ if [ "$(syscare status %{patch_name})" != "NOT-APPLIED" ]; then
     echo "error: cannot remove applied patch '%{patch_name}'" >&2
     exit 1
 fi
-
-%postun
-if [ "$1" != 0 ]; then
-    exit 0
-fi
-if [ -d "%{pkg_root}" ] && [ -z "$(ls -A %{pkg_root})" ]; then
-    rm -rf "%{pkg_root}"
-fi
 "#;
 
 impl RpmSpecGenerator {
-    fn parse_pkg_root(patch_info: &PatchInfo) -> PathBuf {
-        Path::new(PKG_INSTALL_DIR).join(
-            patch_info.target.short_name()
-        )
-    }
-
     fn parse_patch_root(patch_info: &PatchInfo) -> PathBuf {
-        Path::new(PKG_INSTALL_DIR)
-            .join(patch_info.target.short_name())
-            .join(&patch_info.name)
+        Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid)
     }
 
     fn parse_pkg_name(patch_info: &PatchInfo) -> String {
@@ -132,7 +116,6 @@ impl RpmSpecGenerator {
 
         let w = &mut writer;
         write_line2(w, "%global syscare_pkg_name      ", SYSCARE_PKG_NAME)?;
-        write_line2(w, "%global pkg_root              ", Self::parse_pkg_root(patch_info))?;
         write_line2(w, "%global pkg_name              ", Self::parse_pkg_name(patch_info))?;
         write_line2(w, "%global pkg_version           ", patch_info.version.to_string())?;
         write_line2(w, "%global pkg_release           ", &patch_info.release)?;

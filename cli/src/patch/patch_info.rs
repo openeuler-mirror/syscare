@@ -32,6 +32,7 @@ pub struct PatchFile {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchInfo {
+    pub uuid:        String,
     pub name:        String,
     pub version:     u32,
     pub release:     String,
@@ -64,6 +65,7 @@ impl PatchInfo {
             },
         };
 
+        log!(level, "uuid:        {}", self.uuid);
         log!(level, "name:        {}", self.name);
         log!(level, "version:     {}", self.version);
         log!(level, "release:     {}", self.release);

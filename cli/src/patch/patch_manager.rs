@@ -18,24 +18,21 @@ pub struct PatchManager {
 }
 
 impl PatchManager {
-    fn scan_patch_list<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<Patch>> {
-        debug!("Scanning patch list");
+    fn scan_patch_dir<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<Patch>> {
+        debug!("Scanning for patches");
 
         let mut patch_list = Vec::new();
-        for pkg_root in fs::list_all_dirs(directory, false)? {
-            for patch_root in fs::list_all_dirs(&pkg_root, false)? {
-                match Patch::new(&patch_root) {
-                    Ok(patch) => {
-                        debug!("Detected patch \"{}\"", patch);
-                        patch_list.push(patch);
-                    },
-                    Err(e) => {
-                        error!("Cannot read patch info for \"{}/{}\", {}",
-                            fs::file_name(&pkg_root).to_string_lossy(),
-                            fs::file_name(&patch_root).to_string_lossy(),
-                            e.to_string().to_lowercase()
-                        );
-                    }
+        for patch_root in fs::list_all_dirs(directory, false)? {
+            match Patch::new(&patch_root) {
+                Ok(patch) => {
+                    debug!("Detected patch {{{}}}", patch);
+                    patch_list.push(patch);
+                },
+                Err(e) => {
+                    error!("Cannot read patch info of \"{}\", {}",
+                        fs::file_name(&patch_root).to_string_lossy(),
+                        e.to_string().to_lowercase()
+                    );
                 }
             }
         }
@@ -45,11 +42,11 @@ impl PatchManager {
 
     fn is_matched_patch<T: AsRef<Patch>>(patch: &T, pattern: &str) -> bool {
         let patch = patch.as_ref();
-        if (pattern != patch.short_name()) && (pattern != patch.full_name()) {
+        if (pattern != patch.short_name()) && (pattern != patch.full_name()) && (pattern != patch.uuid) {
             return false;
         }
 
-        debug!("Matched patch \"{}\"", patch);
+        debug!("Found patch {{{}}} ({})", patch, patch.full_name());
         true
     }
 
@@ -59,7 +56,7 @@ impl PatchManager {
         F: Fn(&R, &str) -> bool,
         R: AsRef<T>,
     {
-        debug!("Matching patch \"{}\"", pattern);
+        debug!("Finding patch by \"{}\"", pattern);
 
         let mut list = iter.filter(|obj| is_matched(obj, pattern)).collect::<Vec<_>>();
         match list.len().cmp(&1) {
@@ -75,7 +72,7 @@ impl PatchManager {
             std::cmp::Ordering::Greater => {
                 Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("Found multiple patch named \"{}\", please use 'pkg_name/patch_name' instead", pattern)
+                    format!("Found multiple patch named \"{}\", please use uuid instead", pattern)
                 ))
             },
         }
@@ -93,7 +90,7 @@ impl PatchManager {
 impl PatchManager {
     pub fn new() -> std::io::Result<Self> {
         Ok(Self {
-            patch_list: Self::scan_patch_list(PATCH_INSTALL_DIR)?
+            patch_list: Self::scan_patch_dir(PATCH_INSTALL_DIR)?
         })
     }
 
@@ -133,7 +130,7 @@ impl PatchManager {
         let mut status_map = HashMap::with_capacity(self.patch_list.len());
 
         for patch in &self.patch_list {
-            status_map.insert(patch.short_name(), patch.status()?);
+            status_map.insert(&patch.uuid, patch.status()?);
         }
 
         debug!("Saving all patch status");
@@ -150,7 +147,7 @@ impl PatchManager {
             match self.find_patch(&patch_name) {
                 Ok(patch) => {
                     if let Err(_) = patch.restore(status) {
-                        warn!("Patch \"{}\" restore failed", patch);
+                        warn!("Patch {{{}}} restore failed", patch);
                         continue;
                     }
                 },

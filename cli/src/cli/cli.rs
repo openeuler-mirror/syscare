@@ -98,9 +98,9 @@ impl SyscareCLI {
             },
         };
 
-        debug!("Handle Command \"{:?}\"", cmd);
+        debug!("Command {:?}", cmd);
         let exit_code = cmd_executor.invoke(&cmd_arguments)?;
-        debug!("Command \"{:?}\" done", cmd);
+        debug!("Command {:?} done", cmd);
 
         Ok(exit_code)
     }

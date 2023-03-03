@@ -98,7 +98,7 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
         if status_list.len() != 1 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Patch \"{}\" status is out of sync", self.patch)
+                format!("Patch {{{}}} status is out of sync", self.patch)
             ));
         }
 

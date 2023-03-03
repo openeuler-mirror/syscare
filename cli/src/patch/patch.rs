@@ -20,11 +20,11 @@ pub struct Patch {
 }
 
 impl Patch {
-    pub fn new<P: AsRef<Path>>(path_root: P) -> std::io::Result<Self> {
+    pub fn new<P: AsRef<Path>>(patch_root: P) -> std::io::Result<Self> {
         const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-        let info     = serde_versioned::deserialize::<_, PatchInfo>(path_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
-        let root_dir = path_root.as_ref().to_path_buf();
+        let info     = serde_versioned::deserialize::<_, PatchInfo>(patch_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
+        let root_dir = patch_root.as_ref().to_path_buf();
         let status   = AtomicU8::new(PatchStatus::default() as u8);
 
         Ok(Self { info, status, root_dir })
@@ -59,7 +59,7 @@ impl Patch {
     }
 
     fn fetch_status(&self) -> std::io::Result<PatchStatus> {
-        debug!("Updating patch \"{}\" status", self);
+        debug!("Updating patch {{{}}} status", self);
         self.adapter().status()
     }
 
@@ -69,18 +69,18 @@ impl Patch {
             return;
         }
 
-        debug!("Patch \"{}\" status changed from \"{}\" to \"{}\"", self, old_status, status);
+        debug!("Patch {{{}}} status changed from {} to {}", self, old_status, status);
         self.status.store(status as u8, Ordering::Relaxed);
     }
 
     fn do_apply(&self) -> std::io::Result<()> {
-        debug!("Applying patch \"{}\"", self);
+        debug!("Applying patch {{{}}}", self);
 
         self.adapter().check_compatibility().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" check failed", self)
+                format!("Patch {{{}}} check failed", self)
             )
         })?;
 
@@ -88,7 +88,7 @@ impl Patch {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" apply failed", self)
+                format!("Patch {{{}}} apply failed", self)
             )
         })?;
 
@@ -97,13 +97,13 @@ impl Patch {
     }
 
     fn do_remove(&self) -> std::io::Result<()> {
-        debug!("Removing patch \"{}\"", self);
+        debug!("Removing patch {{{}}}", self);
 
         self.adapter().remove().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" remove failed", self)
+                format!("Patch {{{}}} remove failed", self)
             )
         })?;
 
@@ -112,13 +112,13 @@ impl Patch {
     }
 
     fn do_active(&self) -> std::io::Result<()> {
-        debug!("Activing patch \"{}\"", self);
+        debug!("Activing patch {{{}}}", self);
 
         self.adapter().active().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" active failed", self)
+                format!("Patch {{{}}} active failed", self)
             )
         })?;
 
@@ -127,13 +127,13 @@ impl Patch {
     }
 
     fn do_deactive(&self) -> std::io::Result<()> {
-        debug!("Deactiving patch \"{}\"", self);
+        debug!("Deactiving patch {{{}}}", self);
 
         self.adapter().deactive().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
-                format!("Patch \"{}\" deactive failed", self)
+                format!("Patch {{{}}} deactive failed", self)
             )
         })?;
 
@@ -150,7 +150,7 @@ impl Patch {
                 self.do_active()?;
             },
             PatchStatus::Deactived | PatchStatus::Actived => {
-                debug!("Patch \"{}\" is already applied", self);
+                debug!("Patch {{{}}} is already applied", self);
             },
             _ => unreachable!("Patch status is unknown")
         }
@@ -161,7 +161,7 @@ impl Patch {
     pub fn remove(&self) -> std::io::Result<()> {
         match self.status()? {
             PatchStatus::NotApplied => {
-                debug!("Patch \"{}\" is already removed", self);
+                debug!("Patch {{{}}} is already removed", self);
             },
             PatchStatus::Deactived => {
                 self.do_remove()?;
@@ -181,14 +181,14 @@ impl Patch {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Patch \"{}\" is not applied", self)
+                    format!("Patch {{{}}} is not applied", self)
                 ));
             },
             PatchStatus::Deactived => {
                 self.do_active()?;
             },
             PatchStatus::Actived => {
-                debug!("Patch \"{}\" is already actived", self);
+                debug!("Patch {{{}}} is already actived", self);
             },
             _ => unreachable!("Patch status is unknown")
         }
@@ -201,11 +201,11 @@ impl Patch {
             PatchStatus::NotApplied => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
-                    format!("Patch \"{}\" is not applied", self)
+                    format!("Patch {{{}}} is not applied", self)
                 ));
             },
             PatchStatus::Deactived => {
-                debug!("Patch \"{}\" is already deactived", self);
+                debug!("Patch {{{}}} is already deactived", self);
             },
             PatchStatus::Actived => {
                 self.do_deactive()?;
@@ -239,13 +239,13 @@ impl Patch {
         }
 
         let transition = (self.status()?, status);
-        debug!("Restoring patch \"{}\" status from \"{}\" to \"{}\"", self, transition.0, transition.1);
+        debug!("Restoring patch {{{}}} status from {} to {}", self, transition.0, transition.1);
 
         match PATCH_TRANSITION_MAP.get(&transition) {
             Some(action) => {
                 action(self)?
             },
-            None => debug!("Patch \"{}\" status not change", self),
+            None => debug!("Patch {{{}}} status not change", self),
         }
 
         Ok(())
@@ -268,6 +268,6 @@ impl std::ops::Deref for Patch {
 
 impl std::fmt::Display for Patch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.full_name())
+        f.write_str(&self.uuid)
     }
 }

@@ -5,6 +5,7 @@ use std::sync::Mutex;
 
 use log::log;
 use lazy_static::*;
+use uuid::Uuid;
 use serde::{Serialize, Deserialize};
 
 use crate::package::PackageInfo;
@@ -80,6 +81,7 @@ impl std::fmt::Display for PatchFile {
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchInfo {
+    pub uuid:        String,
     pub name:        String,
     pub version:     u32,
     pub release:     String,
@@ -97,6 +99,7 @@ impl PatchInfo {
     pub fn new(target_pkg_info: PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
         const KERNEL_PKG_NAME: &str = "kernel";
 
+        let uuid        = Uuid::new_v4().to_string();
         let name        = args.patch_name.to_owned();
         let kind        = match target_pkg_info.name == KERNEL_PKG_NAME {
             true  => PatchType::KernelPatch,
@@ -113,7 +116,7 @@ impl PatchInfo {
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
 
         Ok(PatchInfo {
-            name, kind,
+            uuid, name, kind,
             version, release, arch,
             target, target_elfs,
             license, description,
@@ -148,6 +151,7 @@ impl PatchInfo {
     }
 
     pub fn print_log(&self, level: log::Level) {
+        log!(level, "uuid:        {}", self.uuid);
         log!(level, "name:        {}", self.name);
         log!(level, "version:     {}", self.version);
         log!(level, "release:     {}", self.release);

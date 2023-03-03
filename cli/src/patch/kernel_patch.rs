@@ -2,7 +2,7 @@ use std::ffi::OsString;
 use std::os::unix::prelude::OsStrExt;
 use std::path::PathBuf;
 
-use log::{trace, debug};
+use log::debug;
 
 use crate::os::{SELinux, SELinuxStatus};
 
@@ -55,7 +55,7 @@ impl<'a> KernelPatchAdapter<'a> {
         let patch_file = self.get_patch_file();
         let sec_type   = SELinux::get_security_context_type(patch_file.as_path())?;
         if sec_type != KPATCH_PATCH_SEC_TYPE {
-            debug!("Setting patch \"{}\" security context type to \"{}\"",
+            debug!("Setting patch {{{}}} security context type to \"{}\"",
                 patch, KPATCH_PATCH_SEC_TYPE
             );
             SELinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
@@ -79,7 +79,7 @@ impl<'a> KernelPatchAdapter<'a> {
         match read_result {
             Ok(s) => {
                 let status = s.trim();
-                trace!("Read file \"{}\": {}", sys_file_path.display(), status);
+                debug!("Read file \"{}\": {}", sys_file_path.display(), status);
 
                 let patch_status = match status {
                     KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
@@ -108,7 +108,7 @@ impl<'a> KernelPatchAdapter<'a> {
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
             _ => unreachable!("Patch status is unknown"),
         };
-        trace!("Write file \"{}\": {}", sys_file_path.display(), status_str);
+        debug!("Write file \"{}\": {}", sys_file_path.display(), status_str);
 
         fs::write(&sys_file_path, status_str)
     }

@@ -145,7 +145,7 @@ impl SELinux {
                 let e = std::io::Error::last_os_error();
                 return Err(std::io::Error::new(
                     e.kind(),
-                    format!("Cannot write security context to \"{}\", {}",
+                    format!("Cannot write security context to {{{}}}, {}",
                         path.as_ref().display(),
                         e.to_string().to_lowercase()
                     )
