@@ -27,9 +27,18 @@ pub struct Arguments {
     #[arg(long, default_value_t = String::new(), hide_default_value = true)]
     pub build_patch_cmd: String,
 
-    /// Specify debug info array
+    /// Specify debug info list
     #[arg(short = 'i', long = "debug-info", required = true)]
     pub debug_infoes: Vec<PathBuf>,
+
+    /// Specify elf path list relate to elf-dir
+    /// if specified, one-to-one correspondence with debug-info
+    #[arg(short, long = "elf-path", required = false, verbatim_doc_comment)]
+    pub elf_pathes: Vec<PathBuf>,
+
+    /// Specify the directory of searching elf [default: <DEBUG_SOURCE>]
+    #[arg(long, default_value = None, required = false)]
+    pub elf_dir: Option<PathBuf>,
 
     /// Specify compiler [default: gcc]
     #[arg(short, long, default_value = None)]
@@ -103,6 +112,25 @@ impl Arguments {
 
         if !self.name.is_empty() {
             self.name.push("-");
+        }
+
+        self.elf_dir = match &self.elf_dir {
+            Some(elf_dir) => Some(real_arg(elf_dir)?),
+            None => Some(self.debug_source.clone()),
+        };
+
+        if !self.elf_pathes.is_empty() {
+            match self.elf_pathes.len().eq(&self.debug_infoes.len()) {
+                true => {
+                    for elf_path in &mut self.elf_pathes {
+                        *elf_path = self.elf_dir.as_ref().unwrap().join(&elf_path);
+                    }
+                },
+                false => return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("{}'s elf-name don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
+                )),
+            }
         }
 
         Ok(())

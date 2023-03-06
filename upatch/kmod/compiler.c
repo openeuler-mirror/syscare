@@ -425,17 +425,13 @@ static int rewrite_link_path(char __user **argv, char __user **envp)
 {
     int ret;
     size_t len;
-    char *link_path = NULL;
+    char *object_path = NULL;
+    char *base_dir = NULL;
     char *out_dir = NULL;
     char *kernel_new_path = NULL;
-    char *new_path = NULL;
+    char filename_buff[FILENAME_ID_LEN];
     unsigned long arg_pointer;
     unsigned long arg_addr, dir_addr;
-
-    ret = -ENOMEM;
-    link_path = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!link_path)
-        goto out;
 
     ret = obtain_parameter_pointer(argv, "-o", NULL, &arg_pointer);
     if (ret || arg_pointer == 0) {
@@ -448,13 +444,18 @@ static int rewrite_link_path(char __user **argv, char __user **envp)
     if (get_user(arg_addr, (unsigned long __user *)arg_pointer))
         goto out;
 
-    ret = copy_para_from_user(arg_addr, link_path, PATH_MAX);
+    ret = -ENOMEM;
+    object_path = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!object_path)
+        goto out;
+
+    ret = copy_para_from_user(arg_addr, object_path, PATH_MAX);
     if (ret)
         goto out;
 
     ret = obtain_parameter_addr(envp, LINK_DIR_ENV, &dir_addr, NULL);
     if (ret || dir_addr == 0) {
-        pr_debug("no valid %s found %s \n", LINK_DIR_ENV, link_path);
+        pr_debug("no valid %s found %s \n", LINK_DIR_ENV, object_path);
         ret = 0;
         goto out;
     }
@@ -469,53 +470,68 @@ static int rewrite_link_path(char __user **argv, char __user **envp)
     if (ret)
         goto out;
 
-    len = strlen(out_dir) + 1 + strlen(link_path) + 1;
+    ret = obtain_parameter_addr(envp, "PWD", &dir_addr, NULL);
+    if (ret || dir_addr == 0) {
+        pr_debug("no valid PWD found - %d \n", ret);
+        ret = 0;
+        goto out;
+    }
+
+    ret = -ENOMEM;
+    base_dir = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!base_dir)
+        goto out;
+
+    ret = copy_para_from_user((unsigned long)dir_addr + strlen("PWD") + 1, base_dir, PATH_MAX);
+    if (ret)
+        goto out;
+
+    ret = generate_file_name(filename_buff, FILENAME_ID_LEN);
+    if (ret)
+        goto out;
+
+    len = strlen(out_dir) + 1 + strlen(filename_buff) + 1;
 
     ret = -ENOMEM;
     kernel_new_path = kmalloc(len, GFP_KERNEL);
     if (!kernel_new_path)
         goto out;
 
-    new_path = (void *)vm_mmap(NULL, 0, len,
-        PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0);
-    if (IS_ERR((void *)new_path))
-        goto out;
-
     ret = -ENOMEM;
     strncpy(kernel_new_path, out_dir, strlen(out_dir));
     strncpy(kernel_new_path + strlen(out_dir), "/", 1);
-    strncpy(kernel_new_path + strlen(out_dir) + 1, link_path, strlen(link_path));
-    strncpy(kernel_new_path + strlen(out_dir) + 1 + strlen(link_path), "\0", 1);
+    strncpy(kernel_new_path + strlen(out_dir) + 1, filename_buff, strlen(filename_buff));
+    strncpy(kernel_new_path + strlen(out_dir) + 1 + strlen(filename_buff), "\0", 1);
 
-    if (copy_to_user(new_path, kernel_new_path, len))
-        goto out;
+    pr_debug("exist file name is %s \n", object_path);
+    pr_debug("link file name is %s \n", kernel_new_path);
 
-    /* modify path of output name */
-    if (put_user((unsigned long)new_path, (unsigned long *)arg_pointer))
-        goto out;
+    if (strncmp(object_path, "/", 1)) {
+        strcat(base_dir, "/");
+        strcat(base_dir, object_path);
+        ret = create_symlink(base_dir, kernel_new_path);
+    }
+    else {
+        ret = create_symlink(object_path, kernel_new_path);
+    }
 
-    pr_debug("exist file name is %s \n", kernel_new_path);
-    pr_debug("link file name is %s \n", link_path);
-
-    ret = create_symlink(kernel_new_path, link_path);
     if (ret) {
         pr_err("create symbol link for linker failed - %d \n", ret);
         goto out;
     }
 
     ret = 0;
-    goto out_normal;
+    goto out;
 
 out:
-    if (new_path && !IS_ERR((void *)new_path))
-        vm_munmap((unsigned long)new_path, len);
-out_normal:
-    if (link_path)
-        kfree(link_path);
+    if (object_path)
+        kfree(object_path);
     if (out_dir)
         kfree(out_dir);
     if (kernel_new_path)
         kfree(kernel_new_path);
+    if (base_dir)
+        kfree(base_dir);
     return ret;
 }
 

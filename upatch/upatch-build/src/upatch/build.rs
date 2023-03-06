@@ -84,7 +84,7 @@ impl UpatchBuild {
         // build source
         info!("Building original {:?}", project_name);
         let project = Project::new(&self.args.debug_source);
-        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.work_dir.binary_dir(), self.args.build_source_cmd.clone())?;
+        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
 
         // build patch
         for patch in &self.args.patches {
@@ -93,7 +93,7 @@ impl UpatchBuild {
         }
 
         info!("Building patched {:?}", project_name);
-        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.work_dir.binary_dir(), self.args.build_patch_cmd.clone())?;
+        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
         // unhack compiler
         info!("Unhacking compiler");
@@ -216,8 +216,28 @@ impl UpatchBuild {
 
     fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
         let mut output_config = OutputConfig::new();
-        let binary_files = list_all_files(self.work_dir.binary_dir(), false)?;
-        for debug_info in debug_infoes {
+        match self.args.elf_pathes.is_empty() {
+            true => self.__build_patches(debug_infoes, &mut output_config),
+            false => self.__build_patches_elf(debug_infoes, &mut output_config),
+        }?;
+        output_config.create(self.args.output_dir.as_ref().unwrap())?;
+        Ok(())
+    }
+
+    fn __build_patches_elf<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
+        for i in 0..debug_infoes.len() {
+            let binary_name = file_name(&self.args.elf_pathes[i])?;
+            let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
+            fs::create_dir(&diff_dir)?;
+            self.create_diff(&self.args.elf_pathes[i], &diff_dir, &debug_infoes[i])?;
+            self.build_patch(&debug_infoes[i], &binary_name, &diff_dir, output_config)?;
+        }
+        Ok(())
+    }
+
+    fn __build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
+        let binary_files = list_all_files(self.args.elf_dir.as_ref().unwrap(), true)?;
+        for debug_info in debug_infoes{
             let debug_info_name = file_name(debug_info)?;
             let mut not_found = true;
             for binary_file in &binary_files {
@@ -226,7 +246,7 @@ impl UpatchBuild {
                     let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
                     fs::create_dir(&diff_dir)?;
                     self.create_diff(&binary_file, &diff_dir, debug_info)?;
-                    self.build_patch(debug_info, &binary_name, &diff_dir, &mut output_config)?;
+                    self.build_patch(debug_info, &binary_name, &diff_dir, output_config)?;
                     not_found = false;
                     break;
                 }
@@ -235,7 +255,6 @@ impl UpatchBuild {
                 return Err(Error::Build(format!("don't have binary match {}", debug_info.as_ref().display())));
             }
         }
-        output_config.create(self.args.output_dir.as_ref().unwrap())?;
         Ok(())
     }
 

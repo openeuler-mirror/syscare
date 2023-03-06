@@ -9,7 +9,6 @@ pub struct WorkDir {
     source_dir: PathBuf,
     patch_dir: PathBuf,
     output_dir: PathBuf,
-    binary_dir: PathBuf,
     log_file: PathBuf,
 }
 
@@ -20,7 +19,6 @@ impl WorkDir {
             source_dir: PathBuf::new(),
             patch_dir: PathBuf::new(),
             output_dir: PathBuf::new(),
-            binary_dir: PathBuf::new(),
             log_file: PathBuf::new(),
         }
     }
@@ -31,7 +29,6 @@ impl WorkDir {
         self.source_dir = self.cache_dir.join("source");
         self.patch_dir = self.cache_dir.join("patch");
         self.output_dir = self.cache_dir.join("output");
-        self.binary_dir = self.cache_dir.join("binary");
         self.log_file = self.cache_dir.join("build.log");
 
         if let Ok(()) = self::check_dir(&self.cache_dir) {
@@ -42,7 +39,6 @@ impl WorkDir {
         fs::create_dir(&self.source_dir)?;
         fs::create_dir(&self.patch_dir)?;
         fs::create_dir(&self.output_dir)?;
-        fs::create_dir(&self.binary_dir)?;
         File::create(&self.log_file)?;
         Ok(())
     }
@@ -62,10 +58,6 @@ impl WorkDir {
 
     pub fn output_dir(&self) -> &Path {
         &self.output_dir
-    }
-
-    pub fn binary_dir(&self) -> &Path {
-        &self.binary_dir
     }
 
     pub fn log_file(&self) -> &Path {
