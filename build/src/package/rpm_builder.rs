@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 
 use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
 use crate::workdir::PackageBuildRoot;
+
+use crate::util::os_str::OsStringExt;
 use crate::util::{fs, serde::serde_versioned};
-use crate::util::os_str::OsStrConcat;
 use crate::util::ext_cmd::ExternCommandArgs;
 
 use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};

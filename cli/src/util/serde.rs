@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use log::error;
 use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use super::fs;
@@ -13,8 +12,7 @@ pub mod serde_unversioned {
         P: AsRef<Path>,
         T: Serialize,
     {
-        let binary = bincode::serialize(&obj).map_err(|e| {
-            error!("{}", e);
+        let binary = bincode::serialize(&obj).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Serialize data failed")
@@ -30,8 +28,7 @@ pub mod serde_unversioned {
         T: DeserializeOwned,
     {
         let binary = fs::read(path)?;
-        bincode::deserialize::<T>(&binary).map_err(|e| {
-            error!("{}", e);
+        bincode::deserialize::<T>(&binary).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Deserialize data failed")
@@ -59,8 +56,7 @@ pub mod serde_versioned {
             version: CLI_VERSION.to_owned(),
             data:    obj
         };
-        let binary = bincode::serialize(&vdata).map_err(|e| {
-            error!("{}", e);
+        let binary = bincode::serialize(&vdata).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Serialize data failed")
@@ -70,14 +66,13 @@ pub mod serde_versioned {
         fs::write(path, binary)
     }
 
-    pub fn deserialize<P: AsRef<Path>, T: DeserializeOwned>(path: P) -> std::io::Result<T>
+    pub fn deserialize<P, T>(path: P) -> std::io::Result<T>
     where
         P: AsRef<Path>,
         T: DeserializeOwned,
     {
         let binary  = fs::read(path)?;
-        let version = bincode::deserialize::<String>(&binary).map_err(|e| {
-            error!("{}", e);
+        let version = bincode::deserialize::<String>(&binary).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Deserialize file version failed")
@@ -91,8 +86,7 @@ pub mod serde_versioned {
         }
 
         let version_len = bincode::serialized_size(&version).unwrap() as usize;
-        let data = bincode::deserialize::<T>(&binary[version_len..]).map_err(|e| {
-            error!("{}", e);
+        let data = bincode::deserialize::<T>(&binary[version_len..]).map_err(|_| {
             std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Deserialize data failed")

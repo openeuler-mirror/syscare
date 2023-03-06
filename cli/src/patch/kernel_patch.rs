@@ -6,9 +6,9 @@ use log::debug;
 
 use crate::os::{SELinux, SELinuxStatus};
 
-use crate::util::sys;
-use crate::util::fs;
-use crate::util::os_str::OsStrConcat;
+
+use crate::util::os_str::OsStringExt;
+use crate::util::{sys, fs};
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::patch::Patch;

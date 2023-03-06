@@ -4,8 +4,9 @@ use std::{path::PathBuf, ffi::OsString};
 use log::info;
 
 use crate::os::KExec;
+
+use crate::util::os_str::OsStringExt;
 use crate::util::fs;
-use crate::util::os_str::OsStrConcat;
 
 pub enum RebootOption {
     Normal,

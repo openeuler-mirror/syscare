@@ -3,8 +3,9 @@ use std::path::{Path, PathBuf};
 use log::debug;
 
 use crate::package::RpmHelper;
+
+use crate::util::os_str::OsStrExt;
 use crate::util::fs;
-use crate::util::os_str::OsStrSplit;
 
 pub struct UserPatchHelper;
 

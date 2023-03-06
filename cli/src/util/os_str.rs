@@ -1,9 +1,8 @@
 use std::ffi::{OsStr, OsString};
-use std::path::Path;
-use std::os::unix::prelude::OsStrExt;
 
-/* Contains */
-pub trait OsStrContains
+use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
+
+pub trait OsStrExt
 where
     Self: AsRef<OsStr>
 {
@@ -15,67 +14,53 @@ where
             .position(|window| window == needle.as_bytes())
             .is_some()
     }
-}
 
-impl OsStrContains for OsStr {}
-impl OsStrContains for Path {}
+    fn starts_with<S: AsRef<OsStr>>(&self, needle: S) -> bool {
+        let os_str_bytes = self.as_ref().as_bytes();
+        let needle_bytes = needle.as_ref().as_bytes();
 
-/* Split */
-pub struct Split<'a> {
-    data:     &'a [u8],
-    spliter:  char,
-    finished: bool,
-}
+        os_str_bytes.starts_with(needle_bytes)
+    }
 
-impl<'a> Iterator for Split<'a> {
-    type Item = &'a OsStr;
+    fn ends_with<S: AsRef<OsStr>>(&self, needle: S) -> bool {
+        let os_str_bytes = self.as_ref().as_bytes();
+        let needle_bytes = needle.as_ref().as_bytes();
 
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
+        os_str_bytes.ends_with(needle_bytes)
+    }
 
-        match self.data.iter().position(|b| b == &(self.spliter as u8)) {
-            None => {
-                if self.finished {
-                    None
-                } else {
-                    self.finished = true;
-                    Some(OsStr::from_bytes(self.data))
-                }
-            },
-            Some(idx) => {
-                let str = Some(OsStr::from_bytes(&self.data[..idx]));
-                self.data = &self.data[idx + 1..];
-                str
-            }
-        }
+    fn strip_prefix<S: AsRef<OsStr>>(&self, prefix: S) -> Option<&OsStr> {
+        let os_str_bytes = self.as_ref().as_bytes();
+        let prefix_bytes = prefix.as_ref().as_bytes();
+
+        os_str_bytes.strip_prefix(prefix_bytes).map(OsStr::from_bytes)
+    }
+
+    fn strip_suffix<S: AsRef<OsStr>>(&self, suffix: S) -> Option<&OsStr> {
+        let os_str_bytes = self.as_ref().as_bytes();
+        let suffix_bytes = suffix.as_ref().as_bytes();
+
+        os_str_bytes.strip_suffix(suffix_bytes).map(OsStr::from_bytes)
+    }
+
+    fn split<'a>(&'a self, spliter: char) -> Box<dyn Iterator<Item = &OsStr> + 'a> {
+        let iter = self.as_ref()
+            .as_bytes()
+            .split(move|byte| byte == &(spliter as u8))
+            .map(|slice|OsStr::from_bytes(slice));
+
+        Box::new(iter)
     }
 }
 
-pub trait OsStrSplit
-where
-    Self: AsRef<OsStr>
-{
-    fn split(&self, spliter: char) -> Split {
-        Split {
-            data: self.as_ref().as_bytes(),
-            spliter,
-            finished: false,
-        }
-    }
+impl OsStrExt for OsStr {}
+
+pub trait OsStringExt {
+    fn concat<S: AsRef<OsStr>>(self, s: S) -> Self;
 }
 
-impl OsStrSplit for OsStr {}
-impl OsStrSplit for Path {}
-
-/* Concat */
-pub trait OsStrConcat {
-    fn concat<T: AsRef<OsStr>>(self, s: T) -> Self;
-}
-
-impl OsStrConcat for OsString {
-    fn concat<T: AsRef<OsStr>>(mut self, s: T) -> Self {
+impl OsStringExt for OsString {
+    fn concat<S: AsRef<OsStr>>(mut self, s: S) -> Self {
         self.push(s);
         self
     }

@@ -29,8 +29,8 @@ impl PatchManager {
                     patch_list.push(patch);
                 },
                 Err(e) => {
-                    error!("Cannot read patch info of \"{}\", {}",
-                        fs::file_name(&patch_root).to_string_lossy(),
+                    error!("Cannot read patch info from \"{}\", {}",
+                        patch_root.display(),
                         e.to_string().to_lowercase()
                     );
                 }

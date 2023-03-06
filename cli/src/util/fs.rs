@@ -2,7 +2,7 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::fs::{Metadata, Permissions, ReadDir, File, FileType};
 
-use super::os_str::OsStrContains;
+use crate::util::os_str::OsStrExt;
 
 trait RewriteError {
     fn rewrite_err(self, err_msg: String) -> Self;

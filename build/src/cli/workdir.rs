@@ -3,7 +3,7 @@ use std::path::Path;
 
 use std::ops::Deref;
 
-use crate::util::os_str::OsStrConcat;
+use crate::util::os_str::OsStringExt;
 use crate::util::sys;
 
 use crate::workdir::{WorkDir, WorkDirManager};

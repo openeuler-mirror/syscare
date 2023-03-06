@@ -2,11 +2,11 @@ use std::ffi::{CString, CStr};
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use std::os::unix::prelude::OsStrExt;
+use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
 
 use log::{trace, error};
 
-use crate::util::os_str::OsStrSplit;
+use crate::util::os_str::OsStrExt;
 use crate::util::fs;
 
 const SELINUX_ENFORCE_FILE:              &str  = "/sys/fs/selinux/enforce";

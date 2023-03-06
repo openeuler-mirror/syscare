@@ -4,8 +4,8 @@ use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::{RpmHelper, PKG_FILE_EXT};
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
+use crate::util::os_str::OsStringExt;
 use crate::util::{fs, serde::serde_unversioned};
-use crate::util::os_str::OsStrConcat;
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::upatch_helper::UserPatchHelper;

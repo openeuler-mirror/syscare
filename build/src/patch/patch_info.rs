@@ -11,8 +11,8 @@ use serde::{Serialize, Deserialize};
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
 
+use crate::util::os_str::OsStrExt;
 use crate::util::{fs, sys, digest};
-use crate::util::os_str::OsStrContains;
 
 const PATCH_VERSION_LENGTH: usize = 8;
 
@@ -64,7 +64,7 @@ impl PatchFile {
     }
 
     pub fn is_from_source_pkg(&self) -> bool {
-        self.path.contains(sys::process_id().to_string())
+        self.path.as_os_str().contains(sys::process_id().to_string())
     }
 }
 
