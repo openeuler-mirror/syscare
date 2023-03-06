@@ -7,7 +7,7 @@ use std::thread::JoinHandle;
 
 use log::*;
 
-use super::LossyLines;
+use super::RawLines;
 
 #[derive(Clone)]
 pub struct ExternCommandArgs {
@@ -170,9 +170,9 @@ impl ExternCommand<'_> {
     {
         std::thread::spawn(move || -> std::io::Result<OsString> {
             let mut last_line = OsString::new();
-            for read_line in LossyLines::from(BufReader::new(stdio)) {
+            for read_line in RawLines::from(BufReader::new(stdio)) {
                 last_line = read_line?;
-                log!(filter, "{:?}", last_line);
+                log!(filter, "{}", last_line.to_string_lossy());
             }
             Ok(last_line)
         })
