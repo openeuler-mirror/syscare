@@ -18,25 +18,15 @@ pub struct Elf {
 
 impl Elf {
     pub fn parse<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        let file = OpenOptions::new().read(true).open(path)?;
-        let mmap = unsafe { MmapOptions::new().offset(0).len(6).map(&file)? };
-        //Noe we only support 64 bit
-        let _class = match mmap.get(4..5) {
-            Some(&[ELFCLASS64]) => ELFCLASS64,
+        let file = OpenOptions::new().read(true).open(&path)?;
+        match check_elf(&file) {
+            Ok(true) => (),
             _ => return Err(std::io::Error::new(
                 std::io::ErrorKind::AddrNotAvailable,
-                format!("elf format is not class64")
+                format!("{:?} is not elf format", path.as_ref())
             )),
         };
-
-        let endian = match mmap.get(5..6) {
-            Some([1]) => Endian::new(Endianness::Little),
-            Some([2]) => Endian::new(Endianness::Big),
-            _ => return Err(std::io::Error::new(
-                std::io::ErrorKind::AddrNotAvailable,
-                format!("elf endian is error")
-            )),
-        };
+        let (_class, endian) = check_header(&file)?;
 
         Ok(Self {
             file,
