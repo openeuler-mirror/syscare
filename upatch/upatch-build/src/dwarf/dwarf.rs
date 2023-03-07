@@ -54,10 +54,11 @@ impl Dwarf{
     }
 
     pub fn file_in_obj<P: AsRef<Path>>(&self, elf: P) -> io::Result<Vec<DwarfCompileUnit>> {
-        // TODO can use mmap here, but depend on some devices
+        // use mmap here, but depend on some devices
         let elf = elf.as_ref();
-        let file = std::fs::read(elf)?;
-        match object::File::parse(&*file) {
+        let file = std::fs::File::open(elf)?;
+        let mmap = unsafe { memmap2::Mmap::map(&file)? };
+        match object::File::parse(&*mmap) {
             Ok(object) => {
                 let endian = if object.is_little_endian() {
                     gimli::RunTimeEndian::Little

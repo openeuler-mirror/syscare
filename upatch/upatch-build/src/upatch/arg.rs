@@ -10,7 +10,7 @@ use crate::tool::*;
 #[command(bin_name="upatch-build", version, term_width = 200)]
 pub struct Arguments {
     /// Specify work directory
-    /// will delete the work_dir [default: ~/.upatch]
+    /// will add .upatch in work_dir [default: ~/.upatch]
     #[arg(short, long, default_value = None, verbatim_doc_comment)]
     pub work_dir: Option<PathBuf>,
 
