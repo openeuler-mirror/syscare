@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU8, Ordering};
 
 use log::{debug, error};
 use lazy_static::lazy_static;
@@ -16,7 +15,6 @@ use super::kernel_patch::KernelPatchAdapter;
 pub struct Patch {
     pub info:     PatchInfo,
     pub root_dir: PathBuf,
-    status:       AtomicU8,
 }
 
 impl Patch {
@@ -25,9 +23,8 @@ impl Patch {
 
         let info     = serde_versioned::deserialize::<_, PatchInfo>(patch_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
         let root_dir = patch_root.as_ref().to_path_buf();
-        let status   = AtomicU8::new(PatchStatus::default() as u8);
 
-        Ok(Self { info, status, root_dir })
+        Ok(Self { info, root_dir })
     }
 
     pub fn short_name(&self) -> String {
@@ -39,14 +36,7 @@ impl Patch {
     }
 
     pub fn status(&self) -> std::io::Result<PatchStatus> {
-        let status = PatchStatus::from(self.status.load(Ordering::Relaxed));
-        if status == PatchStatus::Unknown {
-            let new_status = self.fetch_status()?;
-
-            self.update_status(new_status);
-            return Ok(new_status);
-        }
-        Ok(status)
+        self.adapter().status()
     }
 }
 
@@ -56,21 +46,6 @@ impl Patch {
             PatchType::UserPatch   => Box::new(UserPatchAdapter::new(self)),
             PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(self)),
         }
-    }
-
-    fn fetch_status(&self) -> std::io::Result<PatchStatus> {
-        debug!("Updating patch {{{}}} status", self);
-        self.adapter().status()
-    }
-
-    fn update_status(&self, status: PatchStatus) {
-        let old_status = PatchStatus::from(self.status.load(Ordering::Relaxed));
-        if old_status == status {
-            return;
-        }
-
-        debug!("Patch {{{}}} status changed from {} to {}", self, old_status, status);
-        self.status.store(status as u8, Ordering::Relaxed);
     }
 
     fn do_apply(&self) -> std::io::Result<()> {
@@ -90,10 +65,7 @@ impl Patch {
                 e.kind(),
                 format!("Patch {{{}}} apply failed", self)
             )
-        })?;
-
-        self.update_status(PatchStatus::Deactived);
-        Ok(())
+        })
     }
 
     fn do_remove(&self) -> std::io::Result<()> {
@@ -105,10 +77,7 @@ impl Patch {
                 e.kind(),
                 format!("Patch {{{}}} remove failed", self)
             )
-        })?;
-
-        self.update_status(PatchStatus::NotApplied);
-        Ok(())
+        })
     }
 
     fn do_active(&self) -> std::io::Result<()> {
@@ -120,10 +89,7 @@ impl Patch {
                 e.kind(),
                 format!("Patch {{{}}} active failed", self)
             )
-        })?;
-
-        self.update_status(PatchStatus::Actived);
-        Ok(())
+        })
     }
 
     fn do_deactive(&self) -> std::io::Result<()> {
@@ -135,120 +101,88 @@ impl Patch {
                 e.kind(),
                 format!("Patch {{{}}} deactive failed", self)
             )
-        })?;
+        })
+    }
 
-        self.update_status(PatchStatus::Deactived);
+    fn do_transition(&self, current_status: PatchStatus, target_status: PatchStatus) -> std::io::Result<()> {
+        type Transition       = (PatchStatus, PatchStatus);
+        type TransitionAction = dyn Fn(&Patch) -> std::io::Result<()> + Sync;
+
+        const PATCH_APPLY:    &TransitionAction = &Patch::do_apply;
+        const PATCH_REMOVE:   &TransitionAction = &Patch::do_remove;
+        const PATCH_ACTIVE:   &TransitionAction = &Patch::do_active;
+        const PATCH_DEACTIVE: &TransitionAction = &Patch::do_deactive;
+
+        lazy_static! {
+            static ref PATCH_TRANSITION_MAP: HashMap<Transition, Vec<&'static TransitionAction>> = [
+                ( (PatchStatus::NotApplied, PatchStatus::Actived   ), vec![PATCH_APPLY,    PATCH_ACTIVE] ),
+                ( (PatchStatus::Actived,    PatchStatus::NotApplied), vec![PATCH_DEACTIVE, PATCH_REMOVE] ),
+                ( (PatchStatus::NotApplied, PatchStatus::Deactived ), vec![PATCH_APPLY]                  ),
+                ( (PatchStatus::Deactived,  PatchStatus::NotApplied), vec![PATCH_REMOVE]                 ),
+                ( (PatchStatus::Deactived,  PatchStatus::Actived   ), vec![PATCH_ACTIVE]                 ),
+                ( (PatchStatus::Actived,    PatchStatus::Deactived ), vec![PATCH_DEACTIVE]               ),
+            ].into_iter().collect();
+        }
+
+        debug!("Switching patch {{{}}} status from {} to {}", self, current_status, target_status);
+        match PATCH_TRANSITION_MAP.get(&(current_status, target_status)) {
+            Some(action_list) => {
+                for action in action_list {
+                    action(self)?;
+                }
+            },
+            None => {
+                debug!("Patch {{{}}} status does not change", self);
+            }
+        }
+
         Ok(())
     }
 }
 
 impl Patch {
     pub fn apply(&self) -> std::io::Result<()> {
-        match self.status()? {
-            PatchStatus::NotApplied => {
-                self.do_apply()?;
-                self.do_active()?;
-            },
-            PatchStatus::Deactived | PatchStatus::Actived => {
-                debug!("Patch {{{}}} is already applied", self);
-            },
-            _ => unreachable!("Patch status is unknown")
-        }
-
-        Ok(())
+        let current_status = self.status()?;
+        let target_status  = match current_status {
+            PatchStatus::Unknown    => unreachable!(),
+            PatchStatus::NotApplied => PatchStatus::Actived,
+            PatchStatus::Deactived  => PatchStatus::Deactived,
+            PatchStatus::Actived    => PatchStatus::Actived,
+        };
+        self.do_transition(current_status, target_status)
     }
 
     pub fn remove(&self) -> std::io::Result<()> {
-        match self.status()? {
-            PatchStatus::NotApplied => {
-                debug!("Patch {{{}}} is already removed", self);
-            },
-            PatchStatus::Deactived => {
-                self.do_remove()?;
-            },
-            PatchStatus::Actived => {
-                self.do_deactive()?;
-                self.do_remove()?;
-            },
-            _ => unreachable!("Patch status is unknown")
-        }
-
-        Ok(())
+        self.do_transition(self.status()?, PatchStatus::NotApplied)
     }
 
     pub fn active(&self) -> std::io::Result<()> {
-        match self.status()? {
-            PatchStatus::NotApplied => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Patch {{{}}} is not applied", self)
-                ));
-            },
-            PatchStatus::Deactived => {
-                self.do_active()?;
-            },
-            PatchStatus::Actived => {
-                debug!("Patch {{{}}} is already actived", self);
-            },
-            _ => unreachable!("Patch status is unknown")
+        let current_status = self.status()?;
+        if current_status == PatchStatus::NotApplied {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Patch {{{}}} is not applied", self)
+            ));
         }
-
-        Ok(())
+        self.do_transition(current_status, PatchStatus::Actived)
     }
 
     pub fn deactive(&self) -> std::io::Result<()> {
-        match self.status()? {
-            PatchStatus::NotApplied => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
-                    format!("Patch {{{}}} is not applied", self)
-                ));
-            },
-            PatchStatus::Deactived => {
-                debug!("Patch {{{}}} is already deactived", self);
-            },
-            PatchStatus::Actived => {
-                self.do_deactive()?;
-            },
-            _ => unreachable!("Patch status is unknown")
+        let status = self.status()?;
+        if status == PatchStatus::NotApplied {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("Patch {{{}}} is not applied", self)
+            ));
         }
-
-        Ok(())
+        self.do_transition(status, PatchStatus::Deactived)
     }
 
-    pub fn restore(&self, status: PatchStatus) -> std::io::Result<()> {
-        type Transition  = (PatchStatus, PatchStatus);
-        type TransitionAction = dyn Fn(&Patch) -> std::io::Result<()> + Sync;
+    pub fn restore(&self, target_status: PatchStatus) -> std::io::Result<()> {
+        let current_status = self.status()?;
 
-        const PATCH_APPLY:         &TransitionAction = &Patch::apply;
-        const PATCH_REMOVE:        &TransitionAction = &Patch::remove;
-        const PATCH_APPLY_ONLY:    &TransitionAction = &Patch::do_apply;
-        const PATCH_REMOVE_ONLY:   &TransitionAction = &Patch::do_remove;
-        const PATCH_ACTIVE_ONLY:   &TransitionAction = &Patch::do_active;
-        const PATCH_DEACTIVE_ONLY: &TransitionAction = &Patch::do_deactive;
-
-        lazy_static! {
-            static ref PATCH_TRANSITION_MAP: HashMap<Transition, &'static TransitionAction> = [
-                ( (PatchStatus::NotApplied, PatchStatus::Actived   ), PATCH_APPLY         ),
-                ( (PatchStatus::Actived,    PatchStatus::NotApplied), PATCH_REMOVE        ),
-                ( (PatchStatus::NotApplied, PatchStatus::Deactived ), PATCH_APPLY_ONLY    ),
-                ( (PatchStatus::Deactived,  PatchStatus::NotApplied), PATCH_REMOVE_ONLY   ),
-                ( (PatchStatus::Deactived,  PatchStatus::Actived   ), PATCH_ACTIVE_ONLY   ),
-                ( (PatchStatus::Actived,    PatchStatus::Deactived ), PATCH_DEACTIVE_ONLY ),
-            ].into_iter().collect();
-        }
-
-        let transition = (self.status()?, status);
-        debug!("Restoring patch {{{}}} status from {} to {}", self, transition.0, transition.1);
-
-        match PATCH_TRANSITION_MAP.get(&transition) {
-            Some(action) => {
-                action(self)?
-            },
-            None => debug!("Patch {{{}}} status not change", self),
-        }
-
-        Ok(())
+        debug!("Restoring patch {{{}}} status to {}", self, target_status);
+        self.do_transition(current_status, target_status)
     }
 }
 

@@ -17,17 +17,6 @@ pub enum PatchStatus {
     Actived,
 }
 
-impl From<u8> for PatchStatus {
-    fn from(value: u8) -> Self {
-        match value {
-            1 => PatchStatus::NotApplied,
-            2 => PatchStatus::Deactived,
-            3 => PatchStatus::Actived,
-            _ => PatchStatus::Unknown,
-        }
-    }
-}
-
 impl Default for PatchStatus {
     fn default() -> Self {
         Self::Unknown
