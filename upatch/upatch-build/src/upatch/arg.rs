@@ -31,8 +31,8 @@ pub struct Arguments {
     #[arg(short = 'i', long = "debug-info", required = true)]
     pub debug_infoes: Vec<PathBuf>,
 
-    /// Specify elf path list relate to elf-dir
-    /// if specified, one-to-one correspondence with debug-info
+    /// Specify elf's relative path relate to elf-dir or absolute path list.
+    /// one-to-one correspondence with debug-info
     #[arg(short, long = "elf-path", required = false, verbatim_doc_comment)]
     pub elf_pathes: Vec<PathBuf>,
 
@@ -128,7 +128,7 @@ impl Arguments {
                 },
                 false => return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
-                    format!("{}'s elf-name don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
+                    format!("{}'s elf-path don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
                 )),
             }
         }

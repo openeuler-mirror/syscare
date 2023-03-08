@@ -228,20 +228,36 @@ impl UpatchBuild {
 
     fn __build_patches_elf<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
         for i in 0..debug_infoes.len() {
-            let binary_name = file_name(&self.args.elf_pathes[i])?;
+            let binary_path = self.get_binary_elf(&debug_infoes[i], &self.args.elf_pathes[i])?;
+            let binary_name = file_name(&binary_path)?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
-            self.create_diff(&self.args.elf_pathes[i], &diff_dir, &debug_infoes[i])?;
+            self.create_diff(&binary_path, &diff_dir, &debug_infoes[i])?;
             self.build_patch(&debug_infoes[i], &binary_name, &diff_dir, output_config)?;
         }
         Ok(())
     }
 
+    fn get_binary_elf<P: AsRef<Path>, B: AsRef<Path>>(&self, debug_info: P, binary_file: B) -> Result<PathBuf> {
+        let mut result = Vec::new();
+        let pathes = glob(binary_file)?;
+        for binary_file in &pathes {
+            if self.check_binary_elf(binary_file)? {
+                result.push(binary_file);
+            }
+        }
+        match result.len() {
+            0 => Err(Error::Build(format!("no binary match {:?}", debug_info.as_ref()))),
+            1 => Ok(result[0].clone()),
+            _ => Err(Error::Build(format!("{:?} match too many binaries: {:?}", debug_info.as_ref(), pathes))),
+        }
+    }
+
     fn __build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
         let binary_files = list_all_files(self.args.elf_dir.as_ref().unwrap(), true)?;
-        for debug_info in debug_infoes{
+        for debug_info in debug_infoes {
             let debug_info_name = file_name(debug_info)?;
-            let (binary_name, binary_file) = self.get_binary_elf(&binary_files, debug_info_name)?;
+            let (binary_name, binary_file) = self.get_binary(&binary_files, debug_info_name)?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
             self.create_diff(&binary_file, &diff_dir, debug_info)?;
@@ -250,14 +266,14 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn get_binary_elf<P: AsRef<Path>>(&self, binary_files: &Vec<P>, debug_info_name: OsString) -> Result<(OsString, PathBuf)> {
+    fn get_binary<P: AsRef<Path>>(&self, binary_files: &Vec<P>, debug_info_name: OsString) -> Result<(OsString, PathBuf)> {
         let (mut name, mut file) = (OsString::new(), PathBuf::new());
         for binary_file in binary_files {
             let binary_name = file_name(binary_file)?;
             if debug_info_name.contains(binary_name.as_bytes()) && self.check_binary_elf(&binary_file)? {
                 match name.is_empty() {
                     true => (name, file) = (binary_name, binary_file.as_ref().to_path_buf()),
-                    false => return Err(Error::Build(format!("{:?} match too many binaries: {:?} {:?}, please use --elf-dir or --elf-name parameter to specify one", debug_info_name, file, binary_file.as_ref()))),
+                    false => return Err(Error::Build(format!("{:?} match too many binaries: {:?} {:?}, please use --elf-dir or --elf-path parameter to specify one", debug_info_name, file, binary_file.as_ref()))),
                 }
             }
         }
