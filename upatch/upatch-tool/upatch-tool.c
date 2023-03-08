@@ -23,7 +23,7 @@
 #include "upatch-manage.h"
 #include "upatch-ioctl.h"
 
-#define COMMAND_SIZE 9
+#define COMMAND_SIZE 8
 char* command[COMMAND_SIZE] =
     {"", "active", "deactive", "install", "uninstall", "apply", "remove", "info"};
 enum Command {
