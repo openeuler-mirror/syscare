@@ -1,9 +1,12 @@
+use std::ffi::OsString;
+use std::path::PathBuf;
+
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
 
-use super::kpatch_helper::KernelPatchHelper;
+use super::kpatch_helper::{KernelPatchHelper, VMLINUX_FILE_NAME};
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 
 pub struct KernelPatchBuilder<'a> {
@@ -60,7 +63,7 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
 
         let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
         let source_pkg_build_dir  = source_pkg_build_root.build.as_path();
-        let kernel_source_dir = RpmHelper::find_source_directory(source_pkg_build_dir, patch_info)?;
+        let kernel_source_dir = RpmHelper::find_build_source(source_pkg_build_dir, patch_info)?;
 
         KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
         let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
@@ -95,7 +98,16 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
         }
     }
 
-    fn write_patch_info(&self, _: &mut PatchInfo, _: &PatchBuilderArguments) -> std::io::Result<()> {
+    fn write_patch_info(&self, patch_info: &mut PatchInfo, _: &PatchBuilderArguments) -> std::io::Result<()> {
+        /*
+         * Kernel patch does not use target_elf for patch operation,
+         * so we just add it for display purpose.
+         */
+        patch_info.target_elfs.insert(
+            OsString::from(VMLINUX_FILE_NAME),
+            PathBuf::from(VMLINUX_FILE_NAME),
+        );
+
         Ok(())
     }
 }

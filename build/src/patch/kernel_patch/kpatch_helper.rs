@@ -5,6 +5,8 @@ use log::debug;
 use crate::util::fs;
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
+pub const VMLINUX_FILE_NAME: &str = "vmlinux";
+
 pub struct KernelPatchHelper;
 
 impl KernelPatchHelper {
@@ -34,8 +36,6 @@ impl KernelPatchHelper {
     }
 
     pub fn find_vmlinux<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
-        const VMLINUX_FILE_NAME: &str = "vmlinux";
-
         debug!("Finding vmlinux from \"{}\"", directory.as_ref().display());
         fs::find_file(
             directory,

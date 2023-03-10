@@ -1,14 +1,13 @@
-use std::ffi::{OsString, OsStr};
+use std::ffi::OsString;
 
 use crate::cli::{CliWorkDir, CliArguments};
-use crate::package::{RpmHelper, PKG_FILE_EXT};
+use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
 use crate::util::os_str::OsStringExt;
-use crate::util::{fs, serde::serde_unversioned};
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use crate::util::fs;
 
-use super::upatch_helper::UserPatchHelper;
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
 pub struct UserPatchBuilder<'a> {
@@ -26,6 +25,8 @@ impl<'a> UserPatchBuilder<'a> {
             .arg(&args.work_dir)
             .arg("--debug-source")
             .arg(&args.debug_source)
+            .arg("--elf-dir")
+            .arg(&args.elf_dir)
             .arg("--build-source-cmd")
             .arg(&args.build_source_cmd)
             .arg("--build-patch-cmd")
@@ -33,8 +34,12 @@ impl<'a> UserPatchBuilder<'a> {
             .arg("--output-dir")
             .arg(&args.output_dir);
 
-        for debuginfo in &args.debuginfo {
-            cmd_args = cmd_args.arg("--debug-info").arg(debuginfo);
+        for relation in &args.elf_relations {
+            cmd_args = cmd_args
+                .arg("--elf-path")
+                .arg(OsString::from("*").concat(&relation.elf))
+                .arg("--debug-info")
+                .arg(&relation.debuginfo)
         }
 
         if args.skip_compiler_check {
@@ -51,41 +56,48 @@ impl<'a> UserPatchBuilder<'a> {
 
 impl PatchBuilder for UserPatchBuilder<'_> {
     fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
-        let patch_build_root = self.workdir.patch.build.as_path();
-        let patch_output_dir = self.workdir.patch.output.as_path();
-
         let source_pkg_dir = self.workdir.package.source.as_path();
         let debug_pkg_dir  = self.workdir.package.debug.as_path();
 
-        let pkg_build_root   = RpmHelper::find_build_root(source_pkg_dir)?;
-        let spec_file        = RpmHelper::find_spec_file(&pkg_build_root.specs)?;
-        let patch_source_dir = RpmHelper::find_source_directory(&pkg_build_root.build, patch_info)?;
-        let patch_debuginfo  = UserPatchHelper::find_debuginfo_file(debug_pkg_dir)?;
+        let pkg_build_root    = RpmHelper::find_build_root(source_pkg_dir)?;
+        let pkg_spec_dir      = pkg_build_root.specs.as_path();
+        let pkg_build_dir     = pkg_build_root.build.as_path();
+        let pkg_buildroot_dir = pkg_build_root.build_root.as_path();
+        let pkg_spec_file     = RpmHelper::find_spec_file(pkg_spec_dir)?;
+
+        let target_pkg    = &patch_info.target;
+        let work_dir      = self.workdir.patch.build.as_path();
+        let source_dir    = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
+        let debuginfos    = RpmHelper::find_debuginfo(debug_pkg_dir)?;
+        let elf_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
+        let output_dir    = self.workdir.patch.output.as_path();
 
         let build_original_cmd = OsString::from("rpmbuild")
             .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
-            .concat("' -bb ")
+            .concat("' -bc ")
             .concat("--nodebuginfo ")
             .concat("--noclean ")
-            .concat(&spec_file);
+            .concat(&pkg_spec_file);
 
         let build_patched_cmd = OsString::from("rpmbuild")
+            .concat(" --define '__brp_strip %{nil}'")
             .concat(" --define '_topdir ")
             .concat(&pkg_build_root)
-            .concat("' -bc ")
+            .concat("' -bb ")
             .concat("--noprep ")
             .concat("--nodebuginfo ")
             .concat("--noclean ")
-            .concat(&spec_file);
+            .concat(&pkg_spec_file);
 
         let builder_args = UserPatchBuilderArguments {
-            work_dir:            patch_build_root.to_owned(),
-            debug_source:        patch_source_dir,
-            debuginfo:           patch_debuginfo,
+            work_dir:            work_dir.to_path_buf(),
+            debug_source:        source_dir,
+            elf_dir:             pkg_buildroot_dir.to_path_buf(),
+            elf_relations:       elf_relations,
             build_source_cmd:    build_original_cmd,
             build_patch_cmd:     build_patched_cmd,
-            output_dir:          patch_output_dir.to_path_buf(),
+            output_dir:          output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose:             args.verbose,
             patch_list:          patch_info.patches.to_owned(),
@@ -108,36 +120,21 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     }
 
     fn write_patch_info(&self, patch_info: &mut PatchInfo, args: &PatchBuilderArguments) -> std::io::Result<()> {
-        pub const PATCH_ELF_NAME_FILE: &str  = "elf_names";
-
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
-                let elf_names = serde_unversioned::deserialize::<_, Vec<OsString>>(
-                    uargs.output_dir.join(PATCH_ELF_NAME_FILE)
-                )?;
+                /*
+                 * We assume that upatch-build generated patch file is named same as original elf file.
+                 * Thus, we can filter all elf names by existing patch file, which is the patch binary.
+                 */
+                let elf_map = uargs.elf_relations.iter().filter_map(|elf_relation| {
+                    let elf_name = fs::file_name(&elf_relation.elf);
+                    let elf_path = elf_relation.elf.to_path_buf();
 
-                let src_pkg_dir = self.workdir.package.source.as_path();
-                let pkg_name = format!("{}.{}",
-                    patch_info.target.full_name(),
-                    PKG_FILE_EXT
-                );
-                let pkg_path = fs::find_file(src_pkg_dir, &pkg_name, false, true)?;
-                let pkg_file_list = UserPatchHelper::query_pkg_file_list(pkg_path)?;
-
-                let elf_map = pkg_file_list.into_iter()
-                    .filter_map(|elf_path| {
-                        elf_path.file_name()
-                            .map(OsStr::to_os_string)
-                            .and_then(|elf_name| {
-                                if !elf_names.contains(&elf_name) {
-                                    return None;
-                                }
-                                Some((elf_name.to_os_string(), elf_path))
-                            })
-                    })
-                    .collect::<Vec<_>>();
-
-                    patch_info.target_elfs.extend(elf_map);
+                    fs::find_file(&uargs.output_dir, &elf_name, false, false).map(|_| {
+                        (elf_name, elf_path)
+                    }).ok()
+                });
+                patch_info.target_elfs.extend(elf_map);
 
                 Ok(())
             },
