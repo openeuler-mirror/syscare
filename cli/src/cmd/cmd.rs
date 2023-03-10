@@ -16,33 +16,40 @@ pub enum Command {
     },
     /// Show patch detail info
     Info {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Show patch target info
     Target {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Show patch status
     Status {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// List all installed patches
     List,
     /// Apply a patch
     Apply {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Remove a patch
     Remove {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Activate a patch
     Active {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Deactive a patch
     Deactive {
-        patch_name: String
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
     },
     /// Save all patch status
     Save,

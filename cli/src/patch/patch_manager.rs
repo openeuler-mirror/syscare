@@ -42,7 +42,7 @@ impl PatchManager {
 
     fn is_matched_patch<T: AsRef<Patch>>(patch: &T, pattern: &str) -> bool {
         let patch = patch.as_ref();
-        if (pattern != patch.short_name()) && (pattern != patch.full_name()) && (pattern != patch.uuid) {
+        if (pattern != patch.full_name()) && (pattern != patch.uuid) {
             return false;
         }
 
@@ -78,11 +78,11 @@ impl PatchManager {
         }
     }
 
-    fn find_patch(&self, patch_name: &str) -> std::io::Result<&Patch> {
+    fn find_patch(&self, identifier: &str) -> std::io::Result<&Patch> {
         Self::match_patch(
             self.patch_list.iter(),
             Self::is_matched_patch,
-            patch_name
+            identifier
         )
     }
 }
@@ -98,32 +98,32 @@ impl PatchManager {
         &self.patch_list
     }
 
-    pub fn get_patch_info(&self, patch_name: &str) -> std::io::Result<&PatchInfo> {
-        Ok(&self.find_patch(patch_name)?.info)
+    pub fn get_patch_info(&self, identifier: &str) -> std::io::Result<&PatchInfo> {
+        Ok(&self.find_patch(identifier)?.info)
     }
 
-    pub fn get_patch_target(&self, patch_name: &str) -> std::io::Result<&PackageInfo> {
-        Ok(&self.find_patch(patch_name)?.info.target)
+    pub fn get_patch_target(&self, identifier: &str) -> std::io::Result<&PackageInfo> {
+        Ok(&self.find_patch(identifier)?.info.target)
     }
 
-    pub fn get_patch_status(&self, patch_name: &str) -> std::io::Result<PatchStatus> {
-        self.find_patch(patch_name)?.status()
+    pub fn get_patch_status(&self, identifier: &str) -> std::io::Result<PatchStatus> {
+        self.find_patch(identifier)?.status()
     }
 
-    pub fn apply_patch(&self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch(patch_name)?.apply()
+    pub fn apply_patch(&self, identifier: &str) -> std::io::Result<()> {
+        self.find_patch(identifier)?.apply()
     }
 
-    pub fn remove_patch(&self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch(patch_name)?.remove()
+    pub fn remove_patch(&self, identifier: &str) -> std::io::Result<()> {
+        self.find_patch(identifier)?.remove()
     }
 
-    pub fn active_patch(&self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch(patch_name)?.active()
+    pub fn active_patch(&self, identifier: &str) -> std::io::Result<()> {
+        self.find_patch(identifier)?.active()
     }
 
-    pub fn deactive_patch(&self, patch_name: &str) -> std::io::Result<()> {
-        self.find_patch(patch_name)?.deactive()
+    pub fn deactive_patch(&self, identifier: &str) -> std::io::Result<()> {
+        self.find_patch(identifier)?.deactive()
     }
 
     pub fn save_all_patch_status(&self) -> std::io::Result<()> {

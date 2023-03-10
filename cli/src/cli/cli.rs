@@ -45,41 +45,41 @@ impl SyscareCLI {
                 cmd_executor  = Box::new(BuildCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::CommandLineArguments(args.to_owned());
             }
-            Command::Info { patch_name } => {
+            Command::Info { identifier } => {
                 cmd_executor  = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
-            Command::Target { patch_name } => {
+            Command::Target { identifier } => {
                 cmd_executor = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
-            Command::Status { patch_name } => {
+            Command::Status { identifier } => {
                 cmd_executor  = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
             Command::List => {
                 cmd_executor  = Box::new(ListCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::None;
             },
-            Command::Apply { patch_name } => {
+            Command::Apply { identifier } => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(ApplyCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
-            Command::Remove { patch_name } => {
+            Command::Remove { identifier } => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(RemoveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
-            Command::Active { patch_name } => {
+            Command::Active { identifier } => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(ActiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
-            Command::Deactive { patch_name } => {
+            Command::Deactive { identifier } => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(patch_name.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
             Command::Save => {
                 Self::check_root_permission()?;
