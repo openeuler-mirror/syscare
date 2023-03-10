@@ -1,5 +1,9 @@
-use std::ffi::{OsString, OsStr};
-use std::path::{Path, PathBuf};
+use std::collections::HashMap;
+use std::ffi::OsString;
+use std::path::PathBuf;
+
+use lazy_static::lazy_static;
+use log::{debug, error};
 
 use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
@@ -7,16 +11,76 @@ use super::patch::Patch;
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;
 
-const UPATCH_TOOL: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-tool");
-const UPATCH_ACTION_STATUS:    &str = "info";
-const UPATCH_ACTION_INSTALL:   &str = "install";
-const UPATCH_ACTION_UNINSTALL: &str = "uninstall";
-const UPATCH_ACTION_ACTIVE:    &str = "active";
-const UPATCH_ACTION_DEACTIVE:  &str = "deactive";
-const UPATCH_STATUS_NOT_APPLY: &str = "Status: removed";
-const UPATCH_STATUS_INSTALLED: &str = "Status: installed";
-const UPATCH_STATUS_ACTIVED:   &str = "Status: actived";
-const UPATCH_STATUS_DEACTIVED: &str = "Status: deactived";
+#[derive(PartialEq)]
+#[derive(Clone, Copy)]
+enum UserPatchAction {
+    Info,
+    Install,
+    Uninstall,
+    Active,
+    Deactive,
+}
+
+impl std::fmt::Display for UserPatchAction {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            UserPatchAction::Info      => "info",
+            UserPatchAction::Install   => "install",
+            UserPatchAction::Uninstall => "uninstall",
+            UserPatchAction::Active    => "active",
+            UserPatchAction::Deactive  => "deactive",
+        })
+    }
+}
+
+struct UserPatch {
+    elf:   PathBuf,
+    patch: PathBuf,
+}
+
+impl std::fmt::Display for UserPatch {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{}", self.elf.display()))
+    }
+}
+
+impl UserPatch {
+    fn status(&self) -> std::io::Result<PatchStatus> {
+        let stdout = self.do_action(UserPatchAction::Info)?;
+        let status = match stdout.to_str() {
+            Some("Status: removed")   => PatchStatus::NotApplied,
+            Some("Status: installed") => PatchStatus::Deactived,
+            Some("Status: actived")   => PatchStatus::Actived,
+            Some("Status: deactived") => PatchStatus::Deactived,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!("Patch status \"{}\" is invalid", stdout.to_string_lossy())
+                ));
+            }
+        };
+
+        Ok(status)
+    }
+
+    fn do_action(&self, action: UserPatchAction) -> std::io::Result<OsString> {
+        const UPATCH_TOOL: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-tool");
+
+        let mut args = ExternCommandArgs::new()
+            .arg(action.to_string())
+            .arg("--patch")
+            .arg(&self.patch);
+
+        if action == UserPatchAction::Install {
+            args = args.arg("--binary").arg(&self.elf);
+        }
+
+        let exit_status = UPATCH_TOOL.execvp(args)?;
+        exit_status.check_exit_code()?;
+
+        Ok(exit_status.stdout().to_owned())
+    }
+}
 
 pub struct UserPatchAdapter<'a> {
     patch: &'a Patch,
@@ -27,57 +91,68 @@ impl<'a> UserPatchAdapter<'a> {
         Self { patch }
     }
 
-    fn get_patch_file<S: AsRef<OsStr>>(&self, elf_name: S) -> PathBuf {
-        self.patch.root_dir.join(elf_name.as_ref())
+    fn get_user_patches(&self) -> Vec<UserPatch> {
+        self.patch.target_elfs.iter().map(|(elf_name, elf_path)| {
+            UserPatch {
+                elf:   elf_path.to_path_buf(),
+                patch: self.patch.root_dir.join(elf_name),
+            }
+        }).collect()
     }
 
-    fn do_action<P: AsRef<Path>>(&self, action: &str, patch: P) -> std::io::Result<OsString> {
-        let exit_status = UPATCH_TOOL.execvp(
-            ExternCommandArgs::new()
-                    .arg(action)
-                    .arg("--patch")
-                    .arg(patch.as_ref())
-        )?;
-
-        exit_status.check_exit_code()?;
-        Ok(exit_status.stdout().to_owned())
-    }
-
-    fn do_action_to_elf<P: AsRef<Path>, Q: AsRef<Path>>(&self, action: &str, patch: P, elf: Q) -> std::io::Result<OsString> {
-        let exit_status = UPATCH_TOOL.execvp(
-            ExternCommandArgs::new()
-                    .arg(action)
-                    .arg("--patch")
-                    .arg(patch.as_ref())
-                    .arg("--binary")
-                    .arg(elf.as_ref())
-        )?;
-
-        Ok(exit_status.stdout().to_owned())
-    }
-
-    fn get_patch_status<S: AsRef<OsStr>>(&self, elf_name: S) -> std::io::Result<PatchStatus> {
-        let patch  = self.get_patch_file(&elf_name);
-
-        let stdout = self.do_action(UPATCH_ACTION_STATUS, patch)?;
-        if stdout == UPATCH_STATUS_NOT_APPLY {
-            Ok(PatchStatus::NotApplied)
+    fn do_transaction(&self, action: UserPatchAction) -> std::io::Result<()> {
+        struct TransactionRecord<'a> {
+            upatch:      &'a UserPatch,
+            old_status: PatchStatus,
         }
-        else if stdout == UPATCH_STATUS_INSTALLED  {
-            Ok(PatchStatus::Deactived)
+
+        #[inline(always)]
+        fn __invoke_transaction(upatch: &UserPatch, action: UserPatchAction) -> std::io::Result<TransactionRecord> {
+            let record = TransactionRecord { upatch, old_status: upatch.status()? };
+            debug!("Applying changes to \"{}\"", upatch);
+            upatch.do_action(action)?;
+            debug!("Applied \"{}\"", upatch);
+            Ok(record)
         }
-        else if stdout == UPATCH_STATUS_DEACTIVED  {
-            Ok(PatchStatus::Deactived)
+
+        #[inline(always)]
+        fn __rollback_transaction(records: Vec<TransactionRecord>) -> std::io::Result<()> {
+            type RollbackTransition = (PatchStatus, PatchStatus);
+            lazy_static! {
+                static ref ROLLBACK_ACTION_MAP: HashMap<RollbackTransition, UserPatchAction> = [
+                    ( (PatchStatus::NotApplied, PatchStatus::Deactived ), UserPatchAction::Install   ),
+                    ( (PatchStatus::Deactived,  PatchStatus::Actived   ), UserPatchAction::Active    ),
+                    ( (PatchStatus::Actived,    PatchStatus::Deactived ), UserPatchAction::Deactive  ),
+                    ( (PatchStatus::Deactived,  PatchStatus::NotApplied), UserPatchAction::Uninstall ),
+                ].into_iter().collect();
+            }
+            for record in records {
+                let upatch = record.upatch;
+                debug!("Rolling back changes to \"{}\"", upatch);
+                if let Some(action) = ROLLBACK_ACTION_MAP.get(&(record.old_status, upatch.status()?)) {
+                    upatch.do_action(*action)?;
+                }
+                debug!("Rolled back changes to \"{}\"", upatch);
+            }
+            Ok(())
         }
-        else if stdout == UPATCH_STATUS_ACTIVED  {
-            Ok(PatchStatus::Actived)
+
+        let mut records = Vec::new();
+        for upatch in &self.get_user_patches() {
+            match __invoke_transaction(upatch, action) {
+                Ok(record) => {
+                    records.push(record);
+                }
+                Err(e) => {
+                    if let Err(e) = __rollback_transaction(records) {
+                        error!("{}", e);
+                    }
+                    return Err(e);
+                }
+            }
         }
-        else {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Patch status \"{}\" is invalid", stdout.to_string_lossy())
-            ))
-        }
+
+        Ok(())
     }
 }
 
@@ -89,8 +164,8 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
     fn status(&self) -> std::io::Result<PatchStatus> {
         // Fetch all patches status
         let mut status_list = Vec::new();
-        for (elf_name, _) in &self.patch.target_elfs {
-            status_list.push(self.get_patch_status(elf_name)?);
+        for patch in self.get_user_patches() {
+            status_list.push(patch.status()?)
         }
         // Check if all patch status are same
         status_list.sort();
@@ -98,51 +173,26 @@ impl PatchActionAdapter for UserPatchAdapter<'_> {
         if status_list.len() != 1 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Patch {{{}}} status is out of sync", self.patch)
+                format!("Patch {{{}}} status is not syncing", self.patch)
             ));
         }
 
-        Ok(status_list[0])
+        Ok(status_list.remove(0))
     }
 
     fn apply(&self) -> std::io::Result<()> {
-        for (elf_name, elf_path) in &self.patch.target_elfs {
-            self.do_action_to_elf(
-                UPATCH_ACTION_INSTALL,
-                self.get_patch_file(&elf_name),
-                elf_path
-            )?;
-        }
-        Ok(())
+        self.do_transaction(UserPatchAction::Install)
     }
 
     fn remove(&self) -> std::io::Result<()> {
-        for (elf_name, _) in &self.patch.target_elfs {
-            self.do_action(
-                UPATCH_ACTION_UNINSTALL,
-                self.get_patch_file(&elf_name)
-            )?;
-        }
-        Ok(())
+        self.do_transaction(UserPatchAction::Uninstall)
     }
 
     fn active(&self) -> std::io::Result<()> {
-        for (elf_name, _) in &self.patch.target_elfs {
-            self.do_action(
-                UPATCH_ACTION_ACTIVE,
-                self.get_patch_file(&elf_name)
-            )?;
-        }
-        Ok(())
+        self.do_transaction(UserPatchAction::Active)
     }
 
     fn deactive(&self) -> std::io::Result<()> {
-        for (elf_name, _) in &self.patch.target_elfs {
-            self.do_action(
-                UPATCH_ACTION_DEACTIVE,
-                self.get_patch_file(&elf_name)
-            )?;
-        }
-        Ok(())
+        self.do_transaction(UserPatchAction::Deactive)
     }
 }
