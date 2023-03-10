@@ -30,20 +30,20 @@ pub struct PatchFile {
 }
 
 #[derive(Serialize, Deserialize)]
-#[derive(Clone)]
-pub struct PatchInfo {
+#[derive(Clone)]pub struct PatchInfo {
     pub uuid:        String,
     pub name:        String,
-    pub version:     u32,
-    pub release:     String,
+    pub version:     String,
+    pub release:     u32,
     pub arch:        String,
     pub kind:        PatchType,
+    pub digest:      String,
     pub target:      PackageInfo,
     pub target_elfs: HashMap<OsString, PathBuf>,
     pub license:     String,
     pub description: String,
-    pub is_patched:  bool,
     pub patches:     Vec<PatchFile>,
+    pub is_patched:  bool,
 }
 
 impl PatchInfo {
@@ -56,9 +56,7 @@ impl PatchInfo {
                 for (elf_name, _) in self.target_elfs.iter() {
                     str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
                 }
-                str.pop();
-                str.pop();
-                str
+                str.trim_end_matches(", ").to_string()
             },
             true => {
                 PATCH_FLAG_NONE.to_owned()
@@ -73,6 +71,7 @@ impl PatchInfo {
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
         log!(level, "target_elf:  {}", target_elfs);
+        log!(level, "digest:      {}", self.digest);
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");

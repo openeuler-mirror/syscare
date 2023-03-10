@@ -83,16 +83,17 @@ impl std::fmt::Display for PatchFile {
 pub struct PatchInfo {
     pub uuid:        String,
     pub name:        String,
-    pub version:     u32,
-    pub release:     String,
+    pub version:     String,
+    pub release:     u32,
     pub arch:        String,
     pub kind:        PatchType,
+    pub digest:      String,
     pub target:      PackageInfo,
     pub target_elfs: HashMap<OsString, PathBuf>,
     pub license:     String,
     pub description: String,
-    pub is_patched:  bool,
     pub patches:     Vec<PatchFile>,
+    pub is_patched:  bool,
 }
 
 impl PatchInfo {
@@ -105,22 +106,23 @@ impl PatchInfo {
             true  => PatchType::KernelPatch,
             false => PatchType::UserPatch,
         };
-        let version     = args.patch_version;
-        let release     = digest::file_list_digest(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
+        let version     = args.patch_version.to_owned();
+        let release     = args.patch_release;
         let arch        = args.patch_arch.to_owned();
         let target      = target_pkg_info;
         let target_elfs = HashMap::new();
+        let digest      = digest::file_list_digest(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
-        let is_patched  = false;
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
+        let is_patched  = false;
 
         Ok(PatchInfo {
             uuid, name, kind,
             version, release, arch,
-            target, target_elfs,
+            target, target_elfs, digest,
             license, description,
-            is_patched, patches
+            patches, is_patched,
         })
     }
 
@@ -134,23 +136,22 @@ impl PatchInfo {
 }
 
 impl PatchInfo {
-    fn target_elfs_str(&self) -> String {
-        const UNKNOWN_ELF_NAME: &str = "(unknown)";
-
-        if self.target_elfs.is_empty() {
-            return UNKNOWN_ELF_NAME.to_owned();
-        }
-
-        let mut str = String::new();
-        for (elf_name, _) in self.target_elfs.iter() {
-            str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
-        }
-        str.pop();
-        str.pop();
-        str
-    }
-
     pub fn print_log(&self, level: log::Level) {
+        const PATCH_FLAG_NONE: &str = "(none)";
+
+        let target_elfs = match self.target_elfs.is_empty() {
+            false => {
+                let mut str = String::new();
+                for (elf_name, _) in self.target_elfs.iter() {
+                    str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
+                }
+                str.trim_end_matches(", ").to_string()
+            },
+            true => {
+                PATCH_FLAG_NONE.to_owned()
+            },
+        };
+
         log!(level, "uuid:        {}", self.uuid);
         log!(level, "name:        {}", self.name);
         log!(level, "version:     {}", self.version);
@@ -158,7 +159,8 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elf:  {}", self.target_elfs_str());
+        log!(level, "target_elf:  {}", target_elfs);
+        log!(level, "digest:      {}", self.digest);
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");

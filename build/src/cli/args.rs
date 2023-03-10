@@ -8,6 +8,7 @@ use crate::util::sys;
 use super::{CLI_NAME, CLI_VERSION};
 
 const DEFAULT_PATCH_VERSION:     &str = "1";
+const DEFAULT_PATCH_RELEASE:     &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
 const DEFAULT_WORK_DIR:          &str = ".";
 const DEFAULT_OUTPUT_DIR:        &str = ".";
@@ -29,7 +30,11 @@ pub struct CliArguments {
 
     /// Patch version
     #[arg(long, default_value=DEFAULT_PATCH_VERSION)]
-    pub patch_version: u32,
+    pub patch_version: String,
+
+    /// Patch release
+    #[arg(long, default_value=DEFAULT_PATCH_RELEASE)]
+    pub patch_release: u32,
 
     /// Patch description
     #[arg(long, default_value=DEFAULT_PATCH_DESCRIPTION)]

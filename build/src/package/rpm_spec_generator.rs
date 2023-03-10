@@ -117,8 +117,8 @@ impl RpmSpecGenerator {
         let w = &mut writer;
         write_line2(w, "%global syscare_pkg_name      ", SYSCARE_PKG_NAME)?;
         write_line2(w, "%global pkg_name              ", Self::parse_pkg_name(patch_info))?;
-        write_line2(w, "%global pkg_version           ", patch_info.version.to_string())?;
-        write_line2(w, "%global pkg_release           ", &patch_info.release)?;
+        write_line2(w, "%global pkg_version           ", &patch_info.version)?;
+        write_line2(w, "%global pkg_release           ", patch_info.release.to_string())?;
         write_line2(w, "%global pkg_group             ", PKG_GROUP)?;
         write_line2(w, "%global pkg_license           ", &patch_info.license)?;
         write_line2(w, "%global pkg_summary           ", Self::parse_summary(patch_info))?;

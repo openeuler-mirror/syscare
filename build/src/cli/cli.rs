@@ -129,8 +129,8 @@ impl PatchBuildCLI {
         // Collect patch info from patched source package
         if let Ok(path) = fs::find_file(&pkg_source_dir, PATCH_INFO_FILE_NAME, false, false) {
             let old_patch_info = serde_versioned::deserialize::<_, PatchInfo>(path)?;
-            // Override path version
-            args.patch_version = u32::max(args.patch_version, old_patch_info.version + 1);
+            // Override path release
+            args.patch_release = u32::max(args.patch_release, old_patch_info.release + 1);
             // Overide path list
             let mut new_patches = PatchHelper::collect_patches(&pkg_source_dir)?;
             if !new_patches.is_empty() {
