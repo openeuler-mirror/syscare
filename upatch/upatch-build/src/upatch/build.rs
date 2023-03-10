@@ -20,7 +20,6 @@ use super::Arguments;
 use super::Compiler;
 use super::WorkDir;
 use super::Project;
-use super::OutputConfig;
 use super::Tool;
 use super::Result;
 use super::Error;
@@ -183,7 +182,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D, output_config: &mut OutputConfig) -> Result<()>
+    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -212,28 +211,25 @@ impl UpatchBuild {
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
         resolve(&debug_info, &output_file)?;
-        output_config.push(&binary);
         Ok(())
     }
 
     fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
-        let mut output_config = OutputConfig::new();
         match self.args.elf_pathes.is_empty() {
-            true => self.__build_patches(debug_infoes, &mut output_config),
-            false => self.__build_patches_elf(debug_infoes, &mut output_config),
+            true => self.__build_patches(debug_infoes),
+            false => self.__build_patches_elf(debug_infoes),
         }?;
-        output_config.create(self.args.output_dir.as_ref().unwrap())?;
         Ok(())
     }
 
-    fn __build_patches_elf<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
+    fn __build_patches_elf<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
         for i in 0..debug_infoes.len() {
             let binary_path = self.get_binary_elf(&debug_infoes[i], &self.args.elf_pathes[i])?;
             let binary_name = file_name(&binary_path)?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
             self.create_diff(&binary_path, &diff_dir, &debug_infoes[i])?;
-            self.build_patch(&debug_infoes[i], &binary_name, &diff_dir, output_config)?;
+            self.build_patch(&debug_infoes[i], &binary_name, &diff_dir)?;
         }
         Ok(())
     }
@@ -253,7 +249,7 @@ impl UpatchBuild {
         }
     }
 
-    fn __build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>, output_config: &mut OutputConfig) -> Result<()> {
+    fn __build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
         let binary_files = list_all_files(self.args.elf_dir.as_ref().unwrap(), true)?;
         for debug_info in debug_infoes {
             let debug_info_name = file_name(debug_info)?;
@@ -261,7 +257,7 @@ impl UpatchBuild {
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
             self.create_diff(&binary_file, &diff_dir, debug_info)?;
-            self.build_patch(debug_info, &binary_name, &diff_dir, output_config)?;
+            self.build_patch(debug_info, &binary_name, &diff_dir)?;
         }
         Ok(())
     }
