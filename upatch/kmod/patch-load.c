@@ -541,7 +541,7 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
     for (i = 0; i < sechdr->sh_size / sizeof(Elf_Sym); i++) {
         sym_name = elf_info->strtab + sym[i].st_name;
-        /* TODO: do not care about version */
+        /* FIXME: handle version for external function */
         tmp = strchr(sym_name, '@');
         if (tmp != NULL)
             *tmp = '\0';
@@ -582,8 +582,13 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
         unsigned long addr;
 
-        /* TODO: should we consider the relocation type ? */
+        /* ATTENTION: should we consider the relocation type ? */
         sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
+        /* FIXME: consider version of the library */
+        tmp = strchr(sym_name, '@');
+        if (tmp != NULL)
+            *tmp = '\0';
+
         if (!streql(sym_name, name)
             || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_FUNC)
             continue;
@@ -618,8 +623,8 @@ out_got:
         if (tmp != NULL)
             *tmp = '\0';
 
-        if (!streql(sym_name, name)
-            || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_OBJECT)
+        /* function could also be part of the GOT with the type R_X86_64_GLOB_DAT */
+        if (!streql(sym_name, name))
             continue;
 
         if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
