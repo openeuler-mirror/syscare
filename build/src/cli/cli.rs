@@ -298,7 +298,7 @@ impl PatchBuildCLI {
 }
 
 impl PatchBuildCLI {
-    pub fn run() {
+    pub fn run() -> i32 {
         let mut cli = Self {
             workdir: CliWorkDir::new(),
             args:    CliArguments::new(),
@@ -307,7 +307,7 @@ impl PatchBuildCLI {
         if let Err(e) = cli.cli_main() {
             match Logger::is_inited() {
                 false => {
-                    eprintln!("Error: {}", e)
+                    eprintln!("Error: {}", e);
                 },
                 true => {
                     error!("Error: {}", e);
@@ -316,6 +316,8 @@ impl PatchBuildCLI {
                     );
                 },
             }
+            return -1;
         }
+        return 0;
     }
 }
