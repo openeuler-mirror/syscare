@@ -46,10 +46,7 @@ done
 
 const RPM_SPEC_SRCIPTS: &str = r#"
 %preun
-if [ "$(syscare status %{patch_name})" != "NOT-APPLIED" ]; then
-    echo "error: cannot remove applied patch '%{patch_name}'" >&2
-    exit 1
-fi
+$(syscare remove %{patch_uuid}) || echo "Failed to remove patch '%{patch_target}/%{patch_name}'" 2>&1
 "#;
 
 impl RpmSpecGenerator {
@@ -124,7 +121,9 @@ impl RpmSpecGenerator {
         write_line2(w, "%global pkg_summary           ", Self::parse_summary(patch_info))?;
         write_line2(w, "%global pkg_requires          ", Self::parse_requires(patch_info))?;
         write_line2(w, "%global pkg_description       ", &patch_info.description)?;
+        write_line2(w, "%global patch_uuid            ", &patch_info.uuid)?;
         write_line2(w, "%global patch_name            ", &patch_info.name)?;
+        write_line2(w, "%global patch_target          ", &patch_info.target.short_name())?;
         write_line2(w, "%global patch_root            ", Self::parse_patch_root(patch_info))?;
         write_line2(w, "%global patch_dir_permission  ", PKG_DIR_PERMISSION)?;
         write_line2(w, "%global patch_file_permission ", PKG_FILE_PERMISSION)?;
