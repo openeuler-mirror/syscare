@@ -25,7 +25,7 @@ impl PatchManager {
         for patch_root in fs::list_all_dirs(directory, false)? {
             match Patch::new(&patch_root) {
                 Ok(patch) => {
-                    debug!("Detected patch {{{}}}", patch);
+                    debug!("Detected patch {{{}}} ({})", patch, patch.full_name());
                     patch_list.push(patch);
                 },
                 Err(e) => {
@@ -37,6 +37,7 @@ impl PatchManager {
             }
         }
 
+        debug!("Found {} patch(es)", patch_list.len());
         Ok(patch_list)
     }
 
@@ -46,7 +47,7 @@ impl PatchManager {
             return false;
         }
 
-        debug!("Found patch {{{}}} ({})", patch, patch.full_name());
+        debug!("Found patch {{{}}}", patch);
         true
     }
 
