@@ -139,10 +139,10 @@ static inline struct section *find_section_by_name(struct list_head *list, const
 	return NULL;
 }
 
-// section like .rodata.str1.
+// section like .rodata.str1. and .rodata.__func__.
 static inline bool is_string_literal_section(struct section *sec)
 {
-	return !strncmp(sec->name, ".rodata.", 8) && strstr(sec->name, ".str");
+	return !strncmp(sec->name, ".rodata.", 8) && (strstr(sec->name, ".str") || strstr(sec->name, "__func__"));
 }
 
 static bool has_digit_tail(char *tail)
