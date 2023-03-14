@@ -1,10 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
 
-cmake_minimum_required(VERSION 3.14)
-project(upatch-diff)
-
-set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
-
 include_directories(
     ../kmod/
     ./
@@ -19,4 +14,13 @@ file(GLOB HOST_SRC_FILES
 add_executable(upatch-diff ${HOST_SRC_FILES})
 target_link_libraries(upatch-diff elf)
 
-install(TARGETS upatch-diff DESTINATION ${UPATCH_INSTALL_DIR})
+install(
+    TARGETS
+        upatch-diff
+    PERMISSIONS
+        OWNER_EXECUTE OWNER_WRITE OWNER_READ
+        GROUP_EXECUTE GROUP_READ
+        WORLD_READ WORLD_EXECUTE
+    DESTINATION
+        ${SYSCARE_LIBEXEC_DIR}
+)

@@ -6,8 +6,8 @@ use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
 
 use log::{trace, error};
 
-use crate::util::os_str::OsStrExt;
-use crate::util::fs;
+use common::util::os_str::OsStrExt;
+use common::util::fs;
 
 const SELINUX_ENFORCE_FILE:              &str  = "/sys/fs/selinux/enforce";
 const SELINUX_SECURITY_CONTEXT:          &str  = "security.selinux";

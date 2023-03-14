@@ -1,3 +1,4 @@
+mod logger;
 mod workdir;
 mod args;
 mod cli;

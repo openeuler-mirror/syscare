@@ -3,7 +3,7 @@ use std::path::Path;
 
 use log::{debug, error};
 
-use crate::util::{fs, serde::serde_versioned};
+use common::util::{fs, serde::serde_versioned};
 
 use super::package_info::PackageInfo;
 use super::patch::Patch;

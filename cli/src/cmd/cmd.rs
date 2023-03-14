@@ -1,6 +1,6 @@
 use clap::Subcommand;
 
-use crate::util::sys;
+use common::util::sys;
 
 #[derive(Debug)]
 #[derive(Subcommand)]

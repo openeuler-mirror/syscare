@@ -3,9 +3,10 @@ use std::path::PathBuf;
 use lazy_static::lazy_static;
 use clap::Parser;
 
-use crate::util::sys;
+use common::util::sys;
 
-use super::{CLI_NAME, CLI_VERSION};
+const CLI_NAME:    &str = "syscare build";
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const DEFAULT_PATCH_VERSION:     &str = "1";
 const DEFAULT_PATCH_RELEASE:     &str = "1";

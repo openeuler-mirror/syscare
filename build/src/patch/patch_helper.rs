@@ -1,8 +1,7 @@
 use std::path::{Path, PathBuf};
 
 use log::debug;
-
-use crate::util::fs;
+use common::util::fs;
 
 pub const PATCH_FILE_EXT:        &str = "patch";
 pub const PATCH_INFO_FILE_NAME:  &str = "patch_info";

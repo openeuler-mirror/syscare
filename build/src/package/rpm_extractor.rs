@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::util::ext_cmd::ExternCommandArgs;
+use common::util::ext_cmd::ExternCommandArgs;
 
 use super::rpm_helper::RPM;
 

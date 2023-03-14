@@ -1,19 +1,15 @@
 use log::LevelFilter;
 use log::{info, warn, error};
-
-use crate::log::Logger;
+use common::util::{sys, fs, serde::serde_versioned};
 
 use crate::package::{PackageInfo, PackageType, PKG_FILE_EXT};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
 use crate::patch::{PatchInfo, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME};
 use crate::patch::{PatchHelper, PatchBuilderFactory};
-use crate::util::{sys, fs, serde::serde_versioned};
 
+use super::logger::Logger;
 use super::args::CliArguments;
 use super::workdir::CliWorkDir;
-
-pub const CLI_NAME:    &str = "syscare build";
-pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 const CLI_BANNER: &str = env!("CARGO_PKG_DESCRIPTION");
 

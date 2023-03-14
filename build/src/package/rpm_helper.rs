@@ -2,14 +2,12 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
 use log::debug;
-
+use common::util::os_str::OsStrExt;
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::fs;
 
 use crate::workdir::PackageBuildRoot;
 use crate::patch::{PatchType, PatchInfo};
-
-use crate::util::os_str::OsStrExt;
-use crate::util::fs;
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::package_info::PackageInfo;
 use super::rpm_spec_helper::SPEC_FILE_EXT;

@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use log::{debug, error};
 use lazy_static::lazy_static;
 
-use crate::util::serde::serde_versioned;
+use common::util::serde::serde_versioned;
 
 use super::patch_info::{PatchInfo, PatchType};
 use super::patch_status::PatchStatus;

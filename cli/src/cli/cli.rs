@@ -1,13 +1,13 @@
 use clap::Parser;
 use log::{LevelFilter, debug};
+use common::util::sys;
 
-use crate::log::Logger;
-use crate::util::sys;
 use crate::cmd::*;
 
-pub const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
-pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+use super::logger::Logger;
 
+const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 
 #[derive(Debug)]

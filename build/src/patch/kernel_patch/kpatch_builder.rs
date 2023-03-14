@@ -1,10 +1,11 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
+
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
 
 use super::kpatch_helper::{KernelPatchHelper, VMLINUX_FILE_NAME};
 use super::kpatch_builder_args::KernelPatchBuilderArguments;

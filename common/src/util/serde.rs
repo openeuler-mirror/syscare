@@ -4,6 +4,8 @@ use serde::{Serialize, Deserialize, de::DeserializeOwned};
 
 use super::fs;
 
+const MODULE_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub mod serde_unversioned {
     use super::*;
 
@@ -39,7 +41,6 @@ pub mod serde_unversioned {
 
 pub mod serde_versioned {
     use super::*;
-    use crate::cli::CLI_VERSION;
 
     #[derive(Serialize, Deserialize)]
     struct VersionedData<T> {
@@ -53,7 +54,7 @@ pub mod serde_versioned {
         T: Serialize,
     {
         let vdata  = VersionedData {
-            version: CLI_VERSION.to_owned(),
+            version: MODULE_VERSION.to_owned(),
             data:    obj
         };
         let binary = bincode::serialize(&vdata).map_err(|_| {
@@ -78,7 +79,7 @@ pub mod serde_versioned {
                 format!("Deserialize file version failed")
             )
         })?;
-        if version != CLI_VERSION {
+        if version != MODULE_VERSION {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Version \"{}\" mismatched", version)

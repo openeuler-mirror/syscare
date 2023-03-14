@@ -1,0 +1,7 @@
+[workspace]
+members = [
+    "common",
+    "build",
+    "cli",
+    "upatch/upatch-build"
+]

@@ -9,9 +9,9 @@ use log4rs::encode::pattern::PatternEncoder;
 use log4rs::append::console::{ConsoleAppender, Target};
 use log4rs::append::file::FileAppender;
 
-use crate::cli::CliWorkDir;
+use common::log::LogLevelFilter;
 
-use super::LogLevelFilter;
+use crate::cli::CliWorkDir;
 
 const LOG_PATTERN: &str = "{m}{n}";
 

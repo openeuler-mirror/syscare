@@ -1,12 +1,12 @@
 use std::ffi::OsString;
 
+use common::util::os_str::OsStringExt;
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::fs;
+
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
-
-use crate::util::os_str::OsStringExt;
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use crate::util::fs;
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
 

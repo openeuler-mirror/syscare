@@ -1,7 +1,7 @@
 use log::info;
 
 use crate::boot::{BootManager, RebootOption};
-use crate::util::fs;
+use common::util::fs;
 
 use super::{CommandExecutor, CommandArguments};
 

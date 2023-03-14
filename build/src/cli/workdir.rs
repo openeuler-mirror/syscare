@@ -3,8 +3,8 @@ use std::path::Path;
 
 use std::ops::Deref;
 
-use crate::util::os_str::OsStringExt;
-use crate::util::sys;
+use common::util::os_str::OsStringExt;
+use common::util::sys;
 
 use crate::workdir::{WorkDir, WorkDirManager};
 

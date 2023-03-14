@@ -5,8 +5,8 @@ use log::info;
 
 use crate::os::KExec;
 
-use crate::util::os_str::OsStringExt;
-use crate::util::fs;
+use common::util::os_str::OsStringExt;
+use common::util::fs;
 
 pub enum RebootOption {
     Normal,

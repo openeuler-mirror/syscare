@@ -3,8 +3,9 @@ use std::os::unix::prelude::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::io::{Write, LineWriter};
 
+use common::util::fs;
+
 use crate::patch::PatchInfo;
-use crate::util::fs;
 
 use super::rpm_spec_helper::{SPEC_FILE_EXT, SOURCE_TAG_NAME, TAG_VALUE_NONE};
 

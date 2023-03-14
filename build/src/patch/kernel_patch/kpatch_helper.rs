@@ -1,9 +1,8 @@
 use std::path::{PathBuf, Path};
 
 use log::debug;
-
-use crate::util::fs;
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::fs;
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 

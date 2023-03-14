@@ -1,7 +1,7 @@
 use log::log;
 use serde::{Serialize, Deserialize};
 
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 const RPM: ExternCommand = ExternCommand::new("rpm");
 

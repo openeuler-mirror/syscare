@@ -1,4 +1,4 @@
-const ENV_VERSION_NAME: &str = "SYSCARE_BUILD_VERSION";
+const ENV_VERSION_NAME: &str = "SYSCARE_VERSION";
 
 fn main() {
     if let Ok(value) = std::env::var(ENV_VERSION_NAME) {

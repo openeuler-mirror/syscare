@@ -5,7 +5,7 @@ use std::path::PathBuf;
 use lazy_static::lazy_static;
 use log::{debug, error};
 
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 use super::patch::Patch;
 use super::patch_status::PatchStatus;

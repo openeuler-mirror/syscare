@@ -2,7 +2,7 @@ use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 use std::ops::Deref;
 
-use crate::util::fs;
+use common::util::fs;
 
 use super::patch_root::PatchRoot;
 use super::package_root::PackageRoot;

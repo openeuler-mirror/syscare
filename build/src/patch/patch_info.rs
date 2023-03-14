@@ -11,8 +11,8 @@ use serde::{Serialize, Deserialize};
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
 
-use crate::util::os_str::OsStrExt;
-use crate::util::{fs, sys, digest};
+use common::util::os_str::OsStrExt;
+use common::util::{fs, sys, digest};
 
 const PATCH_VERSION_LENGTH: usize = 8;
 

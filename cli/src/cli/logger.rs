@@ -7,7 +7,7 @@ use log4rs::config::{Root, Appender};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::append::console::{ConsoleAppender, Target};
 
-use super::LogLevelFilter;
+use common::log::LogLevelFilter;
 
 pub struct Logger;
 

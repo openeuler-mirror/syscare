@@ -1,9 +1,9 @@
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
+use common::util::fs;
 
-use crate::util::fs;
+use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
 
 use super::rpm_spec_parser::{RpmSpecParser, RpmSpecTag};
 

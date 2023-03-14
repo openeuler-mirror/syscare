@@ -1,6 +1,3 @@
-# Direction
-build/target/
-
 # Prerequisites
 *.d
 *.rpm
@@ -41,3 +38,9 @@ build/target/
 *.exe
 *.out
 *.app
+
+# vscode settings
+.vscode
+
+# rust build target
+target

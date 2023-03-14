@@ -1,10 +1,5 @@
 # SPDX-License-Identifier: GPL-2.0
 
-cmake_minimum_required(VERSION 3.14)
-project(upatch-tool)
-
-set(UPATCH_INSTALL_DIR /usr/libexec/syscare)
-
 include_directories(
     ../kmod
     ./
@@ -16,4 +11,13 @@ file(GLOB TOOL_SRC_FILES
 
 add_executable(upatch-tool ${TOOL_SRC_FILES})
 
-install(TARGETS upatch-tool DESTINATION ${UPATCH_INSTALL_DIR})
+install(
+    TARGETS
+        upatch-tool
+    PERMISSIONS
+        OWNER_EXECUTE OWNER_WRITE OWNER_READ
+        GROUP_EXECUTE GROUP_READ
+        WORLD_READ WORLD_EXECUTE
+    DESTINATION
+        ${SYSCARE_LIBEXEC_DIR}
+)

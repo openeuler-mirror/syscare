@@ -1,12 +1,12 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use common::util::os_str::OsStringExt;
+use common::util::ext_cmd::ExternCommandArgs;
+use common::util::{fs, serde::serde_versioned};
+
 use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
 use crate::workdir::PackageBuildRoot;
-
-use crate::util::os_str::OsStringExt;
-use crate::util::{fs, serde::serde_versioned};
-use crate::util::ext_cmd::ExternCommandArgs;
 
 use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
 use super::rpm_spec_generator::RpmSpecGenerator;
