@@ -127,12 +127,14 @@ impl<'a> UserPatchAdapter<'a> {
                 ].into_iter().collect();
             }
             for record in records {
-                let upatch = record.upatch;
-                debug!("Rolling back changes to \"{}\"", upatch);
-                if let Some(action) = ROLLBACK_ACTION_MAP.get(&(record.old_status, upatch.status()?)) {
+                let upatch         = record.upatch;
+                let old_status     = record.old_status;
+                let current_status = upatch.status()?;
+                debug!("Rolling back \"{}\" from {} to {}", upatch, current_status, old_status);
+                if let Some(action) = ROLLBACK_ACTION_MAP.get(&(current_status, old_status)) {
                     upatch.do_action(*action)?;
                 }
-                debug!("Rolled back changes to \"{}\"", upatch);
+                debug!("Rolled back \"{}\"", upatch);
             }
             Ok(())
         }
