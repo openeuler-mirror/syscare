@@ -56,7 +56,7 @@ pub enum Command {
     /// Restore all patch status
     Restore,
     /// Reboot the system
-    FastReboot {
+    Reboot {
         /// Target kernel version
         #[arg(short, long, default_value=sys::kernel_version())]
         kernel_version: String,

@@ -91,9 +91,9 @@ impl SyscareCLI {
                 cmd_executor  = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::None;
             },
-            Command::FastReboot { kernel_version, force } => {
+            Command::Reboot { kernel_version, force } => {
                 Self::check_root_permission()?;
-                cmd_executor  = Box::new(FastRebootCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_executor  = Box::new(RebootCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::RebootArguments(kernel_version.to_owned(), force.to_owned());
             },
         };
