@@ -1,7 +1,7 @@
-use std::ffi::OsStr;
+use std::{ffi::OsStr, fs::File};
 use std::os::unix::prelude::OsStrExt;
 
-use memmap2::{MmapMut, Mmap};
+use memmap2::{MmapMut, Mmap, MmapOptions};
 
 use super::super::{Endian, ReadInteger, SymbolRead, SymbolWrite, OperateRead, OperateWrite};
 
@@ -66,6 +66,52 @@ impl OperateWrite for SymbolHeader<'_> {
         let vec = self.endian.write_integer::<T>(data);
         for i in 0..vec.len() {
             self.mmap[start + i] = vec[i];
+        }
+    }
+}
+
+
+
+#[derive(Debug)]
+pub struct SymbolHeaderTable<'a> {
+    file: &'a File,
+    endian: Endian,
+    strtab: &'a Mmap,
+    size: usize,
+    start: usize,
+    end: usize,
+    count: usize,
+}
+
+impl<'a> SymbolHeaderTable<'a> {
+    pub fn from(file: &'a File, endian: Endian, strtab: &'a Mmap, start: usize, size: usize, end: usize) -> Self {
+        Self {
+            file,
+            endian,
+            strtab,
+            size,
+            start,
+            end,
+            count: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for SymbolHeaderTable<'a> {
+    type Item = SymbolHeader<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = self.count * self.size + self.start;
+        match offset < self.end {
+            true => {
+                self.count += 1;
+                let mmap = unsafe { MmapOptions::new().offset(offset as u64).len(self.size).map_mut(self.file).unwrap() };
+                Some(SymbolHeader::from(mmap, self.endian, self.strtab))
+            },
+            false => {
+                self.count = 0;
+                None
+            }
         }
     }
 }

@@ -20,7 +20,7 @@ pub fn check_elf(file: &File) -> std::io::Result<bool> {
 
 pub fn check_header(file: &File) -> std::io::Result<(u8, Endian)> {
     let mmap = unsafe { MmapOptions::new().offset(4).len(2).map(file)? };
-    //Noe we only support 64 bit
+    //Now we only support 64 bit
     let class = match mmap.get(0..1) {
         Some(&[ELFCLASS64]) => ELFCLASS64,
         _ => return Err(std::io::Error::new(

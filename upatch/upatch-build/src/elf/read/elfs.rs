@@ -57,26 +57,26 @@ impl Elf {
         Ok(res)
     }
 
-    pub fn symbols(&mut self) -> std::io::Result<Vec<SymbolHeader>> {
-        let mut res = Vec::new();
+    pub fn symbols(&mut self) -> std::io::Result<SymbolHeaderTable> {
         let sections = &self.sections()?;
         for section in sections {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
                 let offset =  section.get_sh_offset() as usize;
                 let size_sum = section.get_sh_size() as usize;
                 let size = std::mem::size_of::<SymbolHeader64>();
-                let num = size_sum as usize / size;
                 let strtab_offset = sections[section.get_sh_link() as usize].get_sh_offset();
                 let strtab_size = sections[section.get_sh_link() as usize].get_sh_size() as usize;
 
                 self.strtab = Some(unsafe { MmapOptions::new().offset(strtab_offset).len(strtab_size).map(&self.file)? });
 
-                for i in 0..num {
-                    let start = (offset + (i * size)) as u64;
-                    let mmap = unsafe { MmapOptions::new().offset(start).len(size).map(&self.file)? };
-                    res.push(SymbolHeader::from(mmap, self.endian, &self.strtab.as_ref().unwrap()));
-                }
-                return Ok(res);
+                return Ok(SymbolHeaderTable::from(
+                    &self.file,
+                    self.endian,
+                    &self.strtab.as_ref().unwrap(),
+                    offset,
+                    size,
+                    offset + size_sum
+                ));
             }
         }
         Err(std::io::Error::new(

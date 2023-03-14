@@ -10,7 +10,7 @@ pub fn resolve<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::
 
     let debug_info_symbols = &mut debug_info_elf.symbols()?;
 
-    for symbol in &mut patch_elf.symbols()? {
+    for mut symbol in &mut patch_elf.symbols()? {
         /* No need to handle section symbol */
         let sym_info = symbol.get_st_info();
         if elf_st_type(sym_info) == STT_SECTION {
@@ -31,15 +31,15 @@ pub fn resolve<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::
                 }
             }
             else {
-                __partly_resolve_patch(symbol, debug_info_symbols)?;
+                __partly_resolve_patch(&mut symbol, debug_info_symbols)?;
             }
         }
     }
     Ok(())
 }
 
-fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut Vec<read::SymbolHeader>) -> std::io::Result<()> {
-    for debug_info_symbol in debug_info_symbols {
+fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut read::SymbolHeaderTable) -> std::io::Result<()> {
+    for mut debug_info_symbol in debug_info_symbols {
         /* No need to handle section symbol */
         let sym_info = debug_info_symbol.get_st_info();
         if elf_st_type(sym_info) == STT_SECTION {
@@ -63,6 +63,7 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
         symbol.set_st_value(debug_info_symbol.get_st_value());
         symbol.set_st_size(debug_info_symbol.get_st_size());
         trace!("found unresolved symbol {:?} at 0x{:x}", debug_info_symbol.get_st_name(), symbol.get_st_value());
+        break;
     }
 
     Ok(())

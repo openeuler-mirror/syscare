@@ -1,7 +1,8 @@
 use std::ffi::OsStr;
 use std::os::unix::prelude::OsStrExt;
+use std::fs::File;
 
-use memmap2::Mmap;
+use memmap2::{Mmap, MmapOptions};
 
 use super::super::{Endian, ReadInteger, SymbolRead, OperateRead};
 
@@ -56,5 +57,49 @@ impl<'a> SymbolHeader<'a> {
 impl OperateRead for SymbolHeader<'_> {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
         self.endian.read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
+    }
+}
+
+#[derive(Debug)]
+pub struct SymbolHeaderTable<'a> {
+    file: &'a File,
+    endian: Endian,
+    strtab: &'a Mmap,
+    size: usize,
+    start: usize,
+    end: usize,
+    count: usize,
+}
+
+impl<'a> SymbolHeaderTable<'a> {
+    pub fn from(file: &'a File, endian: Endian, strtab: &'a Mmap, start: usize, size: usize, end: usize) -> Self {
+        Self {
+            file,
+            endian,
+            strtab,
+            size,
+            start,
+            end,
+            count: 0,
+        }
+    }
+}
+
+impl<'a> Iterator for SymbolHeaderTable<'a> {
+    type Item = SymbolHeader<'a>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let offset = self.count * self.size + self.start;
+        match offset < self.end {
+            true => {
+                self.count += 1;
+                let mmap = unsafe { MmapOptions::new().offset(offset as u64).len(self.size).map(self.file).unwrap() };
+                Some(SymbolHeader::from(mmap, self.endian, self.strtab))
+            },
+            false => {
+                self.count = 0;
+                None
+            }
+        }
     }
 }
