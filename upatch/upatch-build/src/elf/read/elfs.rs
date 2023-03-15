@@ -1,4 +1,4 @@
-use std::fs::{OpenOptions, File};
+use std::fs::OpenOptions;
 use std::path::Path;
 
 use memmap2::{MmapOptions, Mmap};
@@ -10,10 +10,9 @@ use super::symbol::*;
 
 #[derive(Debug)]
 pub struct Elf {
-    file: File,
+    mmap: Mmap,
     _class: u8,
     endian: Endian,
-    strtab: Option<Mmap>,
 }
 
 impl Elf {
@@ -27,56 +26,38 @@ impl Elf {
             )),
         };
         let (_class, endian) = check_header(&file)?;
+        let mmap = unsafe { MmapOptions::new().map(&file)? };
 
         Ok(Self {
-            file,
+            mmap,
             _class,
             endian,
-            strtab: None
         })
     }
 
     pub fn header(&mut self) -> std::io::Result<Header> {
-        let mmap = unsafe { MmapOptions::new().offset(0).len(64).map(&self.file)? };
-        Ok(Header::from(mmap, self.endian))
+        Ok(Header::from(&self.mmap, self.endian))
     }
 
-    pub fn sections(&mut self) -> std::io::Result<Vec<SectionHeader>> {
-        let mut res = Vec::new();
+    pub fn sections(&mut self) -> std::io::Result<SectionHeaderTable> {
         let header = self.header()?;
         let offset = header.get_e_shoff() as usize;
         let num = header.get_e_shnum() as usize;
         let shentsize = header.get_e_shentsize() as usize;
-
-        for i in 0..num {
-            let start = (offset + (i * shentsize)) as u64;
-            let mmap = unsafe { MmapOptions::new().offset(start).len(shentsize).map(&self.file)? };
-            res.push(SectionHeader::from(mmap, self.endian));
-        }
-
-        Ok(res)
+        Ok(SectionHeaderTable::from(&self.mmap, self.endian, offset, shentsize, num))
     }
 
     pub fn symbols(&mut self) -> std::io::Result<SymbolHeaderTable> {
-        let sections = &self.sections()?;
+        let sections = self.sections()?;
         for section in sections {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
                 let offset =  section.get_sh_offset() as usize;
                 let size_sum = section.get_sh_size() as usize;
                 let size = std::mem::size_of::<SymbolHeader64>();
-                let strtab_offset = sections[section.get_sh_link() as usize].get_sh_offset();
-                let strtab_size = sections[section.get_sh_link() as usize].get_sh_size() as usize;
+                let num = size_sum / size;
+                let strtab_offset = sections.get(section.get_sh_link() as usize)?.get_sh_offset() as usize;
 
-                self.strtab = Some(unsafe { MmapOptions::new().offset(strtab_offset).len(strtab_size).map(&self.file)? });
-
-                return Ok(SymbolHeaderTable::from(
-                    &self.file,
-                    self.endian,
-                    &self.strtab.as_ref().unwrap(),
-                    offset,
-                    size,
-                    offset + size_sum
-                ));
+                return Ok(SymbolHeaderTable::from(&self.mmap, self.endian, strtab_offset, offset, size, num));
             }
         }
         Err(std::io::Error::new(
