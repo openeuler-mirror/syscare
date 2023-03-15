@@ -10,13 +10,15 @@ SET(SYSCARE_BIN_DIR     ${CMAKE_INSTALL_PREFIX}/bin)
 SET(SYSCARE_LIBEXEC_DIR ${CMAKE_INSTALL_PREFIX}/libexec/syscare)
 SET(SYSCARE_SERVICE_DIR ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
 
-message("SYSCARE_VERSION:     ${SYSCARE_VERSION}")
-message("SYSCARE_BIN_DIR:     ${SYSCARE_BIN_DIR}")
-message("SYSCARE_LIBEXEC_DIR: ${SYSCARE_LIBEXEC_DIR}")
-message("SYSCARE_SERVICE_DIR: ${SYSCARE_SERVICE_DIR}")
+message("-- SYSCARE_VERSION:     ${SYSCARE_VERSION}")
+message("-- SYSCARE_BIN_DIR:     ${SYSCARE_BIN_DIR}")
+message("-- SYSCARE_LIBEXEC_DIR: ${SYSCARE_LIBEXEC_DIR}")
+message("-- SYSCARE_SERVICE_DIR: ${SYSCARE_SERVICE_DIR}")
 
 # Build upatch
-add_subdirectory(upatch)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    add_subdirectory(upatch)
+endif()
 
 # Build syscare
 add_custom_target(syscare ALL
