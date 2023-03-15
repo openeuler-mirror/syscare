@@ -1,14 +1,13 @@
 %global debug_package %{nil}
 
 Name:           syscare
-Version:        1.0.0
-Release:        7
+Version:        1.0.1
+Release:        1
 Summary:        system hot-fix service
 
-License:        MulanPSL-2.0 GPL-2.0-only
+License:        MulanPSL-2.0 and GPL-2.0-only
 URL:            https://gitee.com/openeuler/syscare
 Source0:        %{name}-%{version}.tar.gz
-Patch1:         v1.0.0-7.patch
 
 BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
@@ -21,11 +20,11 @@ SysCare is a system-level hot-fix software that provides single-machine-level an
 The host can fix the system problem without rebooting.
 
 %package build
-Summary:        Tools for build syscare patch.
-Requires:       %{name} = %{version}-%{release}
-Requires:       kpatch make gcc openssl-devel dwarves python3-devel bison flex
-Requires:       elfutils-libelf-devel
-Requires:       rpm-build
+Summary:  Tools for build syscare patch.
+Requires: %{name} = %{version}-%{release}
+Requires: kpatch make gcc openssl-devel dwarves python3-devel bison flex
+Requires: elfutils-libelf-devel
+Requires: rpm-build
 
 %description build
 Syscare build tools.
@@ -36,77 +35,79 @@ Syscare build tools.
 %autosetup -p1
 
 %build
-mkdir -p tmp_build
-cd tmp_build
-cmake -DSYSCARE_BUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_version} ..
+mkdir -p build_tmp
+cd build_tmp
+
+cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_version} ..
 make
 
 %install
-cd tmp_build
+cd build_tmp
 %make_install
-
-mkdir -p %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
 %ifarch x86_64
-install -m 0640 %{buildroot}/usr/libexec/%{name}/upatch.ko %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
-%endif
-
-mkdir -p %{buildroot}/usr/lib/systemd/system
-%ifarch aarch64
-install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-restore-arm64.service %{buildroot}/usr/lib/systemd/system/%{name}-restore.service
-%else
-install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-restore.service %{buildroot}/usr/lib/systemd/system
-install -m 0644 %{_builddir}/%{name}-%{version}/misc/%{name}-pre.service %{buildroot}/usr/lib/systemd/system
-%endif
-
-mkdir -p %{buildroot}/usr/lib/syscare
-
-%ifarch x86_64
-cd %{buildroot}
-find lib -name "upatch.ko" \
-	-fprintf %{_builddir}/%{name}-%{version}/ko.files.list "/%p\n"
+    mkdir -p %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
+    install -m 0640 %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
+    cd %{buildroot}
+    find lib -name "upatch.ko" -fprintf %{_builddir}/%{name}-%{version}/ko.files.list "/%p\n"
 %endif
 
 %post
-%systemd_post %{name}-restore.service
+mkdir -p /usr/lib/syscare/patches
 %ifarch x86_64
-%{_bindir}/systemctl enable %{name}-pre.service
+    depmod -a > /dev/null 2>&1 || true
+
+    %systemd_post syscare-pre.service
+    %systemd_post syscare.service
+
+    systemctl enable syscare-pre.service
+    systemctl enable syscare.service
+    systemctl start syscare-pre
+    systemctl start syscare
 %endif
-depmod -a > /dev/null 2>&1 || true
 
 %preun
-%systemd_preun %{name}-restore.service
+rm -rf /usr/lib/syscare/patches
 %ifarch x86_64
-%systemd_preun %{name}-pre.service
+    %systemd_preun syscare-pre.service
+    %systemd_preun syscare.service
 %endif
 
 %postun
-depmod -a > /dev/null 2>&1 || true
+%ifarch x86_64
+    depmod -a > /dev/null 2>&1 || true
+%endif
 
 %ifarch x86_64
 %files -f ko.files.list
 %endif
+
 %files
 %defattr(-,root,root,-)
-%dir /usr/lib/syscare
 %attr(755,root,root) /usr/bin/syscare
+%attr(644,root,root) /usr/lib/systemd/system/syscare-pre.service
+%attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %ifarch x86_64
-%attr(755,root,root) /usr/libexec/%{name}/upatch-tool
-%attr(640,root,root) /usr/libexec/%{name}/upatch.ko
-%attr(644,root,root) /usr/lib/systemd/system/%{name}-pre.service
+    %dir /usr/libexec/syscare
+    %attr(640,root,root) /usr/libexec/syscare/upatch.ko
+    %attr(755,root,root) /usr/libexec/syscare/upatch-tool
 %endif
-%attr(755,root,root) /usr/libexec/%{name}/auto-recovery.sh
-%attr(644,root,root) /usr/lib/systemd/system/%{name}-restore.service
 
 %files build
 %defattr(-,root,root,-)
-%dir /usr/libexec/%{name}
-%attr(755,root,root) /usr/libexec/%{name}/syscare-build
+%dir /usr/libexec/syscare
+%attr(755,root,root) /usr/libexec/syscare/syscare-build
+%attr(755,root,root) /usr/libexec/syscare/upatch-build
 %ifarch x86_64
-%attr(755,root,root) /usr/libexec/%{name}/upatch-diff
-%attr(755,root,root) /usr/libexec/%{name}/upatch-build
+    %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 %endif
 
 %changelog
+* Wed Mar 15 2023 renoseven<dev@renoseven.net> - 1.0.1-1
+- New syscare cli
+- Support building patch for C++ code
+- Support patch version verification
+- Support elf name derivation
+- Support fast reboot
 * Wed Dec 21 2022 snoweay<snoweay@163.com> - 1.0.0-7
 - Fix 42 relocation caused by gcc 11.
 * Tue Dec 20 2022 snoweay<snoweay@163.com> - 1.0.0-6
