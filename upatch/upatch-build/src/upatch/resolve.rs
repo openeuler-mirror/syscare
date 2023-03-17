@@ -39,6 +39,7 @@ pub fn resolve<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::
 }
 
 fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut read::SymbolHeaderTable) -> std::io::Result<()> {
+    debug_info_symbols.reset(0);
     for mut debug_info_symbol in debug_info_symbols {
         /* No need to handle section symbol */
         let sym_info = debug_info_symbol.get_st_info();

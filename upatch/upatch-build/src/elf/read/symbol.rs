@@ -76,6 +76,13 @@ impl<'a> SymbolHeaderTable<'a> {
             count: 0,
         }
     }
+
+    pub fn reset(&mut self, n: usize) {
+        match n < self.num {
+            true => self.count = n,
+            false => self.count = 0,
+        }
+    }
 }
 
 impl<'a> Iterator for SymbolHeaderTable<'a> {

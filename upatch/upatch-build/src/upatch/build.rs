@@ -205,11 +205,13 @@ impl UpatchBuild {
 
         // build notes.o
         let notes = diff_dir.join("notes.o");
+        debug!("create notes: {:?}", notes.display());
         create_note(&debug_info, &notes)?;
         link_args.push(notes);
 
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
+        debug!("resolve {:?} with {:?}", output_file.display(), debug_info.as_ref());
         resolve(&debug_info, &output_file)?;
         Ok(())
     }
