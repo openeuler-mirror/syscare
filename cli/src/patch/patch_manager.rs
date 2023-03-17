@@ -22,7 +22,7 @@ impl PatchManager {
         debug!("Scanning for patches");
 
         let mut patch_list = Vec::new();
-        for patch_root in fs::list_all_dirs(directory, false)? {
+        for patch_root in fs::list_dirs(directory, false)? {
             match Patch::new(&patch_root) {
                 Ok(patch) => {
                     debug!("Detected patch {{{}}} ({})", patch, patch.full_name());

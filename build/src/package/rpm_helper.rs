@@ -56,7 +56,7 @@ impl RpmHelper {
     pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
         debug!("Finding package spec file from \"{}\"", directory.as_ref().display());
 
-        let spec_file = fs::find_file_ext(
+        let spec_file = fs::find_file_by_ext(
             directory,
             SPEC_FILE_EXT,
             false
@@ -99,7 +99,7 @@ impl RpmHelper {
     pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
         debug!("Finding package debuginfo from \"{}\"", directory.as_ref().display());
 
-        let debuginfo_files = fs::list_all_files_ext(
+        let debuginfo_files = fs::list_files_by_ext(
             &directory,
             DEBUGINFO_FILE_EXT,
             true,

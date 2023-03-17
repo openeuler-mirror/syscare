@@ -39,7 +39,7 @@ impl RpmBuilder {
     }
 
     pub fn copy_all_files_to_source<P: AsRef<Path>>(&self, src_dir: P) -> std::io::Result<()> {
-        fs::copy_dir_all(src_dir, &self.build_root.sources)
+        fs::copy_dir_contents(src_dir, &self.build_root.sources)
     }
 
     pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
@@ -73,7 +73,7 @@ impl RpmBuilder {
                 .arg(spec_file.as_ref())
         )?.check_exit_code()?;
 
-        let src_pkg_file = fs::find_file_ext(
+        let src_pkg_file = fs::find_file_by_ext(
             &self.build_root.srpms,
             PKG_FILE_EXT,
             false
@@ -100,7 +100,7 @@ impl RpmBuilder {
                 .arg(spec_file.as_ref())
         )?.check_exit_code()?;
 
-        fs::copy_dir_all(&self.build_root.rpms, &output_dir)?;
+        fs::copy_dir_contents(&self.build_root.rpms, &output_dir)?;
 
         Ok(())
     }
