@@ -10,7 +10,6 @@ build       = "build.rs"
 [dependencies]
 common      = { package = "syscare-common", path = "../common" }
 lazy_static = { version = "1.4.0" }
-libc        = { version = "0.2.139" }
 log         = { version = "0.4.17" }
 log4rs      = { version = "1.2.0" }
 clap        = { version = "4.0.13", features = ["derive"] }

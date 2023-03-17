@@ -4,9 +4,7 @@ use std::path::PathBuf;
 
 use log::debug;
 
-use crate::os::{SELinux, SELinuxStatus};
-
-
+use common::os::{SELinux, SELinuxStatus};
 use common::util::os_str::OsStringExt;
 use common::util::{sys, fs};
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};

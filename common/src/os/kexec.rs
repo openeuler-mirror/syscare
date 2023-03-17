@@ -1,8 +1,8 @@
 use std::ffi::OsString;
 use std::path::Path;
 
-use common::util::os_str::OsStringExt;
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use crate::util::os_str::OsStringExt;
+use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 const KEXEC:     ExternCommand = ExternCommand::new("kexec");
 const SYSTEMCTL: ExternCommand = ExternCommand::new("systemctl");
