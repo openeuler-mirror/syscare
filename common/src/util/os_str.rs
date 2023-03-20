@@ -51,6 +51,38 @@ where
 
         Box::new(iter)
     }
+
+    fn trim_start(&self) -> &OsStr {
+        let bytes = self.as_ref().as_bytes();
+
+        let mut start = 0;
+        for idx in 0..bytes.len() {
+            if !bytes[idx].is_ascii_whitespace() {
+                break;
+            }
+            start += 1;
+        }
+
+        OsStr::from_bytes(&bytes[start..])
+    }
+
+    fn trim_end(&self) -> &OsStr {
+        let bytes = self.as_ref().as_bytes();
+
+        let mut end = bytes.len();
+        for idx in (0..bytes.len()).rev() {
+            if !bytes[idx].is_ascii_whitespace() {
+                break;
+            }
+            end -= 1;
+        }
+
+        OsStr::from_bytes(&bytes[..end])
+    }
+
+    fn trim(&self) -> &OsStr {
+        self.trim_start().trim_end()
+    }
 }
 
 impl OsStrExt for OsStr {}
