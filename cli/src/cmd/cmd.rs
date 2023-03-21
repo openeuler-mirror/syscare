@@ -1,7 +1,5 @@
 use clap::Subcommand;
 
-use common::util::sys;
-
 #[derive(Debug)]
 #[derive(Subcommand)]
 pub enum Command {
@@ -57,9 +55,9 @@ pub enum Command {
     Restore,
     /// Reboot the system
     Reboot {
-        /// Target kernel version
-        #[arg(short, long, default_value=sys::kernel_version())]
-        kernel_version: String,
+        /// Target kernel name
+        #[arg(short, long)]
+        target: Option<String>,
         #[arg(short, long, default_value="false")]
         /// Skip all checks, force reboot
         force: bool,
@@ -70,7 +68,7 @@ pub enum CommandArguments {
     None,
     CommandLineArguments(Vec<String>),
     PatchOperationArguments(String),
-    RebootArguments(String, bool),
+    RebootArguments(Option<String>, bool),
 }
 
 pub trait CommandExecutor {

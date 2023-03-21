@@ -50,7 +50,7 @@ impl SyscareCLI {
                 cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
             Command::Target { identifier } => {
-                cmd_executor = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_executor  = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
             Command::Status { identifier } => {
@@ -91,10 +91,10 @@ impl SyscareCLI {
                 cmd_executor  = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::None;
             },
-            Command::Reboot { kernel_version, force } => {
+            Command::Reboot { target, force } => {
                 Self::check_root_permission()?;
                 cmd_executor  = Box::new(RebootCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::RebootArguments(kernel_version.to_owned(), force.to_owned());
+                cmd_arguments = CommandArguments::RebootArguments(target.to_owned(), force.to_owned());
             },
         };
 
