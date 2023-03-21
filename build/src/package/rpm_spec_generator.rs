@@ -147,7 +147,7 @@ impl RpmSpecGenerator {
             fs::create_file(&pkg_spec_path)?
         );
 
-        let file_names = fs::list_files(source_dir, true)?
+        let file_names = fs::list_files(source_dir, fs::TraverseOptions { recursive: true })?
             .into_iter()
             .map(fs::file_name)
             .collect::<Vec<_>>();

@@ -130,7 +130,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     let elf_name = fs::file_name(&elf_relation.elf);
                     let elf_path = elf_relation.elf.to_path_buf();
 
-                    fs::find_file(&uargs.output_dir, &elf_name, false, false).map(|_| {
+                    fs::find_file(&uargs.output_dir, &elf_name, fs::FindOptions { fuzz: false, recursive: false }).map(|_| {
                         (elf_name, elf_path)
                     }).ok()
                 });

@@ -29,8 +29,7 @@ impl KernelPatchHelper {
         fs::find_file(
             directory,
             KERNEL_CONFIG_FILE_NAME,
-            false,
-            true
+            fs::FindOptions { fuzz: false, recursive: true }
         )
     }
 
@@ -39,8 +38,7 @@ impl KernelPatchHelper {
         fs::find_file(
             directory,
             VMLINUX_FILE_NAME,
-            false,
-            true
+            fs::FindOptions { fuzz: false, recursive: true }
         )
     }
 }

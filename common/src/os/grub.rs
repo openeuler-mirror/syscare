@@ -245,8 +245,7 @@ impl Grub {
         fs::find_file(
             grub_root,
             GRUB_CFG_NAME,
-            false,
-            true
+            fs::FindOptions { fuzz: false, recursive: true }
         )
     }
 
@@ -256,8 +255,7 @@ impl Grub {
         fs::find_file(
             grub_root,
             GRUB_ENV_NAME,
-            false,
-            true
+            fs::FindOptions { fuzz: false, recursive: true }
         )
     }
 

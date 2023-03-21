@@ -215,7 +215,12 @@ pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
         .unwrap_or_default()
 }
 
-pub fn traverse<P, F>(directory: P, recursive: bool, predicate: F) -> std::io::Result<Vec<PathBuf>>
+#[derive(Clone, Copy)]
+pub struct TraverseOptions {
+    pub recursive: bool
+}
+
+pub fn traverse<P, F>(directory: P, options: TraverseOptions, predicate: F) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
     F: Fn(&FileType, &Path) -> bool + Copy
@@ -231,44 +236,44 @@ where
         if predicate(&file_type, &file_path) {
             results.push(file_path.clone());
         }
-        if recursive && file_type.is_dir() {
+        if options.recursive && file_type.is_dir() {
             subdirs.push(file_path);
         }
     }
 
     for subdir in subdirs {
-        results.extend(self::traverse(subdir, recursive, predicate)?);
+        results.extend(self::traverse(subdir, options, predicate)?);
     }
 
     Ok(results)
 }
 
-pub fn list_dirs<P>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+pub fn list_dirs<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, recursive, |file_type, _| file_type.is_dir())?
+    self::traverse(directory, options, |file_type, _| file_type.is_dir())?
         .into_iter()
         .map(self::canonicalize)
         .collect()
 }
 
-pub fn list_files<P>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+pub fn list_files<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, recursive, |file_type, _| file_type.is_file())?
+    self::traverse(directory, options, |file_type, _| file_type.is_file())?
         .into_iter()
         .map(self::canonicalize)
         .collect()
 }
 
-pub fn list_files_by_ext<P, S>(directory: P, ext: S, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+pub fn list_files_by_ext<P, S>(directory: P, ext: S, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    self::traverse(directory, recursive,
+    self::traverse(directory, options,
         |file_type, file_path| {
             if !file_type.is_file() {
                 return false;
@@ -280,14 +285,20 @@ where
     )?.into_iter().map(self::canonicalize).collect()
 }
 
-pub fn list_symlinks<P>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>>
+pub fn list_symlinks<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, recursive, |file_type, _| file_type.is_symlink())
+    self::traverse(directory, options, |file_type, _| file_type.is_symlink())
 }
 
-pub fn find<P, F>(directory: P, recursive: bool, predicate: F)  -> std::io::Result<Option<PathBuf>>
+#[derive(Clone, Copy)]
+pub struct FindOptions {
+    pub fuzz: bool,
+    pub recursive: bool,
+}
+
+pub fn find<P, F>(directory: P, options: FindOptions, predicate: F)  -> std::io::Result<Option<PathBuf>>
 where
     P: AsRef<Path>,
     F: Fn(&FileType, &Path) -> bool + Copy
@@ -302,13 +313,13 @@ where
         if predicate(&file_type, &file_path) {
             return Ok(Some(file_path));
         }
-        if recursive && file_type.is_dir() {
+        if options.recursive && file_type.is_dir() {
             subdirs.push(file_path);
         }
     }
 
     for subdir in subdirs {
-        if let Some(path) = self::find(subdir, recursive, predicate)? {
+        if let Some(path) = self::find(subdir, options, predicate)? {
             return Ok(Some(path));
         }
     }
@@ -316,12 +327,12 @@ where
     Ok(None)
 }
 
-pub fn find_dir<P, S>(directory: P, name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+pub fn find_dir<P, S>(directory: P, name: S, options: FindOptions,) -> std::io::Result<PathBuf>
 where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, recursive,
+    let result = self::find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_dir() {
                 return false;
@@ -330,7 +341,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(&name) {
                     return true;
                 }
             }
@@ -349,12 +360,12 @@ where
     )
 }
 
-pub fn find_file<P, S>(directory: P, name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+pub fn find_file<P, S>(directory: P, name: S, options: FindOptions) -> std::io::Result<PathBuf>
 where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, recursive,
+    let result = self::find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_file() {
                 return false;
@@ -363,7 +374,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(&name) {
                     return true;
                 }
             }
@@ -382,12 +393,12 @@ where
     )
 }
 
-pub fn find_file_by_ext<P, S>(directory: P, ext: S, recursive: bool) -> std::io::Result<PathBuf>
+pub fn find_file_by_ext<P, S>(directory: P, ext: S, options: FindOptions) -> std::io::Result<PathBuf>
 where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, recursive,
+    let result = self::find(&directory, options,
         |file_type: &FileType, file_path: &Path| -> bool {
             if !file_type.is_file() {
                 return false;
@@ -412,12 +423,12 @@ where
     )
 }
 
-pub fn find_symlink<P, S>(directory: P, name: S, fuzz: bool, recursive: bool) -> std::io::Result<PathBuf>
+pub fn find_symlink<P, S>(directory: P, name: S, options: FindOptions) -> std::io::Result<PathBuf>
 where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, recursive,
+    let result = self::find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_symlink() {
                 return false;
@@ -426,7 +437,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(&name) {
                     return true;
                 }
             }
@@ -446,7 +457,7 @@ where
 }
 
 pub fn copy_dir_contents<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> std::io::Result<()> {
-    for src_file in self::list_files(src_dir, true)? {
+    for src_file in self::list_files(src_dir, TraverseOptions { recursive: true })? {
         let dst_file = dst_dir.as_ref().join(src_file.file_name().unwrap_or_default());
 
         self::copy(src_file, dst_file)?;

@@ -76,7 +76,7 @@ impl RpmBuilder {
         let src_pkg_file = fs::find_file_by_ext(
             &self.build_root.srpms,
             PKG_FILE_EXT,
-            false
+            fs::FindOptions { fuzz: false, recursive: false }
         )?;
 
         let dst_pkg_name = format!("{}-{}.src.{}",

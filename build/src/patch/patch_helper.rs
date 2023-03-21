@@ -14,7 +14,7 @@ impl PatchHelper {
         let patch_list = fs::list_files_by_ext(
             directory,
             PATCH_FILE_EXT,
-            false
+            fs::TraverseOptions { recursive: false }
         )?.into_iter().collect();
 
         Ok(patch_list)

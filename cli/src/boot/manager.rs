@@ -32,14 +32,12 @@ impl BootManager {
         let kernel = fs::find_file(
             &boot_dir,
             OsString::from(KERNEL_PREFIX).concat(&name),
-            false,
-            false
+            fs::FindOptions { fuzz: false, recursive: false }
         )?;
         let initrd = fs::find_file(
             &boot_dir,
             OsString::from(INITRAMFS_PREFIX).concat(&name).concat(INITRAMFS_EXTENSION),
-            false,
-            false
+            fs::FindOptions { fuzz: false, recursive: false }
         )?;
 
         Ok(LoadKernelOption {

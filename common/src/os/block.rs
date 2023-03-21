@@ -13,8 +13,7 @@ impl BlockDevice {
             let dev = fs::find_symlink(
                 directory,
                 name,
-                false,
-                false
+                fs::FindOptions { fuzz: false, recursive: false }
             )?;
             fs::canonicalize(dev)
         }
