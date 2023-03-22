@@ -8,18 +8,16 @@ pub struct StatusCommandExecutor;
 
 impl CommandExecutor for StatusCommandExecutor {
     fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
-        match args {
-            CommandArguments::PatchOperationArguments(identifier) => {
-                let patch_manger = PatchManager::new()?;
-                let patch_status = patch_manger.get_patch_status(identifier).unwrap_or_default();
-                info!("{}", patch_status);
+        if let CommandArguments::PatchOperationArguments(identifier) = args {
+            let patch_manger = PatchManager::new()?;
+            let patch_status = patch_manger.get_patch_status(identifier).unwrap_or_default();
+            info!("{}", patch_status);
 
-                if patch_status == PatchStatus::Unknown {
-                    return Ok(-1);
-                }
-                Ok(0)
-            },
-            _ => unreachable!(),
+            if patch_status == PatchStatus::Unknown {
+                return Ok(-1);
+            }
         }
+
+        Ok(0)
     }
 }

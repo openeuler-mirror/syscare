@@ -6,15 +6,12 @@ pub struct TargetCommandExecutor;
 
 impl CommandExecutor for TargetCommandExecutor {
     fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
-        match args {
-            CommandArguments::PatchOperationArguments(identifier) => {
-                PatchManager::new()?
-                    .get_patch_target(&identifier)?
-                    .print_log(log::Level::Info);
-
-                Ok(0)
-            },
-            _ => unreachable!(),
+        if let CommandArguments::PatchOperationArguments(identifier) = args {
+            PatchManager::new()?
+                .get_patch_target(&identifier)?
+                .print_log(log::Level::Info);
         }
+
+        Ok(0)
     }
 }
