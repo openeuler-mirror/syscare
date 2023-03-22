@@ -1,3 +1,4 @@
+pub mod signal;
 pub mod block_device;
 pub mod mounts;
 pub mod grub;
