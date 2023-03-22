@@ -5,8 +5,7 @@ use clap::Parser;
 
 use common::util::sys;
 
-const CLI_NAME:    &str = "syscare build";
-const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+use super::PatchBuildCLI;
 
 const DEFAULT_PATCH_VERSION:     &str = "1";
 const DEFAULT_PATCH_RELEASE:     &str = "1";
@@ -19,7 +18,7 @@ lazy_static! {
 }
 
 #[derive(Parser, Debug)]
-#[command(bin_name=CLI_NAME, version=CLI_VERSION)]
+#[command(bin_name=PatchBuildCLI::name(), version=PatchBuildCLI::version())]
 pub struct CliArguments {
     /// Patch name
     #[arg(short='n', long)]

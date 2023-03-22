@@ -21,7 +21,10 @@ impl Patch {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> std::io::Result<Self> {
         const PATCH_INFO_FILE_NAME: &str = "patch_info";
 
-        let info     = serde_versioned::deserialize::<_, PatchInfo>(patch_root.as_ref().join(PATCH_INFO_FILE_NAME))?;
+        let info = serde_versioned::deserialize::<_, PatchInfo>(
+            patch_root.as_ref().join(PATCH_INFO_FILE_NAME),
+            PatchInfo::version()
+        )?;
         let root_dir = patch_root.as_ref().to_path_buf();
 
         Ok(Self { info, root_dir })

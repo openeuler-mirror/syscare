@@ -2,8 +2,7 @@ use std::collections::HashMap;
 use std::path::Path;
 
 use log::{debug, error};
-
-use common::util::{fs, serde::serde_versioned};
+use common::util::{fs, serde::serde_unversioned};
 
 use super::package_info::PackageInfo;
 use super::patch::Patch;
@@ -135,14 +134,14 @@ impl PatchManager {
         for patch in &self.patch_list {
             status_map.insert(&patch.uuid, patch.status()?);
         }
-        serde_versioned::serialize(&status_map, PATCH_STATUS_FILE)?;
+        serde_unversioned::serialize(&status_map, PATCH_STATUS_FILE)?;
 
         Ok(())
     }
 
     pub fn restore_all_patch_status(&self) -> std::io::Result<()> {
         debug!("Reading all patch status");
-        let mut status_map: HashMap<String, PatchStatus> = serde_versioned::deserialize(PATCH_STATUS_FILE)?;
+        let mut status_map: HashMap<String, PatchStatus> = serde_unversioned::deserialize(PATCH_STATUS_FILE)?;
         /*
          * Merge patch status map with current patch list
          * and treat new patch as NOT-APPLIED

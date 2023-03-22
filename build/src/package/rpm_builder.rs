@@ -23,7 +23,8 @@ impl RpmBuilder {
     pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         serde_versioned::serialize(
             patch_info,
-            self.build_root.sources.join(PATCH_INFO_FILE_NAME)
+            self.build_root.sources.join(PATCH_INFO_FILE_NAME),
+            PatchInfo::version(),
         )
     }
 

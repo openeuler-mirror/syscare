@@ -8,7 +8,7 @@ use super::logger::Logger;
 
 const CLI_NAME:    &str = env!("CARGO_PKG_NAME");
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
-const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+const CLI_ABOUT:   &str = env!("CARGO_PKG_DESCRIPTION");
 
 #[derive(Debug)]
 #[derive(Parser)]
@@ -89,6 +89,10 @@ impl SyscareCLI {
 impl SyscareCLI {
     pub fn name() -> &'static str {
         CLI_NAME
+    }
+
+    pub fn version() -> &'static str {
+        CLI_VERSION
     }
 
     pub fn run() -> std::io::Result<i32> {

@@ -7,6 +7,15 @@ use serde::{Serialize, Deserialize};
 
 use super::package_info::PackageInfo;
 
+/*
+ * In order to solve PatchInfo binary compatibility issue,
+ * we use this version string to perform compatibility check
+ * before PatchInfo deserialization.
+ * Therefore, whenever the PatchInfo is modified (including PackageInfo),
+ * this should be updated and keep sync with patch builder.
+ */
+const PATCH_INFO_MAGIC: &str = "5a8e0b7f";
+
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone, Copy)]
@@ -30,7 +39,8 @@ pub struct PatchFile {
 }
 
 #[derive(Serialize, Deserialize)]
-#[derive(Clone)]pub struct PatchInfo {
+#[derive(Clone)]
+pub struct PatchInfo {
     pub uuid:        String,
     pub name:        String,
     pub version:     String,
@@ -44,6 +54,20 @@ pub struct PatchFile {
     pub description: String,
     pub patches:     Vec<PatchFile>,
     pub is_patched:  bool,
+}
+
+impl PatchInfo {
+    pub fn short_name(&self) -> String {
+        format!("{}-{}-{}", self.name, self.version, self.release)
+    }
+
+    pub fn full_name(&self) -> String {
+        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+    }
+
+    pub fn version() -> &'static str {
+        PATCH_INFO_MAGIC
+    }
 }
 
 impl PatchInfo {

@@ -11,7 +11,9 @@ use super::logger::Logger;
 use super::args::CliArguments;
 use super::workdir::CliWorkDir;
 
-const CLI_BANNER: &str = env!("CARGO_PKG_DESCRIPTION");
+const CLI_NAME:    &str = "syscare build";
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CLI_ABOUT:   &str = env!("CARGO_PKG_DESCRIPTION");
 
 pub struct PatchBuildCLI {
     workdir: CliWorkDir,
@@ -124,7 +126,7 @@ impl PatchBuildCLI {
 
         // Collect patch info from patched source package
         if let Ok(path) = fs::find_file(&pkg_source_dir, PATCH_INFO_FILE_NAME, fs::FindOptions { fuzz: false, recursive: false }) {
-            let old_patch_info = serde_versioned::deserialize::<_, PatchInfo>(path)?;
+            let old_patch_info = serde_versioned::deserialize::<_, PatchInfo>(path, PatchInfo::version())?;
             // Override path release
             args.patch_release = u32::max(args.patch_release, old_patch_info.release + 1);
             // Overide path list
@@ -271,7 +273,7 @@ impl PatchBuildCLI {
         self.initialize()?;
 
         info!("==============================");
-        info!("{}", CLI_BANNER);
+        info!("{}", CLI_ABOUT);
         info!("==============================");
         let (mut src_pkg_info, dbg_pkg_info) = self.collect_package_info()?;
         self.extract_source_package()?;
@@ -294,6 +296,14 @@ impl PatchBuildCLI {
 }
 
 impl PatchBuildCLI {
+    pub fn name() -> &'static str {
+        CLI_NAME
+    }
+
+    pub fn version() -> &'static str {
+        CLI_VERSION
+    }
+
     pub fn run() -> i32 {
         let mut cli = Self {
             workdir: CliWorkDir::new(),

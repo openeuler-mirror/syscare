@@ -15,6 +15,14 @@ use common::util::os_str::OsStrExt;
 use common::util::{fs, sys, digest};
 
 const PATCH_VERSION_LENGTH: usize = 8;
+/*
+ * In order to solve PatchInfo binary compatibility issue,
+ * we use this version string to perform compatibility check
+ * before PatchInfo deserialization.
+ * Therefore, whenever the PatchInfo is modified (including PackageInfo),
+ * it should be updated and keep sync with patch management cli.
+ */
+const PATCH_INFO_MAGIC: &str = "5a8e0b7f";
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
@@ -132,6 +140,10 @@ impl PatchInfo {
 
     pub fn full_name(&self) -> String {
         format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+    }
+
+    pub fn version() -> &'static str {
+        PATCH_INFO_MAGIC
     }
 }
 
