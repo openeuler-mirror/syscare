@@ -228,7 +228,7 @@ where
     let mut results = Vec::new();
     let mut subdirs = Vec::new();
 
-    for dir_entry in self::read_dir(directory)? {
+    for dir_entry in read_dir(directory)? {
         let entry     = dir_entry?;
         let file_type = entry.file_type()?;
         let file_path = entry.path();
@@ -242,7 +242,7 @@ where
     }
 
     for subdir in subdirs {
-        results.extend(self::traverse(subdir, options, predicate)?);
+        results.extend(traverse(subdir, options, predicate)?);
     }
 
     Ok(results)
@@ -252,9 +252,9 @@ pub fn list_dirs<P>(directory: P, options: TraverseOptions) -> std::io::Result<V
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, options, |file_type, _| file_type.is_dir())?
+    traverse(directory, options, |file_type, _| file_type.is_dir())?
         .into_iter()
-        .map(self::canonicalize)
+        .map(canonicalize)
         .collect()
 }
 
@@ -262,9 +262,9 @@ pub fn list_files<P>(directory: P, options: TraverseOptions) -> std::io::Result<
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, options, |file_type, _| file_type.is_file())?
+    traverse(directory, options, |file_type, _| file_type.is_file())?
         .into_iter()
-        .map(self::canonicalize)
+        .map(canonicalize)
         .collect()
 }
 
@@ -273,7 +273,7 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    self::traverse(directory, options,
+    traverse(directory, options,
         |file_type, file_path| {
             if !file_type.is_file() {
                 return false;
@@ -282,14 +282,14 @@ where
                 .map(|s| s == ext.as_ref())
                 .unwrap_or(false);
         }
-    )?.into_iter().map(self::canonicalize).collect()
+    )?.into_iter().map(canonicalize).collect()
 }
 
 pub fn list_symlinks<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
-    self::traverse(directory, options, |file_type, _| file_type.is_symlink())
+    traverse(directory, options, |file_type, _| file_type.is_symlink())
 }
 
 #[derive(Clone, Copy)]
@@ -305,7 +305,7 @@ where
 {
     let mut subdirs = Vec::new();
 
-    for dir_entry in self::read_dir(directory)? {
+    for dir_entry in read_dir(directory)? {
         let entry     = dir_entry?;
         let file_type = entry.file_type()?;
         let file_path = entry.path();
@@ -319,7 +319,7 @@ where
     }
 
     for subdir in subdirs {
-        if let Some(path) = self::find(subdir, options, predicate)? {
+        if let Some(path) = find(subdir, options, predicate)? {
             return Ok(Some(path));
         }
     }
@@ -332,7 +332,7 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, options,
+    let result = find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_dir() {
                 return false;
@@ -365,7 +365,7 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, options,
+    let result = find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_file() {
                 return false;
@@ -398,7 +398,7 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, options,
+    let result = find(&directory, options,
         |file_type: &FileType, file_path: &Path| -> bool {
             if !file_type.is_file() {
                 return false;
@@ -428,7 +428,7 @@ where
     P: AsRef<Path>,
     S: AsRef<OsStr>,
 {
-    let result = self::find(&directory, options,
+    let result = find(&directory, options,
         |file_type, file_path| -> bool {
             if !file_type.is_symlink() {
                 return false;
@@ -457,10 +457,10 @@ where
 }
 
 pub fn copy_dir_contents<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q) -> std::io::Result<()> {
-    for src_file in self::list_files(src_dir, TraverseOptions { recursive: true })? {
+    for src_file in list_files(src_dir, TraverseOptions { recursive: true })? {
         let dst_file = dst_dir.as_ref().join(src_file.file_name().unwrap_or_default());
 
-        self::copy(src_file, dst_file)?;
+        copy(src_file, dst_file)?;
     }
 
     Ok(())
