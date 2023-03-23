@@ -1,6 +1,6 @@
 use clap::Parser;
 use log::{LevelFilter, debug};
-use common::util::sys;
+use common::os;
 
 use crate::cmd::*;
 
@@ -109,7 +109,7 @@ impl SyscareCLI {
     pub fn check_root_permission() -> std::io::Result<()> {
         const ROOT_UID: u32 = 0;
 
-        if sys::user_id() != ROOT_UID {
+        if os::user::id() != ROOT_UID {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::PermissionDenied,
                 "This command has to be run with superuser privileges (under the root user on most systems)."

@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use lazy_static::lazy_static;
 use clap::Parser;
 
-use common::util::sys;
+use common::os;
 
 use super::PatchBuildCLI;
 
@@ -14,7 +14,7 @@ const DEFAULT_WORK_DIR:          &str = ".";
 const DEFAULT_OUTPUT_DIR:        &str = ".";
 
 lazy_static! {
-    static ref DEFAULT_KERNEL_JOBS: String = sys::cpu_num().to_string();
+    static ref DEFAULT_KERNEL_JOBS: String = os::cpu::num().to_string();
 }
 
 #[derive(Parser, Debug)]
@@ -25,7 +25,7 @@ pub struct CliArguments {
     pub patch_name: String,
 
     /// Patch architecture
-    #[arg(long, default_value=sys::cpu_arch())]
+    #[arg(long, default_value=os::cpu::arch())]
     pub patch_arch: String,
 
     /// Patch version

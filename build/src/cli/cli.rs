@@ -1,6 +1,9 @@
+use std::ffi::OsStr;
+
 use log::LevelFilter;
 use log::{info, warn, error};
-use common::util::{sys, fs, serde::serde_versioned};
+use common::os;
+use common::util::{fs, serde::serde_versioned};
 
 use crate::package::{PackageInfo, PackageType, PKG_FILE_EXT};
 use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
@@ -169,8 +172,8 @@ impl PatchBuildCLI {
     fn check_build_args(&self) -> std::io::Result<()> {
         let args = &self.args;
 
-        let system_arch = sys::cpu_arch();
-        if args.patch_arch != system_arch {
+        let system_arch = os::cpu::arch();
+        if OsStr::new(&args.patch_arch) != system_arch {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch arch \"{}\" is unsupported", args.patch_arch),

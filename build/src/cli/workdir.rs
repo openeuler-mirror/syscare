@@ -3,8 +3,8 @@ use std::path::Path;
 
 use std::ops::Deref;
 
+use common::os;
 use common::util::os_str::OsStringExt;
-use common::util::sys;
 
 use crate::workdir::{WorkDir, WorkDirManager};
 
@@ -20,9 +20,9 @@ impl CliWorkDir {
     pub fn create<P: AsRef<Path>>(&mut self, workdir: P) -> std::io::Result<()> {
         let workdir = WorkDir::new(
             workdir.as_ref().join(
-                OsString::from(sys::process_name())
+                OsString::from(os::process::name())
                     .concat(".")
-                    .concat(sys::process_id().to_string())
+                    .concat(os::process::id().to_string())
             )
         );
         workdir.create_all()?;

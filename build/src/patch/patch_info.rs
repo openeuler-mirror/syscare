@@ -7,12 +7,13 @@ use log::log;
 use lazy_static::*;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+use common::os;
 
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
 
 use common::util::os_str::OsStrExt;
-use common::util::{fs, sys, digest};
+use common::util::{fs, digest};
 
 const PATCH_VERSION_LENGTH: usize = 8;
 /*
@@ -72,7 +73,7 @@ impl PatchFile {
     }
 
     pub fn is_from_source_pkg(&self) -> bool {
-        self.path.as_os_str().contains(sys::process_id().to_string())
+        self.path.as_os_str().contains(os::process::id().to_string())
     }
 }
 

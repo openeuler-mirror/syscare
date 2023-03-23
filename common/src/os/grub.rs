@@ -12,8 +12,7 @@ use crate::util::fs;
 use crate::util::raw_line::RawLines;
 use crate::util::os_str::OsStrExt;
 
-use super::mounts;
-use super::block_device;
+use super::{disk, mounts};
 
 #[derive(Debug)]
 enum BootType {
@@ -105,7 +104,7 @@ impl<R: BufRead> GrubConfigParser<R> {
     #[inline(always)]
     fn parse_mount_point(str: &OsStr) -> Option<PathBuf> {
         let find_dev = Self::parse_uuid(str).and_then(|uuid| {
-            block_device::find_by_uuid(uuid).ok()
+            disk::find_by_uuid(uuid).ok()
         });
 
         if let (Some(dev_name), Ok(mounts)) = (find_dev, mounts::enumerate()) {
