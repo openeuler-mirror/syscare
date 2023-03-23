@@ -4,7 +4,8 @@ use std::path::PathBuf;
 
 use log::debug;
 
-use common::os::{SELinux, SELinuxStatus};
+use common::os::selinux;
+use common::os::selinux::SELinuxStatus;
 use common::util::os_str::OsStringExt;
 use common::util::{sys, fs};
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
@@ -43,7 +44,7 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn set_patch_security_context(&self) -> std::io::Result<()> {
-        if SELinux::get_enforce()? != SELinuxStatus::Enforcing {
+        if selinux::get_enforce()? != SELinuxStatus::Enforcing {
             debug!("SELinux is disabled");
             return Ok(());
         }
@@ -51,12 +52,12 @@ impl<'a> KernelPatchAdapter<'a> {
 
         let patch      = self.patch;
         let patch_file = self.get_patch_file();
-        let sec_type   = SELinux::get_security_context_type(patch_file.as_path())?;
+        let sec_type   = selinux::get_security_context_type(patch_file.as_path())?;
         if sec_type != KPATCH_PATCH_SEC_TYPE {
             debug!("Setting patch {{{}}} security context type to \"{}\"",
                 patch, KPATCH_PATCH_SEC_TYPE
             );
-            SELinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
+            selinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
         }
 
         Ok(())

@@ -87,33 +87,29 @@ pub struct MountInfo {
     pub super_opts:  OsString,
 }
 
-pub struct Mounts;
+pub fn enumerate() -> std::io::Result<Vec<MountInfo>> {
+    const MOUNTINFO_FILE: &str = "/proc/self/mountinfo";
 
-impl Mounts {
-    pub fn enumerate() -> std::io::Result<Vec<MountInfo>> {
-        const MOUNTINFO_FILE: &str = "/proc/self/mountinfo";
+    let mut result = Vec::new();
 
-        let mut result = Vec::new();
+    for read_line in RawLines::from(BufReader::new(fs::open_file(MOUNTINFO_FILE)?)) {
+        let line = read_line?;
+        let info = MountInfoParser::new(line.as_bytes()).collect::<Vec<_>>();
+        assert_eq!(info.len(), 10);
 
-        for read_line in RawLines::from(BufReader::new(fs::open_file(MOUNTINFO_FILE)?)) {
-            let line = read_line?;
-            let info = MountInfoParser::new(line.as_bytes()).collect::<Vec<_>>();
-            assert_eq!(info.len(), 10);
-
-            result.push(MountInfo {
-                mount_id:    info[0].to_string_lossy().parse::<u32>().unwrap_or_default(),
-                parent_id:   info[1].to_string_lossy().parse::<u32>().unwrap_or_default(),
-                device_id:   info[2].to_os_string(),
-                root:        PathBuf::from(info[3]),
-                mount_point: PathBuf::from(info[4]),
-                mount_opts:  info[5].to_os_string(),
-                optional:    info[6].to_os_string(),
-                filesystem:  info[7].to_os_string(),
-                source:      PathBuf::from(info[8]),
-                super_opts:  info[9].to_os_string(),
-            })
-        }
-
-        Ok(result)
+        result.push(MountInfo {
+            mount_id:    info[0].to_string_lossy().parse::<u32>().unwrap_or_default(),
+            parent_id:   info[1].to_string_lossy().parse::<u32>().unwrap_or_default(),
+            device_id:   info[2].to_os_string(),
+            root:        PathBuf::from(info[3]),
+            mount_point: PathBuf::from(info[4]),
+            mount_opts:  info[5].to_os_string(),
+            optional:    info[6].to_os_string(),
+            filesystem:  info[7].to_os_string(),
+            source:      PathBuf::from(info[8]),
+            super_opts:  info[9].to_os_string(),
+        })
     }
+
+    Ok(result)
 }

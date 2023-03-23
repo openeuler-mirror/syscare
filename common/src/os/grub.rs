@@ -12,7 +12,8 @@ use crate::util::fs;
 use crate::util::raw_line::RawLines;
 use crate::util::os_str::OsStrExt;
 
-use super::{Mounts, BlockDevice};
+use super::mounts;
+use super::block_device;
 
 #[derive(Debug)]
 enum BootType {
@@ -104,10 +105,10 @@ impl<R: BufRead> GrubConfigParser<R> {
     #[inline(always)]
     fn parse_mount_point(str: &OsStr) -> Option<PathBuf> {
         let find_dev = Self::parse_uuid(str).and_then(|uuid| {
-            BlockDevice::find_by_uuid(uuid).ok()
+            block_device::find_by_uuid(uuid).ok()
         });
 
-        if let (Some(dev_name), Ok(mounts)) = (find_dev, Mounts::enumerate()) {
+        if let (Some(dev_name), Ok(mounts)) = (find_dev, mounts::enumerate()) {
             for mount in mounts {
                 if mount.source == dev_name {
                     return Some(mount.mount_point);
@@ -214,89 +215,86 @@ impl<R: BufRead> Iterator for GrubEnvParser<R> {
     }
 }
 
-pub struct Grub;
+#[inline(always)]
+fn get_boot_type() -> BootType {
+    const UEFI_SYS_INTERFACE: &str = "/sys/firmware/efi";
 
-impl Grub {
-    fn get_boot_type() -> BootType {
-        const UEFI_SYS_INTERFACE: &str = "/sys/firmware/efi";
+    match fs::metadata(UEFI_SYS_INTERFACE) {
+        Ok(_)  => BootType::UEFI,
+        Err(_) => BootType::CSM,
+    }
+}
 
-        match fs::metadata(UEFI_SYS_INTERFACE) {
-            Ok(_)  => BootType::UEFI,
-            Err(_) => BootType::CSM,
+fn get_grub_path() -> PathBuf {
+    const CSM_GRUB_PATH:  &str = "/boot/grub2";
+    const UEFI_GRUB_PATH: &str = "/boot/efi/EFI";
+
+    let boot_type = get_boot_type();
+    debug!("Boot type: {:?}", boot_type);
+
+    match boot_type {
+        BootType::CSM  => PathBuf::from(CSM_GRUB_PATH),
+        BootType::UEFI => PathBuf::from(UEFI_GRUB_PATH),
+    }
+}
+
+fn find_grub_config<P: AsRef<Path>>(grub_root: P) -> std::io::Result<PathBuf> {
+    const GRUB_CFG_NAME: &str = "grub.cfg";
+
+    fs::find_file(
+        grub_root,
+        GRUB_CFG_NAME,
+        fs::FindOptions { fuzz: false, recursive: true }
+    )
+}
+
+fn find_grub_env<P: AsRef<Path>>(grub_root: P) -> std::io::Result<PathBuf> {
+    const GRUB_ENV_NAME: &str = "grubenv";
+
+    fs::find_file(
+        grub_root,
+        GRUB_ENV_NAME,
+        fs::FindOptions { fuzz: false, recursive: true }
+    )
+}
+
+pub fn read_menu_entries() -> std::io::Result<Vec<GrubMenuEntry>> {
+    let grub_root   = get_grub_path();
+    let grub_config = find_grub_config(grub_root)?;
+
+    let result = GrubConfigParser::new(
+        BufReader::new(fs::open_file(grub_config)?)
+    ).collect();
+
+    Ok(result)
+}
+
+pub fn read_grub_env() -> std::io::Result<HashMap<OsString, OsString>> {
+    let grub_root = get_grub_path();
+    let grub_env  = find_grub_env(grub_root).unwrap();
+
+    let result = GrubEnvParser::new(
+        BufReader::new(fs::open_file(grub_env)?)
+    ).collect();
+
+    Ok(result)
+}
+
+pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
+    let config = read_grub_env()?;
+    let default_entry_name = config.get(OsStr::new("saved_entry")).ok_or(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "Cannot read grub default entry name",
+    ))?;
+
+    for entry in read_menu_entries()? {
+        if entry.get_name() == default_entry_name {
+            return Ok(entry);
         }
     }
 
-    fn get_grub_path() -> PathBuf {
-        const CSM_GRUB_PATH:  &str = "/boot/grub2";
-        const UEFI_GRUB_PATH: &str = "/boot/efi/EFI";
-
-        let boot_type = Self::get_boot_type();
-        debug!("Boot type: {:?}", boot_type);
-
-        match boot_type {
-            BootType::CSM  => PathBuf::from(CSM_GRUB_PATH),
-            BootType::UEFI => PathBuf::from(UEFI_GRUB_PATH),
-        }
-    }
-
-    fn find_grub_config<P: AsRef<Path>>(grub_root: P) -> std::io::Result<PathBuf> {
-        const GRUB_CFG_NAME: &str = "grub.cfg";
-
-        fs::find_file(
-            grub_root,
-            GRUB_CFG_NAME,
-            fs::FindOptions { fuzz: false, recursive: true }
-        )
-    }
-
-    fn find_grub_env<P: AsRef<Path>>(grub_root: P) -> std::io::Result<PathBuf> {
-        const GRUB_ENV_NAME: &str = "grubenv";
-
-        fs::find_file(
-            grub_root,
-            GRUB_ENV_NAME,
-            fs::FindOptions { fuzz: false, recursive: true }
-        )
-    }
-
-    pub fn read_menu_entries() -> std::io::Result<Vec<GrubMenuEntry>> {
-        let grub_root   = Self::get_grub_path();
-        let grub_config = Self::find_grub_config(grub_root)?;
-
-        let result = GrubConfigParser::new(
-            BufReader::new(fs::open_file(grub_config)?)
-        ).collect();
-
-        Ok(result)
-    }
-
-    pub fn read_grub_env() -> std::io::Result<HashMap<OsString, OsString>> {
-        let grub_root = Self::get_grub_path();
-        let grub_env  = Self::find_grub_env(grub_root).unwrap();
-
-        let result = GrubEnvParser::new(
-            BufReader::new(fs::open_file(grub_env)?)
-        ).collect();
-
-        Ok(result)
-    }
-
-    pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
-        let config = Self::read_grub_env()?;
-        let default_entry_name = config.get(OsStr::new("saved_entry")).ok_or(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            "Cannot read grub default entry name",
-        ))?;
-
-        for entry in Self::read_menu_entries()? {
-            if entry.get_name() == default_entry_name {
-                return Ok(entry);
-            }
-        }
-
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Cannot find grub default entry \"{}\"", default_entry_name.to_string_lossy())
-        ));
-    }
+    return Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        format!("Cannot find grub default entry \"{}\"", default_entry_name.to_string_lossy())
+    ));
 }

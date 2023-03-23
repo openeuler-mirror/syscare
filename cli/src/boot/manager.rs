@@ -3,7 +3,8 @@ use std::{path::PathBuf, ffi::OsString};
 
 use log::debug;
 
-use common::os::{Grub, KExec};
+use common::os::grub;
+use common::os::kexec;
 use common::util::os_str::OsStringExt;
 use common::util::fs;
 
@@ -48,7 +49,7 @@ impl BootManager {
     }
 
     fn find_kernel_by_grub_config() -> std::io::Result<LoadKernelOption> {
-        let entry = Grub::get_boot_entry()?;
+        let entry = grub::get_boot_entry()?;
 
         Ok(LoadKernelOption {
             name:   entry.get_name().to_os_string(),
@@ -69,13 +70,13 @@ impl BootManager {
         debug!("Loading \"{}\"",   option.name.to_string_lossy());
         debug!("Using kernel: {}", option.kernel.display());
         debug!("Using initrd: {}", option.initrd.display());
-        KExec::load_kernel(option.kernel, option.initrd)
+        kexec::load_kernel(option.kernel, option.initrd)
     }
 
     pub fn reboot(option: RebootOption) -> std::io::Result<()> {
         match option {
-            RebootOption::Normal => KExec::systemd_exec_kernel(),
-            RebootOption::Forced => KExec::direct_exec_kernel(),
+            RebootOption::Normal => kexec::systemd_exec_kernel(),
+            RebootOption::Forced => kexec::direct_exec_kernel(),
         }
     }
 }
