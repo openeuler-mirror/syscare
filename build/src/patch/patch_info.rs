@@ -48,7 +48,7 @@ impl PatchFile {
         let file_name = fs::file_name(&file_path);
 
         let mut file_digests = FILE_DIGESTS.lock().unwrap();
-        let file_digest = &digest::file_digest(file_path.as_path())?[..PATCH_VERSION_LENGTH];
+        let file_digest = &digest::file(file_path.as_path())?[..PATCH_VERSION_LENGTH];
         if !file_digests.insert(file_digest.to_owned()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -111,7 +111,7 @@ impl PatchInfo {
         let arch        = args.patch_arch.to_owned();
         let target      = target_pkg_info;
         let target_elfs = HashMap::new();
-        let digest      = digest::file_list_digest(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
+        let digest      = digest::file_list(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
