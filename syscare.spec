@@ -1,8 +1,12 @@
 %global debug_package %{nil}
 
+%define kernel_devel_rpm %(echo $(rpm -q kernel-devel | head -n 1))
+%define kernel_name %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" %{kernel_devel_rpm}))
+%define kernel_version %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}" %{kernel_devel_rpm}))
+
 Name:           syscare
 Version:        1.0.1
-Release:        2
+Release:        3
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -11,25 +15,39 @@ Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
-BuildRequires:  kernel-devel
 
 Requires:       coreutils systemd kpatch-runtime
+%ifarch x86_64
+Requires:       %{name}-kmod >= 1.0.1-1
+%endif
 
 %description
 SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
 The host can fix the system problem without rebooting.
 
+%ifarch x86_64
+%package kmod
+Summary:       Syscare kernel modules.
+Requires:      kernel = %{kernel_version}
+BuildRequires: kernel-devel
+BuildRequires: make gcc bison flex
+
+%description kmod
+Syscare kernel modules dependency.
+%endif
+
 %package build
 Summary:  Tools for build syscare patch.
 Requires: %{name} = %{version}-%{release}
+%ifarch x86_64
+Requires: %{name}-kmod >= 1.0.1-1
+%endif
 Requires: kpatch make gcc openssl-devel dwarves python3-devel bison flex
 Requires: elfutils-libelf-devel
 Requires: rpm-build
 
 %description build
 Syscare build tools.
-
-%define kernel_version $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" `rpm -q kernel-devel` | head -n 1)
 
 %prep
 %autosetup -p1
@@ -38,12 +56,16 @@ Syscare build tools.
 mkdir -p build_tmp
 cd build_tmp
 
-cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_version} ..
+cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_name} ..
 make
 
 %install
 cd build_tmp
 %make_install
+%ifarch x86_64
+mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+mv %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+%endif
 
 %post
 # Create runtime directory at installation
@@ -51,32 +73,14 @@ if [ "$1" -eq 1 ]; then
     mkdir -p /usr/lib/syscare/patches
 fi
 
-%ifarch x86_64
-# Copy upatch kernel module to lib/modules
-mkdir -p /lib/modules/$(uname -r)/extra/syscare
-install -m 0644 /usr/libexec/syscare/upatch.ko /lib/modules/$(uname -r)/extra/syscare
-
-# Generate kernel module list
-depmod -a > /dev/null 2>&1 || true
-
 # Start all services
-systemctl enable syscare-pre.service
-systemctl enable syscare.service
-systemctl start syscare-pre
+systemctl enable syscare
 systemctl start syscare
-%endif
 
 %preun
-%ifarch x86_64
 # Stop all services
-systemctl stop syscare.service
-systemctl stop syscare-pre.service
-systemctl disable syscare.service
-systemctl disable syscare-pre.service
-
-# Unload upatch kernel module
-rmmod upatch > /dev/null 2>&1 || true
-%endif
+systemctl stop syscare
+systemctl disable syscare
 
 %postun
 # Remove runtime directory at uninstallation
@@ -85,9 +89,20 @@ if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
 fi
 
 %ifarch x86_64
-# Remove upatch kernel module from lib/modules
-rm -rf /lib/modules/$(uname -r)/extra/syscare
+%post kmod
+# Generate kernel module list
+depmod -a > /dev/null 2>&1 || true
 
+# Start all services
+systemctl enable syscare-upatch
+systemctl start syscare-upatch
+
+%preun kmod
+# Stop all services
+systemctl stop syscare-upatch
+systemctl disable syscare-upatch
+
+%postun kmod
 # Generate kernel module list
 depmod -a > /dev/null 2>&1 || true
 %endif
@@ -95,12 +110,17 @@ depmod -a > /dev/null 2>&1 || true
 %files
 %defattr(-,root,root,-)
 %attr(755,root,root) /usr/bin/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare-pre.service
 %attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %ifarch x86_64
 %dir /usr/libexec/syscare
-%attr(640,root,root) /usr/libexec/syscare/upatch.ko
 %attr(755,root,root) /usr/libexec/syscare/upatch-tool
+%endif
+
+%ifarch x86_64
+%files kmod
+%dir /lib/modules/%{kernel_name}/extra/syscare
+%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch.ko
+%attr(644,root,root) /usr/lib/systemd/system/syscare-upatch.service
 %endif
 
 %files build
@@ -113,6 +133,9 @@ depmod -a > /dev/null 2>&1 || true
 %endif
 
 %changelog
+* Thu Mar 30 2023 renoseven<dev@renoseven.net> - 1.0.1-3
+- Fix upatch may not contain all symbols issue
+- Add syscare-kmod package
 * Wed Mar 29 2023 renoseven<dev@renoseven.net> - 1.0.1-2
 - Fix rpm install & remove script issue
 * Wed Mar 15 2023 renoseven<dev@renoseven.net> - 1.0.1-1
