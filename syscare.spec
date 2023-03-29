@@ -2,7 +2,7 @@
 
 Name:           syscare
 Version:        1.0.1
-Release:        1
+Release:        2
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -13,7 +13,7 @@ BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
 BuildRequires:  kernel-devel
 
-Requires:       kpatch-runtime coreutils
+Requires:       coreutils systemd kpatch-runtime
 
 %description
 SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
@@ -44,41 +44,52 @@ make
 %install
 cd build_tmp
 %make_install
-%ifarch x86_64
-    mkdir -p %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
-    install -m 0640 %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_version}/extra/syscare
-    cd %{buildroot}
-    find lib -name "upatch.ko" -fprintf %{_builddir}/%{name}-%{version}/ko.files.list "/%p\n"
-%endif
 
 %post
-mkdir -p /usr/lib/syscare/patches
+# Create runtime directory at installation
+if [ "$1" -eq 1 ]; then
+    mkdir -p /usr/lib/syscare/patches
+fi
+
 %ifarch x86_64
-    depmod -a > /dev/null 2>&1 || true
+# Copy upatch kernel module to lib/modules
+mkdir -p /lib/modules/$(uname -r)/extra/syscare
+install -m 0644 /usr/libexec/syscare/upatch.ko /lib/modules/$(uname -r)/extra/syscare
 
-    %systemd_post syscare-pre.service
-    %systemd_post syscare.service
+# Generate kernel module list
+depmod -a > /dev/null 2>&1 || true
 
-    systemctl enable syscare-pre.service
-    systemctl enable syscare.service
-    systemctl start syscare-pre
-    systemctl start syscare
+# Start all services
+systemctl enable syscare-pre.service
+systemctl enable syscare.service
+systemctl start syscare-pre
+systemctl start syscare
 %endif
 
 %preun
-rm -rf /usr/lib/syscare/patches
 %ifarch x86_64
-    %systemd_preun syscare-pre.service
-    %systemd_preun syscare.service
+# Stop all services
+systemctl stop syscare.service
+systemctl stop syscare-pre.service
+systemctl disable syscare.service
+systemctl disable syscare-pre.service
+
+# Unload upatch kernel module
+rmmod upatch > /dev/null 2>&1 || true
 %endif
 
 %postun
-%ifarch x86_64
-    depmod -a > /dev/null 2>&1 || true
-%endif
+# Remove runtime directory at uninstallation
+if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
+    rm -rf /usr/lib/syscare
+fi
 
 %ifarch x86_64
-%files -f ko.files.list
+# Remove upatch kernel module from lib/modules
+rm -rf /lib/modules/$(uname -r)/extra/syscare
+
+# Generate kernel module list
+depmod -a > /dev/null 2>&1 || true
 %endif
 
 %files
@@ -87,9 +98,9 @@ rm -rf /usr/lib/syscare/patches
 %attr(644,root,root) /usr/lib/systemd/system/syscare-pre.service
 %attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %ifarch x86_64
-    %dir /usr/libexec/syscare
-    %attr(640,root,root) /usr/libexec/syscare/upatch.ko
-    %attr(755,root,root) /usr/libexec/syscare/upatch-tool
+%dir /usr/libexec/syscare
+%attr(640,root,root) /usr/libexec/syscare/upatch.ko
+%attr(755,root,root) /usr/libexec/syscare/upatch-tool
 %endif
 
 %files build
@@ -98,10 +109,12 @@ rm -rf /usr/lib/syscare/patches
 %attr(755,root,root) /usr/libexec/syscare/syscare-build
 %attr(755,root,root) /usr/libexec/syscare/upatch-build
 %ifarch x86_64
-    %attr(755,root,root) /usr/libexec/syscare/upatch-diff
+%attr(755,root,root) /usr/libexec/syscare/upatch-diff
 %endif
 
 %changelog
+* Wed Mar 29 2023 renoseven<dev@renoseven.net> - 1.0.1-2
+- Fix rpm install & remove script issue
 * Wed Mar 15 2023 renoseven<dev@renoseven.net> - 1.0.1-1
 - New syscare cli
 - Support building patch for C++ code
