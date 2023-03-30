@@ -16,7 +16,9 @@ message("-- SYSCARE_LIBEXEC_DIR: ${SYSCARE_LIBEXEC_DIR}")
 message("-- SYSCARE_SERVICE_DIR: ${SYSCARE_SERVICE_DIR}")
 
 # Build upatch
-add_subdirectory(upatch)
+if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
+    add_subdirectory(upatch)
+endif()
 
 # Build syscare
 add_custom_target(syscare ALL
