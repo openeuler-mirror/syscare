@@ -202,7 +202,7 @@ impl<R: BufRead> Iterator for GrubEnvParser<R> {
                     continue;
                 }
 
-                let mut kv = line.split('=');
+                let mut kv = line.split("=");
                 if let (Some(key), Some(value)) = (kv.next(), kv.next()) {
                     return Some((key.trim().to_os_string(), value.trim().to_os_string()));
                 }

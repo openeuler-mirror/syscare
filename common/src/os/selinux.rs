@@ -11,7 +11,7 @@ use crate::util::fs;
 
 const SELINUX_ENFORCE_FILE:              &str  = "/sys/fs/selinux/enforce";
 const SELINUX_SECURITY_CONTEXT:          &str  = "security.selinux";
-const SELINUX_SECURITY_CONTEXT_SPLITTER: char  = ':';
+const SELINUX_SECURITY_CONTEXT_SPLITTER: &str  = ":";
 const SELINUX_SECURITY_CONTEXT_TYPE_NUM: usize = 4;
 
 #[derive(Debug)]

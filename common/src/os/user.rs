@@ -4,7 +4,6 @@ use std::os::unix::prelude::OsStringExt;
 use std::path::{PathBuf, Path};
 
 use lazy_static::*;
-use libc::passwd;
 
 struct UserInfo {
     name:   OsString,
@@ -21,7 +20,7 @@ fn info() -> &'static UserInfo {
     lazy_static! {
         static ref USER_INFO: UserInfo = unsafe {
             let uid = libc::getuid();
-            let mut pwd = std::mem::zeroed::<passwd>();
+            let mut pwd = std::mem::MaybeUninit::zeroed().assume_init();
             let mut buf = Vec::with_capacity(match libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) {
                 n if n < 0 => 16384 as usize,
                 n => n as usize,

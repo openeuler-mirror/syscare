@@ -17,7 +17,7 @@ struct PlatformInfo {
 fn info() -> &'static PlatformInfo {
     lazy_static! {
         static ref PLATFORM_INFO: PlatformInfo = unsafe {
-            let mut buf = std::mem::zeroed::<libc::utsname>();
+            let mut buf = std::mem::MaybeUninit::zeroed().assume_init();
 
             let ret = libc::uname(&mut buf);
             assert_eq!(ret, 0);

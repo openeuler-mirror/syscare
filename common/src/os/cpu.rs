@@ -11,7 +11,7 @@ pub fn arch() -> &'static OsStr {
 pub fn num() -> usize {
     lazy_static! {
         static ref CPU_NUM: usize = unsafe {
-            let mut cpu_set: libc::cpu_set_t = std::mem::zeroed();
+            let mut cpu_set = std::mem::MaybeUninit::zeroed().assume_init();
             let ret = libc::sched_getaffinity(
                 process::id(),
                 std::mem::size_of::<libc::cpu_set_t>(),
