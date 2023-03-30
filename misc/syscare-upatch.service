@@ -1,5 +1,5 @@
 [Unit]
-Description=User patch management
+Description=Syscare user patch management
 Requires=local-fs.target
 After=local-fs.target
 Before=syscare.service

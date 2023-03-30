@@ -56,7 +56,6 @@ install(
 # Install service
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/misc/upatch.service
         ${PROJECT_SOURCE_DIR}/misc/syscare.service
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
