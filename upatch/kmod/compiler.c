@@ -24,6 +24,8 @@
 #include <linux/spinlock.h>
 #include <linux/slab.h>
 #include <linux/version.h>
+#include <linux/vmalloc.h>
+#include <linux/ctype.h>
 
 #include <asm/ptrace.h>
 
@@ -420,118 +422,221 @@ out_normal:
     return ret;
 }
 
-// TODO: maybe the collect2 don't have "-o" parameter
-static int rewrite_link_path(char __user **argv, char __user **envp)
+static const char *get_real_path(const char *path_buff, unsigned int buff_size)
+{
+    int err;
+    struct path path;
+    const char* real_name = NULL;
+
+    err = kern_path(path_buff, LOOKUP_FOLLOW, &path);
+    if (!err)
+        real_name = d_path(&path, (void *)path_buff, buff_size);
+    return real_name;
+}
+
+static bool is_upatch_object_name(const char *name)
+{
+    unsigned int len = strlen(name);
+
+    if (len >= 3 && name[len - 1] == 'o'
+        && name[len - 2] == '.' && isdigit(name[len - 3]))
+        return true;
+    return false;
+}
+
+static void write_one_object_name(struct file *log_file,
+    const char *binary_name, const char *object_buff)
+{
+    ssize_t	nwritten;
+    unsigned int len;
+    char *content = NULL;
+    const char *object_name = NULL;
+
+    object_name = get_real_path(object_buff, PATH_MAX);
+    if (object_name == NULL || IS_ERR(object_name))
+        return;
+
+    if (!is_upatch_object_name(object_name))
+        return;
+
+    len = strlen(binary_name) + 4 + strlen(object_name) + 2;
+    content = vmalloc(len);
+    if (!content)
+        goto out;
+
+    memcpy(content, binary_name, strlen(binary_name));
+    memcpy(content + strlen(binary_name), "::::", 4);
+    memcpy(content + strlen(binary_name) + 4, object_name, strlen(object_name));
+    memcpy(content + strlen(binary_name) + 4 + strlen(object_name), "\n", 1);
+    content[len - 1] = 0;
+
+    nwritten = kernel_write(log_file, content, strlen(content), NULL);
+    if (nwritten != strlen(content))
+        pr_err("write link log failed - %ld \n", nwritten);
+
+out:
+    if (content)
+        vfree(content);
+    return;
+}
+
+static void handle_tmpname_file(struct file *log_file,
+    const char *binary_name, const char *file_path)
 {
     int ret;
-    size_t len;
-    char *object_path = NULL;
-    char *base_dir = NULL;
-    char *out_dir = NULL;
-    char *kernel_new_path = NULL;
-    char filename_buff[FILENAME_ID_LEN];
-    unsigned long arg_pointer;
-    unsigned long arg_addr, dir_addr;
+    unsigned int len, tmp;
+    struct file* filp = NULL;
+    char *content = NULL;
+    char *object_buf = NULL;
 
-    ret = obtain_parameter_pointer(argv, "-o", NULL, &arg_pointer);
-    if (ret || arg_pointer == 0) {
-        pr_debug("no valid object object_path found - %d \n", ret);
-        ret = 0;
+    filp = filp_open(file_path, O_RDONLY, 0);
+    if (filp == NULL || IS_ERR(filp))
+        goto out;
+
+    len = filp->f_inode->i_size;
+    content = vmalloc(len);
+    if (!content)
+        goto out;
+
+    object_buf = vmalloc(PATH_MAX);
+    if (!object_buf)
+        goto out;
+
+    ret = kernel_read(filp, content, len, 0);
+    if (ret != len) {
+        pr_err("read tmp file failed for linker \n");
         goto out;
     }
 
-    ret = -EFAULT;
-    if (get_user(arg_addr, (unsigned long __user *)arg_pointer))
-        goto out;
+    for (tmp = 0; tmp < len; tmp ++) {
+        if (content[tmp] == '\r' || content[tmp] == '\n')
+            content[tmp] = '\0';
+    }
+
+    tmp = 0;
+    while (tmp < len) {
+        unsigned int obj_len = strlen(content + tmp);
+        if (obj_len < PATH_MAX) {
+            memcpy(object_buf, content + tmp, obj_len);
+            object_buf[obj_len] = '\0';
+            write_one_object_name(log_file, binary_name, object_buf);
+        }
+        tmp += obj_len + 1;
+    }
+
+out:
+    if (object_buf)
+        vfree(object_buf);
+    if (content)
+        vfree(content);
+    if (filp && !IS_ERR(filp))
+        filp_close(filp, NULL);
+    return;
+}
+
+static int handle_object_name(struct file *log_file, const char *binary_name, char __user **pointer_array)
+{
+    unsigned long pointer_addr;
+    char *__buffer = NULL;
+    unsigned int len;
+
+    if (!pointer_array)
+        return -EINVAL;
+
+    __buffer = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!__buffer)
+        return -ENOMEM;
+
+    for (;;) {
+        if (get_user(pointer_addr, (unsigned long __user *)pointer_array))
+            break;
+
+        if (!(const char __user *)pointer_addr)
+            break;
+
+        len = strnlen_user((void __user *)pointer_addr, MAX_ARG_STRLEN);
+        if (copy_from_user(__buffer, (void __user *)pointer_addr, len))
+            break;
+
+        pointer_array ++;
+
+        if (__buffer[0] == '@') {
+            handle_tmpname_file(log_file, binary_name, &__buffer[1]);
+            continue;
+        }
+
+        write_one_object_name(log_file, binary_name, __buffer);
+    }
+
+    if (__buffer)
+        kfree(__buffer);
+    return 0;
+}
+
+static int obtain_link_info(char __user **argv, char __user **envp)
+{
+    int ret;
+    unsigned long arg_addr, log_addr;
+    char *path_buf = NULL;
+    const char *name = NULL;
+    struct file *log_file = NULL, *tmp_file = NULL;
 
     ret = -ENOMEM;
-    object_path = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!object_path)
+    path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path_buf)
         goto out;
 
-    ret = copy_para_from_user(arg_addr, object_path, PATH_MAX);
+    ret = obtain_parameter_addr(envp, LINK_PATH_ENV, &log_addr, NULL);
+    if (ret || log_addr == 0)
+        goto out;
+
+    ret = copy_para_from_user((unsigned long)((char *)log_addr + LINK_PATH_ENV_LEN + 1),
+        path_buf, PATH_MAX);
     if (ret)
         goto out;
 
-    ret = obtain_parameter_addr(envp, LINK_DIR_ENV, &dir_addr, NULL);
-    if (ret || dir_addr == 0) {
-        pr_debug("no valid %s found %s \n", LINK_DIR_ENV, object_path);
-        ret = 0;
+    log_file = filp_open(path_buf, O_WRONLY | O_SYNC | O_CREAT | O_APPEND, 0600);
+    if (IS_ERR(log_file)) {
+        ret = PTR_ERR(log_file);
+        pr_err("open log file %s failed - %d \n", path_buf, ret);
         goto out;
     }
 
-    ret = -ENOMEM;
-    out_dir = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!out_dir)
-        goto out;
+    ret = obtain_parameter_addr(argv, "-o", NULL, &arg_addr);
+    /* ATTENTION: if it fails to find the argument, it will work as a.out. */
+    if (ret || arg_addr == 0) {
+        memcpy(path_buf, "a.out", 6);
+        goto out_name;
+    }
 
-    ret = copy_para_from_user((unsigned long)((char *)dir_addr + LINK_DIR_ENV_LEN + 1),
-        out_dir, PATH_MAX);
+    ret = copy_para_from_user(arg_addr, path_buf, PATH_MAX);
     if (ret)
         goto out;
 
-    ret = obtain_parameter_addr(envp, "PWD", &dir_addr, NULL);
-    if (ret || dir_addr == 0) {
-        pr_debug("no valid PWD found - %d \n", ret);
-        ret = 0;
+out_name:
+    tmp_file = filp_open(path_buf, O_CREAT | O_RDONLY, 0600);
+    if (!IS_ERR(tmp_file))
+        filp_close(tmp_file, NULL);
+
+    ret = -ENOENT;
+    name = get_real_path(path_buf, PATH_MAX);
+    if (name == NULL || IS_ERR(name)) {
+        pr_err("get binary name failed \n");
         goto out;
     }
 
-    ret = -ENOMEM;
-    base_dir = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!base_dir)
-        goto out;
-
-    ret = copy_para_from_user((unsigned long)dir_addr + strlen("PWD") + 1, base_dir, PATH_MAX);
+    ret = handle_object_name(log_file, name, argv);
     if (ret)
         goto out;
-
-    ret = generate_file_name(filename_buff, FILENAME_ID_LEN);
-    if (ret)
-        goto out;
-
-    len = strlen(out_dir) + 1 + strlen(filename_buff) + 1;
-
-    ret = -ENOMEM;
-    kernel_new_path = kmalloc(len, GFP_KERNEL);
-    if (!kernel_new_path)
-        goto out;
-
-    ret = -ENOMEM;
-    strncpy(kernel_new_path, out_dir, strlen(out_dir));
-    strncpy(kernel_new_path + strlen(out_dir), "/", 1);
-    strncpy(kernel_new_path + strlen(out_dir) + 1, filename_buff, strlen(filename_buff));
-    strncpy(kernel_new_path + strlen(out_dir) + 1 + strlen(filename_buff), "\0", 1);
-
-    pr_debug("exist file name is %s \n", object_path);
-    pr_debug("link file name is %s \n", kernel_new_path);
-
-    if (strncmp(object_path, "/", 1)) {
-        strcat(base_dir, "/");
-        strcat(base_dir, object_path);
-        ret = create_symlink(base_dir, kernel_new_path);
-    }
-    else {
-        ret = create_symlink(object_path, kernel_new_path);
-    }
-
-    if (ret) {
-        pr_err("create symbol link for linker failed - %d \n", ret);
-        goto out;
-    }
 
     ret = 0;
     goto out;
 
 out:
-    if (object_path)
-        kfree(object_path);
-    if (out_dir)
-        kfree(out_dir);
-    if (kernel_new_path)
-        kfree(kernel_new_path);
-    if (base_dir)
-        kfree(base_dir);
+    if (log_file && !IS_ERR(log_file))
+        filp_close(log_file, NULL);
+    if (path_buf)
+        kfree(path_buf);
     return ret;
 }
 
@@ -613,9 +718,9 @@ static int uprobe_link_handler(struct uprobe_consumer *self, struct pt_regs *reg
     if (!argv || !envp)
         return 0;
 
-    ret = rewrite_link_path(argv, envp);
+    ret = obtain_link_info(argv, envp);
     if (ret) {
-        pr_warn("rewrite link path failed - %d \n", ret);
+        pr_warn("obtain link info failed - %d \n", ret);
         exit_syscall(regs, ret);
     }
 

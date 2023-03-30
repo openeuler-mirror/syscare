@@ -29,8 +29,8 @@
 #define ASSEMBLER_DIR_ENV "UPATCH_AS_OUTPUT"
 #define ASSEMBLER_DIR_ENV_LEN 16
 
-#define LINK_DIR_ENV "UPATCH_LINK_OUTPUT"
-#define LINK_DIR_ENV_LEN 18
+#define LINK_PATH_ENV "UPATCH_LINK_OUTPUT"
+#define LINK_PATH_ENV_LEN 18
 
 struct compiler_step;
 typedef int (*cs_handler_t)(struct compiler_step *step,
