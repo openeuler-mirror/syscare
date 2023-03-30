@@ -214,7 +214,6 @@ impl<R: BufRead> Iterator for GrubEnvParser<R> {
     }
 }
 
-#[inline(always)]
 fn get_boot_type() -> BootType {
     const UEFI_SYS_INTERFACE: &str = "/sys/firmware/efi";
 
@@ -224,12 +223,9 @@ fn get_boot_type() -> BootType {
     }
 }
 
-fn get_grub_path() -> PathBuf {
+fn get_grub_path(boot_type: BootType) -> PathBuf {
     const CSM_GRUB_PATH:  &str = "/boot/grub2";
     const UEFI_GRUB_PATH: &str = "/boot/efi/EFI";
-
-    let boot_type = get_boot_type();
-    debug!("Boot type: {:?}", boot_type);
 
     match boot_type {
         BootType::CSM  => PathBuf::from(CSM_GRUB_PATH),
@@ -257,8 +253,7 @@ fn find_grub_env<P: AsRef<Path>>(grub_root: P) -> std::io::Result<PathBuf> {
     )
 }
 
-pub fn read_menu_entries() -> std::io::Result<Vec<GrubMenuEntry>> {
-    let grub_root   = get_grub_path();
+pub fn read_menu_entries<P: AsRef<Path>>(grub_root: P) -> std::io::Result<Vec<GrubMenuEntry>> {
     let grub_config = find_grub_config(grub_root)?;
 
     let result = GrubConfigParser::new(
@@ -268,9 +263,8 @@ pub fn read_menu_entries() -> std::io::Result<Vec<GrubMenuEntry>> {
     Ok(result)
 }
 
-pub fn read_grub_env() -> std::io::Result<HashMap<OsString, OsString>> {
-    let grub_root = get_grub_path();
-    let grub_env  = find_grub_env(grub_root).unwrap();
+pub fn read_grub_env<P: AsRef<Path>>(grub_root: P) -> std::io::Result<HashMap<OsString, OsString>> {
+    let grub_env = find_grub_env(grub_root).unwrap();
 
     let result = GrubEnvParser::new(
         BufReader::new(fs::open_file(grub_env)?)
@@ -280,13 +274,17 @@ pub fn read_grub_env() -> std::io::Result<HashMap<OsString, OsString>> {
 }
 
 pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
-    let config = read_grub_env()?;
-    let default_entry_name = config.get(OsStr::new("saved_entry")).ok_or(std::io::Error::new(
+    let boot_type = get_boot_type();
+    debug!("Boot type: {:?}", boot_type);
+
+    let grub_root = get_grub_path(boot_type);
+    let grub_env  = read_grub_env(&grub_root)?;
+    let default_entry_name = grub_env.get(OsStr::new("saved_entry")).ok_or(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Cannot read grub default entry name",
     ))?;
 
-    for entry in read_menu_entries()? {
+    for entry in read_menu_entries(&grub_root)? {
         if entry.get_name() == default_entry_name {
             return Ok(entry);
         }
