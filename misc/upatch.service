@@ -1,11 +1,12 @@
 [Unit]
-Description=Prepare for syscare service
+Description=User patch management
 Requires=local-fs.target
 After=local-fs.target
-Before=syscare-restore.service
+Before=syscare.service
 
 [Service]
 ExecStart=modprobe upatch
+ExecStop=rmmod upatch
 User=root
 Group=root
 Type=oneshot

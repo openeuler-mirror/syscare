@@ -5,15 +5,15 @@ cmake_minimum_required(VERSION 3.14)
 project(syscare)
 
 # Variables
-SET(SYSCARE_VERSION     ${BUILD_VERSION})
-SET(SYSCARE_BIN_DIR     ${CMAKE_INSTALL_PREFIX}/bin)
-SET(SYSCARE_LIBEXEC_DIR ${CMAKE_INSTALL_PREFIX}/libexec/syscare)
-SET(SYSCARE_SERVICE_DIR ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
+set(SYSCARE_VERSION     ${BUILD_VERSION})
+set(SYSCARE_BINARY_DIR  ${CMAKE_INSTALL_PREFIX}/bin)
+set(SYSCARE_LIBEXEC_DIR ${CMAKE_INSTALL_PREFIX}/libexec/syscare)
+set(SYSCARE_SERVICE_DIR ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
 
-message("-- SYSCARE_VERSION:     ${SYSCARE_VERSION}")
-message("-- SYSCARE_BIN_DIR:     ${SYSCARE_BIN_DIR}")
-message("-- SYSCARE_LIBEXEC_DIR: ${SYSCARE_LIBEXEC_DIR}")
-message("-- SYSCARE_SERVICE_DIR: ${SYSCARE_SERVICE_DIR}")
+message("-- Syscare verion: ${SYSCARE_VERSION}")
+message("-- Syscare binary  directory: ${SYSCARE_BINARY_DIR}")
+message("-- Syscare libexec directory: ${SYSCARE_LIBEXEC_DIR}")
+message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
 
 # Build upatch
 if (CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64")
@@ -38,7 +38,7 @@ install(
         GROUP_EXECUTE GROUP_READ
         WORLD_READ WORLD_EXECUTE
     DESTINATION
-        ${SYSCARE_BIN_DIR}
+        ${SYSCARE_BINARY_DIR}
 )
 
 install(
@@ -56,7 +56,7 @@ install(
 # Install service
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/misc/syscare-pre.service
+        ${PROJECT_SOURCE_DIR}/misc/upatch.service
         ${PROJECT_SOURCE_DIR}/misc/syscare.service
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ

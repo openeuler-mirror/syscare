@@ -4,9 +4,9 @@ set(UPATCH_KMOD "upatch.ko")
 
 if (DEFINED KERNEL_VERSION)
     set(KERNEL_BUILD /lib/modules/${KERNEL_VERSION}/build)
-    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${UPATCH_VERSION} kernel=${KERNEL_BUILD})
+    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION} kernel=${KERNEL_BUILD})
 else()
-    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${UPATCH_VERSION})
+    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION})
 endif()
 
 add_custom_target(upatch-kmod ALL
