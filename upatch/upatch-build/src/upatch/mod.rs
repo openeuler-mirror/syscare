@@ -7,6 +7,7 @@ mod workdir;
 mod tools;
 mod resolve;
 mod note;
+mod link_message;
 
 pub use build::*;
 pub use compiler::*;
@@ -17,3 +18,4 @@ pub use workdir::*;
 pub use tools::*;
 pub use resolve::*;
 pub use note::*;
+pub use link_message::*;

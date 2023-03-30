@@ -41,7 +41,7 @@ impl Tool {
         }
         let output = ExternCommand::new(&self.diff).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Diff(format!("{}: please look {} for detail.", output.exit_code(), log_file.as_ref().display())))
+            return Err(Error::Diff(format!("{}: please look {:?} for detail.", output.exit_code(), log_file.as_ref())))
         };
         Ok(())
     }

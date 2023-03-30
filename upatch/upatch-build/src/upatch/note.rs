@@ -50,3 +50,15 @@ pub fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, note: Q) -> Re
     std::fs::write(note, out_data)?;
     Ok(())
 }
+
+pub fn read_build_id<P: AsRef<Path>>(binary: P) -> std::io::Result<Option<Vec<u8>>> {
+    let binary_elf = unsafe{ memmap2::Mmap::map(&std::fs::File::open(binary)?)? };
+    match object::File::parse(&*binary_elf) {
+        Ok(object) => match object.build_id() {
+            Ok(Some(id)) => Ok(Some(id.to_vec())),
+            Ok(None) => Ok(None),
+            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("read build_id failed: {}", e))),
+        },
+        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("parse binary failed: {}", e))),
+    }
+}

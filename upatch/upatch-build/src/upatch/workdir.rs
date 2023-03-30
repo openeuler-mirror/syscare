@@ -32,7 +32,7 @@ impl WorkDir {
         self.log_file = self.cache_dir.join("build.log");
 
         if let Ok(()) = self::check_dir(&self.cache_dir) {
-            fs::remove_dir_all(self.cache_dir.clone())?;
+            fs::remove_dir_all(&self.cache_dir)?;
         }
 
         fs::create_dir_all(&self.cache_dir)?;

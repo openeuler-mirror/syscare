@@ -8,10 +8,12 @@ use crate::cmd::*;
 
 use super::Result;
 use super::Error;
+use super::LINK_LOG;
 
 const COMPILER_CMD_ENV: &str = "UPATCH_CMD";
 const ASSEMBLER_DIR_ENV: &str = "UPATCH_AS_OUTPUT";
-const BUILD_SHELL: &str = "build.sh";
+const LINK_PATH_ENV: &str = "UPATCH_LINK_OUTPUT";
+const BUILD_SHELL: &str ="build.sh";
 
 pub struct Project {
     project_dir: PathBuf,
@@ -26,13 +28,14 @@ impl Project {
 
     pub fn build<P: AsRef<Path>>(&self, cmd: &str, assembler_output: P, build_command: String) -> Result<()> {
         let assembler_output = assembler_output.as_ref();
+        let link_output = assembler_output.join(LINK_LOG);
         let command_shell_path = assembler_output.join(BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_path)?;
         command_shell.write_all(build_command.as_ref())?;
         let args_list = ExternCommandArgs::new().arg(command_shell_path);
-        let envs_list = ExternCommandEnvs::new().env(COMPILER_CMD_ENV, cmd).envs([
-            (ASSEMBLER_DIR_ENV, assembler_output)
-        ]);
+        let envs_list = ExternCommandEnvs::new().env(COMPILER_CMD_ENV, cmd)
+            .env(ASSEMBLER_DIR_ENV, assembler_output)
+            .env(LINK_PATH_ENV, link_output);
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {
             return Err(Error::Project(format!("build project error {}: {:?}", output.exit_code(), output.stderr())))
@@ -42,10 +45,14 @@ impl Project {
 
     pub fn patch<P: AsRef<Path>>(&self, patch: P, level: Level) -> Result<()> {
         let patch = patch.as_ref();
+        let file = match File::open(&patch) {
+            Ok(file) => file,
+            Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch, e))),
+        };
         let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
-        let output = ExternCommand::new("patch").execvp_stdio_level(args_list, &self.project_dir, File::open(&patch).expect(&format!("open {} error", patch.display())), level)?;
+        let output = ExternCommand::new("patch").execvp_stdio_level(args_list, &self.project_dir, file, level)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("patch file {} error {}: {:?}", patch.display(), output.exit_code(), output.stderr())));
+            return Err(Error::Project(format!("patch file {:?} error {}: {:?}", patch, output.exit_code(), output.stderr())));
         };
         Ok(())
     }

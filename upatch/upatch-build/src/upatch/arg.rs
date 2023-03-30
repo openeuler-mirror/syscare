@@ -33,7 +33,7 @@ pub struct Arguments {
 
     /// Specify elf's relative path relate to elf-dir or absolute path list.
     /// one-to-one correspondence with debug-info
-    #[arg(short, long = "elf-path", required = false, verbatim_doc_comment)]
+    #[arg(short, long = "elf-path", required = true, verbatim_doc_comment)]
     pub elf_pathes: Vec<PathBuf>,
 
     /// Specify the directory of searching elf [default: <DEBUG_SOURCE>]
@@ -119,18 +119,16 @@ impl Arguments {
             None => Some(self.debug_source.clone()),
         };
 
-        if !self.elf_pathes.is_empty() {
-            match self.elf_pathes.len().eq(&self.debug_infoes.len()) {
-                true => {
-                    for elf_path in &mut self.elf_pathes {
-                        *elf_path = self.elf_dir.as_ref().unwrap().join(&elf_path);
-                    }
-                },
-                false => return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("{}'s elf-path don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
-                )),
-            }
+        match self.elf_pathes.len().eq(&self.debug_infoes.len()) {
+            true => {
+                for elf_path in &mut self.elf_pathes {
+                    *elf_path = self.elf_dir.as_ref().unwrap().join(&elf_path);
+                }
+            },
+            false => return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("{}'s elf-path don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
+            )),
         }
 
         Ok(())
