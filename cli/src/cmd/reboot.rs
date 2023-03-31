@@ -18,9 +18,8 @@ impl CommandExecutor for RebootCommandExecutor {
                 fs::sync();
             }
 
-            debug!("Preparing for reboot");
+            debug!("Preparing kernel images");
             BootManager::load_kernel(target.as_ref())?;
-
 
             BootManager::reboot(match force {
                 false => {

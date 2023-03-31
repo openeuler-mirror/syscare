@@ -15,6 +15,7 @@ use crate::util::os_str::OsStrExt;
 use super::{disk, mounts};
 
 #[derive(Debug)]
+#[derive(Clone, Copy)]
 enum BootType {
     CSM,
     UEFI,
@@ -83,12 +84,13 @@ impl<R: BufRead> GrubConfigParser<R> {
 
     #[inline(always)]
     fn parse_uuid(str: &OsStr) -> Option<OsString> {
-        lazy_static! {
-            static ref RE: Regex = Regex::new(r"[a-f\d]{4}(?:[a-f\d]{4}-){4}[a-f\d]{12}").unwrap();
-        }
-        RE.find(str.as_bytes()).map(|matched| {
-            OsStr::from_bytes(matched.as_bytes()).to_os_string()
-        })
+        str.split(" ").filter_map(|str| {
+            let arg = str.trim();
+            if arg != OsStr::new("search") && !arg.starts_with("--") {
+                return Some(arg.to_os_string());
+            }
+            return None;
+        }).next()
     }
 
     #[inline(always)]
@@ -106,7 +108,6 @@ impl<R: BufRead> GrubConfigParser<R> {
         let find_dev = Self::parse_uuid(str).and_then(|uuid| {
             disk::find_by_uuid(uuid).ok()
         });
-
         if let (Some(dev_name), Ok(mounts)) = (find_dev, mounts::enumerate()) {
             for mount in mounts {
                 if mount.source == dev_name {
@@ -275,16 +276,20 @@ pub fn read_grub_env<P: AsRef<Path>>(grub_root: P) -> std::io::Result<HashMap<Os
 
 pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
     let boot_type = get_boot_type();
+    let grub_root = get_grub_path(boot_type);
     debug!("Boot type: {:?}", boot_type);
 
-    let grub_root = get_grub_path(boot_type);
-    let grub_env  = read_grub_env(&grub_root)?;
+    let menu_entries = read_menu_entries(&grub_root)?;
+    debug!("Boot entries: {:#?}", menu_entries);
+
+    let grub_env = read_grub_env(&grub_root)?;
     let default_entry_name = grub_env.get(OsStr::new("saved_entry")).ok_or(std::io::Error::new(
         std::io::ErrorKind::Other,
         "Cannot read grub default entry name",
     ))?;
+    debug!("Default entry: {:?}", default_entry_name);
 
-    for entry in read_menu_entries(&grub_root)? {
+    for entry in menu_entries {
         if entry.get_name() == default_entry_name {
             return Ok(entry);
         }
@@ -292,6 +297,6 @@ pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
 
     return Err(std::io::Error::new(
         std::io::ErrorKind::Other,
-        format!("Cannot find grub default entry \"{}\"", default_entry_name.to_string_lossy())
+        format!("Cannot find grub default entry {:?}", default_entry_name)
     ));
 }
