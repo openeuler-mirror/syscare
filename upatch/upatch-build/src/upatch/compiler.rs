@@ -25,7 +25,6 @@ pub struct Compiler {
     compiler: PathBuf,
     assembler: PathBuf,
     linker: PathBuf,
-    collect2: PathBuf,
 }
 
 impl Compiler {
@@ -34,7 +33,6 @@ impl Compiler {
             compiler: PathBuf::new(),
             assembler: PathBuf::new(),
             linker: PathBuf::new(),
-            collect2: PathBuf::new(),
         }
     }
 
@@ -60,7 +58,6 @@ impl Compiler {
 
         self.assembler = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
         self.linker = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
-        self.collect2 = self.readlink(&self.read_from_compiler("-print-prog-name=collect2")?)?;
         Ok(())
     }
 
@@ -129,8 +126,8 @@ impl Compiler {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
         let compiler_str = CString::new(self.compiler.as_os_str().as_bytes()).unwrap();
         let assembler_str = CString::new(self.assembler.as_os_str().as_bytes()).unwrap();
-        let collect2_str = CString::new(self.collect2.as_os_str().as_bytes()).unwrap();
-        let hack_array: [CString; UPATCH_HACK_NUM] = [compiler_str, assembler_str, collect2_str];
+        let linker_str = CString::new(self.linker.as_os_str().as_bytes()).unwrap();
+        let hack_array: [CString; UPATCH_HACK_NUM] = [compiler_str, assembler_str, linker_str];
 
         unsafe{
             let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
