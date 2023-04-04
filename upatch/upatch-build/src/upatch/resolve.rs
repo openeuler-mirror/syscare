@@ -20,8 +20,11 @@ pub fn resolve<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::
         let sym_other = symbol.get_st_other();
         if sym_other & SYM_OTHER != 0 {
             // TODO: we can delete these symbol's section here.
-            symbol.set_st_shndx(SHN_LIVEPATCH);
             symbol.set_st_other(sym_other & !SYM_OTHER);
+            match symbol.get_st_value() {
+                0 => symbol.set_st_shndx(SHN_UNDEF),
+                _=> symbol.set_st_shndx(SHN_LIVEPATCH),
+            };
         }
         else if symbol.get_st_shndx() == SHN_UNDEF {
             if elf_st_bind(sym_info) == STB_LOCAL {
