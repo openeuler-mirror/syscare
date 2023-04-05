@@ -25,6 +25,7 @@
 #include "common.h"
 #include "patch.h"
 #include "arch/patch-load.h"
+#include "kmod.h"
 
 #define GOT_RELA_NAME ".rela.dyn"
 #define PLT_RELA_NAME ".rela.plt"
@@ -878,10 +879,6 @@ out:
     return ret;
 }
 
-static struct kprobe kp = {
-    .symbol_name = "do_mprotect_pkey"
-};
-
 typedef int (*do_mprotect_pkey_t)(unsigned long start, size_t len, unsigned long prot, int pkey);
 
 static void frob_text(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
@@ -901,20 +898,7 @@ static void frob_writable_data(const struct upatch_module_layout *layout, do_mpr
 
 static void set_memory_previliage(struct upatch_module *mod)
 {
-    int ret;
-    do_mprotect_pkey_t do_mprotect_pkey;
-
-    ret = register_kprobe(&kp);
-    if (ret) {
-        pr_err("register_kprobe do_mprotect_pkey error %d\n", ret);
-        kp.symbol_name = "do_mprotect_pkey.constprop.0";
-        ret = register_kprobe(&kp);
-        if (ret) {
-            pr_err("register_kprobe do_mprotect_pkey.constprop.0 error %d\n", ret);
-            return;
-        }
-    }
-    do_mprotect_pkey = (do_mprotect_pkey_t) kp.addr;
+    do_mprotect_pkey_t do_mprotect_pkey = (do_mprotect_pkey_t) upatch_kprobes[UPATCH_KPROBE_MPROTECT]->addr;
 
     frob_text(&mod->core_layout, do_mprotect_pkey);
     frob_rodata(&mod->core_layout, do_mprotect_pkey);
@@ -922,8 +906,6 @@ static void set_memory_previliage(struct upatch_module *mod)
     frob_text(&mod->init_layout, do_mprotect_pkey);
     frob_rodata(&mod->init_layout, do_mprotect_pkey);
     frob_writable_data(&mod->init_layout, do_mprotect_pkey);
-
-    unregister_kprobe(&kp);
 }
 
 static int complete_formation(struct upatch_module *mod, struct inode *patch)

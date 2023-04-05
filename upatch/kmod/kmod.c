@@ -12,6 +12,7 @@
 #include <linux/miscdevice.h>
 #include <linux/file.h>
 #include <linux/fs.h>
+#include <linux/kprobes.h>
 
 #include "kmod.h"
 #include "patch.h"
@@ -228,9 +229,74 @@ static struct miscdevice upatch_dev = {
     .mode   = 0666,
 };
 
+struct kprobe __upatch_mprotect = {
+    .symbol_name = "",
+    .flags = KPROBE_FLAG_DISABLED,
+    .post_handler = NULL,
+    .pre_handler = NULL,
+};
+
+struct kprobe *upatch_kprobes[UPATCH_KPROBE_NUM] = {
+    &__upatch_mprotect,
+};
+
+static const char *kprobe_mprotect_names[] = {
+    "do_mprotect_pkey",
+    "do_mprotect_pkey.constprop.0",
+    "NULL",
+};
+
+const char **upatch_kprobes_names[UPATCH_KPROBE_NUM] = {
+    kprobe_mprotect_names,
+};
+
+static int __register_kprobes(int index)
+{
+    int ret;
+    int i = 0;
+
+    while (strcmp(upatch_kprobes_names[index][i], "NULL")) {
+        upatch_kprobes[index]->symbol_name = upatch_kprobes_names[index][i];
+        ret = register_kprobe(upatch_kprobes[index]);
+        if (ret == 0)
+            goto out;
+        i ++;
+    }
+    pr_err("register kprobe %d failed - %d \n", index, ret);
+
+out:
+    return ret;
+}
+
+static int kprobe_init(void)
+{
+    int ret;
+    int i;
+
+    for (i = 0; i < UPATCH_KPROBE_NUM; i ++) {
+        ret = __register_kprobes(i);
+        if (ret < 0)
+            goto out;
+    }
+
+out:
+    return ret;
+}
+
+static void kprobe_exit(void)
+{
+    unregister_kprobes(upatch_kprobes, UPATCH_KPROBE_NUM);
+}
+
 static int __init upatch_init(void)
 {
     int ret;
+
+    ret = kprobe_init();
+    if (ret < 0) {
+        pr_err("kprobe init failed - %d \n", ret);
+        return ret;
+    }
 
     ret = compiler_hack_init();
     if (ret < 0)
@@ -251,6 +317,7 @@ static void __exit upatch_exit(void)
 {
     misc_deregister(&upatch_dev);
     compiler_hack_exit();
+    kprobe_exit();
 }
 
 module_init(upatch_init);
