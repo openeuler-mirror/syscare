@@ -637,6 +637,37 @@ out_got:
         goto out;
     }
 
+    // get symbol address from .dynsym
+    sechdr = &elf_info->sechdrs[elf_info->index.dynsym];
+    sym = (void *)elf_info->hdr + sechdr->sh_offset;
+    for (i = 0; i < sechdr->sh_size / sizeof(Elf64_Sym); i ++) {
+        unsigned long addr;
+        void __user *tmp_addr;
+
+        /* only need the st_value that is not 0 */
+        if (sym[i].st_value == 0)
+            continue;
+
+        sym_name = elf_info->dynstrtab + sym[i].st_name;
+        /* TODO: don't care about its version here */
+        tmp = strchr(sym_name, '@');
+        if (tmp != NULL)
+            *tmp = '\0';
+
+        /* function could also be part of the GOT with the type R_X86_64_GLOB_DAT */
+        if (!streql(sym_name, name))
+            continue;
+
+        tmp_addr = (void *)(elf_info->load_bias + sym[i].st_value);
+        if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
+            pr_err("copy address failed \n");
+            goto out;
+        }
+        /* used for R_X86_64_REX_GOTPCRELX */
+        elf_addr = addr;
+        pr_debug("found unresolved .got %s at 0x%lx \n", sym_name, elf_addr);
+        goto out;
+    }
 
 out:
     if (!elf_addr) {
