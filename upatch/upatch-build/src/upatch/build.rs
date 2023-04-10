@@ -73,6 +73,11 @@ impl UpatchBuild {
             self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_infoes[0])?;
         }
 
+        // check patches
+        let project = Project::new(&self.args.debug_source);
+        project.patch_all(&self.args.patches, Level::Debug)?;
+        project.unpatch_all(&self.args.patches, Level::Debug)?;
+
         // hack compiler
         info!("Hacking compiler");
         self.unhack_stop();
@@ -83,14 +88,10 @@ impl UpatchBuild {
 
         // build source
         info!("Building original {:?}", project_name);
-        let project = Project::new(&self.args.debug_source);
         project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
 
         // build patch
-        for patch in &self.args.patches {
-            info!("Patching file: {:?}", patch);
-            project.patch(patch, Level::Info)?;
-        }
+        project.patch_all(&self.args.patches, Level::Info)?;
 
         info!("Building patched {:?}", project_name);
         project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;

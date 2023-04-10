@@ -2,7 +2,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use log::Level;
+use log::{Level, log};
 
 use crate::cmd::*;
 
@@ -43,16 +43,42 @@ impl Project {
         Ok(())
     }
 
-    pub fn patch<P: AsRef<Path>>(&self, patch: P, level: Level) -> Result<()> {
-        let patch = patch.as_ref();
-        let file = match File::open(&patch) {
-            Ok(file) => file,
-            Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch, e))),
-        };
-        let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
+    pub fn patch_all<P: AsRef<Path>>(&self, patches: &Vec<P>, level: Level) -> Result<()> {
+        for patch in patches {
+            log!(level, "Patching file: {:?}", patch.as_ref());
+            let file = match File::open(&patch) {
+                Ok(file) => file,
+                Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
+            };
+            let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
+            if let Err(e) = self.patch(file, args_list, level) {
+                return Err(Error::Project(format!("patch file {:?} {}", patch.as_ref(), e)));
+            }
+        }
+        Ok(())
+    }
+
+    pub fn unpatch_all<P: AsRef<Path>>(&self, patches: &Vec<P>, level: Level) -> Result<()> {
+        for patch in patches.iter().rev() {
+            log!(level, "Patching file: {:?}", patch.as_ref());
+            let file = match File::open(&patch) {
+                Ok(file) => file,
+                Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
+            };
+            let args_list = ExternCommandArgs::new().args(["-N", "-p1", "-R"]);
+            if let Err(e) = self.patch(file, args_list, level) {
+                return Err(Error::Project(format!("unpatch file {:?} {}", patch.as_ref(), e)));
+            }
+        }
+        Ok(())
+    }
+}
+
+impl Project {
+    fn patch(&self, file: File, args_list: ExternCommandArgs, level: Level) -> Result<()> {
         let output = ExternCommand::new("patch").execvp_stdio_level(args_list, &self.project_dir, file, level)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("patch file {:?} error {}: {:?}", patch, output.exit_code(), output.stderr())));
+            return Err(Error::Project(format!("error {}: {:?}", output.exit_code(), output.stderr())));
         };
         Ok(())
     }
