@@ -902,7 +902,7 @@ out:
     return ret;
 }
 
-static struct elf_path *__get_elf_path(unsigned int cmd, char *name)
+static struct elf_path *__get_elf_path(unsigned int cmd, const char *name)
 {
     struct elf_path *ep;
     struct list_head *elf_list;
@@ -918,7 +918,7 @@ static struct elf_path *__get_elf_path(unsigned int cmd, char *name)
     return NULL;
 }
 
-static int inline __delete_elf_path(unsigned int cmd, char *name)
+static int inline __delete_elf_path(unsigned int cmd, const char *name)
 {
     struct elf_path *ep;
     int ret;
@@ -938,7 +938,7 @@ static int inline __delete_elf_path(unsigned int cmd, char *name)
     return 0;
 }
 
-static int inline __add_elf_path(unsigned int cmd, char *name)
+static int inline __add_elf_path(unsigned int cmd, const char *name)
 {
     struct elf_path *ep;
     int ret;
@@ -968,7 +968,7 @@ static int inline __add_elf_path(unsigned int cmd, char *name)
     return 0;
 }
 
-struct elf_path *get_elf_path(unsigned int cmd, char *name)
+struct elf_path *get_elf_path(unsigned int cmd, const char *name)
 {
     struct mutex *lock;
     struct elf_path *ep = NULL;
@@ -982,7 +982,7 @@ struct elf_path *get_elf_path(unsigned int cmd, char *name)
     return ep;
 }
 
-int delete_elf_path(unsigned int cmd, char *name)
+int delete_elf_path(unsigned int cmd, const char *name)
 {
     struct mutex *lock;
     struct elf_path *ep = NULL;
@@ -1002,7 +1002,7 @@ int delete_elf_path(unsigned int cmd, char *name)
     return ret;
 }
 
-int add_elf_path(unsigned int cmd, char *name)
+int add_elf_path(unsigned int cmd, const char *name)
 {
     struct mutex *lock;
     struct elf_path *ep = NULL;
@@ -1025,28 +1025,35 @@ int add_elf_path(unsigned int cmd, char *name)
 int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
 {
     int ret;
-    char *path = NULL;
+    char *path_buf = NULL;
+    const char* real_path;
 
-    path = kmalloc(PATH_MAX, GFP_KERNEL);
-    if (!path)
+    path_buf = kmalloc(PATH_MAX, GFP_KERNEL);
+    if (!path_buf)
         return -ENOMEM;
 
-    ret = copy_para_from_user(user_addr, path, PATH_MAX);
+    ret = copy_para_from_user(user_addr, path_buf, PATH_MAX);
     if (ret)
         goto out;
+
+    real_path = get_real_path(path_buf, PATH_MAX);
+    if (real_path == NULL || IS_ERR(real_path)) {
+        pr_err("get real_path failed: %u \n", cmd);
+        goto out;
+    }
 
     switch (cmd)
     {
     case UPATCH_REGISTER_COMPILER:
     case UPATCH_REGISTER_ASSEMBLER:
     case UPATCH_REGISTER_LINK:
-        ret = add_elf_path(cmd, path);
+        ret = add_elf_path(cmd, real_path);
         break;
 
     case UPATCH_UNREGISTER_COMPILER:
     case UPATCH_UNREGISTER_ASSEMBLER:
     case UPATCH_UNREGISTER_LINK:
-        ret = delete_elf_path(cmd, path);
+        ret = delete_elf_path(cmd, real_path);
         break;
 
     default:
@@ -1055,8 +1062,8 @@ int handle_compiler_cmd(unsigned long user_addr, unsigned int cmd)
     }
 
 out:
-    if (path)
-        kfree(path);
+    if (path_buf)
+        kfree(path_buf);
     return ret;
 }
 

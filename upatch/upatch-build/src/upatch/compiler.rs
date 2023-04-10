@@ -7,6 +7,7 @@ use which::which;
 
 use crate::dwarf::Dwarf;
 use crate::cmd::*;
+use crate::tool::realpath;
 
 use super::Result;
 use super::Error;
@@ -56,8 +57,8 @@ impl Compiler {
         self.compiler = compiler_file.as_ref().to_path_buf();
         info!("Using compiler at: {:?}", &self.compiler);
 
-        self.assembler = self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?;
-        self.linker = self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?;
+        self.assembler = realpath(self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?)?;
+        self.linker = realpath(self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?)?;
         Ok(())
     }
 
