@@ -352,7 +352,8 @@ void upatch_module_deallocate(struct upatch_module *mod)
 static int upatch_module_alloc(struct upatch_load_info *info,
     struct upatch_module_layout *layout, unsigned long user_limit)
 {
-    unsigned long hint = info->running_elf.load_min + info->running_elf.load_bias;
+    /* find moudle location from code start place */
+    unsigned long hint = info->running_elf.load_start;
 
     layout->base = __upatch_module_alloc(hint, layout->size);
     if (!layout->base)
@@ -921,7 +922,6 @@ int upatch_load(struct file *binary_file, struct inode *set_patch,
     struct patch_entity *patch_entity, struct upatch_load_info *info)
 {
     int err;
-    elf_addr_t min_addr;
     struct upatch_module *mod;
 
     if (patch_entity == NULL) {
@@ -929,22 +929,6 @@ int upatch_load(struct file *binary_file, struct inode *set_patch,
         err = -EINVAL;
         goto free_hdr;
     }
-
-    min_addr = calculate_load_address(binary_file, true);
-    if (min_addr == -1) {
-        pr_err("unable to obtain minimal execuatable address \n");
-        err = -EINVAL;
-        goto free_hdr;
-    }
-
-    info->running_elf.load_min = min_addr;
-    pr_debug("PT_X minimal address is 0x%lx \n", info->running_elf.load_min);
-
-    /* TODO: any protect for start_code ? */
-    info->running_elf.load_bias = current->mm->start_code - min_addr;
-
-    pr_debug("load bias for pid %d is 0x%lx \n",
-        task_pid_nr(current), info->running_elf.load_bias);
 
     err = load_binary_syms(binary_file, &info->running_elf);
     if (err)

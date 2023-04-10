@@ -439,12 +439,14 @@ static int do_module_remove(struct upatch_entity *entity,
 static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *regs)
 {
     unsigned long pc;
-    int ret = 0;
+    elf_addr_t min_addr;
 
+    int ret = 0;
     struct upatch_load_info info;
     struct upatch_entity *entity = NULL;
     struct upatch_module *upatch_mod = NULL;
     struct file *binary_file = NULL;
+    struct vm_area_struct *vma_binary = NULL;
 
     bool need_resolve = false;
     bool need_active = false;
@@ -459,11 +461,25 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
 
     memset(&info, 0, sizeof(info));
 
-    binary_file = get_binary_file_from_addr(current, pc);
-    if (!binary_file) {
+    vma_binary = find_vma(current->mm, pc);
+    if (!vma_binary || !vma_binary->vm_file) {
         pr_err("no exe file found for upatch \n");
         goto out;
     }
+
+    binary_file = vma_binary->vm_file;
+    /* calculate load bias for binary file */
+    min_addr = calculate_load_address(binary_file, true);
+    if (min_addr == -1) {
+        pr_err("unable to obtain minimal execuatable address \n");
+        goto out;
+    }
+
+    /* Attention: it could be wrong when it has mutiple executable vma */
+    info.running_elf.load_start = vma_binary->vm_start;
+    info.running_elf.load_bias = vma_binary->vm_start - min_addr;
+    pr_debug("load bias for pid %d is 0x%lx \n",
+        task_pid_nr(current), info.running_elf.load_bias);
 
     entity = upatch_entity_get(file_inode(binary_file));
     if (!entity) {

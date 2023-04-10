@@ -120,8 +120,8 @@ struct running_elf_info {
     Elf_Ehdr *hdr;
     Elf_Shdr *sechdrs;
     char *secstrings, *strtab, *dynstrtab;
-    /* minimal load address, used to calculate offset */
-    unsigned long load_min;
+    /* start address of this block, used to find the pole */
+    unsigned long load_start;
     /* load bias, used to handle ASLR */
     unsigned long load_bias;
     struct {
