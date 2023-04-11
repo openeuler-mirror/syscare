@@ -8,7 +8,9 @@ fn main() {
             0
         }
         Err(e) => {
-            upatch.unhack_compiler();
+            if let Err(e) = upatch.unhack_compiler() {
+                eprintln!("unhack failed after upatch build error: {}", e);
+            }
             eprintln!("ERROR: {}", e);
             e.code()
         },

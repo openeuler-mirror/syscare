@@ -4,8 +4,7 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::process::exit;
 use std::thread;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
 
 use signal_hook::{iterator::Signals, consts::*};
 
@@ -34,7 +33,7 @@ pub struct UpatchBuild {
     work_dir: WorkDir,
     compiler: Compiler,
     tool: Tool,
-    hack_flag: Arc<AtomicBool>,
+    hack_flag: Arc<Mutex<bool>>,
     dwarf: Dwarf,
     source_obj: HashMap<PathBuf, PathBuf>,
     patch_obj: HashMap<PathBuf, PathBuf>,
@@ -47,7 +46,7 @@ impl UpatchBuild {
             work_dir: WorkDir::new(),
             compiler: Compiler::new(),
             tool: Tool::new(),
-            hack_flag: Arc::new(AtomicBool::new(false)),
+            hack_flag: Arc::new(Mutex::new(false)),
             dwarf: Dwarf::new(),
             source_obj: HashMap::new(),
             patch_obj: HashMap::new(),
@@ -81,8 +80,7 @@ impl UpatchBuild {
         // hack compiler
         info!("Hacking compiler");
         self.unhack_stop();
-        self.compiler.hack()?;
-        self.hack_flag.store(true, Ordering::Relaxed);
+        self.hack_compiler()?;
 
         let project_name = self.args.debug_source.file_name().unwrap();
 
@@ -98,8 +96,7 @@ impl UpatchBuild {
 
         // unhack compiler
         info!("Unhacking compiler");
-        self.compiler.unhack()?;
-        self.hack_flag.store(false, Ordering::Relaxed);
+        self.unhack_compiler()?;
 
         info!("Detecting changed objects");
         // correlate obj name
@@ -109,13 +106,22 @@ impl UpatchBuild {
         Ok(())
     }
 
-    pub fn unhack_compiler(&self){
-        if self.hack_flag.load(Ordering::Relaxed) {
-            if let Err(_) = self.compiler.unhack() {
-                eprintln!("unhack failed after upatch build error");
-            }
-            self.hack_flag.store(false, Ordering::Relaxed);
+    pub fn hack_compiler(&self) -> Result<()> {
+        let mut mutex = self.hack_flag.lock().expect("lock failed");
+        if !*mutex {
+            self.compiler.hack()?;
+            *mutex = true;
         }
+        Ok(())
+    }
+
+    pub fn unhack_compiler(&self) -> Result<()> {
+        let mut mutex = self.hack_flag.lock().expect("lock failed");
+        if *mutex {
+            self.compiler.unhack()?;
+            *mutex = false;
+        }
+        Ok(())
     }
 }
 
@@ -291,11 +297,12 @@ impl UpatchBuild {
         let compiler_clone = self.compiler.clone();
         thread::spawn(move || {
             for signal in signals.forever() {
-                if hack_flag_clone.load(Ordering::Relaxed) {
+                let mut mutex = hack_flag_clone.lock().expect("lock failed");
+                if *mutex {
                     if let Err(e) = compiler_clone.unhack() {
                         eprintln!("{} after upatch build error", e);
                     }
-                    hack_flag_clone.store(false, Ordering::Relaxed);
+                    *mutex = false;
                 }
                 eprintln!("ERROR: receive system signal {}", signal);
                 exit(signal);
@@ -305,11 +312,12 @@ impl UpatchBuild {
         let hack_flag_clone = self.hack_flag.clone();
         let compiler_clone = self.compiler.clone();
         std::panic::set_hook(Box::new(move |_| {
-            if hack_flag_clone.load(Ordering::Relaxed) {
+            let mut mutex = hack_flag_clone.lock().expect("lock failed");
+            if *mutex {
                 if let Err(e) = compiler_clone.unhack() {
                     eprintln!("{} after upatch build error", e);
                 }
-                hack_flag_clone.store(false, Ordering::Relaxed);
+                *mutex = false;
             }
         }));
     }
