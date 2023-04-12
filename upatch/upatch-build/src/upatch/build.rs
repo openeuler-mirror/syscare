@@ -273,21 +273,24 @@ impl UpatchBuild {
 
     fn get_binary_elf<P: AsRef<Path>, B: AsRef<Path>>(&self, debug_info: P, binary_file: B) -> Result<PathBuf> {
         let mut result = Vec::new();
-        let pathes = glob(binary_file)?; // for rpm's "BUILDROOT/*/path"
-        for binary_file in &pathes {
-            if self.check_binary_elf(binary_file)? {
-                result.push(binary_file);
+        let pathes = glob(&binary_file)?; // for rpm's "BUILDROOT/*/path"
+        if pathes.is_empty() {
+            return Err(Error::Build(format!("can't find binary: {:?}", binary_file.as_ref())));
+        }
+        for path in &pathes {
+            if self.check_binary_elf(path)? {
+                result.push(path);
             }
         }
         match result.len() {
-            0 => Err(Error::Build(format!("no binary match {:?}", debug_info.as_ref()))),
+            0 => Err(Error::Build(format!("{:?} don't match binary: {:?}", debug_info.as_ref(), pathes))),
             1 => Ok(result[0].clone()),
             _ => Err(Error::Build(format!("{:?} match too many binaries: {:?}", debug_info.as_ref(), pathes))),
         }
     }
 
-    fn check_binary_elf<P: AsRef<Path>>(&self, binary_file: P) -> std::io::Result<bool> {
-        let file = OpenOptions::new().read(true).open(binary_file)?;
+    fn check_binary_elf<P: AsRef<Path>>(&self, path: P) -> std::io::Result<bool> {
+        let file = OpenOptions::new().read(true).open(path)?;
         check_elf(&file)
     }
 
