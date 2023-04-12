@@ -200,7 +200,7 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D) -> Result<()>
+    fn build_patch<P, Q, D>(&self, debug_info: P, binary: Q, diff_dir: D) -> Result<u32>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -216,7 +216,7 @@ impl UpatchBuild {
         match link_args.len() {
             0 => {
                 info!("Building patch: {:?}: no functional changes found", output_file);
-                return Ok(());
+                return Ok(0);
             },
             _ => info!("Building patch: {:?}", output_file),
         };
@@ -231,7 +231,7 @@ impl UpatchBuild {
         self.compiler.linker(&link_args, &output_file)?;
         debug!("resolve {:?} with {:?}", output_file, debug_info.as_ref());
         resolve(&debug_info, &output_file)?;
-        Ok(())
+        Ok(1)
     }
 
     /*
@@ -241,6 +241,7 @@ impl UpatchBuild {
      * Finally, match the objects compiled twice through dwarf and call upatch-diff with source_object, patch_object and debug info.
      */
     fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
+        let mut upatch_num = 0;
         let source_links = LinkMessages::from(self.work_dir.source_dir(), false)?;
         let patch_links = LinkMessages::from(self.work_dir.patch_dir(), true)?;
         for i in 0..debug_infoes.len() {
@@ -254,7 +255,7 @@ impl UpatchBuild {
             let (patch_name, patch_link_message) = match patch_links.get_objects_from_build_id(&binary_build_id) {
                 Some((patch_name, patch_link_message)) => (patch_name, patch_link_message),
                 None => {
-                    debug!("read {:?}'s patch link_message failed: None", &binary_path);
+                    info!("read {:?}'s patch link_message failed: None", &binary_path);
                     continue;
                 },
             };
@@ -266,7 +267,10 @@ impl UpatchBuild {
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
             self.create_diff(source_link_message, patch_link_message, &diff_dir, &debug_infoes[i])?;
-            self.build_patch(&debug_infoes[i], &binary_name, &diff_dir)?;
+            upatch_num += self.build_patch(&debug_infoes[i], &binary_name, &diff_dir)?;
+        }
+        if upatch_num.eq(&0) {
+            return Err(Error::Build(format!("no upatch is generated!")));
         }
         Ok(())
     }
