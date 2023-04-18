@@ -100,7 +100,10 @@ impl Compiler {
         let cache_dir = cache_dir.as_ref();
         let debug_info = debug_info.as_ref();
         let test_obj = Path::new(&cache_dir).join("test.o");
-        let output = std::process::Command::new("echo").arg("int main() {return 0;}").stdout(std::process::Stdio::piped()).spawn().expect("exec echo failed");
+        let mut output = std::process::Command::new("echo").arg("int main() {return 0;}").stdout(std::process::Stdio::piped()).spawn()?;
+        if !output.wait()?.success() {
+            return Err(Error::Compiler(format!("check_version: execute echo error")));
+        }
 
         let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o"]).arg(&test_obj);
         let output = ExternCommand::new(&self.compiler).execvp_stdio(args_list, cache_dir, output.stdout.expect("get echo stdout failed"))?;
