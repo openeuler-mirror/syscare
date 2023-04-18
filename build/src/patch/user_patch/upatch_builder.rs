@@ -86,6 +86,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .concat(&pkg_build_root)
             .concat("' -bb ")
             .concat("--noprep ")
+            .concat("--nocheck ")
             .concat("--nodebuginfo ")
             .concat("--noclean ")
             .concat(&pkg_spec_file);
