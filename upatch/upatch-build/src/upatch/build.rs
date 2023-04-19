@@ -155,8 +155,14 @@ impl UpatchBuild {
         let compiler_dir = compiler_dir.as_ref();
         let mut map =  HashMap::new();
         let arr = list_all_files_ext(output_dir, "o", false)?;
-        for obj in arr {       
-            let result = self.dwarf.file_in_obj(&obj)?;
+        for obj in arr {
+            let result = match self.dwarf.file_in_obj(&obj) {
+                Ok(dwarf) => dwarf,
+                Err(e) => {
+                    debug!("build map: {:?} is not elf, {}", &obj, e);
+                    continue;
+                },
+            };
             match result.len() == 1 && result[0].DW_AT_comp_dir.starts_with(compiler_dir) {
                 true => { map.insert(obj, result[0].get_source()); },
                 false => debug!("build map: read {:?}'s dwarf failed!", &obj),
