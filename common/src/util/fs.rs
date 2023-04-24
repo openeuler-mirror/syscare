@@ -341,7 +341,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if options.fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(name.as_ref()) {
                     return true;
                 }
             }
@@ -374,7 +374,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if options.fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(name.as_ref()) {
                     return true;
                 }
             }
@@ -437,7 +437,7 @@ where
                 if file_name == name.as_ref() {
                     return true;
                 }
-                else if options.fuzz && file_name.contains(&name) {
+                else if options.fuzz && file_name.contains(name.as_ref()) {
                     return true;
                 }
             }

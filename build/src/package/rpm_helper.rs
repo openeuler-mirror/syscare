@@ -127,7 +127,7 @@ impl RpmHelper {
 
             let elf_path = debuginfo_path.as_os_str()
                 .strip_suffix(suffix)
-                .and_then(|path| path.strip_prefix(prefix))
+                .and_then(|path| path.strip_prefix(prefix.as_os_str()))
                 .map(PathBuf::from);
 
             match elf_path {

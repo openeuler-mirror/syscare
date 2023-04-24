@@ -55,7 +55,7 @@ impl RpmBuilder {
         RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
-                .arg(OsString::from("_topdir ").concat(&self.build_root))
+                .arg(OsString::from("_topdir").append(&self.build_root))
                 .arg("-bp")
                 .arg(spec_file.as_ref())
         )?.check_exit_code()
@@ -96,7 +96,7 @@ impl RpmBuilder {
         RPM_BUILD.execvp(
             ExternCommandArgs::new()
                 .arg("--define")
-                .arg(OsString::from("_topdir ").concat(&self.build_root))
+                .arg(OsString::from("_topdir").append(&self.build_root))
                 .arg("-bb")
                 .arg(spec_file.as_ref())
         )?.check_exit_code()?;

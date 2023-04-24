@@ -73,23 +73,25 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let output_dir    = self.workdir.patch.output.as_path();
 
         let build_original_cmd = OsString::from("rpmbuild")
-            .concat(" --define '_topdir ")
+            .append("--define '_topdir ")
             .concat(&pkg_build_root)
-            .concat("' -bc ")
-            .concat("--nodebuginfo ")
-            .concat("--noclean ")
-            .concat(&pkg_spec_file);
+            .concat("'")
+            .append("-bc")
+            .append("--nodebuginfo")
+            .append("--noclean")
+            .append(&pkg_spec_file);
 
         let build_patched_cmd = OsString::from("rpmbuild")
-            .concat(" --define '__brp_strip %{nil}'")
-            .concat(" --define '_topdir ")
+            .append("--define '__brp_strip %{nil}'")
+            .append("--define '_topdir ")
             .concat(&pkg_build_root)
-            .concat("' -bb ")
-            .concat("--noprep ")
-            .concat("--nocheck ")
-            .concat("--nodebuginfo ")
-            .concat("--noclean ")
-            .concat(&pkg_spec_file);
+            .concat("'")
+            .append("-bb")
+            .append("--noprep")
+            .append("--nocheck")
+            .append("--nodebuginfo")
+            .append("--noclean")
+            .append(&pkg_spec_file);
 
         let builder_args = UserPatchBuilderArguments {
             work_dir:            work_dir.to_path_buf(),

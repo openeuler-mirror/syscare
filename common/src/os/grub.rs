@@ -84,7 +84,7 @@ impl<R: BufRead> GrubConfigParser<R> {
 
     #[inline(always)]
     fn parse_uuid(str: &OsStr) -> Option<OsString> {
-        str.split(" ").filter_map(|str| {
+        str.split_whitespace().filter_map(|str| {
             let arg = str.trim();
             if arg != OsStr::new("search") && !arg.starts_with("--") {
                 return Some(arg.to_os_string());
@@ -203,7 +203,7 @@ impl<R: BufRead> Iterator for GrubEnvParser<R> {
                     continue;
                 }
 
-                let mut kv = line.split("=");
+                let mut kv = line.split('=');
                 if let (Some(key), Some(value)) = (kv.next(), kv.next()) {
                     return Some((key.trim().to_os_string(), value.trim().to_os_string()));
                 }
