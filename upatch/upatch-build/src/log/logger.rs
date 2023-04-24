@@ -2,8 +2,11 @@ use std::path::Path;
 use std::fs::File;
 use std::io::{Write, LineWriter};
 use std::sync::Mutex;
+use std::sync::atomic::{Ordering, AtomicBool};
 
 use super::{Level, LevelFilter, Metadata, Record};
+
+static LOGGER_INIT_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub struct Logger {
     print_level: LevelFilter,
@@ -19,6 +22,11 @@ impl Logger {
         log::set_logger(static_logger)
             .map(|_| log::set_max_level(max_log_level))
             .expect("Set logger failed");
+        LOGGER_INIT_FLAG.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_inited() -> bool {
+        LOGGER_INIT_FLAG.load(Ordering::Relaxed)
     }
 
     pub fn new() -> Self {

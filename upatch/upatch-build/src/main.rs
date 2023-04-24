@@ -1,4 +1,6 @@
+use log::error;
 use upatch_build::upatch::UpatchBuild;
+use upatch_build::log::Logger;
 
 fn main() {
     let mut upatch = UpatchBuild::new();
@@ -11,7 +13,10 @@ fn main() {
             if let Err(e) = upatch.unhack_compiler() {
                 eprintln!("unhack failed after upatch build error: {}", e);
             }
-            eprintln!("ERROR: {}", e);
+            match Logger::is_inited() {
+                true => error!("{}", e),
+                false => eprintln!("ERROR: {}", e),
+            };
             e.code()
         },
     });
