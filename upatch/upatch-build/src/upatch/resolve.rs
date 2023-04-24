@@ -4,7 +4,7 @@ use crate::log::*;
 
 use crate::elf::*;
 
-pub fn resolve<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::io::Result<()> {
+pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::io::Result<()> {
     let mut patch_elf = write::Elf::parse(patch)?;
     let mut debug_info_elf = read::Elf::parse(debug_info)?;
 
@@ -70,5 +70,48 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
         break;
     }
 
+    Ok(())
+}
+
+pub fn resolve_dynamic<P: AsRef<Path>>(debug_info: P) -> std::io::Result<()> {
+    let mut debug_info_elf = write::Elf::parse(debug_info)?;
+    let debug_info_header = debug_info_elf.header()?;
+
+    if debug_info_header.get_e_type().ne(&ET_DYN) {
+        return Ok(())
+    }
+
+    let mut debug_info_symbols = debug_info_elf.symbols()?;
+
+    for mut symbol in &mut debug_info_symbols {
+        if elf_st_type(symbol.get_st_info()).ne(&STT_FILE) {
+            continue;
+        }
+
+        let symbol_name = symbol.get_st_name();
+        if symbol_name.eq("") {
+            _resolve_dynamic(&mut debug_info_symbols)?;
+            break;
+        }
+    }
+    Ok(())
+}
+
+fn _resolve_dynamic(debug_info_symbols: &mut write::SymbolHeaderTable) -> std::io::Result<()> {
+    for mut symbol in debug_info_symbols {
+        if elf_st_type(symbol.get_st_info()).eq(&STT_FILE) {
+            break;
+        }
+
+        let info = symbol.get_st_info();
+        if elf_st_bind(info).ne(&STB_GLOBAL) {
+            let symbol_name = symbol.get_st_name();
+            debug!("resolve_dynamic: set {:?}'s bind {} to 1", symbol_name, elf_st_bind(info));
+
+            let info = elf_st_type(symbol.get_st_info()) | (STB_GLOBAL << 4);
+            symbol.set_st_info(info);
+        }
+
+    }
     Ok(())
 }

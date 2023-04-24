@@ -6,10 +6,12 @@ pub const SHN_UNDEF: u16 = 0;
 pub const SHN_LIVEPATCH: u16 = 0xff20;
 
 pub const STB_LOCAL: u8 = 0;
+pub const STB_GLOBAL: u8 = 1;
 
 pub const SYM_OTHER: u8 = 0x40;
 
 pub const STT_SECTION: u8 = 0x3;
+pub const STT_FILE: u8 = 0x4;
 
 pub trait SymbolRead: OperateRead {
     fn get_st_name_offset(&self) -> u32 {

@@ -21,7 +21,8 @@ use super::Tool;
 use super::LinkMessages;
 use super::Result;
 use super::Error;
-use super::{resolve, create_note};
+use super::resolve;
+use super::note;
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -190,6 +191,11 @@ impl UpatchBuild {
         Q: AsRef<Path>,
     {
         let diff_dir = diff_dir.as_ref().to_path_buf();
+        let new_debug_info = self.work_dir.debuginfo_dir().join(file_name(&debug_info)?);
+        debug!("copy {:?} to {:?}!", &debug_info.as_ref(), &new_debug_info);
+        fs::copy(&debug_info, &new_debug_info)?;
+        resolve::resolve_dynamic(&new_debug_info)?;
+
         for patch_path in patch_link_message {
             let patch_name = match self.patch_obj.get(patch_path) {
                 Some(name) => name,
@@ -215,7 +221,7 @@ impl UpatchBuild {
             }
 
             match source_path {
-                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &debug_info, &self.work_dir.log_file(), self.args.verbose)?,
+                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &new_debug_info, &self.work_dir.log_file(), self.args.verbose)?,
                 None => {
                     debug!("copy {:?} to {:?}!", &patch_path, &output);
                     fs::copy(&patch_path, output)?;
@@ -249,13 +255,13 @@ impl UpatchBuild {
         // build notes.o
         let notes = diff_dir.join("notes.o");
         debug!("create notes: {:?}", notes);
-        create_note(&debug_info, &notes)?;
+        note::create_note(&debug_info, &notes)?;
         link_args.push(notes);
 
         // ld patchs
         self.compiler.linker(&link_args, &output_file)?;
         debug!("resolve {:?} with {:?}", output_file, debug_info.as_ref());
-        resolve(&debug_info, &output_file)?;
+        resolve::resolve_upatch(&debug_info, &output_file)?;
         Ok(1)
     }
 

@@ -2,7 +2,15 @@ use memoffset::offset_of;
 
 use super::{OperateRead, OperateWrite};
 
+pub const ET_DYN: u16 = 3;
+
 pub trait HeaderRead: OperateRead {
+    fn get_e_type(&self) -> u16 {
+        self.get(
+            offset_of!(FileHeader64, e_type)
+        )
+    }
+
     fn get_e_shnum(&self) -> u16 {
         self.get(
             offset_of!(FileHeader64, e_shnum)
