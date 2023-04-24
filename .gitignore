@@ -42,5 +42,7 @@
 # vscode settings
 .vscode
 
-# rust build target
+# rust build directories
+.cargo
+vendor
 target
