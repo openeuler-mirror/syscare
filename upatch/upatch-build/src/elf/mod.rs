@@ -9,6 +9,6 @@ pub mod write;
 
 pub use elfs::*;
 pub use header::*;
-pub(crate) use common::*;
+pub(crate) use self::common::*;
 pub use section::*;
 pub use symbol::*;

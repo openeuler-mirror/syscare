@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
 use std::process::exit;
@@ -18,15 +18,17 @@ use super::Compiler;
 use super::WorkDir;
 use super::Project;
 use super::Tool;
-use super::{LinkMessages, LinkMessage};
+use super::LinkMessages;
 use super::Result;
 use super::Error;
-use super::{resolve, create_note, read_build_id};
+use super::{resolve, create_note};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
-const CMD_SOURCE_ENTER: &str = "SE";
-const CMD_PATCHED_ENTER: &str = "PE";
+const COMPILER_CMD_SOURCE_ENTER: &str = "CSE";
+const COMPILER_CMD_PATCHED_ENTER: &str = "CPE";
+const ASSEMBLER_CMD_SOURCE_ENTER: &str = "ASE";
+const ASSEMBLER_CMD_PATCHED_ENTER: &str = "APE";
 
 pub struct UpatchBuild {
     args: Arguments,
@@ -37,6 +39,8 @@ pub struct UpatchBuild {
     dwarf: Dwarf,
     source_obj: HashMap<PathBuf, PathBuf>,
     patch_obj: HashMap<PathBuf, PathBuf>,
+    source_link_messages: LinkMessages,
+    patch_link_messages: LinkMessages,
 }
 
 impl UpatchBuild {
@@ -50,6 +54,8 @@ impl UpatchBuild {
             dwarf: Dwarf::new(),
             source_obj: HashMap::new(),
             patch_obj: HashMap::new(),
+            source_link_messages: LinkMessages::new(),
+            patch_link_messages: LinkMessages::new(),
         }
     }
 
@@ -86,14 +92,21 @@ impl UpatchBuild {
 
         // build source
         info!("Building original {:?}", project_name);
-        project.build(CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
+        project.build(COMPILER_CMD_SOURCE_ENTER, ASSEMBLER_CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
+
+        for i in 0..self.args.debug_infoes.len() {
+            self.args.elf_pathes[i] = self.get_binary_elf(&self.args.debug_infoes[i], &self.args.elf_pathes[i])?;
+        }
+
+        self.source_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.source_dir())?;
 
         // build patch
         project.patch_all(&self.args.patches, Level::Info)?;
 
         info!("Building patched {:?}", project_name);
-        project.build(CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
+        project.build(COMPILER_CMD_PATCHED_ENTER, ASSEMBLER_CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
+        self.patch_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
         // unhack compiler
         info!("Unhacking compiler");
         self.unhack_compiler()?;
@@ -102,7 +115,7 @@ impl UpatchBuild {
         // correlate obj name
         self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
         self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
-        self.build_patches(&self.args.debug_infoes)?;
+        self.build_patches()?;
         Ok(())
     }
 
@@ -171,23 +184,29 @@ impl UpatchBuild {
         Ok(map)
     }
 
-    fn create_diff<P, Q>(&self, source_link_message: &LinkMessage, patch_link_message: &LinkMessage, diff_dir: P, debug_info: Q) -> Result<()>
+    fn create_diff<P, Q>(&self, source_link_message: &HashSet<PathBuf>, patch_link_message: &HashSet<PathBuf>, diff_dir: P, debug_info: Q) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
         let diff_dir = diff_dir.as_ref().to_path_buf();
-        for patch_path in &patch_link_message.objects {
+        for patch_path in patch_link_message {
             let patch_name = match self.patch_obj.get(patch_path) {
                 Some(name) => name,
-                None => return Err(Error::Build(format!("read {:?}'s dwarf failed!", patch_path))),
+                None => {
+                    debug!("read {:?}'s dwarf failed!", patch_path);
+                    continue;
+                },
             };
             let output = diff_dir.join(file_name(&patch_path)?);
             let mut source_path = None;
-            for path in &source_link_message.objects {
+            for path in source_link_message {
                 let source_name = match self.source_obj.get(path) {
                     Some(name) => name,
-                    None => return Err(Error::Build(format!("read {:?}'s dwarf failed!", source_path))),
+                    None => {
+                        debug!("read {:?}'s dwarf failed!", path);
+                        continue;
+                    },
                 };
                 if patch_name.eq(source_name) {
                     source_path = Some(path);
@@ -240,40 +259,27 @@ impl UpatchBuild {
         Ok(1)
     }
 
-    /*
-     * In order to prevent the existence of binaries and objects with the same name during compilation,
-     * match debug_info and elf_path, find the link messages of the second compilation through the build_id of elf_path,
-     * then find the link information of the first compilation through the absolute address of the linked elf.
-     * Finally, match the objects compiled twice through dwarf and call upatch-diff with source_object, patch_object and debug info.
-     */
-    fn build_patches<P: AsRef<Path>>(&self, debug_infoes: &Vec<P>) -> Result<()> {
+    fn build_patches(&self) -> Result<()> {
         let mut upatch_num = 0;
-        let source_links = LinkMessages::from(self.work_dir.source_dir(), false)?;
-        let patch_links = LinkMessages::from(self.work_dir.patch_dir(), true)?;
-        for i in 0..debug_infoes.len() {
-            let binary_path = self.get_binary_elf(&debug_infoes[i], &self.args.elf_pathes[i])?;
-            debug!("\n\nmatch debuginfo {:?} and elf_path {:?}", debug_infoes[i].as_ref(), &binary_path);
-            let binary_build_id = match read_build_id(&binary_path) {
-                Ok(Some(build_id)) => build_id,
-                Ok(None) => return Err(Error::Build(format!("read {:?}'s build id failed: None", &binary_path))),
-                Err(e) => return Err(Error::Build(format!("read {:?}'s build id failed: {}", &binary_path, e))),
-            };
-            let (patch_name, patch_link_message) = match patch_links.get_objects_from_build_id(&binary_build_id) {
-                Some((patch_name, patch_link_message)) => (patch_name, patch_link_message),
+        for i in 0..self.args.debug_infoes.len() {
+            debug!("\n\nbuild upatches: debuginfo: {:?}(elf_path: {:?})", &self.args.debug_infoes[i], &self.args.elf_pathes[i]);
+            let patch_objects = match self.patch_link_messages.get_objects(&self.args.elf_pathes[i]) {
+                Some(objects) => objects,
                 None => {
-                    info!("read {:?}'s patch link_message failed: None", &binary_path);
+                    info!("read {:?}'s patch link_message failed: None", &self.args.elf_pathes[i]);
                     continue;
                 },
             };
-            let source_link_message = match source_links.get_objects_from_binary(&patch_name) {
-                Some(source_link_message) => source_link_message,
-                None => return Err(Error::Build(format!("read {:?}'s source link_message failed: None", &binary_path))),
+            let source_objects = match self.source_link_messages.get_objects(&self.args.elf_pathes[i]) {
+                Some(objects) => objects,
+                None => return Err(Error::Build(format!("read {:?}'s source link_message failed: None", &self.args.elf_pathes[i]))),
             };
-            let binary_name = file_name(&binary_path)?;
+
+            let binary_name = file_name(&self.args.elf_pathes[i])?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
-            self.create_diff(source_link_message, patch_link_message, &diff_dir, &debug_infoes[i])?;
-            upatch_num += self.build_patch(&debug_infoes[i], &binary_name, &diff_dir)?;
+            self.create_diff(source_objects, patch_objects, &diff_dir, &self.args.debug_infoes[i])?;
+            upatch_num += self.build_patch(&self.args.debug_infoes[i], &binary_name, &diff_dir)?;
         }
         if upatch_num.eq(&0) {
             return Err(Error::Build(format!("no upatch is generated!")));

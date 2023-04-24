@@ -31,10 +31,6 @@ struct upatch_conmsg {
 
 #define UPATCH_UNREGISTER_ASSEMBLER _IOW(UPATCH_IOCTL_MAGIC, 0x4, const char *)
 
-#define UPATCH_REGISTER_LINK _IOW(UPATCH_IOCTL_MAGIC, 0x5, const char *)
-
-#define UPATCH_UNREGISTER_LINK _IOW(UPATCH_IOCTL_MAGIC, 0x6, const char *)
-
 /* when apply: patch information will be recored to the context of the process */
 #define UPATCH_ATTACH_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x7, const struct upatch_conmsg *)
 

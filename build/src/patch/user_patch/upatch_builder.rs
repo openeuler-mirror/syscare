@@ -73,10 +73,12 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let output_dir    = self.workdir.patch.output.as_path();
 
         let build_original_cmd = OsString::from("rpmbuild")
+            .append("--define '__brp_strip %{nil}'")
             .append("--define '_topdir ")
             .concat(&pkg_build_root)
             .concat("'")
-            .append("-bc")
+            .append("-bb")
+            .append("--nocheck")
             .append("--nodebuginfo")
             .append("--noclean")
             .append(&pkg_spec_file);

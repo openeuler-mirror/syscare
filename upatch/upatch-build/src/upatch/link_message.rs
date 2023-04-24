@@ -1,48 +1,40 @@
-use std::ffi::OsString;
-use std::os::unix::prelude::OsStringExt;
 use std::path::PathBuf;
-use std::{path::Path, fs::File};
-use std::io::BufReader;
+use std::path::Path;
 use std::collections::{HashSet, HashMap};
-use std::os::unix::ffi::OsStrExt;
 
-use log::debug;
+use common::util::os_str::OsStrExt;
 
-use crate::cmd::RawLines;
+use crate::elf::read;
 
-use super::read_build_id;
-
-const SEPARATOR_NUM: usize = 4;
-const SEPARATOR: [u8; SEPARATOR_NUM] = [58, 58, 58, 58]; // OsString = ::::
-pub const LINK_LOG: &str = "upatch-link.log";
-
-#[derive(Clone)]
-pub struct LinkMessage {
-    pub build_id: Option<Vec<u8>>,
-    pub objects: HashSet<PathBuf>,
-}
-
-impl LinkMessage {
-    pub fn new() -> Self {
-        Self {
-            build_id: None,
-            objects: HashSet::new(),
-        }
-    }
-
-    pub fn is_empty(&self) -> bool{
-        self.build_id.is_none() && self.objects.is_empty()
-    }
-}
-
-impl std::fmt::Debug for LinkMessage {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("\nbuild_id: {:?}, \nobjects: {:?}\n", self.build_id, self.objects))
-    }
-}
+const OBJECT_PREFIX: &str = ".upatch_";
+const OBJECT_EXTENSION: &str = "o";
 
 pub struct LinkMessages {
-    link_message: HashMap<OsString, LinkMessage>
+    link_message: HashMap<PathBuf, HashSet<PathBuf>>
+}
+
+impl LinkMessages {
+    /*
+     * In order to find out the object files which compose the binary,
+     * we add symbol which's name is ".upatch_xxx" in object, and xxx is the object's name
+     */
+    fn parse<P: AsRef<Path>, Q: AsRef<Path>>(path: P, fliter: Q) -> std::io::Result<HashSet<PathBuf>> {
+        let mut result: HashSet<PathBuf> = HashSet::new();
+        let mut elf = read::Elf::parse(path)?;
+
+        for mut symbol in elf.symbols()? {
+            let symbol_name = symbol.get_st_name();
+            let mut object_path = match symbol_name.strip_prefix(OBJECT_PREFIX) {
+                Some(name) => fliter.as_ref().join(name),
+                None => continue,
+            };
+            object_path.set_extension(OBJECT_EXTENSION);
+            if object_path.exists() {
+                result.insert(object_path);
+            }
+        }
+        Ok(result)
+    }
 }
 
 impl LinkMessages {
@@ -52,71 +44,28 @@ impl LinkMessages {
         }
     }
 
-    pub fn from<P: AsRef<Path>>(path: P, read_build_id_flag: bool) -> std::io::Result<Self> {
-        let file = std::fs::File::open(path.as_ref().join(LINK_LOG))?;
+    pub fn from<P: AsRef<Path>, Q: AsRef<Path>>(pathes: &Vec<P>, fliter: Q) -> std::io::Result<Self> {
+        let mut link_message: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
+        for path in pathes {
+            link_message.insert(path.as_ref().to_path_buf(), Self::parse(path, &fliter)?);
+        }
         Ok(Self {
-            link_message: Self::parse(file, path, read_build_id_flag)?
+            link_message,
         })
     }
 
-    fn parse<P: AsRef<Path>>(file: File, path: P, read_build_id_flag: bool) -> std::io::Result<HashMap<OsString, LinkMessage>> {
-        let mut result: HashMap<OsString, LinkMessage> = HashMap::new();
-        for line in RawLines::from(BufReader::new(file)) {
-            let data = line?;
-            if !data.is_empty() {
-                let (binary, object) = Self::parse_line(&data)?;
-                if !object.starts_with(path.as_ref()) {
-                    continue;
-                }
-                match result.contains_key(&binary) {
-                    true => { result.get_mut(&binary).expect("get binary error").objects.insert(object); },
-                    false => {
-                        let mut message = LinkMessage::new();
-                        message.build_id = match read_build_id_flag {
-                            true => match read_build_id(&binary) {
-                                Ok(Some(build_id)) => Some(build_id),
-                                _ => {
-                                    debug!("parse link log: read {:?} failed!", &binary);
-                                    None
-                                },
-                            },
-                            false => None,
-                        };
-                        message.objects.insert(object);
-                        result.insert(binary, message);
-                    },
-                };
-            }
+    pub fn get_objects<P: AsRef<Path>>(&self, binary: P) -> Option<&HashSet<PathBuf>> {
+        match self.link_message.get(binary.as_ref()) {
+            Some(objects) => match objects.is_empty() {
+                true => None,
+                false => Some(objects),
+            },
+            None => None,
         }
-        Ok(result)
     }
 
-    fn parse_line(line: &OsString) -> std::io::Result<(OsString, PathBuf)> {
-        let line_bytes = line.as_bytes();
-        for i in 0..(line_bytes.len() - SEPARATOR_NUM) {
-            if SEPARATOR.eq(&line_bytes[i..(i + SEPARATOR_NUM)]) {
-                return Ok((OsString::from_vec(line_bytes[0..i].to_vec()), PathBuf::from(OsString::from_vec(line_bytes[(i + SEPARATOR_NUM)..].to_vec()))));
-            }
-        }
-        Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("parse log file failed!")))
-    }
-}
-
-impl LinkMessages {
-    pub fn get_objects_from_build_id(&self, build_id: &Vec<u8>) -> Option<(&OsString, &LinkMessage)> {
-        for (binary, link_message) in &self.link_message {
-            match &link_message.build_id {
-                Some(id)  => if build_id.eq(id) {
-                    return Some((binary, &link_message));
-                },
-                None => (),
-            }
-        }
-        None
-    }
-
-    pub fn get_objects_from_binary(&self, binary_path: &OsString) -> Option<&LinkMessage> {
-        self.link_message.get(binary_path)
+    pub fn get_all_objects(&self) -> &HashMap<PathBuf, HashSet<PathBuf>> {
+        &self.link_message
     }
 }
 

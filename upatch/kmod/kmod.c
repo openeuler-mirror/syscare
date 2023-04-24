@@ -192,8 +192,6 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
     case UPATCH_UNREGISTER_COMPILER:
     case UPATCH_REGISTER_ASSEMBLER:
     case UPATCH_UNREGISTER_ASSEMBLER:
-    case UPATCH_REGISTER_LINK:
-    case UPATCH_UNREGISTER_LINK:
         return handle_compiler_cmd(arg, cmd);
     case UPATCH_ATTACH_PATCH:
         return attach_upatch(arg);

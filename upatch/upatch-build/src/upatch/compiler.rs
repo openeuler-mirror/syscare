@@ -17,9 +17,7 @@ const UPATCH_REGISTER_COMPILER: u64 = 1074324737;
 const UPATCH_UNREGISTER_COMPILER: u64 = 1074324738;
 const UPATCH_REGISTER_ASSEMBLER: u64 = 1074324739;
 const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
-const UPATCH_REGISTER_LINK: u64 = 1074324741;
-const UPATCH_UNREGISTER_LINK: u64 = 1074324742;
-const UPATCH_HACK_NUM: usize = 3;
+const UPATCH_HACK_NUM: usize = 2;
 
 #[derive(Clone)]
 pub struct Compiler {
@@ -156,13 +154,12 @@ impl Compiler {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
         let compiler_str = CString::new(self.compiler.as_os_str().as_bytes()).unwrap();
         let assembler_str = CString::new(self.assembler.as_os_str().as_bytes()).unwrap();
-        let linker_str = CString::new(self.linker.as_os_str().as_bytes()).unwrap();
-        let hack_array: [CString; UPATCH_HACK_NUM] = [compiler_str, assembler_str, linker_str];
+        let hack_array: [CString; UPATCH_HACK_NUM] = [compiler_str, assembler_str];
         Ok((ioctl_str, hack_array))
     }
 
     fn ioctl_register(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
-        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_REGISTER_COMPILER, UPATCH_REGISTER_ASSEMBLER, UPATCH_REGISTER_LINK];
+        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_REGISTER_COMPILER, UPATCH_REGISTER_ASSEMBLER];
         for i in 0..num {
             debug!("hack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
@@ -176,7 +173,7 @@ impl Compiler {
     }
 
     fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
-        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_UNREGISTER_COMPILER, UPATCH_UNREGISTER_ASSEMBLER, UPATCH_UNREGISTER_LINK];
+        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_UNREGISTER_COMPILER, UPATCH_UNREGISTER_ASSEMBLER];
         for i in (0..num).rev() {
             debug!("unhack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
