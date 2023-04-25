@@ -529,7 +529,7 @@ static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned lon
 }
 
 static unsigned long
-resolve_symbol(struct running_elf_info *elf_info, const char *name)
+resolve_symbol(struct running_elf_info *elf_info, const char *name, Elf_Sym patch_sym)
 {
     unsigned int i;
     unsigned long elf_addr = 0;
@@ -538,6 +538,9 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
     Elf_Sym *sym;
     Elf64_Rela *rela;
 
+    if (ELF_ST_TYPE(patch_sym.st_info) == STT_IFUNC &&
+        (elf_info->hdr->e_ident[EI_OSABI] == ELFOSABI_GNU || elf_info->hdr->e_ident[EI_OSABI] == ELFOSABI_FREEBSD))
+        goto out_plt;
     /* handle symbol table first, in most cases, symbol table does not exist */
     sechdr = &elf_info->sechdrs[elf_info->index.sym];
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
@@ -566,6 +569,7 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
      * Currently, we will try approach 1 and approach 2.
      * Approach 3 is more general, but difficulty to implement.
      */
+out_plt:
     if (!elf_info->index.dynsym)
         goto out;
 
@@ -584,16 +588,26 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name)
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
         unsigned long addr;
 
-        /* ATTENTION: should we consider the relocation type ? */
-        sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
-        /* FIXME: consider version of the library */
-        tmp = strchr(sym_name, '@');
-        if (tmp != NULL)
-            *tmp = '\0';
+        /* some rela don't have the symbol index, use the symbol's value and rela's addend to find the symbol.
+         * for example, R_X86_64_IRELATIVE.
+         */
+        if (r_sym == 0) {
+            if (rela[i].r_addend != patch_sym.st_value)
+                continue;
+            sprintf(sym_name, "%llx", rela[i].r_addend);
+        }
+        else {
+            /* ATTENTION: should we consider the relocation type ? */
+            sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
+            /* FIXME: consider version of the library */
+            tmp = strchr(sym_name, '@');
+            if (tmp != NULL)
+                *tmp = '\0';
 
-        if (!streql(sym_name, name)
-            || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_FUNC)
-            continue;
+            if (!streql(sym_name, name)
+                || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_FUNC)
+                continue;
+        }
 
         /* this address is used for R_X86_64_PLT32  */
         if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
@@ -680,9 +694,9 @@ out:
 
 /* TODO: set timeout */
 static inline unsigned long resolve_symbol_wait(struct upatch_module *mod,
-    struct upatch_load_info *info, const char *name)
+    struct upatch_load_info *info, const char *name, Elf_Sym patch_sym)
 {
-    return resolve_symbol(&info->running_elf, name);
+    return resolve_symbol(&info->running_elf, name, patch_sym);
 }
 
 static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *info)
@@ -711,7 +725,7 @@ static int simplify_symbols(struct upatch_module *mod, struct upatch_load_info *
         case SHN_ABS:
             break;
         case SHN_UNDEF:
-            elf_addr = resolve_symbol_wait(mod, info, name);
+            elf_addr = resolve_symbol_wait(mod, info, name, sym[i]);
             if (!elf_addr)
                 ret = -ENOEXEC;
             sym[i].st_value = elf_addr;

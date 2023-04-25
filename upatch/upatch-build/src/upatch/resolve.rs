@@ -7,6 +7,9 @@ use crate::elf::*;
 pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::io::Result<()> {
     let mut patch_elf = write::Elf::parse(patch)?;
     let mut debug_info_elf = read::Elf::parse(debug_info)?;
+    let debug_info_e_ident = debug_info_elf.header()?.get_e_ident();
+    patch_elf.header()?.set_e_ident(debug_info_e_ident);
+    let ei_osabi = elf_ei_osabi(debug_info_e_ident);
 
     let debug_info_symbols = &mut debug_info_elf.symbols()?;
 
@@ -34,14 +37,14 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -
                 }
             }
             else {
-                __partly_resolve_patch(&mut symbol, debug_info_symbols)?;
+                __partly_resolve_patch(&mut symbol, debug_info_symbols, ei_osabi)?;
             }
         }
     }
     Ok(())
 }
 
-fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut read::SymbolHeaderTable) -> std::io::Result<()> {
+fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut read::SymbolHeaderTable, ei_osabi: u8) -> std::io::Result<()> {
     debug_info_symbols.reset(0);
     for mut debug_info_symbol in debug_info_symbols {
         /* No need to handle section symbol */
@@ -61,7 +64,12 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
             continue;
         }
 
-        symbol.set_st_shndx(SHN_LIVEPATCH);
+        // symbol type is STT_IFUNC, need search st_value in .plt table in upatch.
+        let is_ifunc = (ei_osabi.eq(&ELFOSABI_GNU) || ei_osabi.eq(&ELFOSABI_FREEBSD)) && elf_st_type(sym_info).eq(&STT_IFUNC);
+        symbol.set_st_shndx(match is_ifunc {
+            true => SHN_UNDEF,
+            false => SHN_LIVEPATCH,
+        });
         symbol.set_st_info(sym_info);
         symbol.set_st_other(debug_info_symbol.get_st_other());
         symbol.set_st_value(debug_info_symbol.get_st_value());

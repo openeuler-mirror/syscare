@@ -12,6 +12,7 @@ pub const SYM_OTHER: u8 = 0x40;
 
 pub const STT_SECTION: u8 = 0x3;
 pub const STT_FILE: u8 = 0x4;
+pub const STT_IFUNC: u8 = 0xa;
 
 pub trait SymbolRead: OperateRead {
     fn get_st_name_offset(&self) -> u32 {

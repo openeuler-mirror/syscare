@@ -363,6 +363,7 @@ static int check_upatch(Elf_Ehdr *ehdr, struct file *patch_file, struct file *bi
 
     if (memcmp(patch_id.id, binary_id.id, binary_id.head.nhdr.n_descsz) != 0) {
         pr_err("build id is different.\n");
+        ret = -EINVAL;
         goto out;
     }
 

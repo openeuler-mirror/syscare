@@ -4,7 +4,17 @@ use super::{OperateRead, OperateWrite};
 
 pub const ET_DYN: u16 = 3;
 
+pub const EI_OSABI: usize = 7;
+pub const ELFOSABI_GNU: u8 = 0x3;
+pub const ELFOSABI_FREEBSD: u8 = 0x9;
+
 pub trait HeaderRead: OperateRead {
+    fn get_e_ident(&self) -> u128 {
+        self.get(
+            offset_of!(FileHeader64, e_ident)
+        )
+    }
+
     fn get_e_type(&self) -> u16 {
         self.get(
             offset_of!(FileHeader64, e_type)
@@ -31,7 +41,14 @@ pub trait HeaderRead: OperateRead {
 }
 
 pub trait HeaderWrite: OperateWrite {
-    fn set_e_shnum(&mut self, e_shnum: u16) -> () {
+    fn set_e_ident(&mut self, e_ident: u128) {
+        self.set(
+            offset_of!(FileHeader64, e_ident),
+            e_ident
+        )
+    }
+
+    fn set_e_shnum(&mut self, e_shnum: u16) {
         self.set(
             offset_of!(FileHeader64, e_shnum),
             e_shnum
@@ -55,4 +72,8 @@ pub struct FileHeader64 {
     pub e_shentsize:    u16,
     pub e_shnum:        u16,
     pub e_shstrndx:     u16,
+}
+
+pub fn elf_ei_osabi(e_ident: u128) -> u8 {
+    (e_ident >> (EI_OSABI * 8)) as u8
 }

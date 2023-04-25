@@ -17,6 +17,10 @@
 #include "upatch-patch.h"
 #include "upatch-manage.h"
 
+#define STT_IFUNC           0xa // when e_ident[EI_OSABI] == ELFOSABI_GNU/ELFOSABI_FREEBSD
+#define ELFOSABI_GNU        0x3
+#define ELFOSABI_FREEBSD    0x9
+
 /*
  * When patch works, it will no longer be controlled by the uprobe.
  * But we still need uprobe works in this situation to handler further threads.
