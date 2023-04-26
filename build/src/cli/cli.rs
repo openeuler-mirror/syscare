@@ -61,8 +61,11 @@ impl PatchBuildCLI {
 
     fn collect_package_info(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
         info!("Collecting package info");
-        let src_pkg_info = PackageInfo::new(&self.args.source)?;
+        let mut src_pkg_info = PackageInfo::new(&self.args.source)?;
         let dbg_pkg_info = PackageInfo::new(&self.args.debuginfo)?;
+
+        // Source package arch is meaningless, override with debuginfo's
+        src_pkg_info.arch = dbg_pkg_info.arch.clone();
 
         if src_pkg_info.kind != PackageType::SourcePackage {
             return Err(std::io::Error::new(
@@ -160,7 +163,7 @@ impl PatchBuildCLI {
 
         // Override other arguments
         args.target_name.get_or_insert(src_pkg_info.name.to_owned());
-        args.target_arch.get_or_insert(dbg_pkg_info.arch.to_owned());
+        args.target_arch.get_or_insert(src_pkg_info.arch.to_owned());
         args.target_epoch.get_or_insert(src_pkg_info.epoch.to_owned());
         args.target_version.get_or_insert(src_pkg_info.version.to_owned());
         args.target_release.get_or_insert(src_pkg_info.release.to_owned());
