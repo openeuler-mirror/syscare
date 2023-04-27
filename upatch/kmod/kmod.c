@@ -124,7 +124,7 @@ static int check_status(unsigned long user_addr)
         ret = -ENOENT;
         pr_err("no related entity found \n");
         goto out;
-    }     
+    }
 
     mutex_lock(&entity->entity_status_lock);
     ret = entity->set_status;
@@ -286,7 +286,7 @@ static void kprobe_exit(void)
     unregister_kprobes(upatch_kprobes, UPATCH_KPROBE_NUM);
 }
 
-static int __init upatch_init(void)
+static int __init upatch_module_init(void)
 {
     int ret;
 
@@ -311,15 +311,16 @@ static int __init upatch_init(void)
     return 0;
 }
 
-static void __exit upatch_exit(void)
+static void __exit upatch_module_exit(void)
 {
     misc_deregister(&upatch_dev);
     compiler_hack_exit();
+    upatch_exit();
     kprobe_exit();
 }
 
-module_init(upatch_init);
-module_exit(upatch_exit);
+module_init(upatch_module_init);
+module_exit(upatch_module_exit);
 
 MODULE_AUTHOR("Longjun Luo (luolongjuna@gmail.com)");
 MODULE_AUTHOR("Zongwu Li (lzw32321226@163.com)");

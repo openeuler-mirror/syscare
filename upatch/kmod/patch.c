@@ -506,7 +506,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     /* if not set_patch, clear exist patch */
     if (upatch_mod->real_patch != set_patch)
         do_module_remove(entity, upatch_mod);
-    
+
     pr_debug("status from %d to %d \n", upatch_mod->real_state, set_status);
 
     info.mod = upatch_mod;
@@ -577,42 +577,8 @@ static int register_patch_uprobe(struct file *binary_file, loff_t offset)
         return ret;
     }
 
-    pr_info("upatch register patch uprobe at 0x%llx\n", offset);
+    pr_info("register patch uprobe for %ld, offset: %lx\n", inode->i_ino, (unsigned long)offset);
     return 0;
-}
-
-void upatch_entity_try_remove(struct upatch_entity *entity)
-{
-    bool has_mods = false;
-    struct uprobe_offset *uprobe_offset, *tmp;
-
-    if (!entity)
-        return;
-
-    mutex_lock(&entity->entity_status_lock);
-    if (!list_empty(&entity->module_list))
-        has_mods = true;
-    mutex_unlock(&entity->entity_status_lock);
-
-    if (has_mods) {
-        pr_debug("entity still has modules \n");
-        return;
-    }
-
-    pr_debug("start to remove entity \n");
-
-    mutex_lock(&upatch_entity_lock);
-    mutex_lock(&entity->entity_status_lock);
-    /* unregister it in the handler will lead to deadlock */
-    list_for_each_entry_safe(uprobe_offset, tmp, &entity->offset_list, list) {
-        uprobe_unregister(entity->binary, uprobe_offset->offset, &patch_consumber);
-        list_del(&uprobe_offset->list);
-        kfree(uprobe_offset);
-    }
-    mutex_unlock(&entity->entity_status_lock);
-    list_del(&entity->list);
-    kfree(entity);
-    mutex_unlock(&upatch_entity_lock);
 }
 
 /*
@@ -810,4 +776,49 @@ out:
     if (binary_file && !IS_ERR(binary_file))
         filp_close(binary_file, NULL);
     return ret;
+}
+
+static void upatch_entity_remove(struct upatch_entity *entity) {
+    struct uprobe_offset *uprobe_offset, *uprobe_tmp;
+    struct upatch_module *upatch_module, *upatch_module_tmp;
+
+    if (!entity)
+        return;
+
+    mutex_lock(&entity->entity_status_lock);
+
+    list_for_each_entry_safe(upatch_module, upatch_module_tmp, &entity->module_list, list) {
+        do_module_remove(entity, upatch_module);
+        list_del(&upatch_module->list);
+        kfree(upatch_module);
+    }
+
+    list_for_each_entry_safe(uprobe_offset, uprobe_tmp, &entity->offset_list, list) {
+        uprobe_unregister(entity->binary, uprobe_offset->offset, &patch_consumber);
+        pr_info("unregister patch uprobe for %ld, offset: %lx\n", entity->binary->i_ino, (unsigned long)uprobe_offset->offset);
+        list_del(&uprobe_offset->list);
+        kfree(uprobe_offset);
+    }
+
+    upatch_put_patch_entity(entity->patch_entity);
+
+    entity->patch_entity = NULL;
+    entity->binary = NULL;
+    entity->set_patch = NULL;
+    entity->set_status = UPATCH_STATE_REMOVED;
+
+    mutex_unlock(&entity->entity_status_lock);
+}
+
+void upatch_exit() {
+    struct upatch_entity *upatch_entity, *upatch_entity_tmp;
+    mutex_lock(&upatch_entity_lock);
+
+    list_for_each_entry_safe(upatch_entity, upatch_entity_tmp, &upatch_entity_list, list) {
+        upatch_entity_remove(upatch_entity);
+        list_del(&upatch_entity->list);
+        kfree(upatch_entity);
+    }
+
+    mutex_unlock(&upatch_entity_lock);
 }

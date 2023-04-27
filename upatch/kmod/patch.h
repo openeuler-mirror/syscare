@@ -162,6 +162,7 @@ struct upatch_module *upatch_module_get_or_create(struct upatch_entity *, pid_t)
 void upatch_module_deallocate(struct upatch_module *);
 void upatch_put_patch_entity(struct patch_entity *);
 void upatch_get_patch_entity(struct patch_entity *);
+void upatch_exit(void);
 
 /* management releated */
 int upatch_attach(const char *, const char *);
