@@ -52,7 +52,7 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
 
         let debug_info_name = debug_info_symbol.get_st_name();
 
-        if debug_info_name.ne(symbol.get_st_name()) {
+        if elf_st_bind(sym_info).ne(&elf_st_bind(symbol.get_st_info())) || debug_info_name.ne(symbol.get_st_name()) {
             continue;
         }
 
