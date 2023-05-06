@@ -47,7 +47,7 @@ done
 
 const RPM_SPEC_SRCIPTS: &str = r#"
 %preun
-$(syscare remove %{patch_uuid}) || echo "Failed to remove patch '%{patch_target}/%{patch_name}'" 2>&1
+syscare remove '%{patch_uuid}' || echo "Failed to remove patch '%{patch_target}/%{patch_name}'" >&2
 "#;
 
 impl RpmSpecGenerator {
