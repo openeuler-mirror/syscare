@@ -77,10 +77,10 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .append("--define '_topdir ")
             .concat(&pkg_build_root)
             .concat("'")
-            .append("-bb")
+            .append("-bi")
             .append("--nocheck")
-            .append("--nodebuginfo")
             .append("--noclean")
+            .append("--nodebuginfo")
             .append(&pkg_spec_file);
 
         let build_patched_cmd = OsString::from("rpmbuild")
@@ -88,11 +88,11 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .append("--define '_topdir ")
             .concat(&pkg_build_root)
             .concat("'")
-            .append("-bb")
+            .append("-bi")
             .append("--noprep")
             .append("--nocheck")
-            .append("--nodebuginfo")
             .append("--noclean")
+            .append("--nodebuginfo")
             .append(&pkg_spec_file);
 
         let builder_args = UserPatchBuilderArguments {
