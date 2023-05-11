@@ -306,13 +306,19 @@ static void detect_child_functions(struct upatch_elf *uelf)
     }
 }
 
-static bool locals_match(struct running_elf *relf, int idx,
+enum LOCAL_MATCH {
+    FOUND,
+    NOT_FOUND,
+    EMPTY,
+};
+
+static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
     struct symbol *file_sym, struct list_head *sym_list)
 {
     struct symbol *sym;
     struct object_symbol *running_sym;
     int i;
-    bool found;
+    enum LOCAL_MATCH found = EMPTY;
 
     for (i = idx + 1; i < relf->obj_nr; ++i) {
         running_sym = &relf->obj_syms[i];
@@ -323,7 +329,7 @@ static bool locals_match(struct running_elf *relf, int idx,
         if (running_sym->type != STT_FUNC && running_sym->type != STT_OBJECT)
             continue;
 
-        found = false;
+        found = NOT_FOUND;
         sym = file_sym;
         list_for_each_entry_continue(sym, sym_list, list) {
             if (sym->type == STT_FILE)
@@ -333,14 +339,14 @@ static bool locals_match(struct running_elf *relf, int idx,
 
             if (sym->type == running_sym->type &&
                 !strcmp(sym->name, running_sym->name)) {
-                    found = true;
+                    found = FOUND;
                     break;
             }
         }
 
-        if (!found){
+        if (found == NOT_FOUND){
             log_debug("can't find %s - in running_sym \n", running_sym->name);
-            return false;
+            return NOT_FOUND;
         }
     }
 
@@ -353,7 +359,7 @@ static bool locals_match(struct running_elf *relf, int idx,
         if (sym->type != STT_FUNC && sym->type != STT_OBJECT)
             continue;
 
-        found = false;
+        found = NOT_FOUND;
         for (i = idx + 1; i < relf->obj_nr; ++i) {
             running_sym = &relf->obj_syms[i];
             if (running_sym->type == STT_FILE)
@@ -363,18 +369,18 @@ static bool locals_match(struct running_elf *relf, int idx,
 
             if (sym->type == running_sym->type &&
                 !strcmp(sym->name, running_sym->name)) {
-                    found = true;
+                    found = FOUND;
                     break;
             }
         }
 
-        if (!found){
+        if (found == NOT_FOUND){
             log_debug("can't find %s - in sym \n", sym->name);
-            return false;
+            return NOT_FOUND;
         }
     }
 
-    return true;
+    return found;
 }
 
 static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
@@ -383,6 +389,7 @@ static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
     struct object_symbol *running_sym;
     struct object_symbol *lookup_running_file_sym = NULL;
     int i;
+    enum LOCAL_MATCH found;
 
     for (i = 0; i < relf->obj_nr; ++i) {
         running_sym = &relf->obj_syms[i];
@@ -390,12 +397,18 @@ static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
             continue;
         if (strcmp(file_sym->name, running_sym->name))
             continue;
-        if (!locals_match(relf, i, file_sym, sym_list))
+        found = locals_match(relf, i, file_sym, sym_list);
+        if (found == NOT_FOUND) {
             continue;
-        if (lookup_running_file_sym)
-            ERROR("found duplicate matches for %s local symbols in running elf.", file_sym->name);
+        } else if (found == EMPTY) {
+            lookup_running_file_sym = running_sym;
+            break;
+        } else {
+            if (lookup_running_file_sym)
+                ERROR("found duplicate matches for %s local symbols in running elf.", file_sym->name);
 
-        lookup_running_file_sym = running_sym;
+            lookup_running_file_sym = running_sym;
+        }
     }
 
     if (!lookup_running_file_sym)
