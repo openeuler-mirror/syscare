@@ -12,7 +12,10 @@
 #include "arch/patch-load.h"
 #include "arch/arm64/insn.h"
 
-#define AARCH64_JUMP_TABLE_JMP 0xb0000e10d61f0220 /* br x17 */
+/* ldr x17, #8
+ * br x17
+ */
+#define AARCH64_JUMP_TABLE_JMP 0xd61f022058000051
 
 enum aarch64_reloc_op {
     RELOC_OP_NONE,
