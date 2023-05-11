@@ -62,7 +62,7 @@ static inline bool is_text_section(struct section *sec)
 
 static inline bool is_string_section(struct section *sec)
 {
-	return !strncmp(sec->name, ".rodata", 7);
+	return sec->sh.sh_flags & SHF_STRINGS;
 }
 
 /* used for c++ exception handle */
