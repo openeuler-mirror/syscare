@@ -224,7 +224,7 @@ pub fn search_tool<P: AsRef<Path>>(tool_name: P) -> std::io::Result<PathBuf> {
                 Ok(()) => Ok(system_tool),
             }
         },
-        Ok(()) => Ok(current_tool.to_path_buf()),
+        Ok(()) => realpath(current_tool),
     }
 }
 
