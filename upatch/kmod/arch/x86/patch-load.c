@@ -75,6 +75,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
            undefined symbols have been resolved. */
         sym = (Elf64_Sym *)sechdrs[symindex].sh_addr
             + ELF64_R_SYM(rel[i].r_info);
+        name = strtab + sym->st_name;
 
         pr_debug("type %d st_value %Lx r_addend %Lx loc %Lx\n",
                (int)ELF64_R_TYPE(rel[i].r_info),
