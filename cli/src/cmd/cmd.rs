@@ -57,7 +57,11 @@ pub enum Command {
     /// Save all patch status
     Save,
     /// Restore all patch status
-    Restore,
+    Restore {
+        /// Only restore ACCEPTED patches
+        #[arg(long, default_value="false")]
+        accepted: bool,
+    },
     /// Reboot the system
     Reboot {
         /// Target kernel name
@@ -71,9 +75,25 @@ pub enum Command {
 
 pub enum CommandArguments {
     None,
-    CommandLineArguments(Vec<String>),
-    PatchOperationArguments(String),
-    RebootArguments(Option<String>, bool),
+    CommandLineArguments {
+        args: Vec<String>
+    },
+    PatchOperationArguments {
+        identifier: String,
+    },
+    PatchRestoreArguments {
+        accepted_only: bool,
+    },
+    RebootArguments {
+        target: Option<String>,
+        force: bool,
+    },
+}
+
+impl std::fmt::Display for Command {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:?}", self))
+    }
 }
 
 pub trait CommandExecutor {

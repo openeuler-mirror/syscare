@@ -102,7 +102,7 @@ impl<'a> UserPatchAdapter<'a> {
 
     fn do_transaction(&self, action: UserPatchAction) -> std::io::Result<()> {
         struct TransactionRecord<'a> {
-            upatch:      &'a UserPatch,
+            upatch:     &'a UserPatch,
             old_status: PatchStatus,
         }
 

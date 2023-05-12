@@ -100,18 +100,18 @@ impl PatchManager {
 
     pub fn save_all_patch_status(&self) -> std::io::Result<()> {
         debug!("Saving all patch status");
-
         let mut status_map = HashMap::with_capacity(self.patch_list.len());
 
-        for patch in &self.patch_list {
-            status_map.insert(&patch.uuid, patch.status()?);
+        for patch in self.get_patch_list() {
+            status_map.insert(patch.uuid.as_str(), patch.status()?);
+            debug!("  - Patch {{{}}} ({})", patch, patch.full_name());
         }
         serde_unversioned::serialize(&status_map, PATCH_STATUS_FILE)?;
 
         Ok(())
     }
 
-    pub fn restore_all_patch_status(&self) -> std::io::Result<()> {
+    pub fn restore_all_patch_status(&self, accepted_only: bool) -> std::io::Result<()> {
         debug!("Reading all patch status");
         let mut status_map: HashMap<String, PatchStatus> = serde_unversioned::deserialize(PATCH_STATUS_FILE)?;
         /*
@@ -129,12 +129,16 @@ impl PatchManager {
          * 1. map DEACTIVED status to NOT-APPLIED
          * 2. sort patch status to make sure we firstly do REMOVE operation
          */
-        let mut status_list = status_map.into_iter().map(|(uuid, mut status)| {
+        let mut status_list = status_map.into_iter().filter_map(|(uuid, mut status)| {
+            if accepted_only && status != PatchStatus::Accepted {
+                return None;
+            }
             if status == PatchStatus::Deactived {
                 status = PatchStatus::NotApplied;
             }
-            (uuid, status)
+            Some((uuid, status))
         }).collect::<Vec<_>>();
+
         status_list.sort_by(|(_, lhs), (_, rhs)| lhs.cmp(rhs));
 
         for (uuid, status) in status_list {

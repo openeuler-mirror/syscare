@@ -23,26 +23,27 @@ pub struct SyscareCLI {
 }
 
 impl SyscareCLI {
-    fn cli_main(cmd: &Command) -> std::io::Result<i32> {
+    fn cli_main(cmd: Command) -> std::io::Result<i32> {
+        let cmd_str = cmd.to_string();
         let cmd_arguments;
         let cmd_executor;
 
         match cmd {
             Command::Build { args } => {
                 cmd_executor  = Box::new(BuildCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::CommandLineArguments(args.to_owned());
+                cmd_arguments = CommandArguments::CommandLineArguments { args };
             }
             Command::Info { identifier } => {
                 cmd_executor  = Box::new(InfoCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Target { identifier } => {
                 cmd_executor  = Box::new(TargetCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Status { identifier } => {
                 cmd_executor  = Box::new(StatusCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::List => {
                 cmd_executor  = Box::new(ListCommandExecutor {}) as Box<dyn CommandExecutor>;
@@ -50,41 +51,41 @@ impl SyscareCLI {
             },
             Command::Apply { identifier } => {
                 cmd_executor  = Box::new(ApplyCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Remove { identifier } => {
                 cmd_executor  = Box::new(RemoveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Active { identifier } => {
                 cmd_executor  = Box::new(ActiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Deactive { identifier } => {
                 cmd_executor  = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             },
             Command::Accept { identifier } => {
                 cmd_executor  = Box::new(AcceptCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+                cmd_arguments = CommandArguments::PatchOperationArguments { identifier };
             }
             Command::Save => {
                 cmd_executor  = Box::new(SaveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::None;
             },
-            Command::Restore => {
+            Command::Restore { accepted } => {
                 cmd_executor  = Box::new(RestoreCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::None;
+                cmd_arguments = CommandArguments::PatchRestoreArguments { accepted_only: accepted };
             },
             Command::Reboot { target, force } => {
                 cmd_executor  = Box::new(RebootCommandExecutor {}) as Box<dyn CommandExecutor>;
-                cmd_arguments = CommandArguments::RebootArguments(target.to_owned(), force.to_owned());
+                cmd_arguments = CommandArguments::RebootArguments { target, force };
             },
         };
 
-        debug!("Command {:?}", cmd);
+        debug!("Command {}", cmd_str);
         let exit_code = cmd_executor.invoke(&cmd_arguments)?;
-        debug!("Command {:?} done", cmd);
+        debug!("Command {} done", cmd_str);
 
         Ok(exit_code)
     }
@@ -107,7 +108,7 @@ impl SyscareCLI {
             true  => LevelFilter::Debug,
         });
 
-        Self::cli_main(&cli.cmd)
+        Self::cli_main(cli.cmd)
     }
 
     pub fn check_root_permission() -> std::io::Result<()> {

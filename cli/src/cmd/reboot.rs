@@ -12,7 +12,7 @@ impl CommandExecutor for RebootCommandExecutor {
     fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
         SyscareCLI::check_root_permission()?;
 
-        if let CommandArguments::RebootArguments(target, force) = args {
+        if let CommandArguments::RebootArguments { target, force } = args {
             if !force {
                 debug!("Syncing filesystem");
                 fs::sync();

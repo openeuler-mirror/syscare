@@ -19,8 +19,8 @@ impl BuildCommandExecutor {
 
 impl CommandExecutor for BuildCommandExecutor {
     fn invoke(&self, args: &CommandArguments) -> std::io::Result<i32> {
-        if let CommandArguments::CommandLineArguments(cmd_args) = args {
-            let build_result = Self::exec_build_cmd(&cmd_args).map_err(|e| {
+        if let CommandArguments::CommandLineArguments { args } = args {
+            let build_result = Self::exec_build_cmd(&args).map_err(|e| {
                 match e.kind() {
                     std::io::ErrorKind::NotFound => {
                         std::io::Error::new(
