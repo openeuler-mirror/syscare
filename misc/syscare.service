@@ -5,7 +5,7 @@ After=syscare-upatch.service local-fs.target
 Before=network-online.target
 
 [Service]
-ExecStart=/usr/bin/syscare restore
+ExecStart=/usr/bin/syscare restore --accepted
 ExecStop=/usr/bin/syscare save
 User=root
 Group=root
