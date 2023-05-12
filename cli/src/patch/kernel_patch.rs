@@ -39,7 +39,7 @@ impl<'a> KernelPatchAdapter<'a> {
             self.patch.name,
             KPATCH_PATCH_SUFFIX
         );
-        self.patch.root_dir.join(patch_name)
+        self.patch.root_dir().join(patch_name)
     }
 
     fn set_patch_security_context(&self) -> std::io::Result<()> {

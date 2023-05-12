@@ -49,6 +49,11 @@ pub enum Command {
         /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
         identifier: String
     },
+    /// Accept a patch
+    Accept {
+        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        identifier: String
+    },
     /// Save all patch status
     Save,
     /// Restore all patch status

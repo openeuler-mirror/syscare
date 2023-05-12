@@ -64,6 +64,10 @@ impl SyscareCLI {
                 cmd_executor  = Box::new(DeactiveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
             },
+            Command::Accept { identifier } => {
+                cmd_executor  = Box::new(AcceptCommandExecutor {}) as Box<dyn CommandExecutor>;
+                cmd_arguments = CommandArguments::PatchOperationArguments(identifier.to_owned())
+            }
             Command::Save => {
                 cmd_executor  = Box::new(SaveCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::None;

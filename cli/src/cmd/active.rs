@@ -13,7 +13,7 @@ impl CommandExecutor for ActiveCommandExecutor {
         os::signal::block(&[os::signal::SIGINT, os::signal::SIGTERM])?;
 
         if let CommandArguments::PatchOperationArguments(identifier) = args {
-            PatchManager::new()?.active_patch(&identifier)?;
+            PatchManager::new()?.find_patch(identifier)?.active()?;
         }
 
         Ok(0)

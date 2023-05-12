@@ -95,7 +95,7 @@ impl<'a> UserPatchAdapter<'a> {
         self.patch.target_elfs.iter().map(|(elf_name, elf_path)| {
             UserPatch {
                 elf:   elf_path.to_path_buf(),
-                patch: self.patch.root_dir.join(elf_name),
+                patch: self.patch.root_dir().join(elf_name),
             }
         }).collect()
     }
@@ -111,7 +111,7 @@ impl<'a> UserPatchAdapter<'a> {
             let record = TransactionRecord { upatch, old_status: upatch.status()? };
             debug!("Applying changes to \"{}\"", upatch);
             upatch.do_action(action)?;
-            debug!("Applied \"{}\"", upatch);
+            debug!("Applied chages to \"{}\"", upatch);
             Ok(record)
         }
 

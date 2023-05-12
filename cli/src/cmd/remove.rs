@@ -13,7 +13,7 @@ impl CommandExecutor for RemoveCommandExecutor {
         os::signal::block(&[os::signal::SIGINT, os::signal::SIGTERM])?;
 
         if let CommandArguments::PatchOperationArguments(identifier) = args {
-            PatchManager::new()?.remove_patch(&identifier)?;
+            PatchManager::new()?.find_patch(identifier)?.remove()?;
         }
 
         Ok(0)

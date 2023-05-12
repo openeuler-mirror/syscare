@@ -13,7 +13,7 @@ impl CommandExecutor for DeactiveCommandExecutor {
         os::signal::block(&[os::signal::SIGINT, os::signal::SIGTERM])?;
 
         if let CommandArguments::PatchOperationArguments(identifier) = args {
-            PatchManager::new()?.deactive_patch(&identifier)?;
+            PatchManager::new()?.find_patch(identifier)?.deactive()?;
         }
 
         Ok(0)
