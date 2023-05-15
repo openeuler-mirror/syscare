@@ -1,4 +1,4 @@
-use std::ffi::OsString;
+use std::ffi::{OsString, OsStr};
 use std::path::{Path, PathBuf};
 
 use log::debug;
@@ -26,6 +26,23 @@ pub struct RpmElfRelation {
 pub struct RpmHelper;
 
 impl RpmHelper {
+    pub fn check_installed<S: AsRef<OsStr>>(pkg_name: S) -> std::io::Result<()> {
+        let exit_status = RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("--query")
+                .arg(&pkg_name)
+        )?;
+
+        if exit_status.exit_code() != 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::BrokenPipe,
+                format!("Package \"{:?}\" is not installed", pkg_name.as_ref())
+            ));
+        }
+
+        Ok(())
+    }
+
     pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> std::io::Result<OsString> {
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()

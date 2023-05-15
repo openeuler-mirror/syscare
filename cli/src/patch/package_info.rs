@@ -45,7 +45,7 @@ impl PackageInfo {
 
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()
-                .arg("-q")
+                .arg("--query")
                 .arg(&pkg_name)
         )?;
 
