@@ -19,6 +19,23 @@ impl<'a> UserPatchBuilder<'a> {
         Self { workdir }
     }
 
+    fn detect_compiler_name(&self) -> OsString {
+        /*
+         * This is a temporary solution for compiler detection
+         * We assume the compiler would be 'gcc' by default
+         * If gcc_secure is installed, the real compiler would be 'gcc_old'
+         */
+        const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
+
+        const GCC_CC_NAME:        &str = "gcc";
+        const GCC_SECURE_CC_NAME: &str = "gcc_old";
+
+        match RpmHelper::check_installed(GCC_SECURE_PKG_NAME).is_ok() {
+            true  => OsString::from(GCC_SECURE_CC_NAME),
+            false => OsString::from(GCC_CC_NAME),
+        }
+    }
+
     fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
             .arg("--work-dir")
@@ -31,6 +48,8 @@ impl<'a> UserPatchBuilder<'a> {
             .arg(&args.build_source_cmd)
             .arg("--build-patch-cmd")
             .arg(&args.build_patch_cmd)
+            .arg("--compiler")
+            .arg(&args.compiler)
             .arg("--output-dir")
             .arg(&args.output_dir);
 
@@ -65,12 +84,13 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let pkg_buildroot_dir = pkg_build_root.build_root.as_path();
         let pkg_spec_file     = RpmHelper::find_spec_file(pkg_spec_dir)?;
 
-        let target_pkg    = &patch_info.target;
-        let work_dir      = self.workdir.patch.build.as_path();
-        let source_dir    = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
-        let debuginfos    = RpmHelper::find_debuginfo(debug_pkg_dir)?;
-        let elf_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
-        let output_dir    = self.workdir.patch.output.as_path();
+        let target_pkg          = &patch_info.target;
+        let work_dir            = self.workdir.patch.build.as_path();
+        let source_dir          = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
+        let debuginfos          = RpmHelper::find_debuginfo(debug_pkg_dir)?;
+        let elf_debug_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
+        let compiler_name       = self.detect_compiler_name();
+        let output_dir          = self.workdir.patch.output.as_path();
 
         let build_original_cmd = OsString::from("rpmbuild")
             .append("--define '__brp_strip %{nil}'")
@@ -99,9 +119,10 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             work_dir:            work_dir.to_path_buf(),
             debug_source:        source_dir,
             elf_dir:             pkg_buildroot_dir.to_path_buf(),
-            elf_relations:       elf_relations,
+            elf_relations:       elf_debug_relations,
             build_source_cmd:    build_original_cmd,
             build_patch_cmd:     build_patched_cmd,
+            compiler:            compiler_name,
             output_dir:          output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose:             args.verbose,
