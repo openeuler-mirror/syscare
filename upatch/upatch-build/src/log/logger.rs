@@ -72,11 +72,11 @@ impl Logger {
     }
 
     fn enabled_screen(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.print_level
+        metadata.level() <= self.print_level || metadata.level() == LevelFilter::Error
     }
 
     fn enabled_file(&self, metadata: &Metadata) -> bool {
-        metadata.level() <= self.file_level
+        metadata.level() <= self.file_level || metadata.level() == LevelFilter::Error
     }
 
     fn write_screen(&self, level: Level, log_str: &str) {

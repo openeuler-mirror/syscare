@@ -10,9 +10,6 @@ fn main() {
             0
         }
         Err(e) => {
-            if let Err(e) = upatch.unhack_compiler() {
-                eprintln!("unhack failed after upatch build error: {}", e);
-            }
             match Logger::is_inited() {
                 true => error!("{}", e),
                 false => eprintln!("ERROR: {}", e),

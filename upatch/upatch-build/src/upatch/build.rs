@@ -2,9 +2,7 @@ use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
-use std::process::exit;
 use std::thread;
-use std::sync::{Arc, Mutex};
 
 use signal_hook::{iterator::Signals, consts::*};
 
@@ -14,7 +12,7 @@ use crate::tool::*;
 use crate::dwarf::Dwarf;
 
 use super::Arguments;
-use super::Compiler;
+use super::{Compiler, CompilerHackGuard};
 use super::WorkDir;
 use super::Project;
 use super::Tool;
@@ -36,7 +34,6 @@ pub struct UpatchBuild {
     work_dir: WorkDir,
     compiler: Compiler,
     tool: Tool,
-    hack_flag: Arc<Mutex<bool>>,
     dwarf: Dwarf,
     source_obj: HashMap<PathBuf, PathBuf>,
     patch_obj: HashMap<PathBuf, PathBuf>,
@@ -51,7 +48,6 @@ impl UpatchBuild {
             work_dir: WorkDir::new(),
             compiler: Compiler::new(),
             tool: Tool::new(),
-            hack_flag: Arc::new(Mutex::new(false)),
             dwarf: Dwarf::new(),
             source_obj: HashMap::new(),
             patch_obj: HashMap::new(),
@@ -66,6 +62,7 @@ impl UpatchBuild {
         self.work_dir.create_dir(self.args.work_dir.as_ref().unwrap())?;
         self.args.output_dir.get_or_insert(self.work_dir.cache_dir().to_path_buf());
         self.init_logger()?;
+        self.stop_hacker();
 
         // check mod
         self.check_mod()?;
@@ -86,8 +83,7 @@ impl UpatchBuild {
 
         // hack compiler
         info!("Hacking compiler");
-        self.unhack_stop();
-        self.hack_compiler()?;
+        let compiler_hacker = CompilerHackGuard::new(self.compiler.clone())?;
 
         let project_name = self.args.debug_source.file_name().unwrap();
 
@@ -108,33 +104,16 @@ impl UpatchBuild {
         project.build(COMPILER_CMD_PATCHED_ENTER, ASSEMBLER_CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
         self.patch_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
+
         // unhack compiler
         info!("Unhacking compiler");
-        self.unhack_compiler()?;
+        drop(compiler_hacker);
 
         info!("Detecting changed objects");
         // correlate obj name
         self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
         self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
         self.build_patches()?;
-        Ok(())
-    }
-
-    pub fn hack_compiler(&self) -> Result<()> {
-        let mut mutex = self.hack_flag.lock().expect("lock failed");
-        if !*mutex {
-            self.compiler.hack()?;
-            *mutex = true;
-        }
-        Ok(())
-    }
-
-    pub fn unhack_compiler(&self) -> Result<()> {
-        let mut mutex = self.hack_flag.lock().expect("lock failed");
-        if *mutex {
-            self.compiler.unhack()?;
-            *mutex = false;
-        }
         Ok(())
     }
 }
@@ -316,34 +295,19 @@ impl UpatchBuild {
         check_elf(&file)
     }
 
-    fn unhack_stop(&self) {
+    fn stop_hacker(&self) {
         let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
-        let hack_flag_clone = self.hack_flag.clone();
-        let compiler_clone = self.compiler.clone();
         thread::spawn(move || {
-            for signal in signals.forever() {
-                let mut mutex = hack_flag_clone.lock().expect("lock failed");
-                if *mutex {
-                    if let Err(e) = compiler_clone.unhack() {
-                        eprintln!("{} after upatch build error", e);
-                    }
-                    *mutex = false;
-                }
-                eprintln!("ERROR: receive system signal {}", signal);
-                exit(signal);
+            for _ in signals.forever() {
+                panic!("receive signal");
             }
         });
 
-        let hack_flag_clone = self.hack_flag.clone();
-        let compiler_clone = self.compiler.clone();
-        std::panic::set_hook(Box::new(move |_| {
-            let mut mutex = hack_flag_clone.lock().expect("lock failed");
-            if *mutex {
-                if let Err(e) = compiler_clone.unhack() {
-                    eprintln!("{} after upatch build error", e);
-                }
-                *mutex = false;
-            }
+        std::panic::set_hook(Box::new(|e| {
+            match e.payload().downcast_ref::<&str>() {
+                Some(s) => error!("panic occurred: {:?}", s),
+                None => error!("panic occurred"),
+            };
         }));
     }
 }

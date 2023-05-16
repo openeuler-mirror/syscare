@@ -161,10 +161,10 @@ impl Compiler {
     fn ioctl_register(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
         let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_REGISTER_COMPILER, UPATCH_REGISTER_ASSEMBLER];
         for i in 0..num {
-            debug!("hack {:?}", hack_array[i]);
+            trace!("hack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
             if ret != 0 {
-                debug!("hack {:?} error {}, try to rollback", hack_array[i], ret);
+                trace!("hack {:?} error {}, try to rollback", hack_array[i], ret);
                 self.ioctl_unregister(fd, i, hack_array)?;
                 return Err(Error::Mod(format!("hack {:?} error {}", hack_array[i], ret)));
             }
@@ -175,13 +175,33 @@ impl Compiler {
     fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
         let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_UNREGISTER_COMPILER, UPATCH_UNREGISTER_ASSEMBLER];
         for i in (0..num).rev() {
-            debug!("unhack {:?}", hack_array[i]);
+            trace!("unhack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
             if ret != 0 {
-                debug!("unhack {:?} error {}", hack_array[i], ret);
+                trace!("unhack {:?} error {}", hack_array[i], ret);
                 return Err(Error::Mod(format!("unhack {:?} error {}", hack_array[i], ret)));
             }
         }
         Ok(())
+    }
+}
+
+pub struct CompilerHackGuard {
+    compiler: Compiler,
+}
+
+impl CompilerHackGuard {
+    pub fn new(compiler: Compiler) -> Result<Self> {
+        compiler.hack()?;
+        Ok(CompilerHackGuard {
+            compiler
+        })
+    }
+}
+impl Drop for CompilerHackGuard {
+    fn drop(&mut self) {
+        if let Err(e) = self.compiler.unhack() {
+            trace!("{}", e);
+        }
     }
 }
