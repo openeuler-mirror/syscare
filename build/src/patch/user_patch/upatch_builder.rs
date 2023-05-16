@@ -93,7 +93,10 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let output_dir          = self.workdir.patch.output.as_path();
 
         let build_original_cmd = OsString::from("rpmbuild")
-            .append("--define '__brp_strip %{nil}'")
+            .append("--define '__arch_install_post %{nil}'")
+            .append("--define '__os_install_post %{nil}'")
+            .append("--define '__find_provides %{nil}'")
+            .append("--define '__find_requires %{nil}'")
             .append("--define '_topdir ")
             .concat(&pkg_build_root)
             .concat("'")
@@ -104,7 +107,10 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             .append(&pkg_spec_file);
 
         let build_patched_cmd = OsString::from("rpmbuild")
-            .append("--define '__brp_strip %{nil}'")
+            .append("--define '__arch_install_post %{nil}'")
+            .append("--define '__os_install_post %{nil}'")
+            .append("--define '__find_provides %{nil}'")
+            .append("--define '__find_requires %{nil}'")
             .append("--define '_topdir ")
             .concat(&pkg_build_root)
             .concat("'")
