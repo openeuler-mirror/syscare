@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 use std::ffi::OsString;
 
 use clap::Parser;
@@ -85,15 +85,17 @@ impl Arguments {
             }),
         };
 
-        self.compiler = match &self.compiler {
-            Some(compiler) => Some(real_arg(compiler)?),
-            None => Some(match which("gcc") {
-                Ok(compiler) => compiler,
-                Err(e) => return Err(std::io::Error::new(
+        let compiler_path = self.compiler.as_deref().unwrap_or(&Path::new("gcc"));
+        self.compiler = match compiler_path.exists() {
+            true => {
+                Some(real_arg(compiler_path)?)
+            },
+            false => {
+                Some(which(compiler_path).map_err(|e| std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("can't find gcc in system: {}", e),
-                )),
-            }),
+                    format!("can't find {:?} in system: {}", compiler_path, e),
+                ))?)
+            },
         };
 
         self.debug_source = real_arg(&self.debug_source)?;
