@@ -229,7 +229,8 @@ static void check_static_variable_correlate(struct upatch_elf *uelf_source, stru
 
 	list_for_each_entry(relasec, &uelf_source->sections, list) {
 		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec))
+		    is_debug_section(relasec) ||
+			is_note_section(relasec))
 			continue;
 
 		list_for_each_entry(rela, &relasec->relas, list) {
@@ -256,7 +257,8 @@ static void check_static_variable_correlate(struct upatch_elf *uelf_source, stru
 	list_for_each_entry(relasec, &uelf_patched->sections, list) {
 
 		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec))
+		    is_debug_section(relasec) ||
+			is_note_section(relasec))
 			continue;
 
 		list_for_each_entry(rela, &relasec->relas, list) {
@@ -350,7 +352,8 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
 
         /* handle .rela.toc sectoins */
 		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec))
+		    is_debug_section(relasec) ||
+			is_note_section(relasec))
 			continue;
 
         /* check all relocation symbols */

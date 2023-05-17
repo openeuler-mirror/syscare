@@ -71,6 +71,13 @@ static inline bool is_except_section(struct section *sec)
 	return !strncmp(sec->name, ".gcc_except_table", 17);
 }
 
+static inline bool is_note_section(struct section *sec)
+{
+	if (is_rela_section(sec))
+		sec = sec->base;
+	return sec->sh.sh_type == SHT_NOTE;
+}
+
 static inline bool is_eh_frame(struct section *sec)
 {
 	char *name;

@@ -197,7 +197,8 @@ static bool need_dynrela(struct upatch_elf *uelf, struct running_elf *relf,
 {
     struct lookup_result symbol;
 
-    if (is_debug_section(relasec))
+    if (is_debug_section(relasec) ||
+		is_note_section(relasec))
         return false;
 
     if (!lookup_relf(relf, rela->sym, &symbol)) {

@@ -175,6 +175,11 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
         skip = 1;
     }
 
+    if (is_note_section(relasec)) {
+        log_debug("skipping rela listing for .note_* section \n");
+        skip = 1;
+    }
+
     while (rela_nr --) {
         ALLOC_LINK(rela, &relasec->relas);
 

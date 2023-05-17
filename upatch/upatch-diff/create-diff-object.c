@@ -480,7 +480,7 @@ static void replace_section_syms(struct upatch_elf *uelf)
     bool found = false;
 
     list_for_each_entry(relasec, &uelf->sections, list) {
-        if (!is_rela_section(relasec) || is_debug_section(relasec))
+        if (!is_rela_section(relasec) || is_debug_section(relasec) || is_note_section(relasec))
             continue;
 
         list_for_each_entry(rela, &relasec->relas, list) {

@@ -55,7 +55,7 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
         log_debug("%02d %s (%s)", sec->index, sec->name, status_str(sec->status));
         if (is_rela_section(sec)) {
             log_debug(", base-> %s\n", sec->base->name);
-            if (is_debug_section(sec))
+            if (is_debug_section(sec) || is_note_section(sec))
                 goto next;
             log_debug("rela section expansion\n");
             list_for_each_entry(rela, &sec->relas, list) {
