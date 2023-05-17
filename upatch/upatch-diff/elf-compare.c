@@ -130,6 +130,11 @@ static int compare_correlated_section(struct section *sec, struct section *sectw
             return -1;
         }
 
+	if (is_note_section(sec)) {
+		sec->status = SAME;
+		goto out;
+	}
+
 	/* As above but for aarch64 */
 	if (!strcmp(sec->name, ".rela__patchable_function_entries") ||
 	    !strcmp(sec->name, "__patchable_function_entries")) {
