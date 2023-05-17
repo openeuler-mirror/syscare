@@ -225,6 +225,9 @@ static bool is_bundleable(struct symbol *sym)
         NULL,
     };
 
+    if (sym == NULL || sym->sec == NULL)
+        return false;
+
     if (sym->type == STT_FUNC)
         name = strarrcmp(sym->sec->name, func_prefix);
     else if (sym->type == STT_OBJECT)
@@ -443,7 +446,7 @@ static void mark_grouped_sections(struct upatch_elf *uelf)
 {
     struct section *groupsec, *sec;
 	unsigned int *data, *end;
-    
+
     list_for_each_entry(groupsec, &uelf->sections, list) {
         if (groupsec->sh.sh_type != SHT_GROUP)
             continue;
@@ -646,7 +649,7 @@ static void include_symbol(struct symbol *sym)
      * For a function/object symbol, if it has a section, we only need to
      * include the section if it has changed. Otherwise the symbol will be
      * used by relas/dynrelas to link to the real symbol externally.
-     * 
+     *
      * For section symbols, we always include the section because
      * references to them can't otherwise be resolved externally.
      */
