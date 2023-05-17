@@ -19,6 +19,7 @@
 #include <linux/mman.h>
 #include <linux/kprobes.h>
 
+#include <asm/unistd_64.h>
 #include <asm/module.h>
 
 #include "patch-uprobe.h"
@@ -894,33 +895,40 @@ out:
     return ret;
 }
 
-typedef int (*do_mprotect_pkey_t)(unsigned long start, size_t len, unsigned long prot, int pkey);
+/* works for 64-bit architecture */
+static long (*orig_mprotect) (const struct pt_regs *regs);
 
-static void frob_text(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+static long krun_mprotect(unsigned long start, size_t len, unsigned long prot)
 {
-    do_mprotect_pkey((unsigned long)layout->base, layout->text_size, PROT_READ | PROT_EXEC, -1);
+    struct pt_regs regs;
+    setup_parameters(&regs, start, len, prot);
+    return orig_mprotect(&regs);
 }
 
-static void frob_rodata(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+static void frob_text(const struct upatch_module_layout *layout)
 {
-    do_mprotect_pkey((unsigned long)layout->base + layout->text_size, layout->ro_size - layout->text_size, PROT_READ, -1);
+    krun_mprotect((unsigned long)layout->base, layout->text_size, PROT_READ | PROT_EXEC);
 }
 
-static void frob_writable_data(const struct upatch_module_layout *layout, do_mprotect_pkey_t do_mprotect_pkey)
+static void frob_rodata(const struct upatch_module_layout *layout)
 {
-    do_mprotect_pkey((unsigned long)layout->base + layout->ro_after_init_size, layout->size - layout->ro_after_init_size, PROT_READ | PROT_WRITE, -1);
+    krun_mprotect((unsigned long)layout->base + layout->text_size, layout->ro_size - layout->text_size, PROT_READ);
+}
+
+static void frob_writable_data(const struct upatch_module_layout *layout)
+{
+    krun_mprotect((unsigned long)layout->base + layout->ro_after_init_size, layout->size - layout->ro_after_init_size, PROT_READ | PROT_WRITE);
 }
 
 static void set_memory_previliage(struct upatch_module *mod)
 {
-    do_mprotect_pkey_t do_mprotect_pkey = (do_mprotect_pkey_t) upatch_kprobes[UPATCH_KPROBE_MPROTECT]->addr;
-
-    frob_text(&mod->core_layout, do_mprotect_pkey);
-    frob_rodata(&mod->core_layout, do_mprotect_pkey);
-    frob_writable_data(&mod->core_layout, do_mprotect_pkey);
-    frob_text(&mod->init_layout, do_mprotect_pkey);
-    frob_rodata(&mod->init_layout, do_mprotect_pkey);
-    frob_writable_data(&mod->init_layout, do_mprotect_pkey);
+    orig_mprotect = (void *)sys_call_table_p[__NR_mprotect];
+    frob_text(&mod->core_layout);
+    frob_rodata(&mod->core_layout);
+    frob_writable_data(&mod->core_layout);
+    frob_text(&mod->init_layout);
+    frob_rodata(&mod->init_layout);
+    frob_writable_data(&mod->init_layout);
 }
 
 static int complete_formation(struct upatch_module *mod, struct inode *patch)

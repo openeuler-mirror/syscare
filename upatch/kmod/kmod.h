@@ -15,8 +15,6 @@
 
 #include "upatch-ioctl.h"
 
-#define UPATCH_KPROBE_NUM       1
-#define UPATCH_KPROBE_MPROTECT  0
-extern struct kprobe *upatch_kprobes[UPATCH_KPROBE_NUM];
+extern void **sys_call_table_p;
 
 #endif /* _UPATCH_KMOD_H */

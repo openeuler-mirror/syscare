@@ -26,6 +26,14 @@ unsigned long jmp_table_inst()
     return X86_64_JUMP_TABLE_JMP;
 }
 
+void setup_parameters(struct pt_regs *regs, unsigned long para_a,
+    unsigned long para_b, unsigned long para_c)
+{
+    regs->di = para_a;
+    regs->si = para_b;
+    regs->dx = para_c;
+}
+
 /*
  * Jmp tabale records address and used call instruction to execute it.
  * So, we need 'Inst' and 'addr'

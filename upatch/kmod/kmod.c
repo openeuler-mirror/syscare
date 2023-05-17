@@ -227,63 +227,38 @@ static struct miscdevice upatch_dev = {
     .mode   = 0666,
 };
 
-struct kprobe __upatch_mprotect = {
-    .symbol_name = "",
+static unsigned long (*kallsyms_lookup_name_p)(const char *);
+void **sys_call_table_p;
+
+static struct kprobe kp = {
+    .symbol_name = "kallsyms_lookup_name",
     .flags = KPROBE_FLAG_DISABLED,
     .post_handler = NULL,
     .pre_handler = NULL,
 };
 
-struct kprobe *upatch_kprobes[UPATCH_KPROBE_NUM] = {
-    &__upatch_mprotect,
-};
-
-static const char *kprobe_mprotect_names[] = {
-    "do_mprotect_pkey",
-    "do_mprotect_pkey.constprop.0",
-    "NULL",
-};
-
-const char **upatch_kprobes_names[UPATCH_KPROBE_NUM] = {
-    kprobe_mprotect_names,
-};
-
-static int __register_kprobes(int index)
-{
-    int ret;
-    int i = 0;
-
-    while (strcmp(upatch_kprobes_names[index][i], "NULL")) {
-        upatch_kprobes[index]->symbol_name = upatch_kprobes_names[index][i];
-        ret = register_kprobe(upatch_kprobes[index]);
-        if (ret == 0)
-            goto out;
-        i ++;
-    }
-    pr_err("register kprobe %d failed - %d \n", index, ret);
-
-out:
-    return ret;
-}
-
 static int kprobe_init(void)
 {
-    int ret;
-    int i;
-
-    for (i = 0; i < UPATCH_KPROBE_NUM; i ++) {
-        ret = __register_kprobes(i);
-        if (ret < 0)
-            goto out;
+    int ret = register_kprobe(&kp);
+    if (ret < 0) {
+        pr_err("register kprobe for kallsyms_lookup_name failed - %d \n", ret);
+        goto out;
     }
 
+    kallsyms_lookup_name_p = (void *)kp.addr;
+    sys_call_table_p = (void **)kallsyms_lookup_name_p("sys_call_table");
+    if (!sys_call_table_p) {
+        ret = -EINVAL;
+        pr_err("get addr for syscall table failed \n");
+        goto out;
+    }
 out:
     return ret;
 }
 
 static void kprobe_exit(void)
 {
-    unregister_kprobes(upatch_kprobes, UPATCH_KPROBE_NUM);
+    unregister_kprobe(&kp);
 }
 
 static int __init upatch_module_init(void)

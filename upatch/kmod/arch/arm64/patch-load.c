@@ -29,6 +29,14 @@ unsigned long jmp_table_inst()
     return AARCH64_JUMP_TABLE_JMP;
 }
 
+void setup_parameters(struct pt_regs *regs, unsigned long para_a,
+    unsigned long para_b, unsigned long para_c)
+{
+    regs->regs[0] = para_a;
+    regs->regs[1] = para_b;
+    regs->regs[2] = para_c;
+}
+
 static inline s64 calc_reloc(enum aarch64_reloc_op op, void *place, u64 val)
 {
     s64 sval;
