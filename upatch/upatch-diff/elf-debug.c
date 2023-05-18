@@ -110,7 +110,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
     unsigned int count = 0;
 
     /* sanity check */
-    if (!is_eh_frame(sec) || is_rela_section(sec))
+    if (!is_eh_frame(sec) || is_rela_section(sec) || !sec->rela)
         return;
 
     list_for_each_entry(rela, &sec->rela->relas, list)
@@ -194,10 +194,3 @@ void upatch_rebuild_eh_frame(struct section *sec)
     sec->data->d_size = frame_size;
     sec->sh.sh_size = frame_size;
 }
-
-
-
-
-
-
-

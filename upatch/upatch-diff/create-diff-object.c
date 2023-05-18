@@ -484,7 +484,7 @@ static void replace_section_syms(struct upatch_elf *uelf)
             continue;
 
         list_for_each_entry(rela, &relasec->relas, list) {
-            if (rela->sym->type != STT_SECTION || !rela->sym->sec)
+            if (!rela->sym || !rela->sym->sec || rela->sym->type != STT_SECTION)
                 continue;
 
             log_debug("found replace symbol for section %s \n", rela->sym->name);
