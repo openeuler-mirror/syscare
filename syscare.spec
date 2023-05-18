@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.1
-Release:        4
+Release:        5
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -115,6 +115,11 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Mon May 15 2023 renoseven<dev@renoseven.net> - 1.0.1-5
+- Fix aarch64 kmod patch jump instruction error issue
+- Add ifunc support
+- Add 'syscare accept' command
+- Add patch 'ACCEPT' state
 * Tue Apr 04 2023 renoseven<dev@renoseven.net> - 1.0.1-4
 - Enable aarch64
 - Fix syscare-upatch service may start failed issue
