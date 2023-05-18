@@ -198,7 +198,12 @@ impl Dwarf {
                         _ => continue,
                     }
                 }
-                result.push(element);
+                match element.DW_AT_producer.contains("AS") ||
+                      element.DW_AT_name.extension().eq(&Some(OsStr::new(".s"))) ||
+                      element.DW_AT_name.extension().eq(&Some(OsStr::new(".S"))) {
+                    true =>  debug!("Warning: Skipped assemble file: {:?}", element.DW_AT_comp_dir.join(element.DW_AT_name)),
+                    false => result.push(element),
+                };
             }
         }
         Ok(result)
