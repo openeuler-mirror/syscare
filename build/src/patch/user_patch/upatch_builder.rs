@@ -1,4 +1,7 @@
 use std::ffi::OsString;
+use std::os::unix::prelude::OsStrExt;
+use std::path::{PathBuf, Path};
+use std::io::{Write, BufWriter};
 
 use common::util::os_str::OsStringExt;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
@@ -34,6 +37,25 @@ impl<'a> UserPatchBuilder<'a> {
             true  => OsString::from(GCC_SECURE_CC_NAME),
             false => OsString::from(GCC_CC_NAME),
         }
+    }
+
+    fn create_build_macros<P: AsRef<Path>>(&self, buildroot: P) -> std::io::Result<PathBuf> {
+        const MACROS_FILE_NAME: &str = "macros";
+
+        let build_root      = buildroot.as_ref();
+        let macro_file_path = build_root.join(MACROS_FILE_NAME);
+        let macro_file      = fs::create_file(&macro_file_path)?;
+
+        let mut writer = BufWriter::new(macro_file);
+        let topdir = OsString::from("%_topdir").append(build_root).concat("\n");
+
+        writer.write(topdir.as_bytes())?;
+        writer.write(b"%__arch_install_post %{{nil}}\n")?;
+        writer.write(b"%__os_install_post   %{{nil}}\n")?;
+        writer.write(b"%__find_provides     %{{nil}}\n")?;
+        writer.write(b"%__find_requires     %{{nil}}\n")?;
+
+        Ok(macro_file_path)
     }
 
     fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
@@ -75,6 +97,11 @@ impl<'a> UserPatchBuilder<'a> {
 
 impl PatchBuilder for UserPatchBuilder<'_> {
     fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
+        const RPMBUILD_CMD:            &str = "rpmbuild";
+        const RPMBUILD_PERP_FLAGS:     &str = "-bp";
+        const RPMBUILD_ORIGINAL_FLAGS: &str = "-bi --nocheck --nodebuginfo --clean";
+        const RPMBUILD_PATCHED_FLAGS:  &str = "-bi --noprep --nocheck --nodebuginfo --noclean";
+
         let source_pkg_dir = self.workdir.package.source.as_path();
         let debug_pkg_dir  = self.workdir.package.debug.as_path();
 
@@ -84,49 +111,38 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let pkg_buildroot_dir = pkg_build_root.build_root.as_path();
         let pkg_spec_file     = RpmHelper::find_spec_file(pkg_spec_dir)?;
 
-        let target_pkg          = &patch_info.target;
-        let work_dir            = self.workdir.patch.build.as_path();
-        let source_dir          = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
-        let debuginfos          = RpmHelper::find_debuginfo(debug_pkg_dir)?;
-        let elf_debug_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
-        let compiler_name       = self.detect_compiler_name();
-        let output_dir          = self.workdir.patch.output.as_path();
+        let target_pkg      = &patch_info.target;
+        let work_dir        = self.workdir.patch.build.as_path();
+        let source_dir      = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
+        let debuginfos      = RpmHelper::find_debuginfo(debug_pkg_dir)?;
+        let debug_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
+        let compiler_name   = self.detect_compiler_name();
+        let output_dir      = self.workdir.patch.output.as_path();
 
-        let build_original_cmd = OsString::from("rpmbuild")
-            .append("--define '__arch_install_post %{nil}'")
-            .append("--define '__os_install_post %{nil}'")
-            .append("--define '__find_provides %{nil}'")
-            .append("--define '__find_requires %{nil}'")
-            .append("--define '_topdir ")
-            .concat(&pkg_build_root)
-            .concat("'")
-            .append("-bi")
-            .append("--nocheck")
-            .append("--noclean")
-            .append("--nodebuginfo")
+        let build_macros_file = self.create_build_macros(pkg_build_root.as_ref())?;
+        let build_flag_macros = OsString::from("--load=\"").concat(&build_macros_file).concat("\"");
+
+        let build_prep_cmd = OsString::from(RPMBUILD_CMD)
+            .append(&build_flag_macros)
+            .append(RPMBUILD_PERP_FLAGS)
             .append(&pkg_spec_file);
 
-        let build_patched_cmd = OsString::from("rpmbuild")
-            .append("--define '__arch_install_post %{nil}'")
-            .append("--define '__os_install_post %{nil}'")
-            .append("--define '__find_provides %{nil}'")
-            .append("--define '__find_requires %{nil}'")
-            .append("--define '_topdir ")
-            .concat(&pkg_build_root)
-            .concat("'")
-            .append("-bi")
-            .append("--noprep")
-            .append("--nocheck")
-            .append("--noclean")
-            .append("--nodebuginfo")
+        let build_original_cmd = OsString::from(RPMBUILD_CMD)
+            .append(&build_flag_macros)
+            .append(RPMBUILD_ORIGINAL_FLAGS)
+            .append(&pkg_spec_file);
+
+        let build_patched_cmd = OsString::from(RPMBUILD_CMD)
+            .append(&build_flag_macros)
+            .append(RPMBUILD_PATCHED_FLAGS)
             .append(&pkg_spec_file);
 
         let builder_args = UserPatchBuilderArguments {
             work_dir:            work_dir.to_path_buf(),
             debug_source:        source_dir,
             elf_dir:             pkg_buildroot_dir.to_path_buf(),
-            elf_relations:       elf_debug_relations,
-            build_source_cmd:    build_original_cmd,
+            elf_relations:       debug_relations,
+            build_source_cmd:    build_original_cmd.append("&&").append(build_prep_cmd),
             build_patch_cmd:     build_patched_cmd,
             compiler:            compiler_name,
             output_dir:          output_dir.to_path_buf(),
