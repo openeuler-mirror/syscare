@@ -309,6 +309,17 @@ static void detect_child_functions(struct upatch_elf *uelf)
     }
 }
 
+static bool discarded_sym(struct running_elf *relf, struct symbol *sym)
+{
+	if (!relf->is_exec || !sym || !sym->sec || !sym->sec->name)
+		return false;
+
+	if (!strncmp(sym->sec->name, ".gnu.warning.", strlen(".gnu.warning.")))
+		return true;
+
+	return false;
+}
+
 enum LOCAL_MATCH {
     FOUND,
     NOT_FOUND,
@@ -360,6 +371,8 @@ static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
         if(sym->bind != STB_LOCAL)
             continue;
         if (sym->type != STT_FUNC && sym->type != STT_OBJECT)
+            continue;
+        if (discarded_sym(relf, sym))
             continue;
 
         found = NOT_FOUND;

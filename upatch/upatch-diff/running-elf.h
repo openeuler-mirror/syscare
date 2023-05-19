@@ -52,6 +52,7 @@ struct running_elf {
     struct object_symbol *obj_syms;
     int fd;
     Elf *elf;
+    bool is_exec;
 };
 
 void relf_init(char *, struct running_elf *);

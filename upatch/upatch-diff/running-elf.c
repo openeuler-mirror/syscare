@@ -34,6 +34,24 @@
 #include "running-elf.h"
 #include "log.h"
 
+/* TODO: need to judge whether running_elf is a Position-Independent Executable file
+ * https://github.com/bminor/binutils-gdb/blob/master/binutils/readelf.c
+ */
+static bool is_pie(struct Elf *elf)
+{
+    return true;
+}
+
+static bool is_exec(struct Elf *elf)
+{
+    GElf_Ehdr ehdr;
+
+    if (!gelf_getehdr(elf, &ehdr))
+        ERROR("gelf_getehdr running_file failed for %s.", elf_errmsg(0));
+
+    return ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && is_pie(elf));
+}
+
 void relf_init(char *elf_name, struct running_elf *relf)
 {
     GElf_Shdr shdr;
@@ -50,6 +68,8 @@ void relf_init(char *elf_name, struct running_elf *relf)
     if (!relf->elf)
         ERROR("elf_begin with error %s", elf_errmsg(0));
     
+    relf->is_exec = is_exec(relf->elf);
+
     while ((scn = elf_nextscn(relf->elf, scn)) != NULL) {
         if (!gelf_getshdr(scn, &shdr))
             ERROR("gelf_getshdr with error %s", elf_errmsg(0));
