@@ -76,7 +76,7 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
             source_dir:          kernel_source_dir,
             config:              kernel_config_file,
             vmlinux:             vmlinux_file,
-            jobs:                args.kjobs,
+            jobs:                args.jobs,
             output_dir:          patch_output_dir.to_owned(),
             skip_compiler_check: args.skip_compiler_check,
             patch_list:          patch_info.patches.to_owned(),

@@ -14,7 +14,7 @@ const DEFAULT_WORK_DIR:          &str = ".";
 const DEFAULT_OUTPUT_DIR:        &str = ".";
 
 lazy_static! {
-    static ref DEFAULT_KERNEL_JOBS: String = os::cpu::num().to_string();
+    static ref DEFAULT_BUILD_JOBS: String = os::cpu::num().to_string();
 }
 
 #[derive(Parser, Debug)]
@@ -80,9 +80,9 @@ pub struct CliArguments {
     #[arg(short, long, default_value=DEFAULT_OUTPUT_DIR)]
     pub output: PathBuf,
 
-    /// Kernel make jobs
-    #[arg(long, value_name="N", default_value=DEFAULT_KERNEL_JOBS.as_str())]
-    pub kjobs: usize,
+    /// Parallel build jobs
+    #[arg(long, value_name="N", default_value=DEFAULT_BUILD_JOBS.as_str())]
+    pub jobs: usize,
 
     /// Skip compiler version check (not recommended)
     #[arg(long)]

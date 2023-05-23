@@ -39,7 +39,7 @@ impl<'a> UserPatchBuilder<'a> {
         }
     }
 
-    fn create_build_macros<P: AsRef<Path>>(&self, buildroot: P) -> std::io::Result<PathBuf> {
+    fn create_build_macros<P: AsRef<Path>>(&self, buildroot: P, args: &CliArguments) -> std::io::Result<PathBuf> {
         const MACROS_FILE_NAME: &str = "macros";
 
         let build_root      = buildroot.as_ref();
@@ -47,13 +47,15 @@ impl<'a> UserPatchBuilder<'a> {
         let macro_file      = fs::create_file(&macro_file_path)?;
 
         let mut writer = BufWriter::new(macro_file);
-        let topdir = OsString::from("%_topdir").append(build_root).concat("\n");
 
+        let topdir = OsString::from("%_topdir").append(build_root).concat("\n");
         writer.write(topdir.as_bytes())?;
-        writer.write(b"%__arch_install_post %{nil}\n")?;
-        writer.write(b"%__os_install_post   %{nil}\n")?;
-        writer.write(b"%__find_provides     %{nil}\n")?;
-        writer.write(b"%__find_requires     %{nil}\n")?;
+
+        writeln!(writer, "%_smp_build_ncpus    {}", args.jobs)?;
+        writeln!(writer, "%__arch_install_post %{{nil}}")?;
+        writeln!(writer, "%__os_install_post   %{{nil}}")?;
+        writeln!(writer, "%__find_provides     %{{nil}}")?;
+        writeln!(writer, "%__find_requires     %{{nil}}")?;
 
         Ok(macro_file_path)
     }
@@ -119,7 +121,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let compiler_name   = self.detect_compiler_name();
         let output_dir      = self.workdir.patch.output.as_path();
 
-        let build_macros_file = self.create_build_macros(pkg_build_root.as_ref())?;
+        let build_macros_file = self.create_build_macros(pkg_build_root.as_ref(), args)?;
         let build_flag_macros = OsString::from("--load=\"").concat(&build_macros_file).concat("\"");
 
         let build_prep_cmd = OsString::from(RPMBUILD_CMD)
