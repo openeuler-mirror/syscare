@@ -50,10 +50,10 @@ impl<'a> UserPatchBuilder<'a> {
         let topdir = OsString::from("%_topdir").append(build_root).concat("\n");
 
         writer.write(topdir.as_bytes())?;
-        writer.write(b"%__arch_install_post %{{nil}}\n")?;
-        writer.write(b"%__os_install_post   %{{nil}}\n")?;
-        writer.write(b"%__find_provides     %{{nil}}\n")?;
-        writer.write(b"%__find_requires     %{{nil}}\n")?;
+        writer.write(b"%__arch_install_post %{nil}\n")?;
+        writer.write(b"%__os_install_post   %{nil}\n")?;
+        writer.write(b"%__find_provides     %{nil}\n")?;
+        writer.write(b"%__find_requires     %{nil}\n")?;
 
         Ok(macro_file_path)
     }
