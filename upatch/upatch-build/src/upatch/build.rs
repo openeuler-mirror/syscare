@@ -170,10 +170,6 @@ impl UpatchBuild {
         Q: AsRef<Path>,
     {
         let diff_dir = diff_dir.as_ref().to_path_buf();
-        let new_debug_info = self.work_dir.debuginfo_dir().join(file_name(&debug_info)?);
-        debug!("copy {:?} to {:?}!", &debug_info.as_ref(), &new_debug_info);
-        fs::copy(&debug_info, &new_debug_info)?;
-        resolve::resolve_dynamic(&new_debug_info)?;
 
         for patch_path in patch_link_message {
             let patch_name = match self.patch_obj.get(patch_path) {
@@ -200,7 +196,7 @@ impl UpatchBuild {
             }
 
             match source_path {
-                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &new_debug_info, &self.work_dir.log_file(), self.args.verbose)?,
+                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &debug_info, &self.work_dir.log_file(), self.args.verbose)?,
                 None => {
                     debug!("copy {:?} to {:?}!", &patch_path, &output);
                     fs::copy(&patch_path, output)?;
@@ -263,8 +259,14 @@ impl UpatchBuild {
             let binary_name = file_name(&self.args.elf_pathes[i])?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
-            self.create_diff(source_objects, patch_objects, &diff_dir, &self.args.debug_infoes[i])?;
-            upatch_num += self.build_patch(&self.args.debug_infoes[i], &binary_name, &diff_dir)?;
+
+            let new_debug_info = self.work_dir.debuginfo_dir().join(file_name(&self.args.debug_infoes[i])?);
+            debug!("copy {:?} to {:?}!", &self.args.debug_infoes[i], &new_debug_info);
+            fs::copy(&self.args.debug_infoes[i], &new_debug_info)?;
+            resolve::resolve_dynamic(&new_debug_info)?;
+
+            self.create_diff(source_objects, patch_objects, &diff_dir, &new_debug_info)?;
+            upatch_num += self.build_patch(&new_debug_info, &binary_name, &diff_dir)?;
         }
         if upatch_num.eq(&0) {
             return Err(Error::Build(format!("no upatch is generated!")));
