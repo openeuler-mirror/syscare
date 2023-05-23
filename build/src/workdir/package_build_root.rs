@@ -1,6 +1,4 @@
-use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
-use std::ops::Deref;
 
 use common::util::fs;
 
@@ -52,16 +50,8 @@ impl WorkDirManager for PackageBuildRoot {
     }
 }
 
-impl Deref for PackageBuildRoot {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<Path> for PackageBuildRoot {
+    fn as_ref(&self) -> &Path {
         &self.path
-    }
-}
-
-impl AsRef<OsStr> for PackageBuildRoot {
-    fn as_ref(&self) -> &OsStr {
-        self.as_os_str()
     }
 }
