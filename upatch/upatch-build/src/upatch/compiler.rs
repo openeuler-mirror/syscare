@@ -106,7 +106,7 @@ impl Compiler {
         let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o"]).arg(&test_obj);
         let output = ExternCommand::new(&self.compiler).execvp_stdio(args_list, cache_dir, output.stdout.expect("get echo stdout failed"))?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("compiler build test error {}: {:?}", output.exit_code(), output.stderr())))
+            return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr().to_string_lossy())))
         };
 
         let dwarf = Dwarf::new();
@@ -143,7 +143,7 @@ impl Compiler {
         let args_list = ExternCommandArgs::new().args(["-r", "-o"]).arg(output_file.as_ref()).args(link_list);
         let output = ExternCommand::new(&self.linker).execvp(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("link object file error {}: {:?}", output.exit_code(), output.stderr())));
+            return Err(Error::Compiler(format!("link object file error {}: {}", output.exit_code(), output.stderr().to_string_lossy())));
         };
         Ok(())
     }

@@ -38,7 +38,7 @@ impl Project {
             .env(ASSEMBLER_DIR_ENV, assembler_output);
         let output = ExternCommand::new("sh").execve(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("build project error {}: {:?}", output.exit_code(), output.stderr())))
+            return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr().to_string_lossy())))
         };
         Ok(())
     }
@@ -78,7 +78,7 @@ impl Project {
     fn patch(&self, file: File, args_list: ExternCommandArgs, level: Level) -> Result<()> {
         let output = ExternCommand::new("patch").execvp_stdio_level(args_list, &self.project_dir, file, level)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("error {}: {:?}", output.exit_code(), output.stderr())));
+            return Err(Error::Project(format!("error {}: {}", output.exit_code(), output.stderr().to_string_lossy())));
         };
         Ok(())
     }
