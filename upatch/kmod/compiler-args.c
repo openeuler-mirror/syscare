@@ -334,6 +334,28 @@ out:
 }
 
 /*
+ * we can build soft link here in three case:
+ * 1. file does not exist
+ * 2. regular file. this is not allowed: "as -v -o /dev/null /dev/null"
+ * 3. file is soft link. there will be a soft link when compiling for the second time
+ */
+static bool verify_object_path(const char* name)
+{
+    struct path path;
+    struct inode *inode;
+
+    if (kern_path(name, 0, &path))
+        return true;
+
+    inode = path.dentry->d_inode;
+
+    if (S_ISREG(inode->i_mode) || S_ISLNK(inode->i_mode))
+        return true;
+
+    return false;
+}
+
+/*
  * To generate the new object filepath, three ways:
  * 1. append source path from '-o' to the output dir
  * 2. generate new filename based on the HASH mechansim
@@ -368,6 +390,11 @@ static int rewrite_object_path(char __user **argv, const char* out_dir, const ch
     ret = copy_para_from_user(arg_addr, object_path, PATH_MAX);
     if (ret)
         goto out;
+
+    if (!verify_object_path(object_path)) {
+        pr_debug("no valid object_path: %s \n", object_path);
+        goto out;
+    }
 
     len = strlen(out_dir) + 1 + strlen(filename_buff) + 2 + 1;
 
