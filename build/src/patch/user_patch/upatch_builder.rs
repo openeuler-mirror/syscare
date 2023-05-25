@@ -101,7 +101,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     fn parse_builder_args(&self, patch_info: &PatchInfo, args: &CliArguments) -> std::io::Result<PatchBuilderArguments> {
         const RPMBUILD_CMD:            &str = "rpmbuild";
         const RPMBUILD_PERP_FLAGS:     &str = "-bp";
-        const RPMBUILD_ORIGINAL_FLAGS: &str = "-bi --nocheck --nodebuginfo --clean";
+        const RPMBUILD_ORIGINAL_FLAGS: &str = "-bi --noprep --nocheck --nodebuginfo --clean";
         const RPMBUILD_PATCHED_FLAGS:  &str = "-bi --noprep --nocheck --nodebuginfo --noclean";
 
         let source_pkg_dir = self.workdir.package.source.as_path();
@@ -123,7 +123,6 @@ impl PatchBuilder for UserPatchBuilder<'_> {
 
         let build_macros_file = self.create_build_macros(pkg_build_root.as_ref(), args)?;
         let build_flag_macros = OsString::from("--load=\"").concat(&build_macros_file).concat("\"");
-
         let build_prep_cmd = OsString::from(RPMBUILD_CMD)
             .append(&build_flag_macros)
             .append(RPMBUILD_PERP_FLAGS)
