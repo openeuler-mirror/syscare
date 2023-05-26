@@ -286,8 +286,9 @@ static int __elf_check(struct file *file, loff_t *entry_offset)
     Elf_Ehdr elf_header;
     int ret;
     elf_addr_t min_addr;
+    loff_t offset = 0;
 
-    ret = kernel_read(file, &elf_header, sizeof(elf_header), 0);
+    ret = kernel_read(file, &elf_header, sizeof(elf_header), &offset);
     if (ret != sizeof(elf_header)) {
         pr_err("kernel read failed - %d \n", ret);
         ret = -ENOMEM;

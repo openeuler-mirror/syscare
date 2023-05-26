@@ -19,8 +19,9 @@ elf_addr_t calculate_load_address(struct file *file, bool check_code)
     Elf_Ehdr elf_header;
     Elf_Phdr *phdr = NULL;
     elf_addr_t min_addr = -1;
+    loff_t offset = 0;
 
-    ret = kernel_read(file, &elf_header, sizeof(elf_header), 0);
+    ret = kernel_read(file, &elf_header, sizeof(elf_header), &offset);
     if (ret != sizeof(elf_header)) {
         pr_err("read elf header failed - %d \n", ret);
         goto out;

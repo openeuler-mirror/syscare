@@ -85,6 +85,7 @@ void upatch_get_patch_entity(struct patch_entity *patch_entity)
 int upatch_init_patch_entity(struct patch_entity *patch_entity, struct file *patch)
 {
     int ret;
+    loff_t offset = 0;
 
     if (patch == NULL)
         return 0;
@@ -95,7 +96,7 @@ int upatch_init_patch_entity(struct patch_entity *patch_entity, struct file *pat
     if (!patch_entity->patch_buff)
         return -ENOMEM;
 
-    ret = kernel_read(patch, patch_entity->patch_buff, patch_entity->patch_size, 0);
+    ret = kernel_read(patch, patch_entity->patch_buff, patch_entity->patch_size, &offset);
     if (ret != patch_entity->patch_size) {
         pr_err("read patch file for entity failed. \n");
         vm_munmap((unsigned long)patch_entity->patch_buff, patch_entity->patch_size);
