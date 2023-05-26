@@ -13,7 +13,7 @@ impl CommandExecutor for ListCommandExecutor {
             .into_iter()
             .map(|patch| (
                 &patch.uuid,
-                format!("{}/{}", patch.target.short_name(), patch.short_name()),
+                patch.full_name(),
                 patch.status().unwrap_or_default(),
             )).collect::<Vec<_>>();
 
