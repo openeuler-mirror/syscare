@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
@@ -14,9 +15,10 @@ use super::user_patch::UserPatchAdapter;
 use super::kernel_patch::KernelPatchAdapter;
 
 pub struct Patch {
-    info:        PatchInfo,
+    info:        Rc<PatchInfo>,
     root_dir:    PathBuf,
     accept_flag: PathBuf,
+    adapter:     Box<dyn PatchActionAdapter>,
 }
 
 impl Patch {
@@ -25,16 +27,22 @@ impl Patch {
         const PATCH_ACCEPT_FLAG_NAME: &str = "accept_flag";
 
         let patch_root = patch_root.as_ref().to_path_buf();
-        let patch_info = serde_versioned::deserialize::<_, PatchInfo>(
+        let patch_info = Rc::new(serde_versioned::deserialize::<_, PatchInfo>(
             patch_root.join(PATCH_INFO_NAME),
             PatchInfo::version()
-        )?;
+        )?);
         let patch_accept_flag = patch_root.join(PATCH_ACCEPT_FLAG_NAME);
+
+        let patch_adapter: Box<dyn PatchActionAdapter> = match patch_info.kind {
+            PatchType::UserPatch   => Box::new(UserPatchAdapter::new(&patch_root, patch_info.clone())),
+            PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(&patch_root, patch_info.clone())),
+        };
 
         Ok(Self {
             info:        patch_info,
             root_dir:    patch_root,
             accept_flag: patch_accept_flag,
+            adapter:     patch_adapter,
         })
     }
 
@@ -55,7 +63,7 @@ impl Patch {
     }
 
     pub fn status(&self) -> std::io::Result<PatchStatus> {
-        self.adapter().status().map(|status| {
+        self.adapter.status().map(|status| {
             if status == PatchStatus::Actived && self.accept_flag.exists() {
                 return PatchStatus::Accepted;
             }
@@ -65,18 +73,9 @@ impl Patch {
 }
 
 impl Patch {
-    fn adapter(&self) -> Box<dyn PatchActionAdapter + '_> {
-        match &self.kind {
-            PatchType::UserPatch   => Box::new(UserPatchAdapter::new(self)),
-            PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(self)),
-        }
-    }
-
     fn do_apply(&self) -> std::io::Result<()> {
         debug!("Applying patch {{{}}}", self);
-        let adapter = self.adapter();
-
-        adapter.check_compatibility().map_err(|e| {
+        self.adapter.check_compatibility().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -84,7 +83,7 @@ impl Patch {
             )
         })?;
 
-        adapter.apply().map_err(|e| {
+        self.adapter.apply().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -96,7 +95,7 @@ impl Patch {
     fn do_remove(&self) -> std::io::Result<()> {
         debug!("Removing patch {{{}}}", self);
 
-        self.adapter().remove().map_err(|e| {
+        self.adapter.remove().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -108,7 +107,7 @@ impl Patch {
     fn do_active(&self) -> std::io::Result<()> {
         debug!("Activing patch {{{}}}", self);
 
-        self.adapter().active().map_err(|e| {
+        self.adapter.active().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),
@@ -120,7 +119,7 @@ impl Patch {
     fn do_deactive(&self) -> std::io::Result<()> {
         debug!("Deactiving patch {{{}}}", self);
 
-        self.adapter().deactive().map_err(|e| {
+        self.adapter.deactive().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(
                 e.kind(),

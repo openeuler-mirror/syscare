@@ -1,6 +1,7 @@
+use std::rc::Rc;
 use std::ffi::OsString;
 use std::os::unix::prelude::OsStrExt;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use log::debug;
 
@@ -9,12 +10,14 @@ use common::util::fs;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 use common::util::os_str::OsStringExt;
 
-use super::patch::Patch;
+use super::patch_info::PatchInfo;
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;
 
-pub struct KernelPatchAdapter<'a> {
-    patch: &'a Patch
+pub struct KernelPatchAdapter {
+    patch_info: Rc<PatchInfo>,
+    patch_file: PathBuf,
+    sys_file:   PathBuf,
 }
 
 const INSMOD: ExternCommand = ExternCommand::new("insmod");
@@ -29,17 +32,17 @@ const KPATCH_MGNT_FILE: &str = "enabled";
 const KPATCH_STATUS_DISABLED: &str = "0";
 const KPATCH_STATUS_ENABLED:  &str = "1";
 
-impl<'a> KernelPatchAdapter<'a> {
-    pub fn new(patch: &'a Patch) -> Self {
-        Self { patch }
-    }
+impl KernelPatchAdapter {
+    pub fn new<P: AsRef<Path>>(patch_root: P, patch_info: Rc<PatchInfo>) -> Self {
+        let patch_name = patch_info.name.as_str();
+        let patch_file = patch_root.as_ref().join(format!("{}.{}",
+            patch_name, KPATCH_PATCH_SUFFIX
+        ));
+        let sys_file = PathBuf::from(KPATCH_MGNT_DIR)
+            .join(patch_name.replace('-', "_"))
+            .join(KPATCH_MGNT_FILE);
 
-    fn get_patch_file(&self) -> PathBuf {
-        let patch_name = format!("{}.{}",
-            self.patch.name,
-            KPATCH_PATCH_SUFFIX
-        );
-        self.patch.root_dir().join(patch_name)
+        Self { patch_info, patch_file, sys_file }
     }
 
     fn set_patch_security_context(&self) -> std::io::Result<()> {
@@ -49,35 +52,23 @@ impl<'a> KernelPatchAdapter<'a> {
         }
         debug!("SELinux is enforcing");
 
-        let patch      = self.patch;
-        let patch_file = self.get_patch_file();
-        let sec_type   = os::selinux::get_security_context_type(patch_file.as_path())?;
+        let sec_type   = os::selinux::get_security_context_type(&self.patch_file)?;
         if sec_type != KPATCH_PATCH_SEC_TYPE {
             debug!("Setting patch {{{}}} security context type to \"{}\"",
-                patch, KPATCH_PATCH_SEC_TYPE
+                self.patch_info, KPATCH_PATCH_SEC_TYPE
             );
-            os::selinux::set_security_context_type(&patch_file, KPATCH_PATCH_SEC_TYPE)?;
+            os::selinux::set_security_context_type(&self.patch_file, KPATCH_PATCH_SEC_TYPE)?;
         }
 
         Ok(())
     }
 
-    fn patch_sys_interface(&self) -> PathBuf {
-        let patch_name = self.patch.short_name().replace('-', "_");
-
-        PathBuf::from(KPATCH_MGNT_DIR)
-            .join(patch_name)
-            .join(KPATCH_MGNT_FILE)
-    }
-
     fn read_patch_status(&self) -> std::io::Result<PatchStatus> {
-        let sys_file_path = self.patch_sys_interface();
-
-        let read_result = fs::read_to_string(&sys_file_path);
+        let read_result = fs::read_to_string(&self.sys_file);
         match read_result {
             Ok(s) => {
                 let status = s.trim();
-                debug!("Read file \"{}\": {}", sys_file_path.display(), status);
+                debug!("Read file \"{}\": {}", self.sys_file.display(), status);
 
                 let patch_status = match status {
                     KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
@@ -100,24 +91,23 @@ impl<'a> KernelPatchAdapter<'a> {
     }
 
     fn write_patch_status(&self, status: PatchStatus) -> std::io::Result<()> {
-        let sys_file_path = self.patch_sys_interface();
         let status_str = match status {
             PatchStatus::NotApplied | PatchStatus::Deactived => KPATCH_STATUS_DISABLED,
             PatchStatus::Actived => KPATCH_STATUS_ENABLED,
             _ => unreachable!("Patch status is unknown"),
         };
-        debug!("Write file \"{}\": {}", sys_file_path.display(), status_str);
+        debug!("Write file \"{}\": {}", self.sys_file.display(), status_str);
 
-        fs::write(&sys_file_path, status_str)
+        fs::write(&self.sys_file, status_str)
     }
 }
 
-impl PatchActionAdapter for KernelPatchAdapter<'_> {
+impl PatchActionAdapter for KernelPatchAdapter {
     fn check_compatibility(&self) -> std::io::Result<()> {
         let kernel_version = os::kernel::version();
 
         let current_kernel = OsString::from("kernel-").concat(&kernel_version);
-        let patch_target   = self.patch.target.full_name();
+        let patch_target   = self.patch_info.target.full_name();
         debug!("Current kernel: \"{}\"", current_kernel.to_string_lossy());
         debug!("Patch target:   \"{}\"", patch_target);
 
@@ -141,9 +131,8 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
     fn apply(&self) -> std::io::Result<()> {
         self.set_patch_security_context()?;
 
-        let patch_file = self.get_patch_file();
         let exit_status = INSMOD.execvp(
-            ExternCommandArgs::new().arg(patch_file)
+            ExternCommandArgs::new().arg(&self.patch_file)
         )?;
 
         if exit_status.exit_code() != 0 {
@@ -161,9 +150,8 @@ impl PatchActionAdapter for KernelPatchAdapter<'_> {
     }
 
     fn remove(&self) -> std::io::Result<()> {
-        let patch_file  = self.get_patch_file();
         let exit_status = RMMOD.execvp(
-            ExternCommandArgs::new().arg(patch_file)
+            ExternCommandArgs::new().arg(&self.patch_file)
         )?;
 
         if exit_status.exit_code() != 0 {

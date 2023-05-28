@@ -104,3 +104,9 @@ impl PatchInfo {
         }
     }
 }
+
+impl std::fmt::Display for PatchInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.uuid)
+    }
+}

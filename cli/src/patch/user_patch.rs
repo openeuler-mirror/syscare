@@ -1,13 +1,15 @@
-use std::collections::HashMap;
+use std::rc::Rc;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsString;
-use std::path::PathBuf;
+use std::path::{PathBuf, Path};
 
 use lazy_static::lazy_static;
 use log::{debug, error};
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
-use super::patch::Patch;
+// use super::patch::Patch;
+use super::patch_info::PatchInfo;
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;
 
@@ -33,18 +35,18 @@ impl std::fmt::Display for UserPatchAction {
     }
 }
 
-struct UserPatch {
+struct ElfPatch {
     elf:   PathBuf,
     patch: PathBuf,
 }
 
-impl std::fmt::Display for UserPatch {
+impl std::fmt::Display for ElfPatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{}", self.elf.display()))
     }
 }
 
-impl UserPatch {
+impl ElfPatch {
     fn status(&self) -> std::io::Result<PatchStatus> {
         let stdout = self.do_action(UserPatchAction::Info)?;
         let status = match stdout.to_str() {
@@ -82,36 +84,35 @@ impl UserPatch {
     }
 }
 
-pub struct UserPatchAdapter<'a> {
-    patch: &'a Patch,
+pub struct UserPatchAdapter {
+    patch_info: Rc<PatchInfo>,
+    elf_patchs: Vec<ElfPatch>,
 }
 
-impl<'a> UserPatchAdapter<'a> {
-    pub fn new(patch: &'a Patch) -> Self {
-        Self { patch }
-    }
-
-    fn get_user_patches(&self) -> Vec<UserPatch> {
-        self.patch.target_elfs.iter().map(|(elf_name, elf_path)| {
-            UserPatch {
+impl UserPatchAdapter {
+    pub fn new<P: AsRef<Path>>(patch_root: P, patch_info: Rc<PatchInfo>) -> Self {
+        let elf_patchs = patch_info.target_elfs.iter().map(|(elf_name, elf_path)| {
+            ElfPatch {
                 elf:   elf_path.to_path_buf(),
-                patch: self.patch.root_dir().join(elf_name),
+                patch: patch_root.as_ref().join(elf_name),
             }
-        }).collect()
+        }).collect();
+
+        Self { patch_info, elf_patchs }
     }
 
     fn do_transaction(&self, action: UserPatchAction) -> std::io::Result<()> {
         struct TransactionRecord<'a> {
-            upatch:     &'a UserPatch,
+            elf_patch:  &'a ElfPatch,
             old_status: PatchStatus,
         }
 
         #[inline(always)]
-        fn __invoke_transaction(upatch: &UserPatch, action: UserPatchAction) -> std::io::Result<TransactionRecord> {
-            let record = TransactionRecord { upatch, old_status: upatch.status()? };
-            debug!("Applying changes to \"{}\"", upatch);
-            upatch.do_action(action)?;
-            debug!("Applied chages to \"{}\"", upatch);
+        fn __invoke_transaction(elf_patch: &ElfPatch, action: UserPatchAction) -> std::io::Result<TransactionRecord> {
+            let record = TransactionRecord { elf_patch, old_status: elf_patch.status()? };
+            debug!("Applying changes to \"{}\"", elf_patch);
+            elf_patch.do_action(action)?;
+            debug!("Applied chages to \"{}\"", elf_patch);
             Ok(record)
         }
 
@@ -127,21 +128,21 @@ impl<'a> UserPatchAdapter<'a> {
                 ].into_iter().collect();
             }
             for record in records {
-                let upatch         = record.upatch;
+                let elf_patch      = record.elf_patch;
                 let old_status     = record.old_status;
-                let current_status = upatch.status()?;
-                debug!("Rolling back \"{}\" from {} to {}", upatch, current_status, old_status);
+                let current_status = elf_patch.status()?;
+                debug!("Rolling back \"{}\" from {} to {}", elf_patch, current_status, old_status);
                 if let Some(action) = ROLLBACK_ACTION_MAP.get(&(current_status, old_status)) {
-                    upatch.do_action(*action)?;
+                    elf_patch.do_action(*action)?;
                 }
-                debug!("Rolled back \"{}\"", upatch);
+                debug!("Rolled back \"{}\"", elf_patch);
             }
             Ok(())
         }
 
         let mut records = Vec::new();
-        for upatch in &self.get_user_patches() {
-            match __invoke_transaction(upatch, action) {
+        for elf_patch in &self.elf_patchs {
+            match __invoke_transaction(elf_patch, action) {
                 Ok(record) => {
                     records.push(record);
                 }
@@ -158,28 +159,26 @@ impl<'a> UserPatchAdapter<'a> {
     }
 }
 
-impl PatchActionAdapter for UserPatchAdapter<'_> {
+impl PatchActionAdapter for UserPatchAdapter {
     fn check_compatibility(&self) -> std::io::Result<()> {
-        self.patch.target.check_installed()
+        self.patch_info.target.check_installed()
     }
 
     fn status(&self) -> std::io::Result<PatchStatus> {
         // Fetch all patches status
-        let mut status_list = Vec::new();
-        for patch in self.get_user_patches() {
-            status_list.push(patch.status()?)
+        let mut status_set = HashSet::new();
+        for patch in &self.elf_patchs {
+            status_set.insert(patch.status()?);
         }
-        // Check if all patch status are same
-        status_list.sort();
-        status_list.dedup();
-        if status_list.len() != 1 {
+
+        if status_set.len() != 1 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Patch {{{}}} status is not syncing", self.patch)
+                format!("Patch {{{}}} status is not syncing", self.patch_info)
             ));
         }
 
-        Ok(status_list.remove(0))
+        Ok(status_set.iter().next().cloned().unwrap_or_default())
     }
 
     fn apply(&self) -> std::io::Result<()> {
