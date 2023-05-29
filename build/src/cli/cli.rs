@@ -150,10 +150,9 @@ impl PatchBuildCLI {
          * since the package info may be replaced by the one from
          * 'patched' source package.
          */
-        let dbg_pkg_name = format!("{}-debuginfo", src_pkg_info.name);
-        if (dbg_pkg_info.name    != dbg_pkg_name)         ||
-           (dbg_pkg_info.epoch   != src_pkg_info.epoch)   ||
-           (dbg_pkg_info.version != src_pkg_info.version) ||
+        if (!dbg_pkg_info.name.contains(&src_pkg_info.name)) ||
+           (dbg_pkg_info.epoch   != src_pkg_info.epoch)      ||
+           (dbg_pkg_info.version != src_pkg_info.version)    ||
            (dbg_pkg_info.release != src_pkg_info.release) {
                 return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
