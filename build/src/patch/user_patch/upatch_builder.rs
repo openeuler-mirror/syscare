@@ -1,7 +1,5 @@
 use std::ffi::OsString;
-use std::os::unix::prelude::OsStrExt;
-use std::path::{PathBuf, Path};
-use std::io::{Write, BufWriter};
+use std::path::Path;
 
 use common::util::os_str::OsStringExt;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
@@ -39,25 +37,17 @@ impl<'a> UserPatchBuilder<'a> {
         }
     }
 
-    fn create_build_macros<P: AsRef<Path>>(&self, buildroot: P, args: &CliArguments) -> std::io::Result<PathBuf> {
-        const MACROS_FILE_NAME: &str = "macros";
+    fn create_topdir_macro<P: AsRef<Path>>(&self, buildroot: P) -> OsString {
+        OsString::from("--define \"_topdir").append(buildroot.as_ref()).concat("\"")
+    }
 
-        let build_root      = buildroot.as_ref();
-        let macro_file_path = build_root.join(MACROS_FILE_NAME);
-        let macro_file      = fs::create_file(&macro_file_path)?;
-
-        let mut writer = BufWriter::new(macro_file);
-
-        let topdir = OsString::from("%_topdir").append(build_root).concat("\n");
-        writer.write(topdir.as_bytes())?;
-
-        writeln!(writer, "%_smp_build_ncpus    {}", args.jobs)?;
-        writeln!(writer, "%__arch_install_post %{{nil}}")?;
-        writeln!(writer, "%__os_install_post   %{{nil}}")?;
-        writeln!(writer, "%__find_provides     %{{nil}}")?;
-        writeln!(writer, "%__find_requires     %{{nil}}")?;
-
-        Ok(macro_file_path)
+    fn create_build_macros(&self, args: &CliArguments) -> OsString {
+        OsString::new()
+            .append("--define \"_smp_build_ncpus").append(args.jobs.to_string()).concat("\"")
+            .append("--define \"__arch_install_post %{nil}\"")
+            .append("--define \"__os_install_post %{nil}\"")
+            .append("--define \"__find_provides %{nil}\"")
+            .append("--define \"__find_requires %{nil}\"")
     }
 
     fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
@@ -121,20 +111,23 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let compiler_name   = self.detect_compiler_name();
         let output_dir      = self.workdir.patch.output.as_path();
 
-        let build_macros_file = self.create_build_macros(pkg_build_root.as_ref(), args)?;
-        let build_flag_macros = OsString::from("--load=\"").concat(&build_macros_file).concat("\"");
+        let topdir_macro   = self.create_topdir_macro(pkg_build_root.as_ref());
+        let build_macros   = self.create_build_macros(args);
+
         let build_prep_cmd = OsString::from(RPMBUILD_CMD)
-            .append(&build_flag_macros)
+            .append(&topdir_macro)
             .append(RPMBUILD_PERP_FLAGS)
             .append(&pkg_spec_file);
 
         let build_original_cmd = OsString::from(RPMBUILD_CMD)
-            .append(&build_flag_macros)
+            .append(&topdir_macro)
+            .append(&build_macros)
             .append(RPMBUILD_ORIGINAL_FLAGS)
             .append(&pkg_spec_file);
 
         let build_patched_cmd = OsString::from(RPMBUILD_CMD)
-            .append(&build_flag_macros)
+            .append(&topdir_macro)
+            .append(&build_macros)
             .append(RPMBUILD_PATCHED_FLAGS)
             .append(&pkg_spec_file);
 
