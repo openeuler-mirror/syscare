@@ -1,90 +1,139 @@
-# Syscare CLI
+# Syscare build
 
-Syscare cli入口
+Syscare 补丁制作工具
 
-## 调用格式
-
-```bash
-syscare [OPTIONS] <COMMAND>
-```
-
-## 命令``` <COMMAND>```
-
-| 名称     | 描述                   |
-| -------- | ---------------------- |
-| build    | 制作补丁               |
-| info     | 查看补丁信息           |
-| target   | 查看补丁目标软件包信息 |
-| status   | 查看补丁当前状态       |
-| list     | 查看补丁状态列表       |
-| apply    | 加载并激活补丁         |
-| remove   | 去激活并卸载补丁       |
-| active   | 激活补丁               |
-| deactive | 去激活补丁             |
-| save     | 保存所有补丁状态       |
-| restore  | 恢复所有补丁状态       |
-
-### 选项
-
-| 名称          | 描述         | 类型 |
-| ------------- | ------------ | ---- |
-| -v, --verbose | 打印详细信息 | 标识 |
-| -h, --help    | 打印帮助信息 | 标识 |
-| -V, --version | 打印版本信息 | 标识 |
+syscare build为纯CLI工具，提供从RPM包生成热补丁包的功能，补丁包以RPM包的形式封装维护，支持制作内核热补及用户态热补丁。
 
 
 
-## syscare build
-
-请见build/README.md
-
-
-
-## syscare info
-
-### 说明
-
-显示补丁详细信息
-
-### 约束
-
-无
-
-### 调用格式
+## 命令行参数
 
 ```bash
-syscare info <IDENTIFIER>
+Usage: syscare build [OPTIONS] --patch-name <PATCH_NAME> --source <SOURCE> --debuginfo <DEBUGINFO> <PATCHES>...
+
+Arguments:
+  <PATCHES>...  Patch file(s)
+
+Options:
+  -n, --patch-name <PATCH_NAME>                Patch name
+      --patch-arch <PATCH_ARCH>                Patch architecture [default: x86_64]
+      --patch-version <PATCH_VERSION>          Patch version [default: 1]
+      --patch-release <PATCH_RELEASE>          Patch release [default: 1]
+      --patch-description <PATCH_DESCRIPTION>  Patch description [default: (none)]
+      --target-name <TARGET_NAME>              Patch target name
+      --target-arch <TARGET_ARCH>              parch target architecture
+      --target-epoch <TARGET_EPOCH>            Patch target epoch
+      --target-version <TARGET_VERSION>        Patch target version
+      --target-release <TARGET_RELEASE>        Patch target release
+      --target-license <TARGET_LICENSE>        Patch target license
+  -s, --source <SOURCE>                        Source package
+  -d, --debuginfo <DEBUGINFO>                  Debuginfo package
+      --workdir <WORKDIR>                      Working directory [default: .]
+  -o, --output <OUTPUT>                        Generated patch output directory [default: .]
+      --jobs <N>                               Parallel build jobs [default: 96]
+      --skip-compiler-check                    Skip compiler version check (not recommended)
+      --skip-cleanup                           Skip post-build cleanup
+  -v, --verbose                                Provide more detailed info
+  -h, --help                                   Print help information
+  -V, --version                                Print version information
 ```
 
 ### 参数
-
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
+|名称|描述|类型|备注|
+| ---- | ---- | ---- | ---- |
+| ```<PATCHES>```... |补丁文件路径|字符串|必选参数，可指定多个，需为合法路径|
 
 ### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
+|名称|描述|类型|备注|
+| ---- | ---- | ---- | ---- |
+|-n, --patch-name ```<PATCH_NAME>```|补丁名称|字符串|必选参数，需符合RPM命名规范|
+|--patch-arch ```<PATCH_ARCH>```|补丁架构|字符串|默认为当前架构，需符合RPM命名规范|
+|--patch-version ```<PATCH_VERSION>```|补丁版本号|字符串|默认值为1，需符合RPM命名规范|
+|--patch-release ```<PATCH_RELEASE>```|补丁release|数字|默认值为1，需符合RPM命名规范|
+|--patch-description ```<PATCH_DESCRIPTION>```|补丁描述|字符串|默认为(none)|
+|--target-name ```<TARGET_NAME>```|目标软件rpm包名称|字符串|默认由'--source'参数提供的src.rpm包推导|
+|--target-arch ```<TARGET_ARCH>```|目标软件rpm包架构|字符串|默认由'--source'参数提供的src.rpm包推导|
+|--target-epoch ```<TARGET_EPOCH>```|目标软件rpm包epoch|字符串|默认由'--source'参数提供的src.rpm包推导|
+|--target-version ```<TARGET_VERSION>```|目标软件rpm包版本号|字符串|默认由'--source'参数提供的src.rpm包推导|
+|--target-release ```<TARGET_RELEASE>```|目标软件rpm包release|字符串|默认由'--source'参数提供的src.rpm包推导|
+|--target-license ```<TARGET_LICENSE>```|目标软件rpm包license|字符串|默认由'--source'参数提供的src.rpm包推导|
+|-s, --source ```<SOURCE>```|目标软件src.rpm源码包路径|字符串|必选参数，需为合法路径|
+|-d, --debuginfo ```<DEBUGINFO>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
+|--workdir ```<WORKDIR>```|临时文件夹路径|字符串|默认为当前执行目录，需为合法路径|
+|-o, --output ```<OUTPUT>```|补丁输出文件夹|字符串|默认为当前执行目录，需为合法路径|
+|-j, --jobs ```<N>```|并行编译线程数|数字|默认为cpu线程数|
+|--skip-compiler-check|跳过编译器检查|标识|-|
+|--skip-cleanup|跳过临时文件清理|标识|-|
+|-v, --verbose|打印详细信息|标识|-|
+|-h, --help|打印帮助信息|标识|-|
+|-V, --version|打印版本信息|标识|-|
 
 ### 返回值
-
 * 成功返回 0
 * 错误返回255
 
+### 输出
+
+* 补丁包：包含syscare热补丁的二进制及元信息，用于热补丁安装。
+* 补丁源码包：包含目标软件源码及新增补丁，用于新版本热补丁制作。
+
+### 命名规则
+
+* 补丁包：patch-目标软件全名-补丁名称-补丁版本-补丁release.架构名.rpm
+
+* 补丁源码包：目标软件全名.补丁名称.补丁版本.补丁release.src.rpm
+
+### 补丁包安装位置
+
+```bash
+/usr/lib/syscare/patches/${uuid}
+```
 ### 示例
 
 ```bash
-dev@openeuler-dev:[/]$ syscare info redis-6.2.5-1/HP001
+syscare build \
+    --patch-name "HP001" \
+    --patch-description "CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users." \
+    --source ./redis-6.2.5-1.src.rpm \
+    --debuginfo ./redis-debuginfo-6.2.5-1.x86_64.rpm \
+    --output ./output \
+        ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+```
+
+
+
+## 补丁信息
+
+补丁元信息中包含以下字段：
+
+| 字段名称 | 字段描述 |
+| ----------- | ---------------------- |
+| uuid | 补丁ID |
+| name | 补丁名称 |
+| version | 补丁版本 |
+| release | 补丁Release |
+| arch | 补丁架构 |
+| type | 补丁类型 |
+| target | 目标软件名 |
+| target_elf | 目标软件可执行文件名称 |
+| digest | 补丁指纹 |
+| license | 目标软件许可证 |
+| description | 补丁描述 |
+| patch| 补丁文件列表 |
+
+
+示例：
+
+```bash
+dev@openeuler-dev:[output]$ syscare info redis-6.2.5-1/HP001
 uuid:        ec503257-aa75-4abc-9045-c4afdd7ae0f2
 name:        HP001
 version:     1
-release:     31fc7544
+release:     1
 arch:        x86_64
 type:        UserPatch
 target:      redis-6.2.5-1
-target_elf:  redis-server
+target_elf:  redis-cli, redis-server, redis-benchmark
 digest:      31fc7544
 license:     BSD and MIT
 description: CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users.
@@ -94,386 +143,100 @@ patch:
 
 
 
-## syscare target
 
-### 说明
+## 补丁制作流程
 
-查看补丁目标软件包信息
+1. 准备补丁目标软件源码包(source rpm)及软件调试信息包(debuginfo rpm)
 
-### 约束
+   示例：
 
-无
+   ```bash
+   yumdownloader kernel --source
+   yumdownloader kernel-debuginfo
+   ```
 
-### 调用格式
+2. 确认满足对应软件编译依赖
 
-```bash
-syscare target <IDENTIFIER>
-```
+   示例：
 
-### 参数
+   ```bash
+   dnf install make gcc bison flex openssl-devel dwarves python3-devel elfutils-libelf-devel
+   ```
 
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
+3. 执行syscare build命令
 
-### 选项
+   示例：
 
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
+   ```bash
+   syscare-build \
+           --patch-name HP001 \
+           --source kernel-5.10.0-60.66.0.91.oe2203.src.rpm \
+           --debuginfo kernel-debuginfo-5.10.0-60.66.0.91.oe2203.x86_64.rpm \
+           --output output \
+           001-kernel-patch-test.patch
+   ```
 
-### 返回值
+   补丁制作过程将会在由`--workdir`参数所指定的目录中（默认为当前目录）创建以```syscare-build```开头的临时文件夹，用于存放临时文件及编译日志。
 
-* 成功返回 0
-* 错误返回255
+   示例：
 
-### 示例
+   ```bash
+   dev@openeuler-dev:[kernel_patch]$ ls -l syscare-build.111602/
+   total 100
+   -rw-r--r--. 1 dev dev 92303 Nov 12 00:00 build.log
+   drwxr-xr-x. 6 dev dev  4096 Nov 12 00:00 package
+   drwxr-xr-x. 4 dev dev  4096 Nov 12 00:00 patch
+   ```
+   编译日志将会生成在临时文件夹中，名称为```build.log```
+   ```bash
+   dev@openeuler-dev:[kernel_patch]$ cat syscare-build.111602/build.log | less
+   ...
+   ```
+   若补丁制作成功，将不会保留该临时文件夹。
 
-```bash
-dev@openeuler-dev:[/]$ syscare target redis-6.2.5-1/HP001
-name:    redis
-arch:    x86_64
-epoch:   (none)
-version: 6.2.5
-release: 1
-license: BSD and MIT
-```
+4. 检查编译结果
+
+   示例：
+
+   ```bash
+   dev@openeuler-dev:[output]$ ll
+   total 372M
+   -rw-r--r--. 1 dev dev 186M Nov 12 00:00 kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.src.rpm
+   -rw-r--r--. 1 dev dev  11K Nov 12 00:00 patch-kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.rpm
+   ```
+
+   其中
+
+   `kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.src.rpm`为补丁源码包
+
+   `patch-kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.rpm`为补丁二进制包
 
 
 
-## syscare status
+## 错误处理
 
-### 说明
+如果出现错误，请参考编译日志。
 
-查看补丁当前状态
-
-### 约束
-
-无
-
-### 调用格式
-
-```bash
-syscare target <IDENTIFIER>
-```
-
-### 参数
-
-| 名称               | 描述     | 类型   | 备注                                                         |
-| ------------------ | -------- | ------ | ------------------------------------------------------------ |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```patch_name```, 可为```target_name/patch_name```，也可为```uuid``` |
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
+错误示例：
 
 ```bash
-dev@openeuler-dev:[/]$ syscare status redis-6.2.5-1/HP001
-ACTIVED
+...
+Building patch, this may take a while
+ERROR: Process '/usr/libexec/syscare/upatch-build' exited unsuccessfully, exit_code=255
 ```
 
 
 
-## syscare list
+## 约束限制
 
-### 说明
+1. 制作补丁需要满足其源码包编译依赖；
 
-查看补丁状态列表
+2. 补丁源码包版本需要与调试信息包完全一致；
 
-### 约束
+3. 补丁包构建环境需要与debuginfo包构建环境保持完全一致；
 
-无
+4. 所有参数指定的文件及文件夹均需已存在；
 
-### 调用格式
+5. 若输入参数错误，将不会保留任何日志；
 
-```bash
-syscare list
-```
-
-### 参数
-
-无
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ syscare list
-Uuid                                     Name                                     Status
-ec503257-aa75-4abc-9045-c4afdd7ae0f2     redis-6.2.5-1/HP001                      ACTIVED
-6a5735b6-496f-40ab-a92c-2ab32761851d     nginx-1.21.5-4/HP001                     NOT-APPLIED
-b6bf2bf3-ddeb-4e8d-b8fe-a86971b1c62c     kernel-5.10.0-60.80.0.104.oe2203/HP001   NOT-APPLIED
-```
-
-
-
-## syscare apply
-
-### 说明
-
-加载并激活补丁
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare apply <IDENTIFIER>
-```
-
-### 参数
-
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare apply redis-6.2.5-1/HP001
-dev@openeuler-dev:[/]$
-```
-
-
-
-## syscare remove
-
-### 说明
-
-去激活并卸载补丁
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare remove <IDENTIFIER>
-```
-
-### 参数
-
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare remove redis-6.2.5-1/HP001
-dev@openeuler-dev:[/]$
-```
-
-
-
-## syscare active
-
-### 说明
-
-激活补丁
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare active <IDENTIFIER>
-```
-
-### 参数
-
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare active redis-6.2.5-1/HP001
-dev@openeuler-dev:[/]$
-```
-
-
-
-## syscare deactive
-
-### 说明
-
-激活补丁
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare deactive <IDENTIFIER>
-```
-
-### 参数
-
-| 名称               | 描述     | 类型   | 备注                                               |
-| ------------------ | -------- | ------ | -------------------------------------------------- |
-| ```<IDENTIFIER>``` | 补丁名称 | 字符串 | 可为```target_name/patch_name```，也可为```uuid``` |
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare deactive redis-6.2.5-1/HP001
-dev@openeuler-dev:[/]$
-```
-
-
-
-## syscare save
-
-### 说明
-
-保存所有补丁状态
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare save
-```
-
-### 参数
-
-无
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare save
-dev@openeuler-dev:[/]$
-```
-
-
-
-## syscare restore
-
-### 说明
-
-恢复所有补丁状态
-
-### 约束
-
-需要root权限
-
-### 调用格式
-
-```bash
-syscare restore
-```
-
-### 参数
-
-无
-
-### 选项
-
-| 名称       | 描述         | 类型 |
-| ---------- | ------------ | ---- |
-| -h, --help | 打印帮助信息 | 标识 |
-
-### 返回值
-
-* 成功返回 0
-* 错误返回255
-
-### 提示
-
-* 该命令会先进行```REMOVE/DEACTIVE```操作，再进行```APPLY/ACTIVE```操作
-* ```DEACTIVE```状态将会被当作```NOT-APPLIED```状态处理
-* 新发现（安装）的补丁将会被当作```NOT-APPLIED```状态处理
-
-### 示例
-
-```bash
-dev@openeuler-dev:[/]$ sudo syscare restore
-dev@openeuler-dev:[/]$
-```
+6. 建议以非root用户权限运行本命令。

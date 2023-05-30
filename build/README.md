@@ -30,7 +30,7 @@ Options:
   -d, --debuginfo <DEBUGINFO>                  Debuginfo package
       --workdir <WORKDIR>                      Working directory [default: .]
   -o, --output <OUTPUT>                        Generated patch output directory [default: .]
-      --kjobs <N>                              Kernel make jobs [default: 96]
+      --jobs <N>                               Parallel build jobs [default: 96]
       --skip-compiler-check                    Skip compiler version check (not recommended)
       --skip-cleanup                           Skip post-build cleanup
   -v, --verbose                                Provide more detailed info
@@ -61,7 +61,7 @@ Options:
 |-d, --debuginfo ```<DEBUGINFO>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
 |--workdir ```<WORKDIR>```|临时文件夹路径|字符串|默认为当前执行目录，需为合法路径|
 |-o, --output ```<OUTPUT>```|补丁输出文件夹|字符串|默认为当前执行目录，需为合法路径|
-|--kjobs ```<N>```|编译内核补丁线程数|数字|默认为cpu线程数|
+|--jobs ```<N>```|并行编译线程数|数字|默认为cpu线程数|
 |--skip-compiler-check|跳过编译器检查|标识|-|
 |--skip-cleanup|跳过临时文件清理|标识|-|
 |-v, --verbose|打印详细信息|标识|-|
@@ -92,12 +92,12 @@ Options:
 
 ```bash
 syscare build \
-    --patch-name CVE-2021-32675 \
-    --source redis-6.2.5-1.src.rpm \
-    --debuginfo redis-debuginfo-6.2.5-1.x86_64.rpm \
-    --target-elfname redis-server \
-    --output output \
-    0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+    --patch-name "HP001" \
+    --patch-description "CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users." \
+    --source ./redis-6.2.5-1.src.rpm \
+    --debuginfo ./redis-debuginfo-6.2.5-1.x86_64.rpm \
+    --output ./output \
+        ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
 ```
 
 
@@ -133,7 +133,7 @@ release:     1
 arch:        x86_64
 type:        UserPatch
 target:      redis-6.2.5-1
-target_elf:  redis-server
+target_elf:  redis-cli, redis-server, redis-benchmark
 digest:      31fc7544
 license:     BSD and MIT
 description: CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users.
