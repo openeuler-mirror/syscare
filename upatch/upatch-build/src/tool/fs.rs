@@ -4,8 +4,6 @@ use std::os::unix::ffi::OsStrExt;
 
 use crate::tool::os_str::OsStrContains;
 
-const SYSTEM_TOOL_DIR: &str = "/usr/libexec/syscare";
-
 pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
     format!("{}", path.as_ref().display())
 }
@@ -211,19 +209,13 @@ pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fu
     Ok(file_list)
 }
 
-pub fn search_tool<P: AsRef<Path>>(tool_name: P) -> std::io::Result<PathBuf> {
-    let current_tool = tool_name.as_ref();
+pub fn search_tool<P: AsRef<Path>>(tool: P) -> std::io::Result<PathBuf> {
+    let current_tool = tool.as_ref();
     match self::check_file(&current_tool) {
-        Err(_) => {
-            let system_tool = Path::new(SYSTEM_TOOL_DIR).join(current_tool);
-            match self::check_file(&system_tool) {
-                Err(e) => Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("search '{}' in '{}' failed: {}", current_tool.display(), SYSTEM_TOOL_DIR, e)
-                )),
-                Ok(()) => Ok(system_tool),
-            }
-        },
+        Err(e) => return Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("can't find supporting tools {}: {}", current_tool.display(), e)
+        )),
         Ok(()) => realpath(current_tool),
     }
 }

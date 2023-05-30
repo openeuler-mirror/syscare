@@ -67,7 +67,7 @@ impl UpatchBuild {
         // check mod
         self.check_mod()?;
 
-        // find upatch-diff and upatch-tool
+        // find upatch-diff
         self.tool.check()?;
 
         // check patches
