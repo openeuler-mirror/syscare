@@ -61,7 +61,7 @@ Options:
 |-d, --debuginfo ```<DEBUGINFO>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
 |--workdir ```<WORKDIR>```|临时文件夹路径|字符串|默认为当前执行目录，需为合法路径|
 |-o, --output ```<OUTPUT>```|补丁输出文件夹|字符串|默认为当前执行目录，需为合法路径|
-|--jobs ```<N>```|并行编译线程数|数字|默认为cpu线程数|
+|-j, --jobs ```<N>```|并行编译线程数|数字|默认为cpu线程数|
 |--skip-compiler-check|跳过编译器检查|标识|-|
 |--skip-cleanup|跳过临时文件清理|标识|-|
 |-v, --verbose|打印详细信息|标识|-|
