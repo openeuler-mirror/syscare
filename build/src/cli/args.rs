@@ -44,7 +44,7 @@ pub struct CliArguments {
     #[arg(long)]
     pub target_name: Option<String>,
 
-    /// parch target architecture
+    /// Patch target architecture
     #[arg(long)]
     pub target_arch: Option<String>,
 
@@ -68,9 +68,9 @@ pub struct CliArguments {
     #[arg(short, long)]
     pub source: PathBuf,
 
-    /// Debuginfo package
-    #[arg(short, long)]
-    pub debuginfo: PathBuf,
+    /// Debuginfo package(s)
+    #[arg(short, long, required=true)]
+    pub debuginfo: Vec<PathBuf>,
 
     /// Working directory
     #[arg(long, default_value=DEFAULT_WORK_DIR)]

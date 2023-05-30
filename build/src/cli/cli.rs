@@ -1,12 +1,13 @@
 use std::ffi::OsStr;
 
+use common::util::fs::TraverseOptions;
 use log::LevelFilter;
 use log::{info, warn, error};
 use common::os;
 use common::util::{fs, serde::serde_versioned};
 
-use crate::package::{PackageInfo, PackageType, PKG_FILE_EXT};
-use crate::package::{RpmExtractor, RpmHelper, RpmSpecHelper, RpmBuilder};
+use crate::package::{PackageInfo, PackageType, PKG_FILE_EXT, DEBUGINFO_FILE_EXT};
+use crate::package::{RpmHelper, RpmSpecHelper, RpmBuilder};
 use crate::patch::{PatchInfo, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME};
 use crate::patch::{PatchHelper, PatchBuilderFactory};
 
@@ -34,17 +35,15 @@ impl PatchBuildCLI {
             ));
         }
 
-        if fs::file_ext(&args.debuginfo) != PKG_FILE_EXT {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Debuginfo should be a rpm package"),
-            ));
+        for debuginfo in &mut args.debuginfo {
+            if fs::file_ext(&debuginfo) != PKG_FILE_EXT {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!("Debuginfo should be a rpm package"),
+                ));
+            }
+            *debuginfo = fs::canonicalize(&debuginfo)?;
         }
-
-        args.source    = fs::canonicalize(&args.source)?;
-        args.debuginfo = fs::canonicalize(&args.debuginfo)?;
-        args.workdir   = fs::canonicalize(&args.workdir)?;
-        args.output    = fs::canonicalize(&args.output)?;
 
         for patch in &mut args.patches {
             if fs::file_ext(&patch) != PATCH_FILE_EXT {
@@ -56,41 +55,45 @@ impl PatchBuildCLI {
             *patch = fs::canonicalize(&patch)?;
         }
 
+        args.source    = fs::canonicalize(&args.source)?;
+        args.workdir   = fs::canonicalize(&args.workdir)?;
+        args.output    = fs::canonicalize(&args.output)?;
+
         Ok(())
     }
 
-    fn collect_package_info(&self) -> std::io::Result<(PackageInfo, PackageInfo)> {
+    fn collect_package_info(&self) -> std::io::Result<(PackageInfo, Vec<PackageInfo>)> {
         info!("Collecting package info");
-        let mut src_pkg_info = PackageInfo::new(&self.args.source)?;
-        let dbg_pkg_info = PackageInfo::new(&self.args.debuginfo)?;
-
-        // Source package arch is meaningless, override with debuginfo's
-        src_pkg_info.arch = dbg_pkg_info.arch.clone();
-
-        if src_pkg_info.kind != PackageType::SourcePackage {
+        let src_pkg_info = PackageInfo::new(&self.args.source)?;
+        if src_pkg_info.pkg_type() != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("File \"{}\" is not a source package", self.args.source.display()),
+                format!("File \"{}\" is not a source package", &self.args.source.display()),
             ));
         }
-        if dbg_pkg_info.kind != PackageType::BinaryPackage {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("File \"{}\" is not a debuginfo package", self.args.debuginfo.display()),
-            ));
-        }
-
         info!("------------------------------");
         info!("Source package");
         info!("------------------------------");
         src_pkg_info.print_log(log::Level::Info);
         info!("------------------------------");
-        info!("Debuginfo package");
-        info!("------------------------------");
-        dbg_pkg_info.print_log(log::Level::Info);
-        info!("------------------------------");
 
-        Ok((src_pkg_info, dbg_pkg_info))
+        let mut dbg_pkg_infos = Vec::with_capacity(self.args.debuginfo.len());
+        for pkg_path in &self.args.debuginfo {
+            let pkg_info = PackageInfo::new(pkg_path)?;
+            if pkg_info.pkg_type() != PackageType::BinaryPackage {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("File \"{}\" is not a debuginfo package", pkg_path.display())
+                ));
+            }
+            info!("Debuginfo package");
+            info!("------------------------------");
+            pkg_info.print_log(log::Level::Info);
+            info!("------------------------------");
+            dbg_pkg_infos.push(pkg_info);
+        }
+
+        Ok((src_pkg_info, dbg_pkg_infos))
     }
 
     fn collect_patch_info(&self, target_pkg_info: PackageInfo) -> std::io::Result<PatchInfo> {
@@ -108,21 +111,24 @@ impl PatchBuildCLI {
 
     fn extract_source_package(&self) -> std::io::Result<()> {
         info!("Extracting source package");
-        RpmExtractor::extract_package(
+        RpmHelper::extract_package(
             &self.args.source,
             &self.workdir.package.source,
         )
     }
 
-    fn extract_debuginfo_package(&self) -> std::io::Result<()> {
-        info!("Extracting debuginfo package");
-        RpmExtractor::extract_package(
-            &self.args.debuginfo,
-            &self.workdir.package.debug
-        )
+    fn extract_debuginfo_packages(&self) -> std::io::Result<()> {
+        info!("Extracting debuginfo package(s)");
+        for debuginfo_pkg in &self.args.debuginfo {
+            RpmHelper::extract_package(
+                debuginfo_pkg,
+                &self.workdir.package.debug
+            )?;
+        }
+        Ok(())
     }
 
-    fn complete_build_args(&mut self, src_pkg_info: &mut PackageInfo, dbg_pkg_info: &PackageInfo) -> std::io::Result<()> {
+    fn complete_build_args(&mut self, src_pkg_info: &mut PackageInfo, dbg_pkg_infos: &[PackageInfo]) -> std::io::Result<()> {
         let mut args = &mut self.args;
 
         // Find source directory from extracted package root
@@ -145,20 +151,19 @@ impl PatchBuildCLI {
             *src_pkg_info = old_patch_info.target.to_owned();
         }
 
-        /*
-         * Package info matching has to be after package extraction,
-         * since the package info may be replaced by the one from
-         * 'patched' source package.
-         */
-        if (!dbg_pkg_info.name.contains(&src_pkg_info.name)) ||
-           (dbg_pkg_info.epoch   != src_pkg_info.epoch)      ||
-           (dbg_pkg_info.version != src_pkg_info.version)    ||
-           (dbg_pkg_info.release != src_pkg_info.release) {
+        for pkg_info in dbg_pkg_infos {
+            if !src_pkg_info.is_source_pkg_of(&pkg_info) {
                 return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Debuginfo package does not match to the source package"),
-            ));
+                    std::io::ErrorKind::InvalidData,
+                    format!("Package \"{}\" is not source package of \"{}\"",
+                        src_pkg_info.short_name(), pkg_info.short_name(),
+                    ))
+                );
+            }
         }
+
+        // Source package arch is meaningless, override with debuginfo's arch
+        src_pkg_info.arch = dbg_pkg_infos.get(0).as_ref().unwrap().arch.to_owned();
 
         // Override other arguments
         args.target_name.get_or_insert(src_pkg_info.name.to_owned());
@@ -172,10 +177,9 @@ impl PatchBuildCLI {
     }
 
     fn check_build_args(&self) -> std::io::Result<()> {
-        let args = &self.args;
+        let args: &CliArguments = &self.args;
 
-        let system_arch = os::cpu::arch();
-        if OsStr::new(&args.patch_arch) != system_arch {
+        if OsStr::new(&args.patch_arch) != os::cpu::arch() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch arch \"{}\" is unsupported", args.patch_arch),
@@ -202,6 +206,18 @@ impl PatchBuildCLI {
 
         let pkg_build_root = RpmHelper::find_build_root(&self.workdir.package.source)?;
         let spec_file      = RpmHelper::find_spec_file(&pkg_build_root.specs)?;
+
+        let debug_files = fs::list_files_by_ext(
+            &self.workdir.package.debug,
+            DEBUGINFO_FILE_EXT,
+            TraverseOptions { recursive: true }
+        )?;
+        if debug_files.len() == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "Cannot find any debuginfo file",
+            ));
+        }
 
         RpmBuilder::new(pkg_build_root).build_prepare(spec_file)
     }
@@ -280,14 +296,13 @@ impl PatchBuildCLI {
         info!("==============================");
         info!("{}", CLI_ABOUT);
         info!("==============================");
-        let (mut src_pkg_info, dbg_pkg_info) = self.collect_package_info()?;
+        let (mut src_pkg_info, dbg_pkg_infos) = self.collect_package_info()?;
         self.extract_source_package()?;
-        self.complete_build_args(&mut src_pkg_info, &dbg_pkg_info)?;
+        self.complete_build_args(&mut src_pkg_info, &dbg_pkg_infos)?;
+        self.check_build_args()?;
 
         let mut patch_info = self.collect_patch_info(src_pkg_info)?;
-        self.check_build_args()?;
-        self.extract_debuginfo_package()?;
-
+        self.extract_debuginfo_packages()?;
         self.build_prepare()?;
         self.build_patch(&mut patch_info)?;
         self.build_patch_package(&patch_info)?;

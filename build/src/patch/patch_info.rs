@@ -23,7 +23,7 @@ const PATCH_VERSION_LENGTH: usize = 8;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * it should be updated and keep sync with patch management cli.
  */
-const PATCH_INFO_MAGIC: &str = "5a8e0b7f";
+const PATCH_INFO_MAGIC: &str = "2A96A33EC26809077";
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]

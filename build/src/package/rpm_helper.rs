@@ -56,6 +56,23 @@ impl RpmHelper {
         Ok(exit_status.stdout().to_owned())
     }
 
+    pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(pkg_path: P, output_dir: Q) -> std::io::Result<()> {
+        RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("--install")
+                .arg("--nodeps")
+                .arg("--nofiledigest")
+                .arg("--nocontexts")
+                .arg("--nocaps")
+                .arg("--noscripts")
+                .arg("--notriggers")
+                .arg("--allfiles")
+                .arg("--root")
+                .arg(output_dir.as_ref())
+                .arg(pkg_path.as_ref())
+        )?.check_exit_code()
+    }
+
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
         const PKG_BUILD_ROOT: &str = "rpmbuild";
 
