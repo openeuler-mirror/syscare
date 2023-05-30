@@ -81,6 +81,10 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
     Ok(())
 }
 
+/*
+ * In order to avoid external access to internal symbols, the dynamic library changes some GLOBAL symbols to the LOCAL symbols,
+ * then we can't match these symbols, we change these symbols to GLOBAL here.
+ */
 pub fn resolve_dynamic<P: AsRef<Path>>(debug_info: P) -> std::io::Result<()> {
     let mut debug_info_elf = write::Elf::parse(debug_info)?;
     let debug_info_header = debug_info_elf.header()?;
