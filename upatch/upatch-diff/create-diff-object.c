@@ -311,10 +311,14 @@ static void detect_child_functions(struct upatch_elf *uelf)
 
 static bool discarded_sym(struct running_elf *relf, struct symbol *sym)
 {
-	if (!relf->is_exec || !sym || !sym->sec || !sym->sec->name)
+	if (!sym || !sym->sec || !sym->sec->name)
 		return false;
 
-	if (!strncmp(sym->sec->name, ".gnu.warning.", strlen(".gnu.warning.")))
+    /*
+     * ".gnu.warning." section is to prevent some symbols in the dynamic library being used by external programs.
+     * in the exec program, these sections are discarded in linker. so we discard these symbols.
+     */
+	if (relf->is_exec && !strncmp(sym->sec->name, ".gnu.warning.", strlen(".gnu.warning.")))
 		return true;
 
 	return false;
