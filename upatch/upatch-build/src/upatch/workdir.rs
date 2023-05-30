@@ -26,8 +26,7 @@ impl WorkDir {
     }
 
     pub fn create_dir<P: AsRef<Path>>(&mut self, work_dir: P) -> Result<()> {
-        let work_dir = work_dir.as_ref();
-        self.cache_dir = work_dir.join(".upatch");
+        self.cache_dir = work_dir.as_ref().to_path_buf();
         self.source_dir = self.cache_dir.join("source");
         self.patch_dir = self.cache_dir.join("patch");
         self.debuginfo_dir = self.cache_dir.join("debug_info");

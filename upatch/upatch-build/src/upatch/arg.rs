@@ -10,7 +10,7 @@ use crate::tool::*;
 #[command(bin_name="upatch-build", version, term_width = 200)]
 pub struct Arguments {
     /// Specify work directory
-    /// will add .upatch in work_dir [default: ~/.upatch]
+    /// will add upatch in work_dir [default: ~/.upatch]
     #[arg(short, long, default_value = None, verbatim_doc_comment)]
     pub work_dir: Option<PathBuf>,
 
@@ -73,17 +73,17 @@ impl Arguments {
 
 impl Arguments {
     pub fn check(&mut self) -> std::io::Result<()> {
-        self.work_dir = match &self.work_dir {
-            Some(work_dir) => Some(real_arg(work_dir)?),
+        self.work_dir = Some(match &self.work_dir {
+            Some(work_dir) => real_arg(work_dir)?.join("upatch"),
             #[allow(deprecated)]
-            None => Some(match std::env::home_dir() {
-                Some(work_dir) => work_dir,
+            None => match std::env::home_dir() {
+                Some(work_dir) => work_dir.join(".upatch"),
                 None => return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
                     format!("home_dir don't support BSD system"),
                 )),
-            }),
-        };
+            },
+        });
 
         let compiler_path = self.compiler.as_deref().unwrap_or(&Path::new("gcc"));
         self.compiler = match compiler_path.exists() {
