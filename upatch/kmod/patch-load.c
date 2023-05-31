@@ -19,7 +19,6 @@
 #include <linux/mman.h>
 #include <linux/kprobes.h>
 
-#include <asm/unistd_64.h>
 #include <asm/module.h>
 
 #include "patch-uprobe.h"
