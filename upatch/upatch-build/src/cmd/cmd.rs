@@ -184,22 +184,22 @@ impl<'a> ExternCommand<'a> {
         Self { path: path.as_ref() }
     }
 
-    pub fn execvp(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
+    pub fn execv(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
 
         self.execute_command(&mut command, Level::Debug)
     }
 
-    pub fn execvp_stdio<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T) -> std::io::Result<ExternCommandExitStatus>
+    pub fn execve_dir_stdio<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T) -> std::io::Result<ExternCommandExitStatus>
     where
         P: AsRef<Path>,
         T: Into<Stdio>,
     {
-        self.execvp_stdio_level(args, current_dir, stdio, Level::Debug)
+        self.execve_dir_stdio_level(args, current_dir, stdio, Level::Debug)
     }
 
-    pub fn execvp_stdio_level<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T, level: Level) -> std::io::Result<ExternCommandExitStatus>
+    pub fn execve_dir_stdio_level<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T, level: Level) -> std::io::Result<ExternCommandExitStatus>
     where
         P: AsRef<Path>,
         T: Into<Stdio>,
@@ -212,7 +212,7 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(&mut command, level)
     }
 
-    pub fn execve<P: AsRef<Path>>(&self, args: ExternCommandArgs, envs: ExternCommandEnvs, current_dir: P) -> std::io::Result<ExternCommandExitStatus> {
+    pub fn execve_dir<P: AsRef<Path>>(&self, args: ExternCommandArgs, envs: ExternCommandEnvs, current_dir: P) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
         command.envs(envs.into_iter());

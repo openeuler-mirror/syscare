@@ -78,7 +78,7 @@ impl UpatchBuild {
         // check compiler
         self.compiler.analyze(self.args.compiler.as_ref().unwrap())?;
         if !self.args.skip_compiler_check {
-            self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_infoes[0])?;
+            self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_infoes)?;
         }
 
         // hack compiler

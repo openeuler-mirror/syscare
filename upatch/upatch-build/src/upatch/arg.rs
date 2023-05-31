@@ -1,4 +1,4 @@
-use std::path::{PathBuf, Path};
+use std::path::PathBuf;
 use std::ffi::OsString;
 
 use clap::Parser;
@@ -42,7 +42,7 @@ pub struct Arguments {
 
     /// Specify compiler [default: gcc]
     #[arg(short, long, default_value = None)]
-    pub compiler: Option<PathBuf>,
+    pub compiler: Option<Vec<PathBuf>>,
 
     /// Specify output directory [default: <WORK_DIR>]
     #[arg(short, long)]
@@ -85,18 +85,20 @@ impl Arguments {
             },
         });
 
-        let compiler_path = self.compiler.as_deref().unwrap_or(&Path::new("gcc"));
-        self.compiler = match compiler_path.exists() {
-            true => {
-                Some(real_arg(compiler_path)?)
-            },
-            false => {
-                Some(which(compiler_path).map_err(|e| std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("can't find {:?} in system: {}", compiler_path, e),
-                ))?)
-            },
-        };
+        let mut default_compiler = vec![PathBuf::from("gcc"), PathBuf::from("g++")];
+        let compiler_paths = self.compiler.as_deref_mut().unwrap_or(&mut default_compiler);
+        self.compiler = Some({
+            for compiler_path in &mut compiler_paths.iter_mut() {
+                *compiler_path = match compiler_path.exists() {
+                    true => real_arg(&compiler_path)?,
+                    false => which(&compiler_path).map_err(|e| std::io::Error::new(
+                            std::io::ErrorKind::NotFound,
+                            format!("can't find {:?} in system: {}", compiler_path, e),
+                        ))?,
+                };
+            }
+            compiler_paths.to_vec()
+        });
 
         self.debug_source = real_arg(&self.debug_source)?;
 

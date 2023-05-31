@@ -47,7 +47,7 @@ impl Tool {
         if verbose {
             args_list = args_list.arg("-d");
         }
-        let output = ExternCommand::new(&self.diff).execvp(args_list)?;
+        let output = ExternCommand::new(&self.diff).execv(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Diff(format!("{}: please look {:?} for detail.", output.exit_code(), log_file.as_ref())))
         };

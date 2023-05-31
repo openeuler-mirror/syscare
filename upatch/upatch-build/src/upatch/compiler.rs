@@ -1,6 +1,9 @@
 use std::ffi::{CString, OsStr, OsString};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::os::unix::ffi::OsStrExt;
+use std::collections::HashSet;
+use std::fs::File;
 
 use log::*;
 use which::which;
@@ -17,21 +20,24 @@ const UPATCH_REGISTER_COMPILER: u64 = 1074324737;
 const UPATCH_UNREGISTER_COMPILER: u64 = 1074324738;
 const UPATCH_REGISTER_ASSEMBLER: u64 = 1074324739;
 const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
-const UPATCH_HACK_NUM: usize = 2;
 
 #[derive(Clone)]
 pub struct Compiler {
-    compiler: PathBuf,
-    assembler: PathBuf,
+    compiler: Vec<PathBuf>,
+    assembler: HashSet<PathBuf>,
     linker: PathBuf,
+    hack_request: Vec<u64>,
+    unhack_request: Vec<u64>,
 }
 
 impl Compiler {
     pub fn new() -> Self {
         Self {
-            compiler: PathBuf::new(),
-            assembler: PathBuf::new(),
+            compiler: Vec::new(),
+            assembler: HashSet::new(),
             linker: PathBuf::new(),
+            hack_request: Vec::new(),
+            unhack_request: Vec::new(),
         }
     }
 
@@ -42,21 +48,32 @@ impl Compiler {
         }
     }
 
-    pub fn read_from_compiler(&self, name: &str) -> Result<OsString> {
+    pub fn read_from_compiler<P: AsRef<Path>>(&self, compiler: P, name: &str) -> Result<OsString> {
         let args_list = ExternCommandArgs::new().arg(&name);
-        let output = ExternCommand::new(&self.compiler).execvp(args_list)?;
+        let output = ExternCommand::new(compiler.as_ref()).execv(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("get {} from compiler {:?} failed", name, &self.compiler)));
         }
         Ok(output.stdout().to_os_string())
     }
 
-    pub fn analyze<P: AsRef<Path>>(&mut self, compiler_file: P) -> Result<()> {
-        self.compiler = compiler_file.as_ref().to_path_buf();
+    pub fn analyze<I, P>(&mut self, compiler_file: I) -> Result<()>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        self.compiler = compiler_file.into_iter().map(|e| e.as_ref().to_owned()).collect();
         info!("Using compiler at: {:?}", &self.compiler);
 
-        self.assembler = realpath(self.readlink(&self.read_from_compiler("-print-prog-name=as")?)?)?;
-        self.linker = realpath(self.readlink(&self.read_from_compiler("-print-prog-name=ld")?)?)?;
+        for compiler in &self.compiler {
+            self.assembler.insert(realpath(self.readlink(&self.read_from_compiler(compiler, "-print-prog-name=as")?)?)?);
+        }
+        self.linker = realpath(self.readlink(&self.read_from_compiler(&self.compiler[0], "-print-prog-name=ld")?)?)?;
+
+        self.hack_request = vec![UPATCH_REGISTER_COMPILER; self.compiler.len()];
+        self.hack_request.append(&mut vec![UPATCH_REGISTER_ASSEMBLER; self.assembler.len()]);
+        self.unhack_request = vec![UPATCH_UNREGISTER_COMPILER; self.compiler.len()];
+        self.unhack_request.append(&mut vec![UPATCH_UNREGISTER_ASSEMBLER; self.assembler.len()]);
         Ok(())
     }
 
@@ -68,7 +85,7 @@ impl Compiler {
             if fd < 0 {
                 return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
             }
-            let result = self.ioctl_register(fd, UPATCH_HACK_NUM, &hack_array);
+            let result = self.ioctl_register(fd, self.compiler.len() + self.assembler.len(), &hack_array);
             let ret = libc::close(fd);
             if ret < 0 {
                 return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
@@ -85,7 +102,7 @@ impl Compiler {
             if fd < 0 {
                 return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
             }
-            let result = self.ioctl_unregister(fd, UPATCH_HACK_NUM, &hack_array);
+            let result = self.ioctl_unregister(fd, self.compiler.len() + self.assembler.len(), &hack_array);
             let ret = libc::close(fd);
             if ret < 0 {
                 return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
@@ -94,43 +111,52 @@ impl Compiler {
         }
     }
 
-    pub fn check_version<P: AsRef<Path>>(&self, cache_dir: P, debug_info: P) -> Result<()> {
+    pub fn check_version<P, I, Q>(&self, cache_dir: P, debug_infoes:I) -> Result<()>
+    where
+        P: AsRef<Path>,
+        I: IntoIterator<Item = Q>,
+        Q: AsRef<Path>,
+    {
         let cache_dir = cache_dir.as_ref();
-        let debug_info = debug_info.as_ref();
+        let test_path = Path::new(&cache_dir).join("test.c");
+        let mut test_file = File::create(&test_path)?;
+        test_file.write_all(b"int main() {return 0;}")?;
         let test_obj = Path::new(&cache_dir).join("test.o");
-        let mut output = std::process::Command::new("echo").arg("int main() {return 0;}").stdout(std::process::Stdio::piped()).spawn()?;
-        if !output.wait()?.success() {
-            return Err(Error::Compiler(format!("check_version: execute echo error")));
-        }
-
-        let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-x", "c", "-", "-o"]).arg(&test_obj);
-        let output = ExternCommand::new(&self.compiler).execvp_stdio(args_list, cache_dir, output.stdout.expect("get echo stdout failed"))?;
-        if !output.exit_status().success() {
-            return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr().to_string_lossy())))
-        };
-
         let dwarf = Dwarf::new();
-        let mut gcc_version = String::new();
-        for element in dwarf.file_in_obj(&debug_info)? {
-            gcc_version.push_str(&element.get_compiler_version());
-            break;
+        let mut system_compiler_version = HashSet::new();
+
+        for compiler in &self.compiler {
+            let args_list = ExternCommandArgs::new().args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c"]).arg(&test_path).arg("-o").arg(&test_obj);
+            let output = ExternCommand::new(compiler).execv(args_list)?;
+            if !output.exit_status().success() {
+                return Err(Error::Compiler(format!("compiler build test error {}: {}", output.exit_code(), output.stderr().to_string_lossy())))
+            };
+
+            /* Dwraf DW_AT_producer
+             * GNU standard version
+             */
+            for element in dwarf.file_in_obj(test_obj.clone())? {
+                let compiler_version = element.get_compiler_version();
+                let compiler_version_arr = compiler_version.split(" ").collect::<Vec<_>>();
+                if compiler_version_arr.len() < 3 {
+                    return Err(Error::Compiler(format!("read system compiler version failed: {}", element.get_compiler_version())));
+                }
+                system_compiler_version.insert(compiler_version_arr[2].to_string());
+            }
         }
+        debug!("system compiler version: {:?}", &system_compiler_version);
 
-        let mut system_gcc_version = String::new();
-        for element in dwarf.file_in_obj(test_obj.clone())? {
-            system_gcc_version.push_str(&element.get_compiler_version());
-            break;
-        }
-
-        /* Dwraf DW_AT_producer 
-         * GNU standard version 
-         */
-        let gcc_version_arr = gcc_version.split(" ").collect::<Vec<_>>();
-        let system_gcc_version_arr = system_gcc_version.split(" ").collect::<Vec<_>>();
-
-
-        if gcc_version_arr.len() < 3 || system_gcc_version_arr.len() < 3 || gcc_version_arr[2] != system_gcc_version_arr[2] {
-            return Err(Error::Compiler(format!("compiler version is different\n       debug_info compiler_version: {}\n       system compiler_version: {}", &gcc_version, &system_gcc_version)));
+        for debug_info in debug_infoes {
+            for element in dwarf.file_in_obj(debug_info.as_ref())? {
+                let compiler_version = element.get_compiler_version();
+                let compiler_version_arr = compiler_version.split(" ").collect::<Vec<_>>();
+                if compiler_version_arr.len() < 3 {
+                    return Err(Error::Compiler(format!("read {:?} compiler version failed: {}", debug_info.as_ref(), &element.get_compiler_version())));
+                }
+                if !system_compiler_version.contains(compiler_version_arr[2]) {
+                    return Err(Error::Compiler(format!("compiler version is different \n{:?}'s compiler version: {} \nsystem compiler version: {:?}", debug_info.as_ref(), &compiler_version_arr[2], &system_compiler_version)));
+                }
+            }
         }
         Ok(())
     }
@@ -141,7 +167,7 @@ impl Compiler {
         Q: AsRef<Path>,
     {
         let args_list = ExternCommandArgs::new().args(["-r", "-o"]).arg(output_file.as_ref()).args(link_list);
-        let output = ExternCommand::new(&self.linker).execvp(args_list)?;
+        let output = ExternCommand::new(&self.linker).execv(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("link object file error {}: {}", output.exit_code(), output.stderr().to_string_lossy())));
         };
@@ -150,19 +176,22 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn get_cstring(&self) -> Result<(CString, [CString; UPATCH_HACK_NUM])> {
+    fn get_cstring(&self) -> Result<(CString, Vec<CString>)> {
         let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
-        let compiler_str = CString::new(self.compiler.as_os_str().as_bytes()).unwrap();
-        let assembler_str = CString::new(self.assembler.as_os_str().as_bytes()).unwrap();
-        let hack_array: [CString; UPATCH_HACK_NUM] = [compiler_str, assembler_str];
+        let mut hack_array = Vec::with_capacity(self.compiler.len() + self.assembler.len());
+        for compiler in &self.compiler {
+            hack_array.push(CString::new(compiler.as_os_str().as_bytes()).unwrap());
+        }
+        for assembler in &self.assembler {
+            hack_array.push(CString::new(assembler.as_os_str().as_bytes()).unwrap());
+        }
         Ok((ioctl_str, hack_array))
     }
 
-    fn ioctl_register(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
-        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_REGISTER_COMPILER, UPATCH_REGISTER_ASSEMBLER];
+    fn ioctl_register(&self, fd: i32, num: usize, hack_array: &Vec<CString>) -> Result<()> {
         for i in 0..num {
             trace!("hack {:?}", hack_array[i]);
-            let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
+            let ret = unsafe { libc::ioctl(fd, self.hack_request[i], hack_array[i].as_ptr()) };
             if ret != 0 {
                 trace!("hack {:?} error {}, try to rollback", hack_array[i], ret);
                 self.ioctl_unregister(fd, i, hack_array)?;
@@ -172,11 +201,10 @@ impl Compiler {
         Ok(())
     }
 
-    fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &[CString; UPATCH_HACK_NUM]) -> Result<()> {
-        let hack_request: [u64; UPATCH_HACK_NUM] = [UPATCH_UNREGISTER_COMPILER, UPATCH_UNREGISTER_ASSEMBLER];
+    fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &Vec<CString>) -> Result<()> {
         for i in (0..num).rev() {
             trace!("unhack {:?}", hack_array[i]);
-            let ret = unsafe { libc::ioctl(fd, hack_request[i], hack_array[i].as_ptr()) };
+            let ret = unsafe { libc::ioctl(fd, self.unhack_request[i], hack_array[i].as_ptr()) };
             if ret != 0 {
                 trace!("unhack {:?} error {}", hack_array[i], ret);
                 return Err(Error::Mod(format!("unhack {:?} error {}", hack_array[i], ret)));
