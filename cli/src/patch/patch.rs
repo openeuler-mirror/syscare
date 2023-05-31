@@ -2,7 +2,7 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 
-use log::{debug, error};
+use log::{debug, info, error};
 use lazy_static::lazy_static;
 
 use common::util::serde::serde_versioned;
@@ -200,7 +200,7 @@ impl Patch {
     pub fn apply(&self) -> std::io::Result<()> {
         let current_status = self.status()?;
         if current_status >= PatchStatus::Deactived {
-            debug!("Patch {{{}}} is already applied", self);
+            info!("Patch {{{}}} is already applied", self);
             return Ok(());
         }
         self.do_transition(current_status, PatchStatus::Actived)
