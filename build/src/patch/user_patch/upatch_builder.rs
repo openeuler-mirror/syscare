@@ -20,21 +20,30 @@ impl<'a> UserPatchBuilder<'a> {
         Self { workdir }
     }
 
-    fn detect_compiler_name(&self) -> OsString {
+    fn detect_compiler_names(&self) -> Vec<OsString> {
         /*
          * This is a temporary solution for compiler detection
-         * We assume the compiler would be 'gcc' by default
-         * If gcc_secure is installed, the real compiler would be 'gcc_old'
+         * We assume the compiler would be 'gcc/g++' by default
+         * If gcc_secure is installed, the real compiler would be 'gcc_old/g++_old'
          */
-        const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
+        const GCC_SECURE_PKG_NAME:        &str = "gcc_secure";
+        const GCC_SECURE_COMPILER_SUFFIX: &str = "_old";
 
-        const GCC_CC_NAME:        &str = "gcc";
-        const GCC_SECURE_CC_NAME: &str = "gcc_old";
+        const GCC_CC_NAME:  &str = "gcc";
+        const GCC_CXX_NAME: &str = "g++";
 
-        match RpmHelper::check_installed(GCC_SECURE_PKG_NAME).is_ok() {
-            true  => OsString::from(GCC_SECURE_CC_NAME),
-            false => OsString::from(GCC_CC_NAME),
+        let mut compiler_list = vec![
+            OsString::from(GCC_CC_NAME),
+            OsString::from(GCC_CXX_NAME),
+        ];
+
+        if RpmHelper::check_installed(GCC_SECURE_PKG_NAME).is_ok() {
+            for compiler in &mut compiler_list {
+                compiler.push(GCC_SECURE_COMPILER_SUFFIX)
+            }
         }
+
+        compiler_list
     }
 
     fn create_topdir_macro<P: AsRef<Path>>(&self, buildroot: P) -> OsString {
@@ -62,10 +71,12 @@ impl<'a> UserPatchBuilder<'a> {
             .arg(&args.build_source_cmd)
             .arg("--build-patch-cmd")
             .arg(&args.build_patch_cmd)
-            .arg("--compiler")
-            .arg(&args.compiler)
             .arg("--output-dir")
             .arg(&args.output_dir);
+
+        for compiler in &args.compilers {
+            cmd_args = cmd_args.arg("--compiler").arg(compiler)
+        }
 
         for relation in &args.elf_relations {
             cmd_args = cmd_args
@@ -108,7 +119,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let source_dir      = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
         let debuginfos      = RpmHelper::find_debuginfo(debug_pkg_dir)?;
         let debug_relations = RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
-        let compiler_name   = self.detect_compiler_name();
+        let compiler_names  = self.detect_compiler_names();
         let output_dir      = self.workdir.patch.output.as_path();
 
         let topdir_macro   = self.create_topdir_macro(pkg_build_root.as_ref());
@@ -138,7 +149,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             elf_relations:       debug_relations,
             build_source_cmd:    build_original_cmd.append("&&").append(build_prep_cmd),
             build_patch_cmd:     build_patched_cmd,
-            compiler:            compiler_name,
+            compilers:           compiler_names,
             output_dir:          output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose:             args.verbose,
