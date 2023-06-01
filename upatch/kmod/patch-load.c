@@ -513,23 +513,6 @@ static int find_upatch_module_sections(struct upatch_module *mod, struct upatch_
     return 0;
 }
 
-/* Used for both PLT/GOT */
-static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr)
-{
-    struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
-    unsigned int index = info->jmp_cur_entry;
-    if (index >= info->jmp_max_entry) {
-        pr_err("jmp table overflow \n");
-        return 0;
-    }
-
-    table[index].inst = jmp_table_inst();
-    table[index].addr = jmp_addr;
-    info->jmp_cur_entry ++;
-    return (unsigned long)(info->mod->core_layout.base + info->jmp_offs +
-                           index * sizeof(struct upatch_jmp_table_entry));
-}
-
 static unsigned long
 resolve_symbol(struct running_elf_info *elf_info, const char *name, Elf_Sym patch_sym)
 {
@@ -616,7 +599,7 @@ out_plt:
             pr_err("copy address failed \n");
             goto out;
         }
-        elf_addr = setup_jmp_table(elf_info->load_info, addr);
+        elf_addr = setup_jmp_table(elf_info->load_info, addr, (unsigned long)tmp_addr);
         pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
             sym_name, rela[i].r_offset, addr, elf_addr);
         goto out;

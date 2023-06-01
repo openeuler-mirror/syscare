@@ -16,6 +16,7 @@
 
 #include "upatch-patch.h"
 #include "upatch-manage.h"
+#include "arch/patch-load.h"
 
 #define STT_IFUNC           0xa // when e_ident[EI_OSABI] == ELFOSABI_GNU/ELFOSABI_FREEBSD
 #define ELFOSABI_GNU        0x3
@@ -41,12 +42,6 @@
  */
 
 #define JMP_TABLE_MAX_ENTRY 100
-
-/* jmp table, solve limit for the jmp instruction */
-struct upatch_jmp_table_entry {
-    unsigned long inst;
-    unsigned long addr;
-};
 
 /* memory layout for module */
 struct upatch_module_layout {

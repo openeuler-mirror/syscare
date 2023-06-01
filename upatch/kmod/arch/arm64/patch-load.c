@@ -12,10 +12,14 @@
 #include "arch/patch-load.h"
 #include "arch/arm64/insn.h"
 
-/* ldr x17, #8
+/*
+ * ldr x16, #24
+ * ldr x17, #12
  * br x17
+ * undefined
  */
-#define AARCH64_JUMP_TABLE_JMP 0xd61f022058000051
+#define AARCH64_JUMP_TABLE_JMP1 0x58000071580000d0
+#define AARCH64_JUMP_TABLE_JMP2 0x00000000d61f0220
 
 #ifndef R_AARCH64_TLSLE_ADD_TPREL_HI12
 #define R_AARCH64_TLSLE_ADD_TPREL_HI12  549
@@ -34,17 +38,30 @@ enum aarch64_reloc_op {
     RELOC_OP_PAGE,
 };
 
-unsigned long jmp_table_inst()
-{
-    return AARCH64_JUMP_TABLE_JMP;
-}
-
 void setup_parameters(struct pt_regs *regs, unsigned long para_a,
     unsigned long para_b, unsigned long para_c)
 {
     regs->regs[0] = para_a;
     regs->regs[1] = para_b;
     regs->regs[2] = para_c;
+}
+
+unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr, unsigned long tmp_addr)
+{
+    struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
+    unsigned int index = info->jmp_cur_entry;
+    if (index >= info->jmp_max_entry) {
+        pr_err("jmp table overflow \n");
+        return 0;
+    }
+
+    table[index].inst[0] = AARCH64_JUMP_TABLE_JMP1;
+    table[index].inst[1] = AARCH64_JUMP_TABLE_JMP2;
+    table[index].addr[0] = jmp_addr;
+    table[index].addr[1] = tmp_addr;
+    info->jmp_cur_entry ++;
+    return (unsigned long)(info->mod->core_layout.base + info->jmp_offs +
+                           index * sizeof(struct upatch_jmp_table_entry));
 }
 
 static inline s64 calc_reloc(enum aarch64_reloc_op op, void *place, u64 val)

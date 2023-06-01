@@ -33,17 +33,28 @@
 
 #define X86_64_JUMP_TABLE_JMP 0x90900000000225ff /* jmp [rip+2]; nop; nop */
 
-unsigned long jmp_table_inst()
-{
-    return X86_64_JUMP_TABLE_JMP;
-}
-
 void setup_parameters(struct pt_regs *regs, unsigned long para_a,
     unsigned long para_b, unsigned long para_c)
 {
     regs->di = para_a;
     regs->si = para_b;
     regs->dx = para_c;
+}
+
+unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr, unsigned long tmp_addr)
+{
+    struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
+    unsigned int index = info->jmp_cur_entry;
+    if (index >= info->jmp_max_entry) {
+        pr_err("jmp table overflow \n");
+        return 0;
+    }
+
+    table[index].inst = X86_64_JUMP_TABLE_JMP;
+    table[index].addr = jmp_addr;
+    info->jmp_cur_entry ++;
+    return (unsigned long)(info->mod->core_layout.base + info->jmp_offs +
+                           index * sizeof(struct upatch_jmp_table_entry));
 }
 
 /*
