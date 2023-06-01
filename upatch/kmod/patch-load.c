@@ -29,6 +29,8 @@
 
 #define GOT_RELA_NAME ".rela.dyn"
 #define PLT_RELA_NAME ".rela.plt"
+#define TDATA_NAME ".tdata"
+#define TBSS_NAME ".tbss"
 
 #ifndef ARCH_SHF_SMALL
 #define ARCH_SHF_SMALL 0
@@ -401,7 +403,7 @@ static int move_module(struct upatch_module *mod, struct upatch_load_info *info)
     /* Do the allocs. */
     ret = upatch_module_alloc(info, &mod->core_layout, 0xffffffff);
     if (ret) {
-        pr_err("alloc upatch module memory failed \n");
+        pr_err("alloc upatch module memory failed: %d \n", ret);
         return ret;
     }
 
@@ -633,15 +635,22 @@ out_got:
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
         unsigned long addr;
 
-        sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
-        /* TODO: don't care about its version here */
-        tmp = strchr(sym_name, '@');
-        if (tmp != NULL)
-            *tmp = '\0';
+        if (r_sym == 0) {
+            if (rela[i].r_addend != patch_sym.st_value)
+                continue;
+            sprintf(sym_name, "%llx", rela[i].r_addend);
+        }
+        else {
+            sym_name = elf_info->dynstrtab + sym[r_sym].st_name;
+            /* TODO: don't care about its version here */
+            tmp = strchr(sym_name, '@');
+            if (tmp != NULL)
+                *tmp = '\0';
 
-        /* function could also be part of the GOT with the type R_X86_64_GLOB_DAT */
-        if (!streql(sym_name, name))
-            continue;
+            /* function could also be part of the GOT with the type R_X86_64_GLOB_DAT */
+            if (!streql(sym_name, name))
+                continue;
+        }
 
         if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
             pr_err("copy address failed \n");
@@ -835,8 +844,10 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
     }
 
     elf_info->sechdrs = (void *)elf_info->hdr + elf_info->hdr->e_shoff;
+    elf_info->prohdrs = (void *)elf_info->hdr + elf_info->hdr->e_phoff;
     elf_info->secstrings = (void *)elf_info->hdr
         + elf_info->sechdrs[elf_info->hdr->e_shstrndx].sh_offset;
+    elf_info->tls_size = 0;
 
     /* check section header */
     for (i = 1; i < elf_info->hdr->e_shnum; i++) {
@@ -861,6 +872,14 @@ int load_binary_syms(struct file *binary_file, struct running_elf_info *elf_info
             && elf_info->sechdrs[i].sh_type == SHT_RELA) {
             elf_info->index.reladyn = i;
             pr_debug("found %s with %d \n", GOT_RELA_NAME, i);
+        }
+    }
+
+    for (i = 0; i < elf_info->hdr->e_phnum; i++) {
+        if (elf_info->prohdrs[i].p_type == PT_TLS) {
+            elf_info ->tls_size = elf_info->prohdrs[i].p_memsz;
+            elf_info ->tls_align = elf_info->prohdrs[i].p_align;
+            break;
         }
     }
 

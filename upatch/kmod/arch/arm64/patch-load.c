@@ -17,6 +17,16 @@
  */
 #define AARCH64_JUMP_TABLE_JMP 0xd61f022058000051
 
+#ifndef R_AARCH64_TLSLE_ADD_TPREL_HI12
+#define R_AARCH64_TLSLE_ADD_TPREL_HI12  549
+#endif
+
+#ifndef R_AARCH64_TLSLE_ADD_TPREL_LO12_NC
+#define R_AARCH64_TLSLE_ADD_TPREL_LO12_NC  551
+#endif
+
+#define TCB_SIZE    2 * sizeof(void *)
+
 enum aarch64_reloc_op {
     RELOC_OP_NONE,
     RELOC_OP_ABS,
@@ -244,6 +254,20 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             // TODO: ovf check -2^27 < X < 2^27
             result = extract_insn_imm(result, 26, 2);
             result = insert_insn_imm(AARCH64_INSN_IMM_26, loc, result);
+            *(__le32 *)loc = cpu_to_le32(result);
+            break;
+        case R_AARCH64_TLSLE_ADD_TPREL_HI12:
+            result = ALIGN(TCB_SIZE, info->running_elf.tls_align) + val;
+            if (result < 0 || result >= BIT(24))
+                goto overflow;
+            result = extract_insn_imm(result, 12, 12);
+            result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
+            *(__le32 *)loc = cpu_to_le32(result);
+            break;
+        case R_AARCH64_TLSLE_ADD_TPREL_LO12_NC:
+            result = ALIGN(TCB_SIZE, info->running_elf.tls_align) + val;
+            result = extract_insn_imm(result, 12, 0);
+            result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
 

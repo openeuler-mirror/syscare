@@ -11,12 +11,24 @@
 
 #include "arch/patch-load.h"
 
+#ifndef R_X86_64_TLSGD
+#define R_X86_64_TLSGD          19
+#endif
+
+#ifndef R_X86_64_GOTTPOFF
+#define R_X86_64_GOTTPOFF       22
+#endif
+
+#ifndef R_X86_64_TPOFF32
+#define R_X86_64_TPOFF32        23
+#endif
+
 #ifndef R_X86_64_GOTPCRELX
-#define R_X86_64_GOTPCRELX 41
+#define R_X86_64_GOTPCRELX      41
 #endif
 
 #ifndef R_X86_64_REX_GOTPCRELX
-#define R_X86_64_REX_GOTPCRELX 42
+#define R_X86_64_REX_GOTPCRELX  42
 #endif
 
 #define X86_64_JUMP_TABLE_JMP 0x90900000000225ff /* jmp [rip+2]; nop; nop */
@@ -67,6 +79,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
     void *loc, *real_loc;
     u64 val, got;
     const char *name;
+    Elf64_Xword tls_size;
 
     pr_debug("Applying relocate section %u to %u\n",
              relsec, sechdrs[relsec].sh_info);
@@ -114,6 +127,8 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
                 && (ELF_ST_TYPE(sym->st_info) != STT_SECTION))
                 goto overflow;
             break;
+        case R_X86_64_TLSGD:
+        case R_X86_64_GOTTPOFF:
         case R_X86_64_GOTPCRELX:
         case R_X86_64_REX_GOTPCRELX:
             /* get GOT address */
@@ -135,6 +150,14 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
                 goto invalid_relocation;
             val -= (u64)real_loc;
             memcpy(loc, &val, 8);
+            break;
+        case R_X86_64_TPOFF32:
+            tls_size = ALIGN(info->running_elf.tls_size, info->running_elf.tls_align);
+            // %fs + val - tls_size
+            if (val >= tls_size)
+                goto overflow;
+            val -= (u64)tls_size;
+            memcpy(loc, &val, 4);
             break;
         default:
             pr_err("Unknown rela relocation: %llu\n", ELF64_R_TYPE(rel[i].r_info));

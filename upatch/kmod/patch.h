@@ -123,6 +123,9 @@ struct running_elf_info {
     unsigned long len;
     Elf_Ehdr *hdr;
     Elf_Shdr *sechdrs;
+    Elf_Phdr *prohdrs;
+    Elf64_Xword tls_size;
+    Elf64_Xword tls_align;
     char *secstrings, *strtab, *dynstrtab;
     /* start address of this block, used to find the pole */
     unsigned long load_start;
