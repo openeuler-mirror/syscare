@@ -7,12 +7,10 @@ use log::log;
 use lazy_static::*;
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
-use common::os;
 
 use crate::package::PackageInfo;
 use crate::cli::CliArguments;
 
-use common::util::os_str::OsStrExt;
 use common::util::{fs, digest};
 
 const PATCH_VERSION_LENGTH: usize = 8;
@@ -23,7 +21,7 @@ const PATCH_VERSION_LENGTH: usize = 8;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * it should be updated and keep sync with patch management cli.
  */
-const PATCH_INFO_MAGIC: &str = "2A96A33EC26809077";
+const PATCH_INFO_MAGIC: &str = "2B96A33EC26809077";
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
@@ -71,10 +69,6 @@ impl PatchFile {
             digest: file_digest.to_owned()
         })
     }
-
-    pub fn is_from_source_pkg(&self) -> bool {
-        self.path.as_os_str().contains(os::process::id().to_string())
-    }
 }
 
 impl std::fmt::Display for PatchFile {
@@ -102,7 +96,6 @@ pub struct PatchInfo {
     pub license:     String,
     pub description: String,
     pub patches:     Vec<PatchFile>,
-    pub is_patched:  bool,
 }
 
 impl PatchInfo {
@@ -124,14 +117,13 @@ impl PatchInfo {
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
-        let is_patched  = false;
 
         Ok(PatchInfo {
             uuid, name, kind,
             version, release, arch,
             target, target_elfs, digest,
             license, description,
-            patches, is_patched,
+            patches,
         })
     }
 

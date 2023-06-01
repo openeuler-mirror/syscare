@@ -14,7 +14,7 @@ use super::package_info::PackageInfo;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * this should be updated and keep sync with patch builder.
  */
-const PATCH_INFO_MAGIC: &str = "2A96A33EC26809077";
+const PATCH_INFO_MAGIC: &str = "2B96A33EC26809077";
 
 #[derive(Debug)]
 #[derive(Serialize, Deserialize)]
@@ -53,7 +53,6 @@ pub struct PatchInfo {
     pub license:     String,
     pub description: String,
     pub patches:     Vec<PatchFile>,
-    pub is_patched:  bool,
 }
 
 impl PatchInfo {

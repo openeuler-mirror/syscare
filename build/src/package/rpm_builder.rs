@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 
 use common::util::os_str::OsStringExt;
 use common::util::ext_cmd::ExternCommandArgs;
-use common::util::{fs, serde::serde_versioned};
+use common::util::fs;
 
-use crate::patch::{PatchInfo, PATCH_INFO_FILE_NAME};
+use crate::patch::PatchInfo;
 use crate::workdir::PackageBuildRoot;
 
 use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
@@ -20,27 +20,8 @@ impl RpmBuilder {
         Self { build_root }
     }
 
-    pub fn write_patch_info_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        serde_versioned::serialize(
-            patch_info,
-            self.build_root.sources.join(PATCH_INFO_FILE_NAME),
-            PatchInfo::version(),
-        )
-    }
-
-    pub fn copy_patch_file_to_source(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
-        for patch_file in &patch_info.patches {
-            let src_path = patch_file.path.as_path();
-            let dst_path = self.build_root.sources.join(&patch_file.name);
-
-            fs::copy(src_path, dst_path)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn copy_all_files_to_source<P: AsRef<Path>>(&self, src_dir: P) -> std::io::Result<()> {
-        fs::copy_dir_contents(src_dir, &self.build_root.sources)
+    pub fn build_root(&self) -> &PackageBuildRoot {
+        &self.build_root
     }
 
     pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {

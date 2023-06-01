@@ -10,13 +10,17 @@ use crate::workdir::PackageBuildRoot;
 use crate::patch::{PatchType, PatchInfo};
 
 use super::package_info::PackageInfo;
-use super::rpm_spec_helper::SPEC_FILE_EXT;
+use super::rpm_spec_helper::{RpmSpecHelper, SPEC_FILE_EXT};
 
 pub const PKG_FILE_EXT:       &str = "rpm";
 pub const DEBUGINFO_FILE_EXT: &str = "debug";
 
+pub(super) const TAR:       ExternCommand = ExternCommand::new("tar");
 pub(super) const RPM:       ExternCommand = ExternCommand::new("rpm");
 pub(super) const RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
+
+const METADATA_PKG_NAME:  &str = ".syscare.tar.gz";
+const METADATA_DIR_NAME:  &str = ".syscare";
 
 pub struct RpmElfRelation {
     pub elf:       PathBuf,
@@ -26,21 +30,10 @@ pub struct RpmElfRelation {
 pub struct RpmHelper;
 
 impl RpmHelper {
-    pub fn check_installed<S: AsRef<OsStr>>(pkg_name: S) -> std::io::Result<()> {
-        let exit_status = RPM.execvp(
-            ExternCommandArgs::new()
-                .arg("--query")
-                .arg(&pkg_name)
-        )?;
-
-        if exit_status.exit_code() != 0 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::BrokenPipe,
-                format!("Package \"{:?}\" is not installed", pkg_name.as_ref())
-            ));
-        }
-
-        Ok(())
+    pub fn is_package_installed<S: AsRef<OsStr>>(pkg_name: S) -> bool {
+        RPM.execvp(ExternCommandArgs::new().arg("--query").arg(&pkg_name))
+           .map(|exit_status| exit_status.exit_code() == 0)
+           .unwrap_or(false)
     }
 
     pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> std::io::Result<OsString> {
@@ -66,6 +59,8 @@ impl RpmHelper {
                 .arg("--nocaps")
                 .arg("--noscripts")
                 .arg("--notriggers")
+                .arg("--nodigest")
+                .arg("--nofiledigest")
                 .arg("--allfiles")
                 .arg("--root")
                 .arg(output_dir.as_ref())
@@ -73,10 +68,55 @@ impl RpmHelper {
         )?.check_exit_code()
     }
 
+    pub fn metadata_dir<P: AsRef<Path>>(pkg_source_dir: P) -> PathBuf {
+        pkg_source_dir.as_ref().join(METADATA_DIR_NAME)
+    }
+
+    pub fn has_metadata<P: AsRef<Path>>(pkg_source_dir: P) -> bool {
+        pkg_source_dir.as_ref().join(METADATA_PKG_NAME).exists()
+    }
+
+    pub fn compress_metadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
+        let metadata_source_dir = pkg_source_dir.as_ref();
+        let metadata_file       = metadata_source_dir.join(METADATA_PKG_NAME);
+        debug!("Compressing metadata into {:?}", metadata_file);
+
+        TAR.execvp(
+            ExternCommandArgs::new()
+                .arg("-czf")
+                .arg(metadata_file)
+                .arg("-C")
+                .arg(metadata_source_dir)
+                .arg(METADATA_DIR_NAME)
+                .arg("--restrict")
+        )?.check_exit_code()
+    }
+
+    pub fn decompress_medatadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
+        let metadata_source_dir = pkg_source_dir.as_ref();
+        let metadata_file       = metadata_source_dir.join(METADATA_PKG_NAME);
+        debug!("Decompressing metadata from {:?}", metadata_file);
+
+        TAR.execvp(
+            ExternCommandArgs::new()
+                .arg("-xf")
+                .arg(metadata_file)
+                .arg("-C")
+                .arg(metadata_source_dir)
+                .arg("--no-same-owner")
+                .arg("--no-same-permissions")
+                .arg("--restrict")
+        )?.check_exit_code()
+    }
+
+    pub fn add_metadata_to_spec_file<P: AsRef<Path>>(spec_file: P) -> std::io::Result<()> {
+        RpmSpecHelper::add_files_to_spec(&spec_file, vec![METADATA_PKG_NAME])
+    }
+
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
         const PKG_BUILD_ROOT: &str = "rpmbuild";
 
-        debug!("Finding package build root from \"{}\"", directory.as_ref().display());
+        debug!("Finding package build root from {:?}", directory.as_ref());
         Ok(PackageBuildRoot::new(
             fs::find_dir(
                 directory,
@@ -87,8 +127,7 @@ impl RpmHelper {
     }
 
     pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
-        debug!("Finding package spec file from \"{}\"", directory.as_ref().display());
-
+        debug!("Finding package spec file from {:?}", directory.as_ref());
         let spec_file = fs::find_file_by_ext(
             directory,
             SPEC_FILE_EXT,
@@ -101,7 +140,7 @@ impl RpmHelper {
     pub fn find_build_source<P: AsRef<Path>>(directory: P, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
         const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 
-        debug!("Finding package build source from \"{}\"", directory.as_ref().display());
+        debug!("Finding package build source from {:?}", directory.as_ref());
         let search_name = match patch_info.kind {
             PatchType::UserPatch   => &patch_info.target.name,
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
@@ -128,7 +167,7 @@ impl RpmHelper {
     }
 
     pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
-        debug!("Finding package debuginfo from \"{}\"", directory.as_ref().display());
+        debug!("Finding package debuginfo from {:?}", directory.as_ref());
 
         let debuginfo_files = fs::list_files_by_ext(
             &directory,
@@ -174,7 +213,7 @@ impl RpmHelper {
                 None => {
                     return Err(std::io::Error::new(
                         std::io::ErrorKind::Other,
-                        format!("Cannot parse elf path from \"{}\"", debuginfo_path.display())
+                        format!("Cannot parse elf path from {:?}", debuginfo_path)
                     ));
                 }
             }

@@ -37,7 +37,7 @@ impl<'a> UserPatchBuilder<'a> {
             OsString::from(GCC_CXX_NAME),
         ];
 
-        if RpmHelper::check_installed(GCC_SECURE_PKG_NAME).is_ok() {
+        if RpmHelper::is_package_installed(GCC_SECURE_PKG_NAME) {
             for compiler in &mut compiler_list {
                 compiler.push(GCC_SECURE_COMPILER_SUFFIX)
             }
