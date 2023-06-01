@@ -95,24 +95,33 @@ impl UpatchBuild {
             self.args.elf_pathes[i] = self.get_binary_elf(&self.args.debug_infoes[i], &self.args.elf_pathes[i])?;
         }
 
+        // collect source link message and object message
         self.source_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.source_dir())?;
+        self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
+        if self.source_obj.is_empty() {
+            return Err(Error::Build(format!("no valid object in {:?}", self.work_dir.source_dir())));
+        }
 
-        // build patch
+        // patch
         project.patch_all(&self.args.patches, Level::Info)?;
 
+        // build patched
         info!("Building patched {:?}", project_name);
         project.build(COMPILER_CMD_PATCHED_ENTER, ASSEMBLER_CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
+        // collect patched link message and object message
         self.patch_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
+        self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
+        if self.patch_obj.is_empty() {
+            return Err(Error::Build(format!("no valid object in {:?}", self.work_dir.patch_dir())));
+        }
 
         // unhack compiler
         info!("Unhacking compiler");
         drop(compiler_hacker);
 
+        // detecting changed objects
         info!("Detecting changed objects");
-        // correlate obj name
-        self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
-        self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
         self.build_patches()?;
         Ok(())
     }
