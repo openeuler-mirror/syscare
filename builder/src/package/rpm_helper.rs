@@ -42,6 +42,7 @@ impl RpmHelper {
                 .arg("--query")
                 .arg("--queryformat")
                 .arg(format)
+                .arg("--package")
                 .arg(pkg_path.as_ref().as_os_str())
         )?;
         exit_status.check_exit_code()?;
@@ -64,6 +65,7 @@ impl RpmHelper {
                 .arg("--allfiles")
                 .arg("--root")
                 .arg(output_dir.as_ref())
+                .arg("--package")
                 .arg(pkg_path.as_ref())
         )?.check_exit_code()
     }
