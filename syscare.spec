@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.1
-Release:        6
+Release:        7
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -25,7 +25,7 @@ The host can fix the system problem without rebooting.
 
 %package kmod
 Summary:       Syscare kernel modules.
-Requires:      kernel = %{kernel_version}
+Requires:      kernel >= %{kernel_version}
 BuildRequires: kernel-devel
 BuildRequires: make gcc bison flex
 
@@ -38,7 +38,7 @@ Requires: %{name} = %{version}-%{release}
 Requires: %{name}-kmod >= 1.0.1-1
 Requires: kpatch make gcc openssl-devel dwarves python3-devel bison flex
 Requires: elfutils-libelf-devel
-Requires: rpm-build
+Requires: rpm-build tar gzip
 
 %description build
 Syscare build tools.
@@ -47,14 +47,14 @@ Syscare build tools.
 %autosetup -p1
 
 %build
-mkdir -p build_tmp
-cd build_tmp
+mkdir -p build
+cd build
 
 cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_name} ..
 make
 
 %install
-cd build_tmp
+cd build
 %make_install
 mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 mv %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
@@ -115,6 +115,9 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Fri Jun 02 2023 renoseven<dev@renoseven.net> - 1.0.1-7
+- Various bugfix
+- Support multiple compiler
 * Wed May 31 2023 renoseven<dev@renoseven.net> - 1.0.1-6
 - Various bugfix
 - Support multiple debuginfo package
