@@ -41,7 +41,7 @@ void setup_parameters(struct pt_regs *regs, unsigned long para_a,
     regs->dx = para_c;
 }
 
-unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr, unsigned long tmp_addr)
+static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr)
 {
     struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
     unsigned int index = info->jmp_cur_entry;
@@ -80,6 +80,43 @@ static unsigned long setup_got_table(struct upatch_load_info *info, unsigned lon
         + index * sizeof(struct upatch_jmp_table_entry));
 }
 
+unsigned long insert_plt_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr)
+{
+    unsigned long jmp_addr;
+    unsigned long elf_addr = 0;
+
+    if (copy_from_user((void *)&jmp_addr, addr, sizeof(unsigned long))) {
+        pr_err("copy address failed \n");
+        goto out;
+    }
+
+    elf_addr = setup_jmp_table(info, jmp_addr);
+
+    pr_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
+
+out:
+    return elf_addr;
+}
+
+
+unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr)
+{
+    unsigned long jmp_addr;
+    unsigned long elf_addr = 0;
+
+    if (copy_from_user((void *)&jmp_addr, addr, sizeof(unsigned long))) {
+        pr_err("copy address failed \n");
+        goto out;
+    }
+
+    elf_addr = setup_got_table(info, jmp_addr);
+
+    pr_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
+
+out:
+    return elf_addr;
+}
+
 int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
     const char *strtab, unsigned int symindex,
     unsigned int relsec, struct upatch_module *me)
@@ -88,7 +125,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
     Elf64_Rela *rel = (void *)sechdrs[relsec].sh_addr;
     Elf64_Sym *sym;
     void *loc, *real_loc;
-    u64 val, got;
+    u64 val;
     const char *name;
     Elf64_Xword tls_size;
 
@@ -142,12 +179,10 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
         case R_X86_64_GOTTPOFF:
         case R_X86_64_GOTPCRELX:
         case R_X86_64_REX_GOTPCRELX:
-            /* get GOT address */
-            got = setup_got_table(info, sym->st_value);
-            if (got == 0)
+            if (sym->st_value == 0)
                 goto overflow;
             /* G + GOT + A*/
-            val = got + rel[i].r_addend;
+            val = sym->st_value + rel[i].r_addend;
             fallthrough;
         case R_X86_64_PC32:
         case R_X86_64_PLT32:

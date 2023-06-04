@@ -571,7 +571,6 @@ out_plt:
         unsigned long r_sym = ELF64_R_SYM (rela[i].r_info);
         /* for executable file, r_offset is virtual address of PLT table */
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
-        unsigned long addr;
 
         /* some rela don't have the symbol index, use the symbol's value and rela's addend to find the symbol.
          * for example, R_X86_64_IRELATIVE.
@@ -589,19 +588,14 @@ out_plt:
             if (tmp != NULL)
                 *tmp = '\0';
 
-            if (!streql(sym_name, name)
-                || ELF64_ST_TYPE(sym[r_sym].st_info) != STT_FUNC)
+            if (!(streql(sym_name, name)
+                && (ELF64_ST_TYPE(sym[r_sym].st_info) == STT_FUNC || ELF64_ST_TYPE(sym[r_sym].st_info) == STT_TLS)))
                 continue;
         }
 
-        /* this address is used for R_X86_64_PLT32  */
-        if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
-            pr_err("copy address failed \n");
-            goto out;
-        }
-        elf_addr = setup_jmp_table(elf_info->load_info, addr, (unsigned long)tmp_addr);
-        pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx <- 0x%lx (jmp)\n",
-            sym_name, rela[i].r_offset, addr, elf_addr);
+        elf_addr = insert_plt_table(elf_info->load_info, ELF64_R_TYPE(rela[i].r_info), tmp_addr);
+        pr_debug("found unresolved plt.rela %s at 0x%llx -> 0x%lx\n",
+            sym_name, rela[i].r_offset, elf_addr);
         goto out;
     }
 
@@ -616,7 +610,6 @@ out_got:
         unsigned long r_sym = ELF64_R_SYM (rela[i].r_info);
         /* for executable file, r_offset is virtual address of GOT table */
         void __user *tmp_addr = (void *)(elf_info->load_bias + rela[i].r_offset);
-        unsigned long addr;
 
         if (r_sym == 0) {
             if (rela[i].r_addend != patch_sym.st_value)
@@ -635,12 +628,7 @@ out_got:
                 continue;
         }
 
-        if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
-            pr_err("copy address failed \n");
-            goto out;
-        }
-        /* used for R_X86_64_REX_GOTPCRELX */
-        elf_addr = addr;
+        elf_addr = insert_got_table(elf_info->load_info, ELF64_R_TYPE(rela[i].r_info), tmp_addr);
         pr_debug("found unresolved .got %s at 0x%lx \n", sym_name, elf_addr);
         goto out;
     }
@@ -649,7 +637,6 @@ out_got:
     sechdr = &elf_info->sechdrs[elf_info->index.dynsym];
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
     for (i = 0; i < sechdr->sh_size / sizeof(Elf64_Sym); i ++) {
-        unsigned long addr;
         void __user *tmp_addr;
 
         /* only need the st_value that is not 0 */
@@ -667,12 +654,7 @@ out_got:
             continue;
 
         tmp_addr = (void *)(elf_info->load_bias + sym[i].st_value);
-        if (copy_from_user((void *)&addr, tmp_addr, sizeof(unsigned long))) {
-            pr_err("copy address failed \n");
-            goto out;
-        }
-        /* used for R_X86_64_REX_GOTPCRELX */
-        elf_addr = addr;
+        elf_addr = insert_got_table(elf_info->load_info, 0, tmp_addr);
         pr_debug("found unresolved .got %s at 0x%lx \n", sym_name, elf_addr);
         goto out;
     }

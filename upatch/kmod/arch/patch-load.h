@@ -13,11 +13,12 @@
 #include <asm/elf.h>
 
 #include "patch.h"
+#include "common.h"
 
 struct upatch_load_info;
 struct upatch_module;
 
-/* jmp table, solve limit for the jmp instruction */
+/* jmp table, solve limit for the jmp instruction, Used for both PLT/GOT */
 #if defined(__x86_64__)
 struct upatch_jmp_table_entry {
     unsigned long inst;
@@ -30,9 +31,8 @@ struct upatch_jmp_table_entry {
 };
 #endif
 
-/* Used for both PLT/GOT */
-unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned long jmp_addr,
-    unsigned long tmp_addr);
+unsigned long insert_plt_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr);
+unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr);
 
 int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
     const char *strtab, unsigned int symindex,
