@@ -13,7 +13,7 @@ use crate::cli::CliArguments;
 
 use common::util::{fs, digest};
 
-const PATCH_VERSION_LENGTH: usize = 8;
+const PATCH_DIGEST_LENGTH: usize = 8;
 /*
  * In order to solve PatchInfo binary compatibility issue,
  * we use this version string to perform compatibility check
@@ -37,6 +37,7 @@ impl std::fmt::Display for PatchType {
     }
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchFile {
@@ -55,7 +56,7 @@ impl PatchFile {
         let file_name = fs::file_name(&file_path);
 
         let mut file_digests = FILE_DIGESTS.lock().unwrap();
-        let file_digest = &digest::file(file_path.as_path())?[..PATCH_VERSION_LENGTH];
+        let file_digest = &digest::file(file_path.as_path())?[..PATCH_DIGEST_LENGTH];
         if !file_digests.insert(file_digest.to_owned()) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -71,16 +72,7 @@ impl PatchFile {
     }
 }
 
-impl std::fmt::Display for PatchFile {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("PatchFile {{ name: {}, path: {}, digest: ${} }}",
-            self.name.to_string_lossy(),
-            self.path.display(),
-            self.digest
-        ))
-    }
-}
-
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchInfo {
@@ -92,7 +84,7 @@ pub struct PatchInfo {
     pub kind:        PatchType,
     pub digest:      String,
     pub target:      PackageInfo,
-    pub target_elfs: HashMap<OsString, PathBuf>,
+    pub target_elfs: HashMap<OsString, PathBuf>, // (elf_name, elf_path)
     pub license:     String,
     pub description: String,
     pub patches:     Vec<PatchFile>,
@@ -113,7 +105,7 @@ impl PatchInfo {
         let arch        = args.patch_arch.to_owned();
         let target      = target_pkg_info;
         let target_elfs = HashMap::new();
-        let digest      = digest::file_list(&args.patches)?[..PATCH_VERSION_LENGTH].to_owned();
+        let digest      = digest::file_list(&args.patches)?[..PATCH_DIGEST_LENGTH].to_owned();
         let license     = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
         let patches     = args.patches.iter().flat_map(|path| PatchFile::new(path)).collect();
@@ -145,15 +137,13 @@ impl PatchInfo {
         const PATCH_FLAG_NONE: &str = "(none)";
 
         let target_elfs = match self.target_elfs.is_empty() {
-            false => {
-                let mut str = String::new();
-                for (elf_name, _) in self.target_elfs.iter() {
-                    str.push_str(&format!("{}, ", elf_name.to_string_lossy()));
-                }
-                str.trim_end_matches(", ").to_string()
-            },
             true => {
                 PATCH_FLAG_NONE.to_owned()
+            },
+            false => {
+                self.target_elfs.iter().map(|(elf_name, _)| {
+                    format!("{}, ", elf_name.to_string_lossy())
+                }).collect::<String>().trim_end_matches(", ").to_string()
             },
         };
 

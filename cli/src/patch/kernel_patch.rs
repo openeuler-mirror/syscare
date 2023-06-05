@@ -23,6 +23,7 @@ pub struct KernelPatchAdapter {
 const INSMOD: ExternCommand = ExternCommand::new("insmod");
 const RMMOD:  ExternCommand = ExternCommand::new("rmmod");
 
+const KPATCH_PATCH_PREFIX:   &str = "syscare";
 const KPATCH_PATCH_SUFFIX:   &str = "ko";
 const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
 
@@ -34,7 +35,7 @@ const KPATCH_STATUS_ENABLED:  &str = "1";
 
 impl KernelPatchAdapter {
     pub fn new<P: AsRef<Path>>(patch_root: P, patch_info: Rc<PatchInfo>) -> Self {
-        let patch_name = patch_info.name.as_str();
+        let patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, patch_info.uuid); // Use uuid to avoid name collision
         let patch_file = patch_root.as_ref().join(format!("{}.{}",
             patch_name, KPATCH_PATCH_SUFFIX
         ));

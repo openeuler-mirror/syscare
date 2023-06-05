@@ -30,6 +30,7 @@ impl std::fmt::Display for PatchType {
     }
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchFile {
@@ -38,6 +39,7 @@ pub struct PatchFile {
     pub digest: String,
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PatchInfo {
@@ -49,7 +51,7 @@ pub struct PatchInfo {
     pub kind:        PatchType,
     pub digest:      String,
     pub target:      PackageInfo,
-    pub target_elfs: HashMap<OsString, PathBuf>,
+    pub target_elfs: HashMap<OsString, PathBuf>, // (elf_name, elf_path)
     pub license:     String,
     pub description: String,
     pub patches:     Vec<PatchFile>,

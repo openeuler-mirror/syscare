@@ -2,12 +2,14 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
+use common::util::fs;
 
 use crate::cli::{CliWorkDir, CliArguments};
 use crate::package::RpmHelper;
 use crate::patch::{PatchInfo, PatchBuilder, PatchBuilderArguments};
 
-use super::kpatch_helper::{KernelPatchHelper, VMLINUX_FILE_NAME};
+use super::kpatch_helper::KernelPatchHelper;
+use super::kpatch_helper::{VMLINUX_FILE_NAME, KPATCH_PATCH_PREFIX, KPATCH_PATCH_SUFFIX};
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 
 pub struct KernelPatchBuilder<'a> {
@@ -70,9 +72,10 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
         let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
         let vmlinux_file = KernelPatchHelper::find_vmlinux(debug_pkg_dir)?;
 
+        let kernel_patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, patch_info.uuid); // Use uuid to avoid patch name collision
         let builder_args = KernelPatchBuilderArguments {
             build_root:          patch_build_root.to_owned(),
-            patch_name:          patch_info.name.to_owned(),
+            patch_name:          kernel_patch_name,
             source_dir:          kernel_source_dir,
             config:              kernel_config_file,
             vmlinux:             vmlinux_file,
@@ -95,19 +98,29 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
                     self.parse_cmd_envs(kargs)
                 )?.check_exit_code()
             },
-            PatchBuilderArguments::UserPatch(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 
-    fn write_patch_info(&self, patch_info: &mut PatchInfo, _: &PatchBuilderArguments) -> std::io::Result<()> {
-        /*
-         * Kernel patch does not use target_elf for patch operation,
-         * so we just add it for display purpose.
-         */
-        patch_info.target_elfs.insert(
-            OsString::from(VMLINUX_FILE_NAME),
-            PathBuf::from(VMLINUX_FILE_NAME),
-        );
+    fn write_patch_info(&self, patch_info: &mut PatchInfo, args: &PatchBuilderArguments) -> std::io::Result<()> {
+        match args {
+            PatchBuilderArguments::KernelPatch(kargs) => {
+                /*
+                * Kernel patch does not use target_elf for patch operation,
+                * so we just add it for display purpose.
+                */
+                let output_dir = kargs.output_dir.as_path();
+                let patch_name = format!("{}-{}.{}", KPATCH_PATCH_PREFIX, patch_info.uuid, KPATCH_PATCH_SUFFIX);
+
+                if fs::find_file(output_dir, patch_name, fs::FindOptions { fuzz: false, recursive: false }).is_ok() {
+                    let elf_path = PathBuf::new();
+                    let elf_name = OsString::from(VMLINUX_FILE_NAME);
+
+                    patch_info.target_elfs.insert(elf_name, elf_path);
+                }
+            },
+            _ => unreachable!(),
+        }
 
         Ok(())
     }

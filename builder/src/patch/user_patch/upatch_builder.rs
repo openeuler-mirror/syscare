@@ -168,7 +168,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     self.parse_cmd_args(uargs)
                 )?.check_exit_code()
             },
-            PatchBuilderArguments::KernelPatch(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 
@@ -179,19 +179,21 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                  * We assume that upatch-build generated patch file is named same as original elf file.
                  * Thus, we can filter all elf names by existing patch file, which is the patch binary.
                  */
-                let elf_map = uargs.elf_relations.iter().filter_map(|elf_relation| {
-                    let elf_name = fs::file_name(&elf_relation.elf);
-                    let elf_path = elf_relation.elf.to_path_buf();
+                for elf_relation in &uargs.elf_relations {
+                    let output_dir = uargs.output_dir.as_path();
+                    let patch_name = fs::file_name(&elf_relation.elf);
 
-                    fs::find_file(&uargs.output_dir, &elf_name, fs::FindOptions { fuzz: false, recursive: false }).map(|_| {
-                        (elf_name, elf_path)
-                    }).ok()
-                });
-                patch_info.target_elfs.extend(elf_map);
+                    if fs::find_file(output_dir, &patch_name, fs::FindOptions { fuzz: false, recursive: false }).is_ok() {
+                        let elf_path = elf_relation.elf.to_owned();
+                        let elf_name = patch_name;
+
+                        patch_info.target_elfs.insert(elf_name, elf_path);
+                    }
+                }
 
                 Ok(())
             },
-            PatchBuilderArguments::KernelPatch(_) => unreachable!(),
+            _ => unreachable!(),
         }
     }
 }

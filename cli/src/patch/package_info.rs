@@ -19,6 +19,7 @@ impl std::fmt::Display for PackageType {
     }
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(Clone)]
 pub struct PackageInfo {

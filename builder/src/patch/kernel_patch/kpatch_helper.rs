@@ -4,7 +4,9 @@ use log::debug;
 use common::util::fs;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
-pub const VMLINUX_FILE_NAME: &str = "vmlinux";
+pub const VMLINUX_FILE_NAME:   &str = "vmlinux";
+pub const KPATCH_PATCH_PREFIX: &str = "syscare";
+pub const KPATCH_PATCH_SUFFIX: &str = "ko";
 
 pub struct KernelPatchHelper;
 

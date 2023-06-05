@@ -22,6 +22,7 @@ impl std::fmt::Display for PackageType {
     }
 }
 
+#[derive(Debug)]
 #[derive(Serialize, Deserialize)]
 #[derive(PartialEq)]
 #[derive(Clone)]
