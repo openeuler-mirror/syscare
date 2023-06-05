@@ -8,7 +8,6 @@ use log::{debug, error};
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
-// use super::patch::Patch;
 use super::patch_info::PatchInfo;
 use super::patch_status::PatchStatus;
 use super::patch_action::PatchActionAdapter;

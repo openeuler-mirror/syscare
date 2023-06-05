@@ -47,17 +47,19 @@ pub struct PatchFile {
 }
 
 impl PatchFile {
-    pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+    fn is_file_digest_exists<S: AsRef<str>>(digest: S) -> bool {
         lazy_static! {
             static ref FILE_DIGESTS: Mutex<HashSet<String>> = Mutex::new(HashSet::new());
         }
+        FILE_DIGESTS.lock().unwrap().insert(digest.as_ref().to_owned())
+    }
 
-        let file_path = fs::canonicalize(path)?;
-        let file_name = fs::file_name(&file_path);
+    pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+        let file_path   = fs::canonicalize(path)?;
+        let file_name   = fs::file_name(&file_path);
+        let file_digest = digest::file(&file_path)?[..PATCH_DIGEST_LENGTH].to_owned();
 
-        let mut file_digests = FILE_DIGESTS.lock().unwrap();
-        let file_digest = &digest::file(file_path.as_path())?[..PATCH_DIGEST_LENGTH];
-        if !file_digests.insert(file_digest.to_owned()) {
+        if !Self::is_file_digest_exists(&file_digest) {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!("Patch \"{}\" is duplicated", file_path.display())
@@ -65,9 +67,9 @@ impl PatchFile {
         }
 
         Ok(Self {
-            name:   file_name.to_owned(),
+            name:   file_name,
             path:   file_path,
-            digest: file_digest.to_owned()
+            digest: file_digest
         })
     }
 }
@@ -159,8 +161,10 @@ impl PatchInfo {
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");
+        let mut patch_id = 1usize;
         for patch_file in &self.patches {
-            log!(level, "{} {}", patch_file.digest, patch_file.name.to_string_lossy());
+            log!(level, "{}. {}", patch_id, patch_file.name.to_string_lossy());
+            patch_id += 1;
         }
     }
 }
