@@ -19,6 +19,13 @@ message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
 add_subdirectory(upatch)
 
 # Build syscare
+add_custom_target(syscare-deps ALL
+    COMMENT "Updating syscare dependency..."
+    COMMAND cargo update -p clap --precise 4.0.32
+    COMMAND cargo update -p clap_lex --precise 0.3.0
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
 add_custom_target(syscare ALL
     COMMENT "Compiling syscare..."
     COMMAND cargo update -p clap --precise 4.0.32

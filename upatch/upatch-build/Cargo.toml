@@ -1,6 +1,6 @@
 [package]
 name = "upatch-build"
-version = "0.1.1"
+version = "1.0.1"
 edition = "2021"
 authors = ["lizongwu@huawei.com"]
 description = "upatch-build tool"
@@ -11,7 +11,7 @@ build = "build.rs"
 
 [dependencies]
 common = { path = "../../common", package = "syscare-common"}
-log = {version = "0.4.17"}
+log = {version = "0.4"}
 object = {version = "0.29.0", features = ["write"]}
 gimli = {version = "0.26.1"}
 typed-arena = {version = "2.0.1"}

@@ -1,6 +1,6 @@
 [package]
 name        = "syscare"
-version     = "1.0.0-dev"
+version     = "1.0.1"
 edition     = "2021"
 authors     = ["renoseven <dev@renoseven.net>"]
 description = "Syscare command line interface"
@@ -10,7 +10,7 @@ build       = "build.rs"
 [dependencies]
 common      = { package = "syscare-common", path = "../common" }
 lazy_static = { version = "1.4.0" }
-log         = { version = "0.4.17" }
-log4rs      = { version = "1.2.0" }
-clap        = { version = "4.0.13", features = ["derive"] }
+log         = { version = "0.4" }
+log4rs      = { version = "1" }
+clap        = { version = "4.0.32", features = ["derive"] }
 serde       = { version = "1.0", features = ["derive"] }
