@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.1
-Release:        7
+Release:        8
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -36,7 +36,9 @@ Syscare kernel modules dependency.
 Summary:  Tools for build syscare patch.
 Requires: %{name} = %{version}-%{release}
 Requires: %{name}-kmod >= 1.0.1-1
-Requires: kpatch make gcc openssl-devel dwarves python3-devel bison flex
+Requires: make gcc patch
+Requires: bison flex
+Requires: kpatch dwarves
 Requires: elfutils-libelf-devel
 Requires: rpm-build tar gzip
 
@@ -115,6 +117,10 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Tue Jun 06 2023 renoseven<dev@renoseven.net> - 1.0.1-8
+- Fix 'kernel patch sys interface collision' issue
+- Fix 'patch GOT table jump fails' issue
+- Fix 'patch TLS variable relocation fails' issue
 * Fri Jun 02 2023 renoseven<dev@renoseven.net> - 1.0.1-7
 - Various bugfix
 - Support multiple compiler
