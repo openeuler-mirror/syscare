@@ -11,6 +11,10 @@
 
 #include "arch/patch-load.h"
 
+#ifndef R_X86_64_DTPMOD64
+#define R_X86_64_DTPMOD64       16
+#endif
+
 #ifndef R_X86_64_TLSGD
 #define R_X86_64_TLSGD          19
 #endif
@@ -63,7 +67,7 @@ static unsigned long setup_jmp_table(struct upatch_load_info *info, unsigned lon
  * GOT only need record address and resolve it by [got_addr].
  * To simplify design, use same table for both jmp table and GOT.
  */
-static unsigned long setup_got_table(struct upatch_load_info *info, unsigned long jmp_addr)
+static unsigned long setup_got_table(struct upatch_load_info *info, unsigned long jmp_addr, unsigned long tls_addr)
 {
     struct upatch_jmp_table_entry *table =
         info->mod->core_layout.kbase + info->jmp_offs;
@@ -74,7 +78,7 @@ static unsigned long setup_got_table(struct upatch_load_info *info, unsigned lon
     }
 
     table[index].inst = jmp_addr;
-    table[index].addr = 0xffffffff;
+    table[index].addr = tls_addr;
     info->jmp_cur_entry ++;
     return (unsigned long)(info->mod->core_layout.base + info->jmp_offs
         + index * sizeof(struct upatch_jmp_table_entry));
@@ -102,6 +106,7 @@ out:
 unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr)
 {
     unsigned long jmp_addr;
+    unsigned long tls_addr = 0xffffffff;
     unsigned long elf_addr = 0;
 
     if (copy_from_user((void *)&jmp_addr, addr, sizeof(unsigned long))) {
@@ -109,7 +114,14 @@ unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_ty
         goto out;
     }
 
-    elf_addr = setup_got_table(info, jmp_addr);
+    // tls's got size is 64bits
+    if (r_type == R_X86_64_DTPMOD64 &&
+        copy_from_user((void *)&tls_addr, addr + 8, sizeof(unsigned long))) {
+        pr_err("copy address failed \n");
+        goto out;
+    }
+
+    elf_addr = setup_got_table(info, jmp_addr, tls_addr);
 
     pr_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
 
