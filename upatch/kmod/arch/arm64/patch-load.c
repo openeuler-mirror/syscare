@@ -125,7 +125,7 @@ unsigned long insert_plt_table(struct upatch_load_info *info, unsigned long r_ty
     }
 
     if (r_type == R_AARCH64_TLSDESC &&
-        copy_from_user((void *)&tls_addr, addr + 8, sizeof(unsigned long))) {
+        copy_from_user((void *)&tls_addr, addr + sizeof(unsigned long), sizeof(unsigned long))) {
         pr_err("copy address failed \n");
         goto out;
     }
@@ -155,7 +155,7 @@ unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_ty
     }
 
     if (r_type == R_AARCH64_TLSDESC &&
-        copy_from_user((void *)&tls_addr, addr + 8, sizeof(unsigned long))) {
+        copy_from_user((void *)&tls_addr, addr + sizeof(unsigned long), sizeof(unsigned long))) {
         pr_err("copy address failed \n");
         goto out;
     }

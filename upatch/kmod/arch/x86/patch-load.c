@@ -114,9 +114,12 @@ unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_ty
         goto out;
     }
 
-    // tls's got size is 64bits
+    /*
+     * R_X86_64_TLSGD: allocate two contiguous entries in the GOT to hold a tls_index structure
+     * tls_index has two unsigned long, the first one is R_X86_64_DTPMOD64.
+     */
     if (r_type == R_X86_64_DTPMOD64 &&
-        copy_from_user((void *)&tls_addr, addr + 8, sizeof(unsigned long))) {
+        copy_from_user((void *)&tls_addr, addr + sizeof(unsigned long), sizeof(unsigned long))) {
         pr_err("copy address failed \n");
         goto out;
     }
