@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use serde::{Serialize, Deserialize, de::DeserializeOwned};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::fs;
 
@@ -12,12 +12,8 @@ pub mod serde_unversioned {
         P: AsRef<Path>,
         T: Serialize,
     {
-        let binary = bincode::serialize(&obj).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Serialize data failed")
-            )
-        })?;
+        let binary = bincode::serialize(&obj)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
 
         fs::write(path, binary)
     }
@@ -28,12 +24,8 @@ pub mod serde_unversioned {
         T: DeserializeOwned,
     {
         let binary = fs::read(path)?;
-        bincode::deserialize::<T>(&binary).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Deserialize data failed")
-            )
-        })
+        bincode::deserialize::<T>(&binary)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Deserialize data failed"))
     }
 }
 
@@ -43,7 +35,7 @@ pub mod serde_versioned {
     #[derive(Serialize, Deserialize)]
     struct VersionedData<T> {
         version: String,
-        data: T
+        data: T,
     }
 
     pub fn serialize<P, T>(obj: T, path: P, version: &str) -> std::io::Result<()>
@@ -51,16 +43,12 @@ pub mod serde_versioned {
         P: AsRef<Path>,
         T: Serialize,
     {
-        let vdata  = VersionedData {
+        let vdata = VersionedData {
             version: version.to_owned(),
-            data:    obj
+            data: obj,
         };
-        let binary = bincode::serialize(&vdata).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Serialize data failed")
-            )
-        })?;
+        let binary = bincode::serialize(&vdata)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
 
         fs::write(path, binary)
     }
@@ -70,26 +58,23 @@ pub mod serde_versioned {
         P: AsRef<Path>,
         T: DeserializeOwned,
     {
-        let binary  = fs::read(path)?;
+        let binary = fs::read(path)?;
         let data_version = bincode::deserialize::<String>(&binary).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Deserialize data version failed")
-            )
+            std::io::Error::new(std::io::ErrorKind::Other, "Deserialize data version failed")
         })?;
         if data_version != version {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Data version \"{}\" does not match expected version \"{}\"", data_version, version)
+                format!(
+                    "Data version \"{}\" does not match expected version \"{}\"",
+                    data_version, version
+                ),
             ));
         }
 
         let version_len = bincode::serialized_size(&data_version).unwrap() as usize;
         let data = bincode::deserialize::<T>(&binary[version_len..]).map_err(|_| {
-            std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Deserialize data failed")
-            )
+            std::io::Error::new(std::io::ErrorKind::Other, "Deserialize data failed")
         })?;
 
         Ok(data)

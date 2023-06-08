@@ -15,7 +15,7 @@ pub fn file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
 pub fn file_list<I, P>(file_list: I) -> std::io::Result<String>
 where
     I: IntoIterator<Item = P>,
-    P: AsRef<Path>
+    P: AsRef<Path>,
 {
     let mut hasher = Sha256::new();
     for file in file_list {
@@ -28,6 +28,6 @@ where
 pub fn dir<P: AsRef<Path>>(directory: P) -> std::io::Result<String> {
     file_list(fs::list_files(
         directory,
-        fs::TraverseOptions { recursive: true }
+        fs::TraverseOptions { recursive: true },
     )?)
 }

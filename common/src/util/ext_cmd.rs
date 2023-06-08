@@ -1,11 +1,11 @@
-use std::ffi::{OsStr, OsString};
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 
 use std::io::{BufReader, Read};
 use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
 
-use log::{trace, debug};
+use log::{debug, trace};
 
 use super::raw_line::RawLines;
 
@@ -20,7 +20,7 @@ impl ExternCommandArgs {
 
     pub fn arg<S>(mut self, arg: S) -> Self
     where
-        S: AsRef<OsStr>
+        S: AsRef<OsStr>,
     {
         self.args.push(arg.as_ref().to_os_string());
         self
@@ -29,7 +29,7 @@ impl ExternCommandArgs {
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>
+        S: AsRef<OsStr>,
     {
         for arg in args {
             self.args.push(arg.as_ref().to_os_string())
@@ -49,13 +49,21 @@ impl IntoIterator for ExternCommandArgs {
     }
 }
 
+impl Default for ExternCommandEnvs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct ExternCommandEnvs {
     envs: HashMap<OsString, OsString>,
 }
 
 impl ExternCommandEnvs {
     pub fn new() -> Self {
-        Self { envs: HashMap::new() }
+        Self {
+            envs: HashMap::new(),
+        }
     }
 
     pub fn env<K, V>(mut self, k: K, v: V) -> Self
@@ -63,10 +71,8 @@ impl ExternCommandEnvs {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        self.envs.insert(
-            k.as_ref().to_os_string(),
-            v.as_ref().to_os_string()
-        );
+        self.envs
+            .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
         self
     }
 
@@ -77,10 +83,8 @@ impl ExternCommandEnvs {
         V: AsRef<OsStr>,
     {
         for (k, v) in envs {
-            self.envs.insert(
-                k.as_ref().to_os_string(),
-                v.as_ref().to_os_string()
-            );
+            self.envs
+                .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
         }
         self
     }
@@ -96,8 +100,13 @@ impl IntoIterator for ExternCommandEnvs {
     }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+impl Default for ExternCommandArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct ExternCommand<'a> {
     path: &'a str,
 }
@@ -106,7 +115,7 @@ impl ExternCommand<'_> {
     #[inline(always)]
     fn create_stdio_thread<R>(stdio: R) -> JoinHandle<std::io::Result<OsString>>
     where
-        R: Read + Send + Sync + 'static
+        R: Read + Send + Sync + 'static,
     {
         std::thread::spawn(move || -> std::io::Result<OsString> {
             let mut last_line = OsString::new();
@@ -131,27 +140,44 @@ impl ExternCommand<'_> {
             .map_err(|e| {
                 std::io::Error::new(
                     e.kind(),
-                    format!("Start process \"{}\" failed, {}", self.path, e.to_string().to_lowercase())
+                    format!(
+                        "Start process \"{}\" failed, {}",
+                        self.path,
+                        e.to_string().to_lowercase()
+                    ),
                 )
             })?;
 
         let child_name = self.path.to_owned();
-        let child_pid  = child.id();
+        let child_pid = child.id();
         trace!("Process \"{}\" ({}) started", child_name, child_pid);
 
-        let stdout_thread = child.stdout.take().map(Self::create_stdio_thread).expect("Pipe stdout failed");
-        let stderr_thread = child.stderr.take().map(Self::create_stdio_thread).expect("Pipe stderr failed");
+        let stdout_thread = child
+            .stdout
+            .take()
+            .map(Self::create_stdio_thread)
+            .expect("Pipe stdout failed");
+        let stderr_thread = child
+            .stderr
+            .take()
+            .map(Self::create_stdio_thread)
+            .expect("Pipe stderr failed");
 
         let child_retval = child.wait()?.code().expect("Get process exit code failed");
         let child_stdout = stdout_thread.join().expect("Join stdout thread failed")?;
         let child_stderr = stderr_thread.join().expect("Join stderr thread failed")?;
-        trace!("Process \"{}\" ({}) exited, exit_code={}", child_name, child_pid, child_retval);
+        trace!(
+            "Process \"{}\" ({}) exited, exit_code={}",
+            child_name,
+            child_pid,
+            child_retval
+        );
 
         Ok(ExternCommandExitStatus {
-            cmd_name:  child_name,
+            cmd_name: child_name,
             exit_code: child_retval,
-            stdout:    child_stdout,
-            stderr:    child_stderr,
+            stdout: child_stdout,
+            stderr: child_stderr,
         })
     }
 }
@@ -168,8 +194,11 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(command)
     }
 
-    pub fn execve(&self, args: ExternCommandArgs, vars: ExternCommandEnvs) -> std::io::Result<ExternCommandExitStatus>
-    {
+    pub fn execve(
+        &self,
+        args: ExternCommandArgs,
+        vars: ExternCommandEnvs,
+    ) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
         command.envs(vars.into_iter());
@@ -187,9 +216,9 @@ impl std::fmt::Display for ExternCommand<'_> {
 #[derive(Debug)]
 pub struct ExternCommandExitStatus {
     cmd_name: String,
-    exit_code:    i32,
-    stdout:       OsString,
-    stderr:       OsString,
+    exit_code: i32,
+    stdout: OsString,
+    stderr: OsString,
 }
 
 impl ExternCommandExitStatus {
@@ -210,9 +239,9 @@ impl ExternCommandExitStatus {
             debug!("{}", self.stderr.to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Process \"{}\" exited unsuccessfully, exit_code={}",
-                    self.cmd_name,
-                    self.exit_code
+                format!(
+                    "Process \"{}\" exited unsuccessfully, exit_code={}",
+                    self.cmd_name, self.exit_code
                 ),
             ));
         }

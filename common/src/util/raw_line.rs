@@ -6,7 +6,7 @@ pub struct RawLines<B> {
     buf: B,
 }
 
-impl <B: BufRead> Iterator for RawLines<B> {
+impl<B: BufRead> Iterator for RawLines<B> {
     type Item = std::io::Result<OsString>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -27,8 +27,8 @@ impl <B: BufRead> Iterator for RawLines<B> {
                 // Drop remaining capacity to save some memory
                 buf.shrink_to_fit();
                 Some(Ok(OsString::from_vec(buf)))
-            },
-            Err(e) => Some(Err(e))
+            }
+            Err(e) => Some(Err(e)),
         }
     }
 }
