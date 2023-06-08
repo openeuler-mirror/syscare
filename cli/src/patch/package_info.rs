@@ -1,13 +1,11 @@
 use log::log;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
 const RPM: ExternCommand = ExternCommand::new("rpm");
 
-#[derive(Serialize, Deserialize)]
-#[derive(Clone)]
-#[derive(Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum PackageType {
     SourcePackage,
     BinaryPackage,
@@ -19,16 +17,14 @@ impl std::fmt::Display for PackageType {
     }
 }
 
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PackageInfo {
-    pub name:       String,
-    pub arch:       String,
-    pub epoch:      String,
-    pub version:    String,
-    pub release:    String,
-    pub license:    String,
+    pub name: String,
+    pub arch: String,
+    pub epoch: String,
+    pub version: String,
+    pub release: String,
+    pub license: String,
     pub source_pkg: String,
 }
 
@@ -38,22 +34,21 @@ impl PackageInfo {
     }
 
     pub fn full_name(&self) -> String {
-        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+        format!(
+            "{}-{}-{}.{}",
+            self.name, self.version, self.release, self.arch
+        )
     }
 
     pub fn check_installed(&self) -> std::io::Result<()> {
         let pkg_name = self.short_name();
 
-        let exit_status = RPM.execvp(
-            ExternCommandArgs::new()
-                .arg("--query")
-                .arg(&pkg_name)
-        )?;
+        let exit_status = RPM.execvp(ExternCommandArgs::new().arg("--query").arg(&pkg_name))?;
 
         if exit_status.exit_code() != 0 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
-                format!("Package \"{}\" is not installed", pkg_name)
+                format!("Package \"{}\" is not installed", pkg_name),
             ));
         }
 

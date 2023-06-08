@@ -1,17 +1,17 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use log::{debug, error};
 use common::util::{fs, serde::serde_unversioned};
+use log::{debug, error};
 
-use super::patch::Patch;
+use super::patch_impl::Patch;
 use super::patch_status::PatchStatus;
 
 const PATCH_INSTALL_DIR: &str = "/usr/lib/syscare/patches";
 const PATCH_STATUS_FILE: &str = "/usr/lib/syscare/patch_status";
 
 pub struct PatchManager {
-    patch_list: Vec<Patch>
+    patch_list: Vec<Patch>,
 }
 
 impl PatchManager {
@@ -24,9 +24,10 @@ impl PatchManager {
                 Ok(patch) => {
                     debug!("Detected patch {{{}}} ({})", patch, patch.full_name());
                     patch_list.push(patch);
-                },
+                }
                 Err(e) => {
-                    error!("Cannot read patch info from \"{}\", {}",
+                    error!(
+                        "Cannot read patch info from \"{}\", {}",
                         patch_root.display(),
                         e.to_string().to_lowercase()
                     );
@@ -56,42 +57,35 @@ impl PatchManager {
     {
         debug!("Finding patch by \"{}\"", pattern);
 
-        let mut list = iter.filter(|obj| is_matched(obj, pattern)).collect::<Vec<_>>();
+        let mut list = iter
+            .filter(|obj| is_matched(obj, pattern))
+            .collect::<Vec<_>>();
         match list.len().cmp(&1) {
-            std::cmp::Ordering::Equal => {
-                Ok(list.swap_remove(0))
-            },
-            std::cmp::Ordering::Less => {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("Cannot find patch \"{}\"", pattern)
-                ))
-            },
-            std::cmp::Ordering::Greater => {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidInput,
-                    format!("Found multiple patch named \"{}\", please use uuid instead", pattern)
-                ))
-            },
+            std::cmp::Ordering::Equal => Ok(list.swap_remove(0)),
+            std::cmp::Ordering::Less => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Cannot find patch \"{}\"", pattern),
+            )),
+            std::cmp::Ordering::Greater => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Found multiple patch named \"{}\", please use uuid instead",
+                    pattern
+                ),
+            )),
         }
     }
-
-
 }
 
 impl PatchManager {
     pub fn new() -> std::io::Result<Self> {
         Ok(Self {
-            patch_list: Self::scan_patch(PATCH_INSTALL_DIR)?
+            patch_list: Self::scan_patch(PATCH_INSTALL_DIR)?,
         })
     }
 
     pub fn find_patch(&self, identifier: &str) -> std::io::Result<&Patch> {
-        Self::match_patch(
-            self.patch_list.iter(),
-            Self::is_matched_patch,
-            identifier
-        )
+        Self::match_patch(self.patch_list.iter(), Self::is_matched_patch, identifier)
     }
 
     pub fn get_patch_list(&self) -> &[Patch] {
@@ -113,7 +107,8 @@ impl PatchManager {
 
     pub fn restore_all_patch_status(&self, accepted_only: bool) -> std::io::Result<()> {
         debug!("Reading all patch status");
-        let mut status_map: HashMap<String, PatchStatus> = serde_unversioned::deserialize(PATCH_STATUS_FILE)?;
+        let mut status_map: HashMap<String, PatchStatus> =
+            serde_unversioned::deserialize(PATCH_STATUS_FILE)?;
         /*
          * Merge patch status map with current patch list
          * and treat new patch as NOT-APPLIED
@@ -129,15 +124,18 @@ impl PatchManager {
          * 1. map DEACTIVED status to NOT-APPLIED
          * 2. sort patch status to make sure we firstly do REMOVE operation
          */
-        let mut status_list = status_map.into_iter().filter_map(|(uuid, mut status)| {
-            if accepted_only && status != PatchStatus::Accepted {
-                return None;
-            }
-            if status == PatchStatus::Deactived {
-                status = PatchStatus::NotApplied;
-            }
-            Some((uuid, status))
-        }).collect::<Vec<_>>();
+        let mut status_list = status_map
+            .into_iter()
+            .filter_map(|(uuid, mut status)| {
+                if accepted_only && status != PatchStatus::Accepted {
+                    return None;
+                }
+                if status == PatchStatus::Deactived {
+                    status = PatchStatus::NotApplied;
+                }
+                Some((uuid, status))
+            })
+            .collect::<Vec<_>>();
 
         status_list.sort_by(|(_, lhs), (_, rhs)| lhs.cmp(rhs));
 
@@ -149,8 +147,8 @@ impl PatchManager {
                         error!("Patch {{{}}} restore failed", patch);
                         continue;
                     }
-                },
-                Err(e) => error!("{}", e)
+                }
+                Err(e) => error!("{}", e),
             }
         }
 

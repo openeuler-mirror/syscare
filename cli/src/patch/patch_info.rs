@@ -1,9 +1,9 @@
+use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::collections::HashMap;
 
 use log::log;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use super::package_info::PackageInfo;
 
@@ -16,9 +16,7 @@ use super::package_info::PackageInfo;
  */
 const PATCH_INFO_MAGIC: &str = "2B96A33EC26809077";
 
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum PatchType {
     UserPatch,
     KernelPatch,
@@ -30,31 +28,27 @@ impl std::fmt::Display for PatchType {
     }
 }
 
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PatchFile {
-    pub name:   OsString,
-    pub path:   PathBuf,
+    pub name: OsString,
+    pub path: PathBuf,
     pub digest: String,
 }
 
-#[derive(Debug)]
-#[derive(Serialize, Deserialize)]
-#[derive(Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PatchInfo {
-    pub uuid:        String,
-    pub name:        String,
-    pub version:     String,
-    pub release:     u32,
-    pub arch:        String,
-    pub kind:        PatchType,
-    pub digest:      String,
-    pub target:      PackageInfo,
+    pub uuid: String,
+    pub name: String,
+    pub version: String,
+    pub release: u32,
+    pub arch: String,
+    pub kind: PatchType,
+    pub digest: String,
+    pub target: PackageInfo,
     pub target_elfs: HashMap<OsString, PathBuf>, // (elf_name, elf_path)
-    pub license:     String,
+    pub license: String,
     pub description: String,
-    pub patches:     Vec<PatchFile>,
+    pub patches: Vec<PatchFile>,
 }
 
 impl PatchInfo {
@@ -63,7 +57,10 @@ impl PatchInfo {
     }
 
     pub fn full_name(&self) -> String {
-        format!("{}-{}-{}.{}", self.name, self.version, self.release, self.arch)
+        format!(
+            "{}-{}-{}.{}",
+            self.name, self.version, self.release, self.arch
+        )
     }
 
     pub fn version() -> &'static str {
@@ -76,14 +73,14 @@ impl PatchInfo {
         const PATCH_FLAG_NONE: &str = "(none)";
 
         let target_elfs = match self.target_elfs.is_empty() {
-            true => {
-                PATCH_FLAG_NONE.to_owned()
-            },
-            false => {
-                self.target_elfs.iter().map(|(elf_name, _)| {
-                    format!("{}, ", elf_name.to_string_lossy())
-                }).collect::<String>().trim_end_matches(", ").to_string()
-            },
+            true => PATCH_FLAG_NONE.to_owned(),
+            false => self
+                .target_elfs
+                .iter()
+                .map(|(elf_name, _)| format!("{}, ", elf_name.to_string_lossy()))
+                .collect::<String>()
+                .trim_end_matches(", ")
+                .to_string(),
         };
 
         log!(level, "uuid:        {}", self.uuid);

@@ -1,48 +1,52 @@
-use std::rc::Rc;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
-use log::{debug, info, error};
 use lazy_static::lazy_static;
+use log::{debug, error, info};
 
-use common::util::serde::serde_versioned;
 use common::util::fs;
+use common::util::serde::serde_versioned;
 
+use super::kernel_patch::KernelPatchAdapter;
+use super::patch_action::PatchActionAdapter;
 use super::patch_info::{PatchInfo, PatchType};
 use super::patch_status::PatchStatus;
-use super::patch_action::PatchActionAdapter;
 use super::user_patch::UserPatchAdapter;
-use super::kernel_patch::KernelPatchAdapter;
 
 pub struct Patch {
-    info:        Rc<PatchInfo>,
-    root_dir:    PathBuf,
+    info: Rc<PatchInfo>,
+    root_dir: PathBuf,
     accept_flag: PathBuf,
-    adapter:     Box<dyn PatchActionAdapter>,
+    adapter: Box<dyn PatchActionAdapter>,
 }
 
 impl Patch {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> std::io::Result<Self> {
-        const PATCH_INFO_NAME:        &str = "patch_info";
+        const PATCH_INFO_NAME: &str = "patch_info";
         const PATCH_ACCEPT_FLAG_NAME: &str = "accept_flag";
 
         let patch_root = patch_root.as_ref().to_path_buf();
         let patch_info = Rc::new(serde_versioned::deserialize::<_, PatchInfo>(
             patch_root.join(PATCH_INFO_NAME),
-            PatchInfo::version()
+            PatchInfo::version(),
         )?);
         let patch_accept_flag = patch_root.join(PATCH_ACCEPT_FLAG_NAME);
 
         let patch_adapter: Box<dyn PatchActionAdapter> = match patch_info.kind {
-            PatchType::UserPatch   => Box::new(UserPatchAdapter::new(&patch_root, patch_info.clone())),
-            PatchType::KernelPatch => Box::new(KernelPatchAdapter::new(&patch_root, patch_info.clone())),
+            PatchType::UserPatch => {
+                Box::new(UserPatchAdapter::new(&patch_root, patch_info.clone()))
+            }
+            PatchType::KernelPatch => {
+                Box::new(KernelPatchAdapter::new(&patch_root, patch_info.clone()))
+            }
         };
 
         Ok(Self {
-            info:        patch_info,
-            root_dir:    patch_root,
+            info: patch_info,
+            root_dir: patch_root,
             accept_flag: patch_accept_flag,
-            adapter:     patch_adapter,
+            adapter: patch_adapter,
         })
     }
 
@@ -77,18 +81,12 @@ impl Patch {
         debug!("Applying patch {{{}}}", self);
         self.adapter.check_compatibility().map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} check failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} check failed", self))
         })?;
 
         self.adapter.apply().map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} apply failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} apply failed", self))
         })
     }
 
@@ -97,10 +95,7 @@ impl Patch {
 
         self.adapter.remove().map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} remove failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} remove failed", self))
         })
     }
 
@@ -109,10 +104,7 @@ impl Patch {
 
         self.adapter.active().map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} active failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} active failed", self))
         })
     }
 
@@ -121,22 +113,16 @@ impl Patch {
 
         self.adapter.deactive().map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} deactive failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} deactive failed", self))
         })
     }
 
     fn do_accept(&self) -> std::io::Result<()> {
         debug!("Accepting patch {{{}}}", self);
 
-        fs::create_file(&self.accept_flag).map(|_|()).map_err(|e| {
+        fs::create_file(&self.accept_flag).map(|_| ()).map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} accept failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} accept failed", self))
         })
     }
 
@@ -145,48 +131,91 @@ impl Patch {
 
         fs::remove_file(&self.accept_flag).map_err(|e| {
             error!("{}", e);
-            std::io::Error::new(
-                e.kind(),
-                format!("Patch {{{}}} decline failed", self)
-            )
+            std::io::Error::new(e.kind(), format!("Patch {{{}}} decline failed", self))
         })
     }
 
-    fn do_transition(&self, current_status: PatchStatus, target_status: PatchStatus) -> std::io::Result<()> {
-        type Transition       = (PatchStatus, PatchStatus);
+    fn do_transition(
+        &self,
+        current_status: PatchStatus,
+        target_status: PatchStatus,
+    ) -> std::io::Result<()> {
+        type Transition = (PatchStatus, PatchStatus);
         type TransitionAction = dyn Fn(&Patch) -> std::io::Result<()> + Sync;
 
-        const PATCH_APPLY:    &TransitionAction = &Patch::do_apply;
-        const PATCH_REMOVE:   &TransitionAction = &Patch::do_remove;
-        const PATCH_ACTIVE:   &TransitionAction = &Patch::do_active;
+        const PATCH_APPLY: &TransitionAction = &Patch::do_apply;
+        const PATCH_REMOVE: &TransitionAction = &Patch::do_remove;
+        const PATCH_ACTIVE: &TransitionAction = &Patch::do_active;
         const PATCH_DEACTIVE: &TransitionAction = &Patch::do_deactive;
-        const PATCH_ACCEPT:   &TransitionAction = &Patch::do_accept;
-        const PATCH_DECLINE:  &TransitionAction = &Patch::do_decline;
+        const PATCH_ACCEPT: &TransitionAction = &Patch::do_accept;
+        const PATCH_DECLINE: &TransitionAction = &Patch::do_decline;
 
         lazy_static! {
-            static ref PATCH_TRANSITION_MAP: HashMap<Transition, Vec<&'static TransitionAction>> = [
-                ((PatchStatus::NotApplied, PatchStatus::Deactived ), vec![PATCH_APPLY]                                ),
-                ((PatchStatus::NotApplied, PatchStatus::Actived   ), vec![PATCH_APPLY, PATCH_ACTIVE]                  ),
-                ((PatchStatus::NotApplied, PatchStatus::Accepted  ), vec![PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT]    ),
-                ((PatchStatus::Deactived,  PatchStatus::NotApplied), vec![PATCH_REMOVE]                               ),
-                ((PatchStatus::Deactived,  PatchStatus::Actived   ), vec![PATCH_ACTIVE]                               ),
-                ((PatchStatus::Deactived,  PatchStatus::Accepted  ), vec![PATCH_ACTIVE, PATCH_ACCEPT]                 ),
-                ((PatchStatus::Actived,    PatchStatus::NotApplied), vec![PATCH_DEACTIVE, PATCH_REMOVE]               ),
-                ((PatchStatus::Actived,    PatchStatus::Deactived ), vec![PATCH_DEACTIVE]                             ),
-                ((PatchStatus::Actived,    PatchStatus::Accepted  ), vec![PATCH_ACCEPT]                               ),
-                ((PatchStatus::Accepted,   PatchStatus::NotApplied), vec![PATCH_DECLINE, PATCH_DEACTIVE, PATCH_REMOVE]),
-                ((PatchStatus::Accepted,   PatchStatus::Deactived ), vec![PATCH_DECLINE, PATCH_DEACTIVE]              ),
-                ((PatchStatus::Accepted,   PatchStatus::Actived   ), vec![PATCH_DECLINE]                              ),
-            ].into_iter().collect();
+            static ref PATCH_TRANSITION_MAP: HashMap<Transition, Vec<&'static TransitionAction>> =
+                [
+                    (
+                        (PatchStatus::NotApplied, PatchStatus::Deactived),
+                        vec![PATCH_APPLY]
+                    ),
+                    (
+                        (PatchStatus::NotApplied, PatchStatus::Actived),
+                        vec![PATCH_APPLY, PATCH_ACTIVE]
+                    ),
+                    (
+                        (PatchStatus::NotApplied, PatchStatus::Accepted),
+                        vec![PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT]
+                    ),
+                    (
+                        (PatchStatus::Deactived, PatchStatus::NotApplied),
+                        vec![PATCH_REMOVE]
+                    ),
+                    (
+                        (PatchStatus::Deactived, PatchStatus::Actived),
+                        vec![PATCH_ACTIVE]
+                    ),
+                    (
+                        (PatchStatus::Deactived, PatchStatus::Accepted),
+                        vec![PATCH_ACTIVE, PATCH_ACCEPT]
+                    ),
+                    (
+                        (PatchStatus::Actived, PatchStatus::NotApplied),
+                        vec![PATCH_DEACTIVE, PATCH_REMOVE]
+                    ),
+                    (
+                        (PatchStatus::Actived, PatchStatus::Deactived),
+                        vec![PATCH_DEACTIVE]
+                    ),
+                    (
+                        (PatchStatus::Actived, PatchStatus::Accepted),
+                        vec![PATCH_ACCEPT]
+                    ),
+                    (
+                        (PatchStatus::Accepted, PatchStatus::NotApplied),
+                        vec![PATCH_DECLINE, PATCH_DEACTIVE, PATCH_REMOVE]
+                    ),
+                    (
+                        (PatchStatus::Accepted, PatchStatus::Deactived),
+                        vec![PATCH_DECLINE, PATCH_DEACTIVE]
+                    ),
+                    (
+                        (PatchStatus::Accepted, PatchStatus::Actived),
+                        vec![PATCH_DECLINE]
+                    ),
+                ]
+                .into_iter()
+                .collect();
         }
 
         match PATCH_TRANSITION_MAP.get(&(current_status, target_status)) {
             Some(action_list) => {
-                debug!("Switching patch {{{}}} status from {} to {}", self, current_status, target_status);
+                debug!(
+                    "Switching patch {{{}}} status from {} to {}",
+                    self, current_status, target_status
+                );
                 for action in action_list {
                     action(self)?;
                 }
-            },
+            }
             None => {
                 debug!("Patch {{{}}} status does not change", self);
             }
@@ -215,7 +244,7 @@ impl Patch {
         if current_status < PatchStatus::Deactived {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Patch {{{}}} is not applied", self)
+                format!("Patch {{{}}} is not applied", self),
             ));
         }
         self.do_transition(current_status, PatchStatus::Actived)
@@ -226,7 +255,7 @@ impl Patch {
         if status < PatchStatus::Deactived {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Patch {{{}}} is not applied", self)
+                format!("Patch {{{}}} is not applied", self),
             ));
         }
         self.do_transition(status, PatchStatus::Deactived)
@@ -237,7 +266,7 @@ impl Patch {
         if status != PatchStatus::Actived {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!("Patch {{{}}} is not actived", self)
+                format!("Patch {{{}}} is not actived", self),
             ));
         }
         self.do_transition(status, PatchStatus::Accepted)
