@@ -7,7 +7,7 @@ use common::util::os_str::OsStringExt;
 
 use crate::cli::{CliArguments, CliWorkDir};
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
@@ -189,22 +189,20 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                  */
                 for elf_relation in &uargs.elf_relations {
                     let output_dir = uargs.output_dir.as_path();
-                    let patch_name = fs::file_name(&elf_relation.elf);
+                    let elf_file = elf_relation.elf.as_path();
+                    let patch_name = fs::file_name(elf_file);
 
-                    if fs::find_file(
+                    if let Ok(patch_file) = fs::find_file(
                         output_dir,
-                        &patch_name,
+                        patch_name,
                         fs::FindOptions {
                             fuzz: false,
                             recursive: false,
                         },
-                    )
-                    .is_ok()
-                    {
-                        let elf_path = elf_relation.elf.to_owned();
-                        let elf_name = patch_name;
-
-                        patch_info.target_elfs.insert(elf_name, elf_path);
+                    ) {
+                        patch_info
+                            .entities
+                            .push(PatchEntity::new(patch_file, elf_file)?);
                     }
                 }
 

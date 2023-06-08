@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -21,7 +21,7 @@ const PATCH_DIGEST_LENGTH: usize = 8;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * it should be updated and keep sync with patch management cli.
  */
-const PATCH_INFO_MAGIC: &str = "2B96A33EC26809077";
+const PATCH_INFO_MAGIC: &str = "44C194B5C07832BD554531";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum PatchType {
@@ -32,6 +32,29 @@ pub enum PatchType {
 impl std::fmt::Display for PatchType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{:?}", self))
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatchEntity {
+    pub uuid: String,
+    pub patch_name: OsString,
+    pub patch_target: PathBuf,
+    pub checksum: String,
+}
+
+impl PatchEntity {
+    pub fn new<P: AsRef<Path>, Q: AsRef<Path>>(patch_file: P, elf_file: Q) -> std::io::Result<Self>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        Ok(Self {
+            uuid: Uuid::new_v4().to_string(),
+            patch_name: fs::file_name(patch_file.as_ref()),
+            patch_target: elf_file.as_ref().to_owned(),
+            checksum: digest::file(patch_file.as_ref())?,
+        })
     }
 }
 
@@ -83,7 +106,7 @@ pub struct PatchInfo {
     pub kind: PatchType,
     pub digest: String,
     pub target: PackageInfo,
-    pub target_elfs: HashMap<OsString, PathBuf>, // (elf_name, elf_path)
+    pub entities: Vec<PatchEntity>,
     pub license: String,
     pub description: String,
     pub patches: Vec<PatchFile>,
@@ -103,7 +126,7 @@ impl PatchInfo {
         let release = args.patch_release;
         let arch = args.patch_arch.to_owned();
         let target = target_pkg_info;
-        let target_elfs = HashMap::new();
+        let entities = Vec::new();
         let digest = digest::file_list(&args.patches)?[..PATCH_DIGEST_LENGTH].to_owned();
         let license = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
@@ -117,7 +140,7 @@ impl PatchInfo {
             release,
             arch,
             target,
-            target_elfs,
+            entities,
             digest,
             license,
             description,
@@ -145,12 +168,12 @@ impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
 
-        let target_elfs = match self.target_elfs.is_empty() {
+        let patch_entities = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
             false => self
-                .target_elfs
+                .entities
                 .iter()
-                .map(|(elf_name, _)| format!("{}, ", elf_name.to_string_lossy()))
+                .map(|entity| format!("{}, ", entity.patch_name.to_string_lossy()))
                 .collect::<String>()
                 .trim_end_matches(", ")
                 .to_string(),
@@ -163,7 +186,7 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elf:  {}", target_elfs);
+        log!(level, "target_elf:  {}", patch_entities);
         log!(level, "digest:      {}", self.digest);
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);

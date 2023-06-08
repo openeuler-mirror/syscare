@@ -1,12 +1,11 @@
 use std::ffi::OsString;
-use std::path::PathBuf;
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
 use common::util::fs;
 
 use crate::cli::{CliArguments, CliWorkDir};
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
 
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 use super::kpatch_helper::KernelPatchHelper;
@@ -120,20 +119,18 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
                     KPATCH_PATCH_PREFIX, patch_info.uuid, KPATCH_PATCH_SUFFIX
                 );
 
-                if fs::find_file(
+                if let Ok(patch_file) = fs::find_file(
                     output_dir,
                     patch_name,
                     fs::FindOptions {
                         fuzz: false,
                         recursive: false,
                     },
-                )
-                .is_ok()
-                {
-                    let elf_path = PathBuf::new();
-                    let elf_name = OsString::from(VMLINUX_FILE_NAME);
-
-                    patch_info.target_elfs.insert(elf_name, elf_path);
+                ) {
+                    patch_info.entities.push(PatchEntity::new(
+                        patch_file,
+                        OsString::from(VMLINUX_FILE_NAME),
+                    )?);
                 }
             }
             _ => unreachable!(),

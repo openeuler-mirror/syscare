@@ -79,7 +79,7 @@ impl Patch {
 impl Patch {
     fn do_apply(&self) -> std::io::Result<()> {
         debug!("Applying patch {{{}}}", self);
-        self.adapter.check_compatibility().map_err(|e| {
+        self.adapter.check().map_err(|e| {
             error!("{}", e);
             std::io::Error::new(e.kind(), format!("Patch {{{}}} check failed", self))
         })?;

@@ -34,13 +34,13 @@ impl std::fmt::Display for UserPatchAction {
 }
 
 struct ElfPatch {
-    elf: PathBuf,
-    patch: PathBuf,
+    elf_file: PathBuf,
+    patch_file: PathBuf,
 }
 
 impl std::fmt::Display for ElfPatch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("{}", self.elf.display()))
+        f.write_fmt(format_args!("{}", self.elf_file.display()))
     }
 }
 
@@ -69,10 +69,10 @@ impl ElfPatch {
         let mut args = ExternCommandArgs::new()
             .arg(action.to_string())
             .arg("--patch")
-            .arg(&self.patch);
+            .arg(&self.patch_file);
 
         if action == UserPatchAction::Install {
-            args = args.arg("--binary").arg(&self.elf);
+            args = args.arg("--binary").arg(&self.elf_file);
         }
 
         let exit_status = UPATCH_TOOL.execvp(args)?;
@@ -90,11 +90,11 @@ pub struct UserPatchAdapter {
 impl UserPatchAdapter {
     pub fn new<P: AsRef<Path>>(patch_root: P, patch_info: Rc<PatchInfo>) -> Self {
         let elf_patchs = patch_info
-            .target_elfs
+            .entities
             .iter()
-            .map(|(elf_name, elf_path)| ElfPatch {
-                elf: elf_path.to_path_buf(),
-                patch: patch_root.as_ref().join(elf_name),
+            .map(|entity| ElfPatch {
+                elf_file: entity.patch_target.to_path_buf(),
+                patch_file: patch_root.as_ref().join(&entity.patch_name),
             })
             .collect();
 
@@ -186,7 +186,7 @@ impl UserPatchAdapter {
 }
 
 impl PatchActionAdapter for UserPatchAdapter {
-    fn check_compatibility(&self) -> std::io::Result<()> {
+    fn check(&self) -> std::io::Result<()> {
         self.patch_info.target.check_installed()
     }
 

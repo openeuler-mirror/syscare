@@ -107,10 +107,10 @@ impl KernelPatchAdapter {
 }
 
 impl PatchActionAdapter for KernelPatchAdapter {
-    fn check_compatibility(&self) -> std::io::Result<()> {
+    fn check(&self) -> std::io::Result<()> {
         let kernel_version = os::kernel::version();
 
-        let current_kernel = OsString::from("kernel-").concat(&kernel_version);
+        let current_kernel = OsString::from("kernel-").concat(kernel_version);
         let patch_target = self.patch_info.target.full_name();
         debug!("Current kernel: \"{}\"", current_kernel.to_string_lossy());
         debug!("Patch target:   \"{}\"", patch_target);

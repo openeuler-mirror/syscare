@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::ffi::OsString;
 use std::path::PathBuf;
 
@@ -14,7 +13,7 @@ use super::package_info::PackageInfo;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * this should be updated and keep sync with patch builder.
  */
-const PATCH_INFO_MAGIC: &str = "2B96A33EC26809077";
+const PATCH_INFO_MAGIC: &str = "44C194B5C07832BD554531";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum PatchType {
@@ -26,6 +25,14 @@ impl std::fmt::Display for PatchType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{:?}", self))
     }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct PatchEntity {
+    pub uuid: String,
+    pub patch_name: OsString,
+    pub patch_target: PathBuf,
+    pub checksum: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -45,7 +52,7 @@ pub struct PatchInfo {
     pub kind: PatchType,
     pub digest: String,
     pub target: PackageInfo,
-    pub target_elfs: HashMap<OsString, PathBuf>, // (elf_name, elf_path)
+    pub entities: Vec<PatchEntity>,
     pub license: String,
     pub description: String,
     pub patches: Vec<PatchFile>,
@@ -72,12 +79,12 @@ impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
 
-        let target_elfs = match self.target_elfs.is_empty() {
+        let patch_elfs = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
             false => self
-                .target_elfs
+                .entities
                 .iter()
-                .map(|(elf_name, _)| format!("{}, ", elf_name.to_string_lossy()))
+                .map(|entity| format!("{}, ", entity.patch_name.to_string_lossy()))
                 .collect::<String>()
                 .trim_end_matches(", ")
                 .to_string(),
@@ -90,7 +97,7 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elf:  {}", target_elfs);
+        log!(level, "target_elf:  {}", patch_elfs);
         log!(level, "digest:      {}", self.digest);
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
