@@ -1,10 +1,10 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
-use log::debug;
-use common::util::fs;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::fs;
+use log::debug;
 
-pub const VMLINUX_FILE_NAME:   &str = "vmlinux";
+pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 pub const KPATCH_PATCH_PREFIX: &str = "syscare";
 pub const KPATCH_PATCH_SUFFIX: &str = "ko";
 
@@ -17,21 +17,29 @@ impl KernelPatchHelper {
 
         debug!("Generating kernel default config");
 
-        MAKE.execvp(ExternCommandArgs::new()
-            .arg("-C")
-            .arg(source_dir.as_ref())
-            .arg(DEFCONFIG_FILE_NAME)
-        )?.check_exit_code()
+        MAKE.execvp(
+            ExternCommandArgs::new()
+                .arg("-C")
+                .arg(source_dir.as_ref())
+                .arg(DEFCONFIG_FILE_NAME),
+        )?
+        .check_exit_code()
     }
 
     pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
         const KERNEL_CONFIG_FILE_NAME: &str = ".config";
 
-        debug!("Finding kernel config from \"{}\"", directory.as_ref().display());
+        debug!(
+            "Finding kernel config from \"{}\"",
+            directory.as_ref().display()
+        );
         fs::find_file(
             directory,
             KERNEL_CONFIG_FILE_NAME,
-            fs::FindOptions { fuzz: false, recursive: true }
+            fs::FindOptions {
+                fuzz: false,
+                recursive: true,
+            },
         )
     }
 
@@ -40,7 +48,10 @@ impl KernelPatchHelper {
         fs::find_file(
             directory,
             VMLINUX_FILE_NAME,
-            fs::FindOptions { fuzz: false, recursive: true }
+            fs::FindOptions {
+                fuzz: false,
+                recursive: true,
+            },
         )
     }
 }
