@@ -2,31 +2,38 @@ use std::path::{Path, PathBuf};
 
 use common::util::fs;
 
-use super::workdir::WorkDirManager;
+use super::workdir_impl::WorkDirManager;
 
-#[derive(Clone)]
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct PackageBuildRoot {
-    pub path:       PathBuf,
-    pub build:      PathBuf,
+    pub path: PathBuf,
+    pub build: PathBuf,
     pub build_root: PathBuf,
-    pub rpms:       PathBuf,
-    pub sources:    PathBuf,
-    pub specs:      PathBuf,
-    pub srpms:      PathBuf,
+    pub rpms: PathBuf,
+    pub sources: PathBuf,
+    pub specs: PathBuf,
+    pub srpms: PathBuf,
 }
 
 impl PackageBuildRoot {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let path       = path.as_ref().to_path_buf();
-        let build      = path.join("BUILD");
+        let path = path.as_ref().to_path_buf();
+        let build = path.join("BUILD");
         let build_root = path.join("BUILDROOT");
-        let rpms       = path.join("RPMS");
-        let sources    = path.join("SOURCES");
-        let specs      = path.join("SPECS");
-        let srpms      = path.join("SRPMS");
+        let rpms = path.join("RPMS");
+        let sources = path.join("SOURCES");
+        let specs = path.join("SPECS");
+        let srpms = path.join("SRPMS");
 
-        Self { path, build, build_root, rpms, sources, specs, srpms }
+        Self {
+            path,
+            build,
+            build_root,
+            rpms,
+            sources,
+            specs,
+            srpms,
+        }
     }
 }
 

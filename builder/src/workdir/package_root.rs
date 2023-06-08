@@ -1,27 +1,32 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use common::util::fs;
 
-use super::workdir::WorkDirManager;
 use super::package_build_root::PackageBuildRoot;
+use super::workdir_impl::WorkDirManager;
 
 pub struct PackageRoot {
-    pub path:   PathBuf,
+    pub path: PathBuf,
     pub source: PathBuf,
-    pub debug:  PathBuf,
-    pub patch:  PackageBuildRoot,
+    pub debug: PathBuf,
+    pub patch: PackageBuildRoot,
 }
 
 impl PackageRoot {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let path   = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_path_buf();
         let source = path.join("source");
-        let debug  = path.join("debuginfo");
-        let patch  = PackageBuildRoot::new(path.join("patch"));
+        let debug = path.join("debuginfo");
+        let patch = PackageBuildRoot::new(path.join("patch"));
 
-        Self { path, source, debug, patch }
+        Self {
+            path,
+            source,
+            debug,
+            patch,
+        }
     }
 }
 

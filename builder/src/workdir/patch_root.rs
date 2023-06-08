@@ -1,24 +1,28 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use common::util::fs;
 
-use super::workdir::WorkDirManager;
+use super::workdir_impl::WorkDirManager;
 
 pub struct PatchRoot {
-    pub path:   PathBuf,
-    pub build:  PathBuf,
+    pub path: PathBuf,
+    pub build: PathBuf,
     pub output: PathBuf,
 }
 
 impl PatchRoot {
     pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
-        let path   = base_dir.as_ref().to_path_buf();
-        let build  = path.join("build");
+        let path = base_dir.as_ref().to_path_buf();
+        let build = path.join("build");
         let output = path.join("output");
 
-        Self { path, build, output }
+        Self {
+            path,
+            build,
+            output,
+        }
     }
 }
 

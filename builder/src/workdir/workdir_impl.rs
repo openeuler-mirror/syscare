@@ -1,11 +1,11 @@
 use std::ffi::OsStr;
-use std::path::{Path, PathBuf};
 use std::ops::Deref;
+use std::path::{Path, PathBuf};
 
 use common::util::fs;
 
-use super::patch_root::PatchRoot;
 use super::package_root::PackageRoot;
+use super::patch_root::PatchRoot;
 
 pub trait WorkDirManager {
     fn create_all(&self) -> std::io::Result<()>;
@@ -13,20 +13,25 @@ pub trait WorkDirManager {
 }
 
 pub struct WorkDir {
-    pub path:     PathBuf,
+    pub path: PathBuf,
     pub log_file: PathBuf,
-    pub patch:    PatchRoot,
-    pub package:  PackageRoot,
+    pub patch: PatchRoot,
+    pub package: PackageRoot,
 }
 
 impl WorkDir {
     pub fn new<P: AsRef<Path>>(path: P) -> Self {
-        let path     = path.as_ref().to_path_buf();
+        let path = path.as_ref().to_path_buf();
         let log_file = path.join("build.log");
-        let patch    = PatchRoot::new(path.join("patch"));
-        let package  = PackageRoot::new(path.join("package"));
+        let patch = PatchRoot::new(path.join("patch"));
+        let package = PackageRoot::new(path.join("package"));
 
-        Self { path, log_file, patch, package }
+        Self {
+            path,
+            log_file,
+            patch,
+            package,
+        }
     }
 }
 
