@@ -1,10 +1,10 @@
-pub mod platform;
 pub mod cpu;
 pub mod disk;
 pub mod grub;
 pub mod kernel;
-pub mod signal;
 pub mod mounts;
-pub mod user;
+pub mod platform;
 pub mod process;
 pub mod selinux;
+pub mod signal;
+pub mod user;

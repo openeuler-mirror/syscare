@@ -1,18 +1,18 @@
 use std::ffi::CStr;
 use std::ffi::{OsStr, OsString};
 use std::os::unix::prelude::OsStringExt;
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
 use lazy_static::*;
 
 struct UserInfo {
-    name:   OsString,
+    name: OsString,
     passwd: OsString,
-    uid:    u32,
-    gid:    u32,
-    gecos:  OsString,
-    home:   PathBuf,
-    shell:  PathBuf,
+    uid: u32,
+    gid: u32,
+    gecos: OsString,
+    home: PathBuf,
+    shell: PathBuf,
 }
 
 #[inline(always)]
@@ -22,7 +22,7 @@ fn info() -> &'static UserInfo {
             let uid = libc::getuid();
             let mut pwd = std::mem::MaybeUninit::zeroed().assume_init();
             let mut buf = Vec::with_capacity(match libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) {
-                n if n < 0 => 16384 as usize,
+                n if n < 0 => 16384_usize,
                 n => n as usize,
             });
             let buflen = buf.capacity();
@@ -33,13 +33,17 @@ fn info() -> &'static UserInfo {
             assert!(!result.is_null());
 
             UserInfo {
-                name:   OsString::from_vec(CStr::from_ptr(pwd.pw_name).to_bytes().to_vec()),
+                name: OsString::from_vec(CStr::from_ptr(pwd.pw_name).to_bytes().to_vec()),
                 passwd: OsString::from_vec(CStr::from_ptr(pwd.pw_passwd).to_bytes().to_vec()),
-                uid:    pwd.pw_uid,
-                gid:    pwd.pw_gid,
-                gecos:  OsString::from_vec(CStr::from_ptr(pwd.pw_gecos).to_bytes().to_vec()),
-                home:   PathBuf::from(OsString::from_vec(CStr::from_ptr(pwd.pw_dir).to_bytes().to_vec())),
-                shell:  PathBuf::from(OsString::from_vec(CStr::from_ptr(pwd.pw_shell).to_bytes().to_vec())),
+                uid: pwd.pw_uid,
+                gid: pwd.pw_gid,
+                gecos: OsString::from_vec(CStr::from_ptr(pwd.pw_gecos).to_bytes().to_vec()),
+                home: PathBuf::from(OsString::from_vec(
+                    CStr::from_ptr(pwd.pw_dir).to_bytes().to_vec(),
+                )),
+                shell: PathBuf::from(OsString::from_vec(
+                    CStr::from_ptr(pwd.pw_shell).to_bytes().to_vec(),
+                )),
             }
         };
     }

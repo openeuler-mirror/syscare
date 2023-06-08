@@ -1,8 +1,8 @@
-use std::ffi::{OsString, OsStr};
+use std::ffi::{OsStr, OsString};
 use std::os::unix::prelude::OsStrExt;
 
-use std::path::PathBuf;
 use std::io::BufReader;
+use std::path::PathBuf;
 
 use crate::util::fs;
 use crate::util::raw_line::RawLines;
@@ -31,7 +31,7 @@ impl<'a> Iterator for MountInfoParser<'a> {
         const OPTION_PATTERN: &str = " - ";
 
         let start = self.pos;
-        let end   = self.data.len();
+        let end = self.data.len();
         if start == end {
             return None;
         }
@@ -44,9 +44,10 @@ impl<'a> Iterator for MountInfoParser<'a> {
          * But for optional fields, we use " - "
          */
         let pat = match self.idx != 6 {
-            true  => NORMAL_PATTERN,
+            true => NORMAL_PATTERN,
             false => OPTION_PATTERN,
-        }.as_bytes();
+        }
+        .as_bytes();
         /*
          * Try to match specific pattern
          * if success, the rest data is what we want
@@ -75,16 +76,16 @@ impl<'a> Iterator for MountInfoParser<'a> {
 
 #[derive(Debug)]
 pub struct MountInfo {
-    pub mount_id:    u32,
-    pub parent_id:   u32,
-    pub device_id:   OsString,
-    pub root:        PathBuf,
+    pub mount_id: u32,
+    pub parent_id: u32,
+    pub device_id: OsString,
+    pub root: PathBuf,
     pub mount_point: PathBuf,
-    pub mount_opts:  OsString,
-    pub optional:    OsString,
-    pub filesystem:  OsString,
-    pub source:      PathBuf,
-    pub super_opts:  OsString,
+    pub mount_opts: OsString,
+    pub optional: OsString,
+    pub filesystem: OsString,
+    pub source: PathBuf,
+    pub super_opts: OsString,
 }
 
 pub fn enumerate() -> std::io::Result<Vec<MountInfo>> {
@@ -98,16 +99,16 @@ pub fn enumerate() -> std::io::Result<Vec<MountInfo>> {
         assert_eq!(info.len(), 10);
 
         result.push(MountInfo {
-            mount_id:    info[0].to_string_lossy().parse::<u32>().unwrap_or_default(),
-            parent_id:   info[1].to_string_lossy().parse::<u32>().unwrap_or_default(),
-            device_id:   info[2].to_os_string(),
-            root:        PathBuf::from(info[3]),
+            mount_id: info[0].to_string_lossy().parse::<u32>().unwrap_or_default(),
+            parent_id: info[1].to_string_lossy().parse::<u32>().unwrap_or_default(),
+            device_id: info[2].to_os_string(),
+            root: PathBuf::from(info[3]),
             mount_point: PathBuf::from(info[4]),
-            mount_opts:  info[5].to_os_string(),
-            optional:    info[6].to_os_string(),
-            filesystem:  info[7].to_os_string(),
-            source:      PathBuf::from(info[8]),
-            super_opts:  info[9].to_os_string(),
+            mount_opts: info[5].to_os_string(),
+            optional: info[6].to_os_string(),
+            filesystem: info[7].to_os_string(),
+            source: PathBuf::from(info[8]),
+            super_opts: info[9].to_os_string(),
         })
     }
 

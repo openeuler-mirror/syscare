@@ -15,7 +15,7 @@ pub fn num() -> usize {
             let ret = libc::sched_getaffinity(
                 process::id(),
                 std::mem::size_of::<libc::cpu_set_t>(),
-                &mut cpu_set
+                &mut cpu_set,
             );
             assert_eq!(ret, 0);
 
@@ -27,19 +27,14 @@ pub fn num() -> usize {
 
 #[derive(Debug)]
 pub struct LoadAvg {
-    pub one:     f64,
-    pub five:    f64,
-    pub fifteen: f64
+    pub one: f64,
+    pub five: f64,
+    pub fifteen: f64,
 }
 
 pub fn load() -> (f64, f64, f64) {
     let mut loadavg = [0f64; 3];
-    let ret = unsafe {
-        libc::getloadavg(
-            loadavg.as_mut_ptr(),
-            loadavg.len() as i32
-        )
-    };
+    let ret = unsafe { libc::getloadavg(loadavg.as_mut_ptr(), loadavg.len() as i32) };
     assert_eq!(ret, 3);
 
     (loadavg[0], loadavg[1], loadavg[2])
