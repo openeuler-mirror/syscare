@@ -1,17 +1,17 @@
 use std::path::PathBuf;
 
-use lazy_static::lazy_static;
 use clap::Parser;
+use lazy_static::lazy_static;
 
 use common::os;
 
 use super::PatchBuildCLI;
 
-const DEFAULT_PATCH_VERSION:     &str = "1";
-const DEFAULT_PATCH_RELEASE:     &str = "1";
+const DEFAULT_PATCH_VERSION: &str = "1";
+const DEFAULT_PATCH_RELEASE: &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
-const DEFAULT_WORK_DIR:          &str = ".";
-const DEFAULT_OUTPUT_DIR:        &str = ".";
+const DEFAULT_WORK_DIR: &str = ".";
+const DEFAULT_OUTPUT_DIR: &str = ".";
 
 lazy_static! {
     static ref DEFAULT_BUILD_JOBS: String = os::cpu::num().to_string();
@@ -21,7 +21,7 @@ lazy_static! {
 #[command(bin_name=PatchBuildCLI::name(), version=PatchBuildCLI::version())]
 pub struct CliArguments {
     /// Patch name
-    #[arg(short='n', long)]
+    #[arg(short = 'n', long)]
     pub patch_name: String,
 
     /// Patch architecture
@@ -69,7 +69,7 @@ pub struct CliArguments {
     pub source: PathBuf,
 
     /// Debuginfo package(s)
-    #[arg(short, long, required=true)]
+    #[arg(short, long, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
     /// Working directory
@@ -97,12 +97,18 @@ pub struct CliArguments {
     pub verbose: bool,
 
     /// Patch file(s)
-    #[arg(required=true)]
-    pub patches: Vec<PathBuf>
+    #[arg(required = true)]
+    pub patches: Vec<PathBuf>,
 }
 
 impl CliArguments {
     pub fn new() -> Self {
         CliArguments::parse()
+    }
+}
+
+impl Default for CliArguments {
+    fn default() -> Self {
+        Self::new()
     }
 }

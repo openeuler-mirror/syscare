@@ -22,8 +22,8 @@ impl CliWorkDir {
             workdir.as_ref().join(
                 OsString::from(os::process::name())
                     .concat(".")
-                    .concat(os::process::id().to_string())
-            )
+                    .concat(os::process::id().to_string()),
+            ),
         );
         workdir.create_all()?;
 
@@ -45,5 +45,11 @@ impl Deref for CliWorkDir {
 
     fn deref(&self) -> &Self::Target {
         self.inner.as_ref().expect("Working directory is not exist")
+    }
+}
+
+impl Default for CliWorkDir {
+    fn default() -> Self {
+        Self::new()
     }
 }
