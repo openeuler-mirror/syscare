@@ -2,10 +2,10 @@ use std::sync::Once;
 
 use log::LevelFilter;
 
-use log4rs::Config;
-use log4rs::config::{Root, Appender};
-use log4rs::encode::pattern::PatternEncoder;
 use log4rs::append::console::{ConsoleAppender, Target};
+use log4rs::config::{Appender, Root};
+use log4rs::encode::pattern::PatternEncoder;
+use log4rs::Config;
 
 use common::log::{LogLevelFilter, SyslogAppender};
 
@@ -25,28 +25,40 @@ impl Logger {
                 .filter(Box::new(LogLevelFilter::new(LevelFilter::Info, max_level)))
                 .build(
                     STDOUT_APPENDER,
-                    Box::new(ConsoleAppender::builder()
-                        .target(Target::Stdout)
-                        .encoder(Box::new(PatternEncoder::new(STD_LOG_PATTERN)))
-                        .build())
+                    Box::new(
+                        ConsoleAppender::builder()
+                            .target(Target::Stdout)
+                            .encoder(Box::new(PatternEncoder::new(STD_LOG_PATTERN)))
+                            .build(),
+                    ),
                 ),
             Appender::builder()
-                .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, LevelFilter::Warn)))
+                .filter(Box::new(LogLevelFilter::new(
+                    LevelFilter::Error,
+                    LevelFilter::Warn,
+                )))
                 .build(
                     STDERR_APPENDER,
-                    Box::new(ConsoleAppender::builder()
-                        .target(Target::Stderr)
-                        .encoder(Box::new(PatternEncoder::new(ERR_LOG_PATTERN)))
-                        .build())
+                    Box::new(
+                        ConsoleAppender::builder()
+                            .target(Target::Stderr)
+                            .encoder(Box::new(PatternEncoder::new(ERR_LOG_PATTERN)))
+                            .build(),
+                    ),
                 ),
             Appender::builder()
-                .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, LevelFilter::Warn)))
+                .filter(Box::new(LogLevelFilter::new(
+                    LevelFilter::Error,
+                    LevelFilter::Warn,
+                )))
                 .build(
                     SYSLOG_APPENDER,
-                    Box::new(SyslogAppender::builder()
-                        .encoder(Box::new(PatternEncoder::new(STD_LOG_PATTERN)))
-                        .build())
-                )
+                    Box::new(
+                        SyslogAppender::builder()
+                            .encoder(Box::new(PatternEncoder::new(STD_LOG_PATTERN)))
+                            .build(),
+                    ),
+                ),
         ]
     }
 
@@ -58,10 +70,7 @@ impl Logger {
             .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
             .build(max_level);
 
-        let log_config = Config::builder()
-            .appenders(appenders)
-            .build(root)
-            .unwrap();
+        let log_config = Config::builder().appenders(appenders).build(root).unwrap();
         log4rs::init_config(log_config).unwrap();
     }
 

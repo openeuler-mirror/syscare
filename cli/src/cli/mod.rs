@@ -1,4 +1,4 @@
+mod cli_impl;
 mod logger;
-mod cli;
 
-pub use cli::*;
+pub use cli_impl::*;
