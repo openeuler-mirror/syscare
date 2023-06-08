@@ -7,8 +7,8 @@ use log::debug;
 
 use common::os;
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use common::util::fs;
 use common::util::os_str::OsStringExt;
+use common::util::{digest, fs};
 
 use super::patch_action::PatchActionAdapter;
 use super::patch_info::PatchInfo;
@@ -18,6 +18,7 @@ pub struct KernelPatchAdapter {
     patch_info: Rc<PatchInfo>,
     patch_file: PathBuf,
     sys_file: PathBuf,
+    checksum: String,
 }
 
 const INSMOD: ExternCommand = ExternCommand::new("insmod");
@@ -42,11 +43,17 @@ impl KernelPatchAdapter {
         let sys_file = PathBuf::from(KPATCH_MGNT_DIR)
             .join(patch_name.replace('-', "_"))
             .join(KPATCH_MGNT_FILE);
+        let checksum = patch_info
+            .entities
+            .get(0)
+            .map(|e| e.checksum.to_owned())
+            .unwrap_or_default();
 
         Self {
             patch_info,
             patch_file,
             sys_file,
+            checksum,
         }
     }
 
@@ -112,6 +119,8 @@ impl PatchActionAdapter for KernelPatchAdapter {
 
         let current_kernel = OsString::from("kernel-").concat(kernel_version);
         let patch_target = self.patch_info.target.full_name();
+        let patch_file = self.patch_file.as_path();
+
         debug!("Current kernel: \"{}\"", current_kernel.to_string_lossy());
         debug!("Patch target:   \"{}\"", patch_target);
 
@@ -123,6 +132,15 @@ impl PatchActionAdapter for KernelPatchAdapter {
                     kernel_version.to_string_lossy(),
                     patch_target
                 ),
+            ));
+        }
+
+        let real_checksum = digest::file(patch_file)?;
+        let expect_checksum = self.checksum.as_str();
+        if real_checksum != expect_checksum {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "Patch checksum failed",
             ));
         }
 

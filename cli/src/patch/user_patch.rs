@@ -3,6 +3,7 @@ use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use common::util::digest;
 use lazy_static::lazy_static;
 use log::{debug, error};
 
@@ -36,6 +37,7 @@ impl std::fmt::Display for UserPatchAction {
 struct ElfPatch {
     elf_file: PathBuf,
     patch_file: PathBuf,
+    checksum: String,
 }
 
 impl std::fmt::Display for ElfPatch {
@@ -95,6 +97,7 @@ impl UserPatchAdapter {
             .map(|entity| ElfPatch {
                 elf_file: entity.patch_target.to_path_buf(),
                 patch_file: patch_root.as_ref().join(&entity.patch_name),
+                checksum: entity.checksum.to_owned(),
             })
             .collect();
 
@@ -187,7 +190,19 @@ impl UserPatchAdapter {
 
 impl PatchActionAdapter for UserPatchAdapter {
     fn check(&self) -> std::io::Result<()> {
-        self.patch_info.target.check_installed()
+        self.patch_info.target.check_installed()?;
+        for elf_patch in &self.elf_patchs {
+            let real_checksum = digest::file(&elf_patch.patch_file)?;
+            let expect_checksum = elf_patch.checksum.as_str();
+            if real_checksum != expect_checksum {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    "Patch checksum failed",
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     fn status(&self) -> std::io::Result<PatchStatus> {
