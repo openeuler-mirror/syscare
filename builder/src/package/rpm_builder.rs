@@ -96,6 +96,8 @@ impl RpmBuilder {
                 ExternCommandArgs::new()
                     .arg("--define")
                     .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+                    .arg("--define")
+                    .arg("__spec_install_post %{nil}")
                     .arg("-bb")
                     .arg(spec_file.as_ref()),
             )?

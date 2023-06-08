@@ -54,8 +54,7 @@ impl<'a> UserPatchBuilder<'a> {
             .append("--define \"_smp_build_ncpus")
             .append(args.jobs.to_string())
             .concat("\"")
-            .append("--define \"__arch_install_post %{nil}\"")
-            .append("--define \"__os_install_post %{nil}\"")
+            .append("--define \"__spec_install_post %{nil}\"")
             .append("--define \"__find_provides %{nil}\"")
             .append("--define \"__find_requires %{nil}\"")
     }
