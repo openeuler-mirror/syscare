@@ -10,7 +10,7 @@ build       = "build.rs"
 [dependencies]
 anyhow      = { version = "1.0" }
 lazy_static = { version = "1.4.0" }
-libc        = { version = "0.2.139" }
+libc        = { version = "0.2.146" }
 signal-hook = { version = "0.3.14" }
 log         = { version = "0.4" }
 log4rs      = { version = "1" }
