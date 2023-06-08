@@ -76,7 +76,7 @@ impl RpmBuilder {
         let dst_pkg_name = format!(
             "{}-{}.src.{}",
             patch_info.target.short_name(),
-            patch_info.full_name(),
+            patch_info.short_name(),
             PKG_FILE_EXT
         );
         let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);
