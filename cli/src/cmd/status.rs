@@ -2,7 +2,7 @@ use log::info;
 
 use crate::patch::PatchManager;
 
-use super::{CommandExecutor, CommandArguments};
+use super::{CommandArguments, CommandExecutor};
 
 pub struct StatusCommandExecutor;
 

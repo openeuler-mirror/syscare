@@ -1,8 +1,8 @@
-use log::debug;
 use common::util::fs;
+use log::debug;
 
-use crate::cli::SyscareCLI;
 use crate::boot::{BootManager, RebootOption};
+use crate::cli::SyscareCLI;
 
 use super::{CommandArguments, CommandExecutor};
 
@@ -25,7 +25,7 @@ impl CommandExecutor for RebootCommandExecutor {
                 false => {
                     debug!("Rebooting system");
                     RebootOption::Normal
-                },
+                }
                 true => {
                     debug!("Force rebooting system");
                     RebootOption::Forced

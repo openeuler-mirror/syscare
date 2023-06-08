@@ -13,7 +13,7 @@ impl CommandExecutor for AcceptCommandExecutor {
         os::signal::block(&[os::signal::SIGINT, os::signal::SIGTERM])?;
 
         if let CommandArguments::PatchOperationArguments { identifier } = args {
-            PatchManager::new()?.find_patch(&identifier)?.accept()?;
+            PatchManager::new()?.find_patch(identifier)?.accept()?;
         }
 
         Ok(0)
