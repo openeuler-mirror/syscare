@@ -1,4 +1,4 @@
-pub mod patch;
-pub mod package;
-pub mod workdir;
 pub mod cli;
+pub mod package;
+pub mod patch;
+pub mod workdir;
