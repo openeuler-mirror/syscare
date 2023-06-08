@@ -46,7 +46,7 @@ impl Project {
     pub fn patch_all<P: AsRef<Path>>(&self, patches: &Vec<P>, level: Level) -> Result<()> {
         for patch in patches {
             log!(level, "Patching file: {:?}", patch.as_ref());
-            let file = match File::open(&patch) {
+            let file = match File::open(patch) {
                 Ok(file) => file,
                 Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
             };
@@ -58,10 +58,10 @@ impl Project {
         Ok(())
     }
 
-    pub fn unpatch_all<P: AsRef<Path>>(&self, patches: &Vec<P>, level: Level) -> Result<()> {
+    pub fn unpatch_all<P: AsRef<Path>>(&self, patches: &[P], level: Level) -> Result<()> {
         for patch in patches.iter().rev() {
             log!(level, "Patching file: {:?}", patch.as_ref());
-            let file = match File::open(&patch) {
+            let file = match File::open(patch) {
                 Ok(file) => file,
                 Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
             };

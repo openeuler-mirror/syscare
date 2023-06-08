@@ -71,3 +71,9 @@ impl WorkDir {
         &self.log_file
     }
 }
+
+impl Default for WorkDir {
+    fn default() -> Self {
+        Self::new()
+    }
+}

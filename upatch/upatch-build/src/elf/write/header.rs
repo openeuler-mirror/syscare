@@ -30,7 +30,7 @@ impl OperateRead for Header {
 impl OperateWrite for Header {
     fn set<T: ReadInteger<T>>(&mut self, start: usize, data: T) {
         let vec = self.endian.write_integer::<T>(data);
-        for i in 0..vec.len() {
+        for (i, _) in vec.iter().enumerate() {
             self.mmap[start + i] = vec[i];
         }
     }

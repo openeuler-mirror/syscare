@@ -49,7 +49,7 @@ impl Compiler {
     }
 
     pub fn read_from_compiler<P: AsRef<Path>>(&self, compiler: P, name: &str) -> Result<OsString> {
-        let args_list = ExternCommandArgs::new().arg(&name);
+        let args_list = ExternCommandArgs::new().arg(name);
         let output = ExternCommand::new(compiler.as_ref()).execv(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!("get {} from compiler {:?} failed", name, &self.compiler)));
@@ -137,7 +137,7 @@ impl Compiler {
              */
             for element in dwarf.file_in_obj(test_obj.clone())? {
                 let compiler_version = element.get_compiler_version();
-                let compiler_version_arr = compiler_version.split(" ").collect::<Vec<_>>();
+                let compiler_version_arr = compiler_version.split(' ').collect::<Vec<_>>();
                 if compiler_version_arr.len() < 3 {
                     return Err(Error::Compiler(format!("read system compiler version failed: {}", element.get_compiler_version())));
                 }
@@ -149,7 +149,7 @@ impl Compiler {
         for debug_info in debug_infoes {
             for element in dwarf.file_in_obj(debug_info.as_ref())? {
                 let compiler_version = element.get_compiler_version();
-                let compiler_version_arr = compiler_version.split(" ").collect::<Vec<_>>();
+                let compiler_version_arr = compiler_version.split(' ').collect::<Vec<_>>();
                 if compiler_version_arr.len() < 3 {
                     return Err(Error::Compiler(format!("read {:?} compiler version failed: {}", debug_info.as_ref(), &element.get_compiler_version())));
                 }
@@ -188,7 +188,7 @@ impl Compiler {
         Ok((ioctl_str, hack_array))
     }
 
-    fn ioctl_register(&self, fd: i32, num: usize, hack_array: &Vec<CString>) -> Result<()> {
+    fn ioctl_register(&self, fd: i32, num: usize, hack_array: &[CString]) -> Result<()> {
         for i in 0..num {
             trace!("hack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, self.hack_request[i], hack_array[i].as_ptr()) };
@@ -201,7 +201,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &Vec<CString>) -> Result<()> {
+    fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &[CString]) -> Result<()> {
         for i in (0..num).rev() {
             trace!("unhack {:?}", hack_array[i]);
             let ret = unsafe { libc::ioctl(fd, self.unhack_request[i], hack_array[i].as_ptr()) };
@@ -231,5 +231,11 @@ impl Drop for CompilerHackGuard {
         if let Err(e) = self.compiler.unhack() {
             trace!("{}", e);
         }
+    }
+}
+
+impl Default for Compiler {
+    fn default() -> Self {
+        Self::new()
     }
 }

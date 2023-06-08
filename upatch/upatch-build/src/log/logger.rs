@@ -107,6 +107,12 @@ impl Logger {
     }
 }
 
+impl Default for Logger {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl log::Log for Logger {
     fn enabled(&self, metadata: &Metadata) -> bool {
         self.enabled_screen(metadata) || self.enabled_file(metadata)

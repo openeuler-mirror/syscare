@@ -73,19 +73,18 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
     let mut file_list = Vec::new();
     let mut dir_list = Vec::new();
     for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
+        let entry = dir_entry?;
+        let current_path = entry.path();
+        let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
-                continue;
-            }
-            if current_path_type.is_file() {
-                file_list.push(self::realpath(current_path.as_path())?);
-            }
-            if current_path_type.is_dir() {
-                dir_list.push(self::realpath(current_path.as_path())?);
-            }
+        if current_path_type.is_symlink() {
+            continue;
+        }
+        if current_path_type.is_file() {
+            file_list.push(self::realpath(current_path.as_path())?);
+        }
+        if current_path_type.is_dir() {
+            dir_list.push(self::realpath(current_path.as_path())?);
         }
     }
 
@@ -105,18 +104,17 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
 
     let mut dir_list = Vec::new();
     for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
+        let entry = dir_entry?;
+        let current_path = entry.path();
+        let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
-                continue;
-            }
-            if !current_path_type.is_dir() {
-                continue;
-            }
-            dir_list.push(self::realpath(current_path.as_path())?);
+        if current_path_type.is_symlink() {
+            continue;
         }
+        if !current_path_type.is_dir() {
+            continue;
+        }
+        dir_list.push(self::realpath(current_path.as_path())?);
     }
 
     if recursive {
@@ -136,22 +134,21 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
     let mut file_list = Vec::new();
     let mut dir_list = Vec::new();
     for dir_entry in std::fs::read_dir(search_path)? {
-        if let Ok(entry) = dir_entry {
-            let current_path = entry.path();
-            let current_path_type = current_path.symlink_metadata()?.file_type();
+        let entry = dir_entry?;
+        let current_path = entry.path();
+        let current_path_type = current_path.symlink_metadata()?.file_type();
 
-            if current_path_type.is_symlink() {
-                continue;
+        if current_path_type.is_symlink() {
+            continue;
+        }
+        if current_path_type.is_file() {
+            let current_path_ext = current_path.extension().unwrap_or_default();
+            if current_path_ext == file_ext {
+                file_list.push(self::realpath(current_path.as_path())?);
             }
-            if current_path_type.is_file() {
-                let current_path_ext = current_path.extension().unwrap_or_default();
-                if current_path_ext == file_ext {
-                    file_list.push(self::realpath(current_path.as_path())?);
-                }
-            }
-            if current_path_type.is_dir() {
-                dir_list.push(self::realpath(current_path.as_path())?);
-            }
+        }
+        if current_path_type.is_dir() {
+            dir_list.push(self::realpath(current_path.as_path())?);
         }
     }
 
@@ -198,10 +195,7 @@ pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fu
 
     for file in self::list_all_files(search_path, recursive)? {
         if let Ok(curr_file_name) = self::file_name(file.as_path()) {
-            if curr_file_name == file_name {
-                file_list.push(file);
-            }
-            else if fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes()) {
+            if curr_file_name == file_name || (fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes())){
                 file_list.push(file);
             }
         }
@@ -211,8 +205,8 @@ pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fu
 
 pub fn search_tool<P: AsRef<Path>>(tool: P) -> std::io::Result<PathBuf> {
     let current_tool = tool.as_ref();
-    match self::check_file(&current_tool) {
-        Err(e) => return Err(std::io::Error::new(
+    match self::check_file(current_tool) {
+        Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!("can't find supporting tools {}: {}", current_tool.display(), e)
         )),

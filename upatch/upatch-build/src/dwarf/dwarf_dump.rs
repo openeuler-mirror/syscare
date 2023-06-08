@@ -75,6 +75,12 @@ impl Dwarf{
     }
 }
 
+impl Default for DwarfCompileUnit {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl Dwarf {
     fn find_binary<P: AsRef<Path>>(&self, dir_str: P, binary: P) -> io::Result<String> {
         let dir_str = dir_str.as_ref();
@@ -93,25 +99,21 @@ impl Dwarf {
             if offset as u64 != offset64 {
                 continue;
             }
-            let offset = offset as usize;
             match relocation.kind() {
                 object::RelocationKind::Absolute => {
-                    match relocation.target() {
-                        object::RelocationTarget::Symbol(symbol_idx) => {
-                            match file.symbol_by_index(symbol_idx) {
-                                Ok(symbol) => {
-                                    let addend = symbol.address().wrapping_add(relocation.addend() as u64);
-                                    relocation.set_addend(addend as i64);
-                                }
-                                Err(_) => {
-                                    trace!( "Relocation with invalid symbol for section {} at offset 0x{:08x}",
-                                        section.name().unwrap(),
-                                        offset
-                                    );
-                                }
+                    if let object::RelocationTarget::Symbol(symbol_idx) = relocation.target() {
+                        match file.symbol_by_index(symbol_idx) {
+                            Ok(symbol) => {
+                                let addend = symbol.address().wrapping_add(relocation.addend() as u64);
+                                relocation.set_addend(addend as i64);
+                            }
+                            Err(_) => {
+                                trace!( "Relocation with invalid symbol for section {} at offset 0x{:08x}",
+                                    section.name().unwrap(),
+                                    offset
+                                );
                             }
                         }
-                        _ => {}
                     }
                     if relocations.insert(offset, relocation).is_some() {
                         trace!("Multiple relocations for section {} at offset 0x{:08x}",
@@ -140,7 +142,7 @@ impl Dwarf {
     ) -> Result<Relocate<'arena, gimli::EndianSlice<'arena, Endian>>> {
         let mut relocations = RelocationMap::default();
         let name = Some(id.name());
-        let data = match name.and_then(|name| file.section_by_name(&name)) {
+        let data = match name.and_then(|name| file.section_by_name(name)) {
             Some(ref section) => {
                 // DWO sections never have relocations, so don't bother.
                 self.add_relocations(&mut relocations, file, section);
@@ -187,13 +189,13 @@ impl Dwarf {
                 while let Some(attr) = attrs.next()? {
                     match attr.name() {
                         constants::DW_AT_comp_dir => {
-                            element.DW_AT_comp_dir.push(&self.attr_value(&attr, &dwarf));
+                            element.DW_AT_comp_dir.push(&self.attr_value(&attr, dwarf));
                         },
                         constants::DW_AT_name => {
-                            element.DW_AT_name.push(&self.attr_value(&attr, &dwarf));
+                            element.DW_AT_name.push(&self.attr_value(&attr, dwarf));
                         },
                         constants::DW_AT_producer => {
-                            element.DW_AT_producer.push_str(&self.attr_value(&attr, &dwarf).to_string_lossy());
+                            element.DW_AT_producer.push_str(&self.attr_value(&attr, dwarf).to_string_lossy());
                         }
                         _ => continue,
                     }
@@ -228,5 +230,11 @@ impl Dwarf {
             }
             _ =>  OsString::default()
         }
+    }
+}
+
+impl Default for Dwarf {
+    fn default() -> Self {
+        Self::new()
     }
 }

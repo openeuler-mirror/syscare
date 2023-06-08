@@ -149,7 +149,7 @@ impl UpatchBuild {
         file.read_to_string(&mut contents)?;
         match contents.find(UPATCH_DEV_NAME) {
             Some(_) => Ok(()),
-            None => Err(Error::Mod(format!("can't find upatch mod in system"))),
+            None => Err(Error::Mod("can't find upatch mod in system".to_string())),
         }
     }
 
@@ -188,7 +188,7 @@ impl UpatchBuild {
                     continue;
                 },
             };
-            let output = diff_dir.join(file_name(&patch_path)?);
+            let output = diff_dir.join(file_name(patch_path)?);
             let mut source_path = None;
             for path in source_link_message {
                 let source_name = match self.source_obj.get(path) {
@@ -205,10 +205,10 @@ impl UpatchBuild {
             }
 
             match source_path {
-                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &debug_info, &self.work_dir.log_file(), self.args.verbose)?,
+                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &debug_info, self.work_dir.log_file(), self.args.verbose)?,
                 None => {
                     debug!("copy {:?} to {:?}!", &patch_path, &output);
-                    fs::copy(&patch_path, output)?;
+                    fs::copy(patch_path, output)?;
                 },
             };
         }
@@ -278,7 +278,7 @@ impl UpatchBuild {
             upatch_num += self.build_patch(&new_debug_info, &binary_name, &diff_dir)?;
         }
         if upatch_num.eq(&0) {
-            return Err(Error::Build(format!("no upatch is generated!")));
+            return Err(Error::Build("no upatch is generated!".to_string()));
         }
         Ok(())
     }
@@ -307,7 +307,7 @@ impl UpatchBuild {
     }
 
     fn stop_hacker(&self) {
-        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
+        let mut signals = Signals::new([SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
         thread::spawn(move || {
             for _ in signals.forever() {
                 panic!("receive signal");
@@ -320,5 +320,11 @@ impl UpatchBuild {
                 None => error!("panic occurred"),
             };
         }));
+    }
+}
+
+impl Default for UpatchBuild {
+    fn default() -> Self {
+        Self::new()
     }
 }

@@ -25,7 +25,7 @@ impl<'a> SymbolHeader<'a> {
 
     pub fn get_st_name(&mut self) -> &OsStr {
         match self.name.is_empty() {
-            false => self.name.clone(),
+            false => <&std::ffi::OsStr>::clone(&self.name),
             true => {
                 let name_offset = self.get_st_name_offset() as usize;
                 self.name = self.read_to_os_string(name_offset);
@@ -45,10 +45,9 @@ impl<'a> SymbolHeader<'a> {
         let mut end = offset;
         loop {
             let data = self.strtab[end];
-            match data {
-                0 => break,
-                _ => (),
-            };
+            if data.eq(&0) {
+                break;
+            }
             end += 1;
         }
         OsStr::from_bytes(&self.strtab[offset..end])
@@ -64,7 +63,7 @@ impl OperateRead for SymbolHeader<'_> {
 impl OperateWrite for SymbolHeader<'_> {
     fn set<T: ReadInteger<T>>(&mut self, start: usize, data: T) {
         let vec = self.endian.write_integer::<T>(data);
-        for i in 0..vec.len() {
+        for (i, _) in vec.iter().enumerate() {
             self.mmap[start + i] = vec[i];
         }
     }

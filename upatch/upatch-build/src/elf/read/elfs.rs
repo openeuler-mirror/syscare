@@ -62,7 +62,7 @@ impl Elf {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::AddrNotAvailable,
-            format!("elf symbols is error")
+            "elf symbols is error".to_string()
         ))
     }
 }

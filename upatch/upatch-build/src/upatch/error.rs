@@ -30,7 +30,7 @@ impl fmt::Display for Error {
 
 impl Error {
     pub fn description(&self) -> String {
-        match *&self {
+        match self {
             Error::Io(err) => err.to_string(),
             Error::Compiler(err) => err.to_string(),
             Error::Project(err) => err.to_string(),
@@ -43,7 +43,7 @@ impl Error {
     }
 
     pub fn code(&self) -> i32 {
-        match *&self {
+        match self {
             Error::Io(_) => -1,
             Error::Compiler(_) => -2,
             Error::Project(_) => -3,

@@ -1,5 +1,5 @@
-mod cmd;
+mod command;
 mod raw_line;
 
-pub use cmd::*;
+pub use command::*;
 pub use raw_line::*;

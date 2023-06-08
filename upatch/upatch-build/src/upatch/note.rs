@@ -57,8 +57,8 @@ pub fn read_build_id<P: AsRef<Path>>(binary: P) -> std::io::Result<Option<Vec<u8
         Ok(object) => match object.build_id() {
             Ok(Some(id)) => Ok(Some(id.to_vec())),
             Ok(None) => Ok(None),
-            Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("read build_id failed: {}", e))),
+            Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("read build_id failed: {}", e))),
         },
-        Err(e) => return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("parse binary failed: {}", e))),
+        Err(e) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("parse binary failed: {}", e))),
     }
 }

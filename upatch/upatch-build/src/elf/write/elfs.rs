@@ -74,7 +74,7 @@ impl Elf {
                 return Ok(SymbolHeaderTable::from(
                     &self.file,
                     self.endian,
-                    &self.strtab.as_ref().unwrap(),
+                    self.strtab.as_ref().unwrap(),
                     offset,
                     size,
                     offset + size_sum
@@ -83,7 +83,7 @@ impl Elf {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::AddrNotAvailable,
-            format!("elf symbols is error")
+            "elf symbols is error".to_string()
         ))
     }
 }

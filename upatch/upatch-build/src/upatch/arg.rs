@@ -80,7 +80,7 @@ impl Arguments {
                 Some(work_dir) => work_dir.join(".upatch"),
                 None => return Err(std::io::Error::new(
                     std::io::ErrorKind::NotFound,
-                    format!("home_dir don't support BSD system"),
+                    "home_dir don't support BSD system".to_string(),
                 )),
             },
         });
@@ -136,5 +136,11 @@ impl Arguments {
         }
 
         Ok(())
+    }
+}
+
+impl Default for Arguments {
+    fn default() -> Self {
+        Self::new()
     }
 }

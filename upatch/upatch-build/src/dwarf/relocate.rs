@@ -12,16 +12,12 @@ pub struct Relocate<'a, R: gimli::Reader<Offset = usize>> {
 impl<'a, R: gimli::Reader<Offset = usize>> Relocate<'a, R> {
     pub fn relocate(&self, offset: usize, value: u64) -> u64 {
         if let Some(relocation) = self.relocations.get(&offset) {
-            match relocation.kind() {
-                object::RelocationKind::Absolute => {
-                    if relocation.has_implicit_addend() {
-                        // Use the explicit addend too, because it may have the symbol value.
-                        return value.wrapping_add(relocation.addend() as u64);
-                    } else {
-                        return relocation.addend() as u64;
-                    }
+            if relocation.kind() == object::RelocationKind::Absolute {
+                return match relocation.has_implicit_addend() {
+                    // Use the explicit addend too, because it may have the symbol value.
+                    true => value.wrapping_add(relocation.addend() as u64),
+                    false => relocation.addend() as u64,
                 }
-                _ => {}
             }
         };
         value

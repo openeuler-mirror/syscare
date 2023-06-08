@@ -74,3 +74,9 @@ impl std::fmt::Debug for LinkMessages {
         f.write_fmt(format_args!("{:?}", self.link_message))
     }
 }
+
+impl Default for LinkMessages {
+    fn default() -> Self {
+        Self::new()
+    }
+}

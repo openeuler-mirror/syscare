@@ -54,3 +54,9 @@ impl Tool {
         Ok(())
     }
 }
+
+impl Default for Tool {
+    fn default() -> Self {
+        Self::new()
+    }
+}

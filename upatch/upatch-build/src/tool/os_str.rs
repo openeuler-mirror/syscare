@@ -11,8 +11,7 @@ where
 
         std::os::unix::prelude::OsStrExt::as_bytes(self.as_ref())
             .windows(needle.len())
-            .position(|window| window == needle)
-            .is_some()
+            .any(|window| window == needle)
     }
 }
 

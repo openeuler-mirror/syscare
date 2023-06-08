@@ -25,7 +25,7 @@ pub fn check_header(file: &File) -> std::io::Result<(u8, Endian)> {
         Some(&[ELFCLASS64]) => ELFCLASS64,
         _ => return Err(std::io::Error::new(
             std::io::ErrorKind::AddrNotAvailable,
-            format!("elf format is not class64")
+            "elf format is not class64".to_string()
         )),
     };
 
@@ -34,7 +34,7 @@ pub fn check_header(file: &File) -> std::io::Result<(u8, Endian)> {
         Some([2]) => Endian::new(Endianness::Big),
         _ => return Err(std::io::Error::new(
             std::io::ErrorKind::AddrNotAvailable,
-            format!("elf endian is error")
+            "elf endian is error".to_string()
         )),
     };
 

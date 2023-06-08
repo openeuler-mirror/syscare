@@ -37,10 +37,9 @@ impl<'a> SymbolHeader<'a> {
         let mut end = offset;
         loop {
             let data = &self.mmap[self.strtab + end];
-            match data {
-                0 => break,
-                _ => (),
-            };
+            if data.eq(&0) {
+                break
+            }
             end += 1;
         }
         OsStr::from_bytes(&self.mmap[self.strtab + offset..self.strtab + end])

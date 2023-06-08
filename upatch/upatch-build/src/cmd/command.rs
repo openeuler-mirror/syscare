@@ -50,6 +50,12 @@ impl IntoIterator for ExternCommandArgs {
     }
 }
 
+impl Default for ExternCommandArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 pub struct ExternCommandEnvs {
     envs: HashMap<OsString, OsString>,
 }
@@ -84,6 +90,12 @@ impl ExternCommandEnvs {
             );
         }
         self
+    }
+}
+
+impl Default for ExternCommandEnvs {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
