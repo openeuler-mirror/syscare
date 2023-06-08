@@ -290,8 +290,8 @@ pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
         }
     }
 
-    return Err(std::io::Error::new(
+    Err(std::io::Error::new(
         std::io::ErrorKind::Other,
         format!("Cannot find grub default entry {:?}", default_entry_name),
-    ));
+    ))
 }

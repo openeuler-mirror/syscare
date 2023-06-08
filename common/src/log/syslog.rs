@@ -68,7 +68,7 @@ impl SyslogAppenderBuilder {
         SyslogAppender {
             encoder: self
                 .encoder
-                .unwrap_or_else(|| Box::new(PatternEncoder::default())),
+                .unwrap_or_else(|| Box::<PatternEncoder>::default()),
         }
     }
 }
