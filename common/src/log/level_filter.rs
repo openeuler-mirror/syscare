@@ -9,7 +9,10 @@ pub struct LogLevelFilter {
 
 impl LogLevelFilter {
     pub fn new(min_level: LevelFilter, max_level: LevelFilter) -> LogLevelFilter {
-        LogLevelFilter { min_level, max_level }
+        LogLevelFilter {
+            min_level,
+            max_level,
+        }
     }
 }
 
