@@ -1,6 +1,6 @@
 use memmap2::MmapMut;
 
-use super::super::{Endian, ReadInteger, SectionRead, OperateRead, OperateWrite};
+use super::super::{Endian, OperateRead, OperateWrite, ReadInteger, SectionRead};
 
 #[derive(Debug)]
 pub struct SectionHeader {
@@ -10,10 +10,7 @@ pub struct SectionHeader {
 
 impl SectionHeader {
     pub fn from(mmap: MmapMut, endian: Endian) -> Self {
-        Self {
-            mmap,
-            endian,
-        }
+        Self { mmap, endian }
     }
 }
 
@@ -21,7 +18,8 @@ impl SectionRead for SectionHeader {}
 
 impl OperateRead for SectionHeader {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
-        self.endian.read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
+        self.endian
+            .read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
     }
 }
 

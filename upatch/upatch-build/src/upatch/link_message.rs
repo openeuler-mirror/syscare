@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
-use std::collections::{HashSet, HashMap};
+use std::path::PathBuf;
 
 use common::util::os_str::OsStrExt;
 
@@ -10,7 +10,7 @@ const OBJECT_PREFIX: &str = ".upatch_";
 const OBJECT_EXTENSION: &str = "o";
 
 pub struct LinkMessages {
-    link_message: HashMap<PathBuf, HashSet<PathBuf>>
+    link_message: HashMap<PathBuf, HashSet<PathBuf>>,
 }
 
 impl LinkMessages {
@@ -18,7 +18,10 @@ impl LinkMessages {
      * In order to find out the object files which compose the binary,
      * we add symbol which's name is ".upatch_xxx" in object, and xxx is the object's name
      */
-    fn parse<P: AsRef<Path>, Q: AsRef<Path>>(path: P, fliter: Q) -> std::io::Result<HashSet<PathBuf>> {
+    fn parse<P: AsRef<Path>, Q: AsRef<Path>>(
+        path: P,
+        fliter: Q,
+    ) -> std::io::Result<HashSet<PathBuf>> {
         let mut result: HashSet<PathBuf> = HashSet::new();
         let mut elf = read::Elf::parse(path)?;
 
@@ -40,18 +43,19 @@ impl LinkMessages {
 impl LinkMessages {
     pub fn new() -> Self {
         Self {
-            link_message: HashMap::new()
+            link_message: HashMap::new(),
         }
     }
 
-    pub fn from<P: AsRef<Path>, Q: AsRef<Path>>(pathes: &Vec<P>, fliter: Q) -> std::io::Result<Self> {
+    pub fn from<P: AsRef<Path>, Q: AsRef<Path>>(
+        pathes: &Vec<P>,
+        fliter: Q,
+    ) -> std::io::Result<Self> {
         let mut link_message: HashMap<PathBuf, HashSet<PathBuf>> = HashMap::new();
         for path in pathes {
             link_message.insert(path.as_ref().to_path_buf(), Self::parse(path, &fliter)?);
         }
-        Ok(Self {
-            link_message,
-        })
+        Ok(Self { link_message })
     }
 
     pub fn get_objects<P: AsRef<Path>>(&self, binary: P) -> Option<&HashSet<PathBuf>> {

@@ -1,5 +1,8 @@
-use std::{io, fmt::{self, Debug}};
 use std::result;
+use std::{
+    fmt::{self, Debug},
+    io,
+};
 
 pub type Result<T> = result::Result<T, Error>;
 

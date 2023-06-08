@@ -1,5 +1,5 @@
-use std::path::PathBuf;
 use std::ffi::OsString;
+use std::path::PathBuf;
 
 use clap::Parser;
 use which::which;
@@ -7,7 +7,7 @@ use which::which;
 use crate::tool::*;
 
 #[derive(Parser, Debug)]
-#[command(bin_name="upatch-build", version, term_width = 200)]
+#[command(bin_name = "upatch-build", version, term_width = 200)]
 pub struct Arguments {
     /// Specify work directory
     /// will add upatch in work_dir [default: ~/.upatch]
@@ -62,7 +62,7 @@ pub struct Arguments {
 
     /// Patch file(s)
     #[arg(required = true)]
-    pub patches: Vec<PathBuf>
+    pub patches: Vec<PathBuf>,
 }
 
 impl Arguments {
@@ -78,23 +78,30 @@ impl Arguments {
             #[allow(deprecated)]
             None => match std::env::home_dir() {
                 Some(work_dir) => work_dir.join(".upatch"),
-                None => return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    "home_dir don't support BSD system".to_string(),
-                )),
+                None => {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        "home_dir don't support BSD system".to_string(),
+                    ))
+                }
             },
         });
 
         let mut default_compiler = vec![PathBuf::from("gcc"), PathBuf::from("g++")];
-        let compiler_paths = self.compiler.as_deref_mut().unwrap_or(&mut default_compiler);
+        let compiler_paths = self
+            .compiler
+            .as_deref_mut()
+            .unwrap_or(&mut default_compiler);
         self.compiler = Some({
             for compiler_path in &mut compiler_paths.iter_mut() {
                 *compiler_path = match compiler_path.exists() {
                     true => real_arg(&compiler_path)?,
-                    false => which(&compiler_path).map_err(|e| std::io::Error::new(
+                    false => which(&compiler_path).map_err(|e| {
+                        std::io::Error::new(
                             std::io::ErrorKind::NotFound,
                             format!("can't find {:?} in system: {}", compiler_path, e),
-                        ))?,
+                        )
+                    })?,
                 };
             }
             compiler_paths.to_vec()
@@ -128,11 +135,17 @@ impl Arguments {
                 for elf_path in &mut self.elf_pathes {
                     *elf_path = self.elf_dir.as_ref().unwrap().join(&elf_path);
                 }
-            },
-            false => return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("{}'s elf-path don't match {}'s debug-info", self.elf_pathes.len(), self.debug_infoes.len()),
-            )),
+            }
+            false => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidInput,
+                    format!(
+                        "{}'s elf-path don't match {}'s debug-info",
+                        self.elf_pathes.len(),
+                        self.debug_infoes.len()
+                    ),
+                ))
+            }
         }
 
         Ok(())

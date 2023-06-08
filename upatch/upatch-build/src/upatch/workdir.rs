@@ -1,8 +1,8 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
-use crate::tool::*;
 use super::Result;
+use crate::tool::*;
 
 pub struct WorkDir {
     cache_dir: PathBuf,
@@ -45,7 +45,6 @@ impl WorkDir {
         File::create(&self.log_file)?;
         Ok(())
     }
-
 
     pub fn cache_dir(&self) -> &Path {
         &self.cache_dir

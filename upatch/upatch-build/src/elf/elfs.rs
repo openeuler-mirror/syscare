@@ -23,19 +23,23 @@ pub fn check_header(file: &File) -> std::io::Result<(u8, Endian)> {
     //Now we only support 64 bit
     let class = match mmap.get(0..1) {
         Some(&[ELFCLASS64]) => ELFCLASS64,
-        _ => return Err(std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "elf format is not class64".to_string()
-        )),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                "elf format is not class64".to_string(),
+            ))
+        }
     };
 
     let endian = match mmap.get(1..2) {
         Some([1]) => Endian::new(Endianness::Little),
         Some([2]) => Endian::new(Endianness::Big),
-        _ => return Err(std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "elf endian is error".to_string()
-        )),
+        _ => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::AddrNotAvailable,
+                "elf endian is error".to_string(),
+            ))
+        }
     };
 
     Ok((class, endian))

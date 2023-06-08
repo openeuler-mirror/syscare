@@ -1,26 +1,26 @@
-use std::path::{Path, PathBuf};
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
+use std::path::{Path, PathBuf};
 use std::thread;
 
-use signal_hook::{iterator::Signals, consts::*};
+use signal_hook::{consts::*, iterator::Signals};
 
+use crate::dwarf::Dwarf;
 use crate::elf::check_elf;
 use crate::log::*;
 use crate::tool::*;
-use crate::dwarf::Dwarf;
 
-use super::Arguments;
-use super::{Compiler, CompilerHackGuard};
-use super::WorkDir;
-use super::Project;
-use super::Tool;
-use super::LinkMessages;
-use super::Result;
-use super::Error;
-use super::resolve;
 use super::note;
+use super::resolve;
+use super::Arguments;
+use super::Error;
+use super::LinkMessages;
+use super::Project;
+use super::Result;
+use super::Tool;
+use super::WorkDir;
+use super::{Compiler, CompilerHackGuard};
 
 pub const UPATCH_DEV_NAME: &str = "upatch";
 const SYSTEM_MOUDLES: &str = "/proc/modules";
@@ -59,8 +59,11 @@ impl UpatchBuild {
     pub fn run(&mut self) -> Result<()> {
         self.args.check()?;
 
-        self.work_dir.create_dir(self.args.work_dir.as_ref().unwrap())?;
-        self.args.output_dir.get_or_insert(self.work_dir.cache_dir().to_path_buf());
+        self.work_dir
+            .create_dir(self.args.work_dir.as_ref().unwrap())?;
+        self.args
+            .output_dir
+            .get_or_insert(self.work_dir.cache_dir().to_path_buf());
         self.init_logger()?;
         self.stop_hacker();
 
@@ -76,9 +79,11 @@ impl UpatchBuild {
         project.unpatch_all(&self.args.patches, Level::Debug)?;
 
         // check compiler
-        self.compiler.analyze(self.args.compiler.as_ref().unwrap())?;
+        self.compiler
+            .analyze(self.args.compiler.as_ref().unwrap())?;
         if !self.args.skip_compiler_check {
-            self.compiler.check_version(self.work_dir.cache_dir(), &self.args.debug_infoes)?;
+            self.compiler
+                .check_version(self.work_dir.cache_dir(), &self.args.debug_infoes)?;
         }
 
         // hack compiler
@@ -89,17 +94,28 @@ impl UpatchBuild {
 
         // build source
         info!("Building original {:?}", project_name);
-        project.build(COMPILER_CMD_SOURCE_ENTER, ASSEMBLER_CMD_SOURCE_ENTER, self.work_dir.source_dir(), self.args.build_source_cmd.clone())?;
+        project.build(
+            COMPILER_CMD_SOURCE_ENTER,
+            ASSEMBLER_CMD_SOURCE_ENTER,
+            self.work_dir.source_dir(),
+            self.args.build_source_cmd.clone(),
+        )?;
 
         for i in 0..self.args.debug_infoes.len() {
-            self.args.elf_pathes[i] = self.get_binary_elf(&self.args.debug_infoes[i], &self.args.elf_pathes[i])?;
+            self.args.elf_pathes[i] =
+                self.get_binary_elf(&self.args.debug_infoes[i], &self.args.elf_pathes[i])?;
         }
 
         // collect source link message and object message
-        self.source_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.source_dir())?;
-        self.source_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
+        self.source_link_messages =
+            LinkMessages::from(&self.args.elf_pathes, self.work_dir.source_dir())?;
+        self.source_obj =
+            self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
         if self.source_obj.is_empty() {
-            return Err(Error::Build(format!("no valid object in {:?}", self.work_dir.source_dir())));
+            return Err(Error::Build(format!(
+                "no valid object in {:?}",
+                self.work_dir.source_dir()
+            )));
         }
 
         // patch
@@ -107,13 +123,22 @@ impl UpatchBuild {
 
         // build patched
         info!("Building patched {:?}", project_name);
-        project.build(COMPILER_CMD_PATCHED_ENTER, ASSEMBLER_CMD_PATCHED_ENTER, self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
+        project.build(
+            COMPILER_CMD_PATCHED_ENTER,
+            ASSEMBLER_CMD_PATCHED_ENTER,
+            self.work_dir.patch_dir(),
+            self.args.build_patch_cmd.clone(),
+        )?;
 
         // collect patched link message and object message
-        self.patch_link_messages = LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
+        self.patch_link_messages =
+            LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
         self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
         if self.patch_obj.is_empty() {
-            return Err(Error::Build(format!("no valid object in {:?}", self.work_dir.patch_dir())));
+            return Err(Error::Build(format!(
+                "no valid object in {:?}",
+                self.work_dir.patch_dir()
+            )));
         }
 
         // unhack compiler
@@ -133,7 +158,7 @@ impl UpatchBuild {
 
         let log_level = match self.args.verbose {
             false => LevelFilter::Info,
-            true  => LevelFilter::Debug,
+            true => LevelFilter::Debug,
         };
 
         logger.set_print_level(log_level);
@@ -153,9 +178,13 @@ impl UpatchBuild {
         }
     }
 
-    fn correlate_obj<P: AsRef<Path>, Q: AsRef<Path>>(&self, compiler_dir: P, output_dir: Q) -> Result<HashMap<PathBuf, PathBuf>> {
+    fn correlate_obj<P: AsRef<Path>, Q: AsRef<Path>>(
+        &self,
+        compiler_dir: P,
+        output_dir: Q,
+    ) -> Result<HashMap<PathBuf, PathBuf>> {
         let compiler_dir = compiler_dir.as_ref();
-        let mut map =  HashMap::new();
+        let mut map = HashMap::new();
         let arr = list_all_files_ext(output_dir, "o", false)?;
         for obj in arr {
             let result = match self.dwarf.file_in_obj(&obj) {
@@ -163,17 +192,25 @@ impl UpatchBuild {
                 Err(e) => {
                     debug!("build map: {:?} is not elf, {}", &obj, e);
                     continue;
-                },
+                }
             };
             match result.len() == 1 && result[0].DW_AT_comp_dir.starts_with(compiler_dir) {
-                true => { map.insert(obj, result[0].get_source()); },
+                true => {
+                    map.insert(obj, result[0].get_source());
+                }
                 false => debug!("build map: read {:?}'s dwarf failed!", &obj),
             }
         }
         Ok(map)
     }
 
-    fn create_diff<P, Q>(&self, source_link_message: &HashSet<PathBuf>, patch_link_message: &HashSet<PathBuf>, diff_dir: P, debug_info: Q) -> Result<()>
+    fn create_diff<P, Q>(
+        &self,
+        source_link_message: &HashSet<PathBuf>,
+        patch_link_message: &HashSet<PathBuf>,
+        diff_dir: P,
+        debug_info: Q,
+    ) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -186,7 +223,7 @@ impl UpatchBuild {
                 None => {
                     debug!("read {:?}'s dwarf failed!", patch_path);
                     continue;
-                },
+                }
             };
             let output = diff_dir.join(file_name(patch_path)?);
             let mut source_path = None;
@@ -196,7 +233,7 @@ impl UpatchBuild {
                     None => {
                         debug!("read {:?}'s dwarf failed!", path);
                         continue;
-                    },
+                    }
                 };
                 if patch_name.eq(source_name) {
                     source_path = Some(path);
@@ -205,11 +242,18 @@ impl UpatchBuild {
             }
 
             match source_path {
-                Some(source_path) => self.tool.upatch_diff(source_path, patch_path, &output, &debug_info, self.work_dir.log_file(), self.args.verbose)?,
+                Some(source_path) => self.tool.upatch_diff(
+                    source_path,
+                    patch_path,
+                    &output,
+                    &debug_info,
+                    self.work_dir.log_file(),
+                    self.args.verbose,
+                )?,
                 None => {
                     debug!("copy {:?} to {:?}!", &patch_path, &output);
                     fs::copy(patch_path, output)?;
-                },
+                }
             };
         }
         Ok(())
@@ -225,14 +269,22 @@ impl UpatchBuild {
         let binary = binary.as_ref().to_path_buf();
 
         let mut binding = self.args.name.clone();
-        let output_file = self.args.output_dir.as_ref().unwrap().join(binding.concat(&binary));
+        let output_file = self
+            .args
+            .output_dir
+            .as_ref()
+            .unwrap()
+            .join(binding.concat(&binary));
 
         let mut link_args = list_all_files_ext(diff_dir, "o", false)?;
         match link_args.len() {
             0 => {
-                info!("Building patch: {:?}: no functional changes found", output_file);
+                info!(
+                    "Building patch: {:?}: no functional changes found",
+                    output_file
+                );
                 return Ok(0);
-            },
+            }
             _ => info!("Building patch: {:?}", output_file),
         };
 
@@ -252,25 +304,48 @@ impl UpatchBuild {
     fn build_patches(&self) -> Result<()> {
         let mut upatch_num = 0;
         for i in 0..self.args.debug_infoes.len() {
-            debug!("\n\nbuild upatches: debuginfo: {:?}(elf_path: {:?})", &self.args.debug_infoes[i], &self.args.elf_pathes[i]);
-            let patch_objects = match self.patch_link_messages.get_objects(&self.args.elf_pathes[i]) {
+            debug!(
+                "\n\nbuild upatches: debuginfo: {:?}(elf_path: {:?})",
+                &self.args.debug_infoes[i], &self.args.elf_pathes[i]
+            );
+            let patch_objects = match self
+                .patch_link_messages
+                .get_objects(&self.args.elf_pathes[i])
+            {
                 Some(objects) => objects,
                 None => {
-                    info!("read {:?}'s patch link_message failed: None", &self.args.elf_pathes[i]);
+                    info!(
+                        "read {:?}'s patch link_message failed: None",
+                        &self.args.elf_pathes[i]
+                    );
                     continue;
-                },
+                }
             };
-            let source_objects = match self.source_link_messages.get_objects(&self.args.elf_pathes[i]) {
+            let source_objects = match self
+                .source_link_messages
+                .get_objects(&self.args.elf_pathes[i])
+            {
                 Some(objects) => objects,
-                None => return Err(Error::Build(format!("read {:?}'s source link_message failed: None", &self.args.elf_pathes[i]))),
+                None => {
+                    return Err(Error::Build(format!(
+                        "read {:?}'s source link_message failed: None",
+                        &self.args.elf_pathes[i]
+                    )))
+                }
             };
 
             let binary_name = file_name(&self.args.elf_pathes[i])?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
 
-            let new_debug_info = self.work_dir.debuginfo_dir().join(file_name(&self.args.debug_infoes[i])?);
-            debug!("copy {:?} to {:?}!", &self.args.debug_infoes[i], &new_debug_info);
+            let new_debug_info = self
+                .work_dir
+                .debuginfo_dir()
+                .join(file_name(&self.args.debug_infoes[i])?);
+            debug!(
+                "copy {:?} to {:?}!",
+                &self.args.debug_infoes[i], &new_debug_info
+            );
             fs::copy(&self.args.debug_infoes[i], &new_debug_info)?;
             resolve::resolve_dynamic(&new_debug_info)?;
 
@@ -283,11 +358,18 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn get_binary_elf<P: AsRef<Path>, B: AsRef<Path>>(&self, debug_info: P, binary_file: B) -> Result<PathBuf> {
+    fn get_binary_elf<P: AsRef<Path>, B: AsRef<Path>>(
+        &self,
+        debug_info: P,
+        binary_file: B,
+    ) -> Result<PathBuf> {
         let mut result = Vec::new();
         let pathes = glob(&binary_file)?; // for rpm's "BUILDROOT/*/path"
         if pathes.is_empty() {
-            return Err(Error::Build(format!("can't find binary: {:?}", binary_file.as_ref())));
+            return Err(Error::Build(format!(
+                "can't find binary: {:?}",
+                binary_file.as_ref()
+            )));
         }
         for path in &pathes {
             if self.check_binary_elf(path)? {
@@ -295,9 +377,17 @@ impl UpatchBuild {
             }
         }
         match result.len() {
-            0 => Err(Error::Build(format!("{:?} don't match binary: {:?}", debug_info.as_ref(), pathes))),
+            0 => Err(Error::Build(format!(
+                "{:?} don't match binary: {:?}",
+                debug_info.as_ref(),
+                pathes
+            ))),
             1 => Ok(result[0].clone()),
-            _ => Err(Error::Build(format!("{:?} match too many binaries: {:?}", debug_info.as_ref(), pathes))),
+            _ => Err(Error::Build(format!(
+                "{:?} match too many binaries: {:?}",
+                debug_info.as_ref(),
+                pathes
+            ))),
         }
     }
 

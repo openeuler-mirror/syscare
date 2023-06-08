@@ -3,7 +3,7 @@ use std::os::unix::prelude::OsStrExt;
 
 use memmap2::Mmap;
 
-use super::super::{Endian, ReadInteger, SymbolRead, OperateRead};
+use super::super::{Endian, OperateRead, ReadInteger, SymbolRead};
 
 #[derive(Debug)]
 pub struct SymbolHeader<'a> {
@@ -27,7 +27,6 @@ impl<'a> SymbolHeader<'a> {
         let name_offset = self.get_st_name_offset() as usize;
         self.read_to_os_string(name_offset)
     }
-
 }
 
 impl SymbolRead for SymbolHeader<'_> {}
@@ -38,7 +37,7 @@ impl<'a> SymbolHeader<'a> {
         loop {
             let data = &self.mmap[self.strtab + end];
             if data.eq(&0) {
-                break
+                break;
             }
             end += 1;
         }
@@ -48,7 +47,9 @@ impl<'a> SymbolHeader<'a> {
 
 impl OperateRead for SymbolHeader<'_> {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
-        self.endian.read_integer::<T>(&self.mmap[self.offset + start..(self.offset + start + std::mem::size_of::<T>())])
+        self.endian.read_integer::<T>(
+            &self.mmap[self.offset + start..(self.offset + start + std::mem::size_of::<T>())],
+        )
     }
 }
 
@@ -64,7 +65,14 @@ pub struct SymbolHeaderTable<'a> {
 }
 
 impl<'a> SymbolHeaderTable<'a> {
-    pub fn from(mmap: &'a Mmap, endian: Endian, strtab: usize, offset: usize, size: usize, num: usize) -> Self {
+    pub fn from(
+        mmap: &'a Mmap,
+        endian: Endian,
+        strtab: usize,
+        offset: usize,
+        size: usize,
+        num: usize,
+    ) -> Self {
         Self {
             mmap,
             endian,
@@ -92,8 +100,13 @@ impl<'a> Iterator for SymbolHeaderTable<'a> {
             true => {
                 let offset = self.count * self.size + self.offset;
                 self.count += 1;
-                Some(SymbolHeader::from(self.mmap, self.endian, self.strtab, offset))
-            },
+                Some(SymbolHeader::from(
+                    self.mmap,
+                    self.endian,
+                    self.strtab,
+                    offset,
+                ))
+            }
             false => {
                 self.count = 0;
                 None

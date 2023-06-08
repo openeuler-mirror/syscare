@@ -23,22 +23,20 @@ pub struct Endian {
 
 impl Endian {
     pub fn new(endian: Endianness) -> Self {
-        Self {
-            endian
-        }
+        Self { endian }
     }
 
     pub fn read_integer<T: ReadInteger<T>>(&self, data: &[u8]) -> T {
         match self.endian {
             Endianness::Little => T::from_le_bytes(&data[..std::mem::size_of::<T>()]),
-            Endianness::Big =>  T::from_be_bytes(&data[..std::mem::size_of::<T>()]),
+            Endianness::Big => T::from_be_bytes(&data[..std::mem::size_of::<T>()]),
         }
     }
 
     pub fn write_integer<T: ReadInteger<T>>(&self, data: T) -> Vec<u8> {
         match self.endian {
             Endianness::Little => T::to_le_bytes(data),
-            Endianness::Big =>  T::to_be_bytes(data),
+            Endianness::Big => T::to_be_bytes(data),
         }
     }
 }

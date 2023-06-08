@@ -1,6 +1,6 @@
 use memmap2::Mmap;
 
-use super::super::{Endian, ReadInteger, SectionRead, OperateRead};
+use super::super::{Endian, OperateRead, ReadInteger, SectionRead};
 
 #[derive(Debug)]
 pub struct SectionHeader<'a> {
@@ -23,7 +23,9 @@ impl SectionRead for SectionHeader<'_> {}
 
 impl OperateRead for SectionHeader<'_> {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
-        self.endian.read_integer::<T>(&self.mmap[self.offset + start..(self.offset + start + std::mem::size_of::<T>())])
+        self.endian.read_integer::<T>(
+            &self.mmap[self.offset + start..(self.offset + start + std::mem::size_of::<T>())],
+        )
     }
 }
 
@@ -54,10 +56,11 @@ impl<'a> SectionHeaderTable<'a> {
             true => {
                 let offset = index * self.size + self.offset;
                 Ok(SectionHeader::from(self.mmap, self.endian, offset))
-            },
-            false => {
-                Err(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("the index is {}, but the len is {}", index, self.num)))
             }
+            false => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("the index is {}, but the len is {}", index, self.num),
+            )),
         }
     }
 }
@@ -71,7 +74,7 @@ impl<'a> Iterator for SectionHeaderTable<'a> {
                 let offset = self.count * self.size + self.offset;
                 self.count += 1;
                 Some(SectionHeader::from(self.mmap, self.endian, offset))
-            },
+            }
             false => {
                 self.count = 0;
                 None

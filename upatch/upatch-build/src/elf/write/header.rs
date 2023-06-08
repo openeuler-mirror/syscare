@@ -1,6 +1,6 @@
 use memmap2::MmapMut;
 
-use super::super::{Endian, ReadInteger, HeaderRead, HeaderWrite, OperateRead, OperateWrite};
+use super::super::{Endian, HeaderRead, HeaderWrite, OperateRead, OperateWrite, ReadInteger};
 
 #[derive(Debug)]
 pub struct Header {
@@ -10,10 +10,7 @@ pub struct Header {
 
 impl Header {
     pub fn from(mmap: MmapMut, endian: Endian) -> Self {
-        Self {
-            mmap,
-            endian
-        }
+        Self { mmap, endian }
     }
 }
 
@@ -23,7 +20,8 @@ impl HeaderWrite for Header {}
 
 impl OperateRead for Header {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
-        self.endian.read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
+        self.endian
+            .read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
     }
 }
 

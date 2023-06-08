@@ -16,76 +16,49 @@ pub const STT_IFUNC: u8 = 0xa;
 
 pub trait SymbolRead: OperateRead {
     fn get_st_name_offset(&self) -> u32 {
-        self.get::<u32>(
-            offset_of!(SymbolHeader64, st_name)
-        )
+        self.get::<u32>(offset_of!(SymbolHeader64, st_name))
     }
 
     fn get_st_info(&self) -> u8 {
-        self.get(
-            offset_of!(SymbolHeader64, st_info)
-        )
+        self.get(offset_of!(SymbolHeader64, st_info))
     }
 
     fn get_st_other(&self) -> u8 {
-        self.get(
-            offset_of!(SymbolHeader64, st_other)
-        )
+        self.get(offset_of!(SymbolHeader64, st_other))
     }
 
     fn get_st_shndx(&self) -> u16 {
-        self.get(
-            offset_of!(SymbolHeader64, st_shndx)
-        )
+        self.get(offset_of!(SymbolHeader64, st_shndx))
     }
 
     fn get_st_value(&self) -> u64 {
-        self.get(
-            offset_of!(SymbolHeader64, st_value)
-        )
+        self.get(offset_of!(SymbolHeader64, st_value))
     }
 
     fn get_st_size(&self) -> u64 {
-        self.get(
-            offset_of!(SymbolHeader64, st_size)
-        )
+        self.get(offset_of!(SymbolHeader64, st_size))
     }
 }
 
 pub trait SymbolWrite: OperateWrite {
     fn set_st_info(&mut self, st_info: u8) {
-        self.set(
-            offset_of!(SymbolHeader64, st_info),
-            st_info
-        )
+        self.set(offset_of!(SymbolHeader64, st_info), st_info)
     }
 
     fn set_st_other(&mut self, st_other: u8) {
-        self.set(
-            offset_of!(SymbolHeader64, st_other),
-            st_other
-        )
+        self.set(offset_of!(SymbolHeader64, st_other), st_other)
     }
 
     fn set_st_shndx(&mut self, st_shndx: u16) {
-        self.set(
-            offset_of!(SymbolHeader64, st_shndx),
-            st_shndx
-        )
+        self.set(offset_of!(SymbolHeader64, st_shndx), st_shndx)
     }
 
     fn set_st_value(&mut self, st_value: u64) {
-        self.set(
-            offset_of!(SymbolHeader64, st_value),
-            st_value
-        )
+        self.set(offset_of!(SymbolHeader64, st_value), st_value)
     }
 
     fn set_st_size(&mut self, st_size: u64) {
-        self.set(
-            offset_of!(SymbolHeader64, st_size),
-            st_size
-        )
+        self.set(offset_of!(SymbolHeader64, st_size), st_size)
     }
 }
 

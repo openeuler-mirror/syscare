@@ -1,8 +1,8 @@
-use std::path::Path;
 use std::fs::File;
-use std::io::{Write, LineWriter};
+use std::io::{LineWriter, Write};
+use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
-use std::sync::atomic::{Ordering, AtomicBool};
 
 use super::{Level, LevelFilter, Metadata, Record};
 
@@ -10,7 +10,7 @@ static LOGGER_INIT_FLAG: AtomicBool = AtomicBool::new(false);
 
 pub struct Logger {
     print_level: LevelFilter,
-    file_level:  LevelFilter,
+    file_level: LevelFilter,
     file_writer: Option<Mutex<LineWriter<File>>>,
 }
 
@@ -32,8 +32,8 @@ impl Logger {
     pub fn new() -> Self {
         Self {
             print_level: LevelFilter::Off,
-            file_level:  LevelFilter::Off,
-            file_writer: None
+            file_level: LevelFilter::Off,
+            file_writer: None,
         }
     }
 
@@ -41,16 +41,20 @@ impl Logger {
         self.print_level = log_level;
     }
 
-    pub fn set_log_file<P: AsRef<Path>>(&mut self, log_level: LevelFilter, file_path: P) -> std::io::Result<()> {
+    pub fn set_log_file<P: AsRef<Path>>(
+        &mut self,
+        log_level: LevelFilter,
+        file_path: P,
+    ) -> std::io::Result<()> {
         let log_writter = LineWriter::new(
             File::options()
                 .create(true)
                 .append(true)
                 .read(false)
                 .write(true)
-                .open(file_path)?
+                .open(file_path)?,
         );
-        self.file_level  = log_level;
+        self.file_level = log_level;
         self.file_writer = Some(Mutex::new(log_writter));
 
         Ok(())
@@ -64,10 +68,10 @@ impl Logger {
         match record.metadata().level() {
             Level::Error | Level::Warn => {
                 format!("{}: {}", record.level(), record.args())
-            },
-            _=> {
+            }
+            _ => {
                 format!("{}", record.args())
-            },
+            }
         }
     }
 
@@ -83,26 +87,24 @@ impl Logger {
         match level {
             Level::Error | Level::Warn => {
                 eprintln!("{}", log_str);
-            },
-            _=> {
+            }
+            _ => {
                 println!("{}", log_str);
-            },
+            }
         };
     }
 
     fn write_file(&self, log_str: &str) {
         if let Some(writer_lock) = &self.file_writer {
             let mut writer = writer_lock.lock().expect("Lock posioned");
-            writeln!(writer, "{}", log_str)
-                .expect("Write log to file failed");
+            writeln!(writer, "{}", log_str).expect("Write log to file failed");
         }
     }
 
     fn flush_writer(&self) {
         if let Some(writer_lock) = &self.file_writer {
             let mut writer = writer_lock.lock().expect("Lock posioned");
-            writer.flush()
-                .expect("Flush log writer failed");
+            writer.flush().expect("Flush log writer failed");
         }
     }
 }

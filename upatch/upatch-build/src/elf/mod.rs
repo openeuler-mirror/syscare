@@ -1,14 +1,14 @@
+mod common;
 mod elfs;
 mod header;
-mod common;
 mod section;
 mod symbol;
 
 pub mod read;
 pub mod write;
 
+pub(crate) use self::common::*;
 pub use elfs::*;
 pub use header::*;
-pub(crate) use self::common::*;
 pub use section::*;
 pub use symbol::*;

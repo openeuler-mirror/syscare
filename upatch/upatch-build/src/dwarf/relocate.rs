@@ -1,4 +1,4 @@
-use std::{collections::HashMap, borrow::Cow};
+use std::{borrow::Cow, collections::HashMap};
 
 type RelocationMap = HashMap<usize, object::Relocation>;
 
@@ -17,7 +17,7 @@ impl<'a, R: gimli::Reader<Offset = usize>> Relocate<'a, R> {
                     // Use the explicit addend too, because it may have the symbol value.
                     true => value.wrapping_add(relocation.addend() as u64),
                     false => relocation.addend() as u64,
-                }
+                };
             }
         };
         value

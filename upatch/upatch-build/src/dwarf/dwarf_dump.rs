@@ -1,12 +1,12 @@
-use std::borrow::{Cow, Borrow};
+use std::borrow::{Borrow, Cow};
 use std::collections::HashMap;
+use std::ffi::{OsStr, OsString};
 use std::io;
-use std::path::{Path, PathBuf};
-use std::ffi::{OsString, OsStr};
 use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
-use log::*;
 use gimli::{constants, Reader};
+use log::*;
 use object::{Object, ObjectSection, ObjectSymbol};
 use typed_arena::Arena;
 
@@ -23,8 +23,8 @@ pub struct DwarfCompileUnit {
     pub DW_AT_name: PathBuf,
 }
 
-impl DwarfCompileUnit{
-    pub fn new() -> Self{
+impl DwarfCompileUnit {
+    pub fn new() -> Self {
         Self {
             DW_AT_producer: String::new(),
             DW_AT_comp_dir: PathBuf::new(),
@@ -43,12 +43,16 @@ impl DwarfCompileUnit{
 
 pub struct Dwarf {}
 
-impl Dwarf{
-    pub fn new() -> Self{
+impl Dwarf {
+    pub fn new() -> Self {
         Self {}
     }
 
-    pub fn file_in_binary<P: AsRef<Path>>(&self, dir_str: P, binary: P) -> io::Result<Vec<DwarfCompileUnit>> {
+    pub fn file_in_binary<P: AsRef<Path>>(
+        &self,
+        dir_str: P,
+        binary: P,
+    ) -> io::Result<Vec<DwarfCompileUnit>> {
         let path = self.find_binary(dir_str, binary)?;
         self.file_in_obj(path)
     }
@@ -69,8 +73,8 @@ impl Dwarf{
                     Ok(res) => Ok(res),
                     Err(e) => Err(io::Error::new(io::ErrorKind::NotFound, e.to_string())),
                 }
-            },
-            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string()))
+            }
+            Err(e) => Err(io::Error::new(io::ErrorKind::InvalidInput, e.to_string())),
         }
     }
 }
@@ -87,13 +91,29 @@ impl Dwarf {
         let binary = binary.as_ref();
         let arr = find_files(dir_str, binary, false, true)?;
         match arr.len() {
-            0 => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} don't have {}", dir_str.display(), binary.display()))),
+            0 => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!("{} don't have {}", dir_str.display(), binary.display()),
+            )),
             1 => Ok(stringtify(&arr[0])),
-            _ => Err(io::Error::new(io::ErrorKind::NotFound, format!("{} have {} {}", dir_str.display(), arr.len(), binary.display()))),
+            _ => Err(io::Error::new(
+                io::ErrorKind::NotFound,
+                format!(
+                    "{} have {} {}",
+                    dir_str.display(),
+                    arr.len(),
+                    binary.display()
+                ),
+            )),
         }
     }
 
-    fn add_relocations(&self, relocations: &mut RelocationMap, file: &object::File, section: &object::Section) {
+    fn add_relocations(
+        &self,
+        relocations: &mut RelocationMap,
+        file: &object::File,
+        section: &object::Section,
+    ) {
         for (offset64, mut relocation) in section.relocations() {
             let offset = offset64 as usize;
             if offset as u64 != offset64 {
@@ -104,7 +124,8 @@ impl Dwarf {
                     if let object::RelocationTarget::Symbol(symbol_idx) = relocation.target() {
                         match file.symbol_by_index(symbol_idx) {
                             Ok(symbol) => {
-                                let addend = symbol.address().wrapping_add(relocation.addend() as u64);
+                                let addend =
+                                    symbol.address().wrapping_add(relocation.addend() as u64);
                                 relocation.set_addend(addend as i64);
                             }
                             Err(_) => {
@@ -116,14 +137,16 @@ impl Dwarf {
                         }
                     }
                     if relocations.insert(offset, relocation).is_some() {
-                        trace!("Multiple relocations for section {} at offset 0x{:08x}",
+                        trace!(
+                            "Multiple relocations for section {} at offset 0x{:08x}",
                             section.name().unwrap(),
                             offset
                         );
                     }
                 }
                 _ => {
-                    trace!( "Unsupported relocation for section {} at offset 0x{:08x}",
+                    trace!(
+                        "Unsupported relocation for section {} at offset 0x{:08x}",
                         section.name().unwrap(),
                         offset
                     );
@@ -132,7 +155,7 @@ impl Dwarf {
         }
     }
 
-    fn load_file_section<'input, 'arena, Endian: gimli::Endianity> (
+    fn load_file_section<'input, 'arena, Endian: gimli::Endianity>(
         &self,
         id: gimli::SectionId,
         file: &object::File<'input>,
@@ -155,10 +178,18 @@ impl Dwarf {
         let reader = gimli::EndianSlice::new(data_ref, endian);
         let section = reader;
         let relocations = (*arena_relocations.alloc(relocations)).borrow();
-        Ok(Relocate {relocations, section, reader})
+        Ok(Relocate {
+            relocations,
+            section,
+            reader,
+        })
     }
 
-    fn get_files(&self, file: &object::File, endian: gimli::RunTimeEndian) -> Result<Vec<DwarfCompileUnit>> {
+    fn get_files(
+        &self,
+        file: &object::File,
+        endian: gimli::RunTimeEndian,
+    ) -> Result<Vec<DwarfCompileUnit>> {
         let arena_data = Arena::new();
         let arena_relocations = Arena::new();
 
@@ -172,7 +203,6 @@ impl Dwarf {
         self.__get_files(&dwarf)
     }
 
- 
     fn __get_files<R: Reader>(&self, dwarf: &gimli::Dwarf<R>) -> Result<Vec<DwarfCompileUnit>> {
         let mut result = Vec::new();
         let mut iter = dwarf.units();
@@ -180,7 +210,7 @@ impl Dwarf {
             let unit = dwarf.unit(header)?;
             let mut entries = unit.entries();
             while let Some((_, entry)) = entries.next_dfs()? {
-                if entry.tag() != constants::DW_TAG_compile_unit{
+                if entry.tag() != constants::DW_TAG_compile_unit {
                     break;
                 }
                 // Iterate over the attributes in the DIE.
@@ -190,20 +220,26 @@ impl Dwarf {
                     match attr.name() {
                         constants::DW_AT_comp_dir => {
                             element.DW_AT_comp_dir.push(&self.attr_value(&attr, dwarf));
-                        },
+                        }
                         constants::DW_AT_name => {
                             element.DW_AT_name.push(&self.attr_value(&attr, dwarf));
-                        },
+                        }
                         constants::DW_AT_producer => {
-                            element.DW_AT_producer.push_str(&self.attr_value(&attr, dwarf).to_string_lossy());
+                            element
+                                .DW_AT_producer
+                                .push_str(&self.attr_value(&attr, dwarf).to_string_lossy());
                         }
                         _ => continue,
                     }
                 }
-                match element.DW_AT_producer.contains("AS") ||
-                      element.DW_AT_name.extension().eq(&Some(OsStr::new(".s"))) ||
-                      element.DW_AT_name.extension().eq(&Some(OsStr::new(".S"))) {
-                    true =>  debug!("Warning: Skipped assemble file: {:?}", element.DW_AT_comp_dir.join(element.DW_AT_name)),
+                match element.DW_AT_producer.contains("AS")
+                    || element.DW_AT_name.extension().eq(&Some(OsStr::new(".s")))
+                    || element.DW_AT_name.extension().eq(&Some(OsStr::new(".S")))
+                {
+                    true => debug!(
+                        "Warning: Skipped assemble file: {:?}",
+                        element.DW_AT_comp_dir.join(element.DW_AT_name)
+                    ),
                     false => result.push(element),
                 };
             }
@@ -211,7 +247,11 @@ impl Dwarf {
         Ok(result)
     }
 
-    fn attr_value<R: Reader>(&self, attr: &gimli::Attribute<R>, dwarf: &gimli::Dwarf<R>) -> OsString {
+    fn attr_value<R: Reader>(
+        &self,
+        attr: &gimli::Attribute<R>,
+        dwarf: &gimli::Dwarf<R>,
+    ) -> OsString {
         let value = attr.value();
         match value {
             gimli::AttributeValue::DebugLineStrRef(offset) => {
@@ -228,7 +268,7 @@ impl Dwarf {
                     OsString::default()
                 }
             }
-            _ =>  OsString::default()
+            _ => OsString::default(),
         }
     }
 }

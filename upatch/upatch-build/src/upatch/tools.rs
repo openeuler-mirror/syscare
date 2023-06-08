@@ -1,10 +1,10 @@
-use std::path::{PathBuf, Path};
+use std::path::{Path, PathBuf};
 
-use crate::tool::*;
 use crate::cmd::*;
+use crate::tool::*;
 
-use super::Result;
 use super::Error;
+use super::Result;
 
 const SUPPORT_DIFF: &str = "upatch-diff";
 pub struct Tool {
@@ -22,16 +22,26 @@ impl Tool {
         let current_exe = std::env::current_exe()?;
         let search_dir = match current_exe.parent() {
             Some(search_dir) => search_dir,
-            None => return Err(std::io::Error::new(
-                std::io::ErrorKind::NotFound,
-                format!("can't get current binary {:?}'s directory", &current_exe)
-            )),
+            None => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::NotFound,
+                    format!("can't get current binary {:?}'s directory", &current_exe),
+                ))
+            }
         };
         self.diff = search_tool(search_dir.join(SUPPORT_DIFF))?;
         Ok(())
     }
 
-    pub fn upatch_diff<P, Q, O, D, L>(&self, source: P, patch: Q, output: O, debug_info: D, log_file: L, verbose: bool) -> Result<()>
+    pub fn upatch_diff<P, Q, O, D, L>(
+        &self,
+        source: P,
+        patch: Q,
+        output: O,
+        debug_info: D,
+        log_file: L,
+        verbose: bool,
+    ) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -40,16 +50,24 @@ impl Tool {
         L: AsRef<Path>,
     {
         let mut args_list = ExternCommandArgs::new()
-            .arg("-s").arg(source.as_ref())
-            .arg("-p").arg(patch.as_ref())
-            .arg("-o").arg(output.as_ref())
-            .arg("-r").arg(debug_info.as_ref());
+            .arg("-s")
+            .arg(source.as_ref())
+            .arg("-p")
+            .arg(patch.as_ref())
+            .arg("-o")
+            .arg(output.as_ref())
+            .arg("-r")
+            .arg(debug_info.as_ref());
         if verbose {
             args_list = args_list.arg("-d");
         }
         let output = ExternCommand::new(&self.diff).execv(args_list)?;
         if !output.exit_status().success() {
-            return Err(Error::Diff(format!("{}: please look {:?} for detail.", output.exit_code(), log_file.as_ref())))
+            return Err(Error::Diff(format!(
+                "{}: please look {:?} for detail.",
+                output.exit_code(),
+                log_file.as_ref()
+            )));
         };
         Ok(())
     }

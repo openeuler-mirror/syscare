@@ -1,6 +1,6 @@
 use log::error;
-use upatch_build::upatch::UpatchBuild;
 use upatch_build::log::Logger;
+use upatch_build::upatch::UpatchBuild;
 
 fn main() {
     let mut upatch = UpatchBuild::new();
@@ -15,6 +15,6 @@ fn main() {
                 false => eprintln!("ERROR: {}", e),
             };
             e.code()
-        },
+        }
     });
 }

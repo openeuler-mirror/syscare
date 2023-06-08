@@ -1,8 +1,8 @@
-use std::process::{Command, ExitStatus, Stdio};
+use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufReader, Read};
 use std::path::Path;
-use std::collections::HashMap;
+use std::process::{Command, ExitStatus, Stdio};
 use std::thread::JoinHandle;
 
 use log::*;
@@ -21,7 +21,7 @@ impl ExternCommandArgs {
 
     pub fn arg<S>(mut self, arg: S) -> Self
     where
-        S: AsRef<OsStr>
+        S: AsRef<OsStr>,
     {
         self.args.push(arg.as_ref().to_os_string());
         self
@@ -30,7 +30,7 @@ impl ExternCommandArgs {
     pub fn args<I, S>(mut self, args: I) -> Self
     where
         I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>
+        S: AsRef<OsStr>,
     {
         for arg in args {
             self.args.push(arg.as_ref().to_os_string())
@@ -62,7 +62,9 @@ pub struct ExternCommandEnvs {
 
 impl ExternCommandEnvs {
     pub fn new() -> Self {
-        Self { envs: HashMap::new() }
+        Self {
+            envs: HashMap::new(),
+        }
     }
 
     pub fn env<K, V>(mut self, k: K, v: V) -> Self
@@ -70,10 +72,8 @@ impl ExternCommandEnvs {
         K: AsRef<OsStr>,
         V: AsRef<OsStr>,
     {
-        self.envs.insert(
-            k.as_ref().to_os_string(),
-            v.as_ref().to_os_string()
-        );
+        self.envs
+            .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
         self
     }
 
@@ -84,10 +84,8 @@ impl ExternCommandEnvs {
         V: AsRef<OsStr>,
     {
         for (k, v) in envs {
-            self.envs.insert(
-                k.as_ref().to_os_string(),
-                v.as_ref().to_os_string()
-            );
+            self.envs
+                .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
         }
         self
     }
@@ -137,28 +135,44 @@ impl ExternCommandExitStatus {
     }
 }
 
-#[derive(Debug)]
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ExternCommand<'a> {
     path: &'a OsStr,
 }
 
 impl ExternCommand<'_> {
     #[inline(always)]
-    pub fn execute_command(&self, command: &mut Command, filter: Level) -> std::io::Result<ExternCommandExitStatus> {
-        let mut child_process = match command.stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+    pub fn execute_command(
+        &self,
+        command: &mut Command,
+        filter: Level,
+    ) -> std::io::Result<ExternCommandExitStatus> {
+        let mut child_process = match command
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+        {
             Ok(child_process) => child_process,
             Err(e) => {
-                if e.kind() == std::io::ErrorKind::NotFound{
-                    return Err(std::io::Error::new(std::io::ErrorKind::NotFound, format!("can't find command: {:?}", self.path)));
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("can't find command: {:?}", self.path),
+                    ));
                 }
                 return Err(e);
             }
         };
 
         trace!("Executing '{}' ({:?}):", &self, command);
-        let stdout_thread = Self::create_stdio_thread(child_process.stdout.take().expect("Pipe stdout failed"), filter);
-        let stderr_thread = Self::create_stdio_thread(child_process.stderr.take().expect("Pipe stderr failed"), Level::Trace);
+        let stdout_thread = Self::create_stdio_thread(
+            child_process.stdout.take().expect("Pipe stdout failed"),
+            filter,
+        );
+        let stderr_thread = Self::create_stdio_thread(
+            child_process.stderr.take().expect("Pipe stderr failed"),
+            Level::Trace,
+        );
 
         let exit_status = child_process.wait()?;
         let last_stdout = stdout_thread.join().expect("join stdout thread failed")?;
@@ -176,9 +190,9 @@ impl ExternCommand<'_> {
     }
 
     #[inline(always)]
-    fn create_stdio_thread<R>(stdio: R, filter: Level) ->JoinHandle<std::io::Result<OsString>>
+    fn create_stdio_thread<R>(stdio: R, filter: Level) -> JoinHandle<std::io::Result<OsString>>
     where
-        R: Read + Send + Sync + 'static
+        R: Read + Send + Sync + 'static,
     {
         std::thread::spawn(move || -> std::io::Result<OsString> {
             let mut last_line = OsString::new();
@@ -193,7 +207,9 @@ impl ExternCommand<'_> {
 
 impl<'a> ExternCommand<'a> {
     pub fn new<S: AsRef<OsStr> + ?Sized>(path: &'a S) -> Self {
-        Self { path: path.as_ref() }
+        Self {
+            path: path.as_ref(),
+        }
     }
 
     pub fn execv(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
@@ -203,7 +219,12 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(&mut command, Level::Debug)
     }
 
-    pub fn execve_dir_stdio<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T) -> std::io::Result<ExternCommandExitStatus>
+    pub fn execve_dir_stdio<P, T>(
+        &self,
+        args: ExternCommandArgs,
+        current_dir: P,
+        stdio: T,
+    ) -> std::io::Result<ExternCommandExitStatus>
     where
         P: AsRef<Path>,
         T: Into<Stdio>,
@@ -211,7 +232,13 @@ impl<'a> ExternCommand<'a> {
         self.execve_dir_stdio_level(args, current_dir, stdio, Level::Debug)
     }
 
-    pub fn execve_dir_stdio_level<P, T>(&self, args: ExternCommandArgs, current_dir: P, stdio: T, level: Level) -> std::io::Result<ExternCommandExitStatus>
+    pub fn execve_dir_stdio_level<P, T>(
+        &self,
+        args: ExternCommandArgs,
+        current_dir: P,
+        stdio: T,
+        level: Level,
+    ) -> std::io::Result<ExternCommandExitStatus>
     where
         P: AsRef<Path>,
         T: Into<Stdio>,
@@ -224,7 +251,12 @@ impl<'a> ExternCommand<'a> {
         self.execute_command(&mut command, level)
     }
 
-    pub fn execve_dir<P: AsRef<Path>>(&self, args: ExternCommandArgs, envs: ExternCommandEnvs, current_dir: P) -> std::io::Result<ExternCommandExitStatus> {
+    pub fn execve_dir<P: AsRef<Path>>(
+        &self,
+        args: ExternCommandArgs,
+        envs: ExternCommandEnvs,
+        current_dir: P,
+    ) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
         command.args(args.into_iter());
         command.envs(envs.into_iter());

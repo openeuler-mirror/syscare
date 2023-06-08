@@ -1,6 +1,6 @@
-use std::ffi::{OsString, OsStr};
-use std::path::{Path, PathBuf};
+use std::ffi::{OsStr, OsString};
 use std::os::unix::ffi::OsStrExt;
+use std::path::{Path, PathBuf};
 
 use crate::tool::os_str::OsStrContains;
 
@@ -13,7 +13,7 @@ pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     if !path_ref.exists() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("Path '{}' is not exist", path_ref.display())
+            format!("Path '{}' is not exist", path_ref.display()),
         ));
     }
     Ok(())
@@ -26,7 +26,7 @@ pub fn check_dir<P: AsRef<Path>>(dir_path: P) -> std::io::Result<()> {
     if !path.is_dir() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("Path '{}' is not a directory", path.display())
+            format!("Path '{}' is not a directory", path.display()),
         ));
     }
 
@@ -40,7 +40,7 @@ pub fn check_file<P: AsRef<Path>>(file_path: P) -> std::io::Result<()> {
     if !path.is_file() {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidInput,
-            format!("Path '{}' is not a file", path.display())
+            format!("Path '{}' is not a file", path.display()),
         ));
     }
 
@@ -53,19 +53,18 @@ pub fn file_name<P: AsRef<Path>>(file_path: P) -> std::io::Result<OsString> {
     self::check_exist(file)?;
 
     match file.file_name() {
-        Some(file_name) => {
-            Ok(file_name.to_os_string())
-        },
-        None => {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
-                format!("Parse file name from '{}' failed", file.display())
-            ))
-        }
+        Some(file_name) => Ok(file_name.to_os_string()),
+        None => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("Parse file name from '{}' failed", file.display()),
+        )),
     }
 }
 
-pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+pub fn list_all_files<P: AsRef<Path>>(
+    directory: P,
+    recursive: bool,
+) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
 
     self::check_dir(search_path)?;
@@ -97,7 +96,10 @@ pub fn list_all_files<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io:
     Ok(file_list)
 }
 
-pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+pub fn list_all_dirs<P: AsRef<Path>>(
+    directory: P,
+    recursive: bool,
+) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
 
     self::check_dir(search_path)?;
@@ -126,7 +128,11 @@ pub fn list_all_dirs<P: AsRef<Path>>(directory: P, recursive: bool) -> std::io::
     Ok(dir_list)
 }
 
-pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+pub fn list_all_files_ext<P: AsRef<Path>>(
+    directory: P,
+    file_ext: &str,
+    recursive: bool,
+) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
 
     self::check_dir(search_path)?;
@@ -154,16 +160,18 @@ pub fn list_all_files_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursiv
 
     if recursive {
         for dir in dir_list.as_slice() {
-            file_list.append(
-                &mut self::list_all_files_ext(dir, file_ext, recursive)?
-            );
+            file_list.append(&mut self::list_all_files_ext(dir, file_ext, recursive)?);
         }
     }
 
     Ok(file_list)
 }
 
-pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bool) -> std::io::Result<PathBuf> {
+pub fn find_file_ext<P: AsRef<Path>>(
+    directory: P,
+    file_ext: &str,
+    recursive: bool,
+) -> std::io::Result<PathBuf> {
     let search_path = directory.as_ref();
 
     self::check_dir(search_path)?;
@@ -178,7 +186,11 @@ pub fn find_file_ext<P: AsRef<Path>>(directory: P, file_ext: &str, recursive: bo
 
     Err(std::io::Error::new(
         std::io::ErrorKind::NotFound,
-        format!("Cannot find '*.{}' file in '{}'", file_ext, search_path.display())
+        format!(
+            "Cannot find '*.{}' file in '{}'",
+            file_ext,
+            search_path.display()
+        ),
     ))
 }
 
@@ -186,7 +198,12 @@ pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     path.as_ref().canonicalize()
 }
 
-pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fuzz: bool, recursive: bool) -> std::io::Result<Vec<PathBuf>> {
+pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(
+    directory: P,
+    file_name: Q,
+    fuzz: bool,
+    recursive: bool,
+) -> std::io::Result<Vec<PathBuf>> {
     let search_path = directory.as_ref();
     let file_name = file_name.as_ref();
     let mut file_list = Vec::new();
@@ -195,7 +212,9 @@ pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(directory: P, file_name: Q, fu
 
     for file in self::list_all_files(search_path, recursive)? {
         if let Ok(curr_file_name) = self::file_name(file.as_path()) {
-            if curr_file_name == file_name || (fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes())){
+            if curr_file_name == file_name
+                || (fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes()))
+            {
                 file_list.push(file);
             }
         }
@@ -208,7 +227,11 @@ pub fn search_tool<P: AsRef<Path>>(tool: P) -> std::io::Result<PathBuf> {
     match self::check_file(current_tool) {
         Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
-            format!("can't find supporting tools {}: {}", current_tool.display(), e)
+            format!(
+                "can't find supporting tools {}: {}",
+                current_tool.display(),
+                e
+            ),
         )),
         Ok(()) => realpath(current_tool),
     }

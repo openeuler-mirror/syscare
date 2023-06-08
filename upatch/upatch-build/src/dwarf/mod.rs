@@ -1,7 +1,7 @@
 mod dwarf_dump;
-mod relocate;
 mod error;
+mod relocate;
 
 pub use dwarf_dump::*;
-pub use relocate::*;
 pub use error::*;
+pub use relocate::*;

@@ -1,14 +1,17 @@
-use std::os::unix::prelude::OsStrExt;
-use std::path::{Path, PathBuf, Component};
 use std::ffi::{OsStr, OsString};
+use std::os::unix::prelude::OsStrExt;
+use std::path::{Component, Path, PathBuf};
 
-use super::{list_all_files, list_all_dirs, file_name};
+use super::{file_name, list_all_dirs, list_all_files};
 
 pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
     let components = Path::new(path.as_ref()).components().collect::<Vec<_>>();
     let mut pathes = vec![PathBuf::new()];
 
-    if components[0].ne(&Component::RootDir) && components[0].ne(&Component::CurDir) && components[0].ne(&Component::ParentDir) {
+    if components[0].ne(&Component::RootDir)
+        && components[0].ne(&Component::CurDir)
+        && components[0].ne(&Component::ParentDir)
+    {
         push_path(Component::CurDir, &mut pathes);
     }
 
@@ -16,7 +19,7 @@ pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
         match components[i] {
             Component::RootDir | Component::CurDir | Component::ParentDir => {
                 push_path(components[i], &mut pathes);
-            },
+            }
             _ => {
                 let mut path_clone = vec![];
                 for p in &mut pathes {
@@ -31,11 +34,11 @@ pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
                             for name in find_name(components[i].as_os_str(), all_pathes)? {
                                 path_clone.push(p.join(name));
                             }
-                        },
+                        }
                     };
                 }
                 pathes = path_clone;
-            },
+            }
         };
     }
     Ok(pathes)
@@ -67,18 +70,15 @@ fn pattern_match(name: &[u8], pattern: &[u8]) -> bool {
         if j < n && (name[i].eq(&pattern[j]) || pattern[j].eq(&63)) {
             i += 1;
             j += 1;
-        }
-        else if j < n && pattern[j].eq(&42) {
+        } else if j < n && pattern[j].eq(&42) {
             i_star = i as i32;
             j_star = j as i32;
             j += 1;
-        }
-        else if i_star >= 0 {
+        } else if i_star >= 0 {
             i_star += 1;
             i = i_star as usize;
             j = (j_star + 1) as usize;
-        }
-        else {
+        } else {
             return false;
         }
     }

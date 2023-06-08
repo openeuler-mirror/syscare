@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 /* Contains */
 pub trait OsStrContains
 where
-    Self: AsRef<OsStr>
+    Self: AsRef<OsStr>,
 {
     fn contains<S: AsRef<[u8]>>(&self, other: S) -> bool {
         let needle = other.as_ref();

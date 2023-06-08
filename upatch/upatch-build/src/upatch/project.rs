@@ -2,17 +2,17 @@ use std::fs::File;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use log::{Level, log};
+use log::{log, Level};
 
 use crate::cmd::*;
 
-use super::Result;
 use super::Error;
+use super::Result;
 
 const COMPILER_CMD_ENV: &str = "UPATCH_COMPILER_CMD";
 const ASSEMBLER_CMD_ENV: &str = "UPATCH_ASSEMBLER_CMD";
 const ASSEMBLER_DIR_ENV: &str = "UPATCH_ASSEMBLER_OUTPUT";
-const BUILD_SHELL: &str ="build.sh";
+const BUILD_SHELL: &str = "build.sh";
 
 pub struct Project {
     project_dir: PathBuf,
@@ -21,11 +21,17 @@ pub struct Project {
 impl Project {
     pub fn new<P: AsRef<Path>>(project_dir: P) -> Self {
         Self {
-            project_dir: project_dir.as_ref().to_path_buf()
+            project_dir: project_dir.as_ref().to_path_buf(),
         }
     }
 
-    pub fn build<P: AsRef<Path>>(&self, compiler_cmd: &str, assembler_cmd: &str, assembler_output: P, build_command: String) -> Result<()> {
+    pub fn build<P: AsRef<Path>>(
+        &self,
+        compiler_cmd: &str,
+        assembler_cmd: &str,
+        assembler_output: P,
+        build_command: String,
+    ) -> Result<()> {
         let assembler_output = assembler_output.as_ref();
         let command_shell_path = assembler_output.join(BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_path)?;
@@ -36,9 +42,14 @@ impl Project {
             .env(COMPILER_CMD_ENV, compiler_cmd)
             .env(ASSEMBLER_CMD_ENV, assembler_cmd)
             .env(ASSEMBLER_DIR_ENV, assembler_output);
-        let output = ExternCommand::new("sh").execve_dir(args_list, envs_list, &self.project_dir)?;
+        let output =
+            ExternCommand::new("sh").execve_dir(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("build project error {}: {}", output.exit_code(), output.stderr().to_string_lossy())))
+            return Err(Error::Project(format!(
+                "build project error {}: {}",
+                output.exit_code(),
+                output.stderr().to_string_lossy()
+            )));
         };
         Ok(())
     }
@@ -48,11 +59,21 @@ impl Project {
             log!(level, "Patching file: {:?}", patch.as_ref());
             let file = match File::open(patch) {
                 Ok(file) => file,
-                Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
+                Err(e) => {
+                    return Err(Error::Project(format!(
+                        "open {:?} error: {}",
+                        patch.as_ref(),
+                        e
+                    )))
+                }
             };
             let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
             if let Err(e) = self.patch(file, args_list, level) {
-                return Err(Error::Project(format!("patch file {:?} {}", patch.as_ref(), e)));
+                return Err(Error::Project(format!(
+                    "patch file {:?} {}",
+                    patch.as_ref(),
+                    e
+                )));
             }
         }
         Ok(())
@@ -63,11 +84,21 @@ impl Project {
             log!(level, "Patching file: {:?}", patch.as_ref());
             let file = match File::open(patch) {
                 Ok(file) => file,
-                Err(e) => return Err(Error::Project(format!("open {:?} error: {}", patch.as_ref(), e))),
+                Err(e) => {
+                    return Err(Error::Project(format!(
+                        "open {:?} error: {}",
+                        patch.as_ref(),
+                        e
+                    )))
+                }
             };
             let args_list = ExternCommandArgs::new().args(["-N", "-p1", "-R"]);
             if let Err(e) = self.patch(file, args_list, level) {
-                return Err(Error::Project(format!("unpatch file {:?} {}", patch.as_ref(), e)));
+                return Err(Error::Project(format!(
+                    "unpatch file {:?} {}",
+                    patch.as_ref(),
+                    e
+                )));
             }
         }
         Ok(())
@@ -76,9 +107,18 @@ impl Project {
 
 impl Project {
     fn patch(&self, file: File, args_list: ExternCommandArgs, level: Level) -> Result<()> {
-        let output = ExternCommand::new("patch").execve_dir_stdio_level(args_list, &self.project_dir, file, level)?;
+        let output = ExternCommand::new("patch").execve_dir_stdio_level(
+            args_list,
+            &self.project_dir,
+            file,
+            level,
+        )?;
         if !output.exit_status().success() {
-            return Err(Error::Project(format!("error {}: {}", output.exit_code(), output.stderr().to_string_lossy())));
+            return Err(Error::Project(format!(
+                "error {}: {}",
+                output.exit_code(),
+                output.stderr().to_string_lossy()
+            )));
         };
         Ok(())
     }

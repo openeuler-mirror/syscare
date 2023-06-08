@@ -4,7 +4,10 @@ use crate::log::*;
 
 use crate::elf::*;
 
-pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -> std::io::Result<()> {
+pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(
+    debug_info: P,
+    patch: Q,
+) -> std::io::Result<()> {
     let mut patch_elf = write::Elf::parse(patch)?;
     let mut debug_info_elf = read::Elf::parse(debug_info)?;
     let debug_info_e_ident = debug_info_elf.header()?.get_e_ident();
@@ -26,17 +29,15 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -
             symbol.set_st_other(sym_other & !SYM_OTHER);
             match symbol.get_st_value() {
                 0 => symbol.set_st_shndx(SHN_UNDEF),
-                _=> symbol.set_st_shndx(SHN_LIVEPATCH),
+                _ => symbol.set_st_shndx(SHN_LIVEPATCH),
             };
-        }
-        else if symbol.get_st_shndx() == SHN_UNDEF {
+        } else if symbol.get_st_shndx() == SHN_UNDEF {
             if elf_st_bind(sym_info) == STB_LOCAL {
                 /* only partly resolved undefined symbol could have st_value */
                 if symbol.get_st_value() != 0 {
                     symbol.set_st_shndx(SHN_LIVEPATCH);
                 }
-            }
-            else {
+            } else {
                 __partly_resolve_patch(&mut symbol, debug_info_symbols, ei_osabi)?;
             }
         }
@@ -44,7 +45,11 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(debug_info: P, patch: Q) -
     Ok(())
 }
 
-fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: &mut read::SymbolHeaderTable, ei_osabi: u8) -> std::io::Result<()> {
+fn __partly_resolve_patch(
+    symbol: &mut write::SymbolHeader,
+    debug_info_symbols: &mut read::SymbolHeaderTable,
+    ei_osabi: u8,
+) -> std::io::Result<()> {
     debug_info_symbols.reset(0);
     for mut debug_info_symbol in debug_info_symbols {
         /* No need to handle section symbol */
@@ -55,7 +60,9 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
 
         let debug_info_name = debug_info_symbol.get_st_name();
 
-        if elf_st_bind(sym_info).ne(&elf_st_bind(symbol.get_st_info())) || debug_info_name.ne(symbol.get_st_name()) {
+        if elf_st_bind(sym_info).ne(&elf_st_bind(symbol.get_st_info()))
+            || debug_info_name.ne(symbol.get_st_name())
+        {
             continue;
         }
 
@@ -65,7 +72,8 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
         }
 
         // symbol type is STT_IFUNC, need search st_value in .plt table in upatch.
-        let is_ifunc = (ei_osabi.eq(&ELFOSABI_GNU) || ei_osabi.eq(&ELFOSABI_FREEBSD)) && elf_st_type(sym_info).eq(&STT_IFUNC);
+        let is_ifunc = (ei_osabi.eq(&ELFOSABI_GNU) || ei_osabi.eq(&ELFOSABI_FREEBSD))
+            && elf_st_type(sym_info).eq(&STT_IFUNC);
         symbol.set_st_shndx(match is_ifunc {
             true => SHN_UNDEF,
             false => SHN_LIVEPATCH,
@@ -74,7 +82,11 @@ fn __partly_resolve_patch(symbol: &mut write::SymbolHeader, debug_info_symbols: 
         symbol.set_st_other(debug_info_symbol.get_st_other());
         symbol.set_st_value(debug_info_symbol.get_st_value());
         symbol.set_st_size(debug_info_symbol.get_st_size());
-        trace!("found unresolved symbol {:?} at 0x{:x}", debug_info_symbol.get_st_name(), symbol.get_st_value());
+        trace!(
+            "found unresolved symbol {:?} at 0x{:x}",
+            debug_info_symbol.get_st_name(),
+            symbol.get_st_value()
+        );
         break;
     }
 
@@ -90,7 +102,7 @@ pub fn resolve_dynamic<P: AsRef<Path>>(debug_info: P) -> std::io::Result<()> {
     let debug_info_header = debug_info_elf.header()?;
 
     if debug_info_header.get_e_type().ne(&ET_DYN) {
-        return Ok(())
+        return Ok(());
     }
 
     let mut debug_info_symbols = debug_info_elf.symbols()?;
@@ -118,12 +130,15 @@ fn _resolve_dynamic(debug_info_symbols: &mut write::SymbolHeaderTable) -> std::i
         let info = symbol.get_st_info();
         if elf_st_bind(info).ne(&STB_GLOBAL) {
             let symbol_name = symbol.get_st_name();
-            debug!("resolve_dynamic: set {:?}'s bind {} to 1", symbol_name, elf_st_bind(info));
+            debug!(
+                "resolve_dynamic: set {:?}'s bind {} to 1",
+                symbol_name,
+                elf_st_bind(info)
+            );
 
             let info = elf_st_type(symbol.get_st_info()) | (STB_GLOBAL << 4);
             symbol.set_st_info(info);
         }
-
     }
     Ok(())
 }

@@ -1,9 +1,9 @@
-use std::{ffi::OsStr, fs::File};
 use std::os::unix::prelude::OsStrExt;
+use std::{ffi::OsStr, fs::File};
 
-use memmap2::{MmapMut, Mmap, MmapOptions};
+use memmap2::{Mmap, MmapMut, MmapOptions};
 
-use super::super::{Endian, ReadInteger, SymbolRead, SymbolWrite, OperateRead, OperateWrite};
+use super::super::{Endian, OperateRead, OperateWrite, ReadInteger, SymbolRead, SymbolWrite};
 
 #[derive(Debug)]
 pub struct SymbolHeader<'a> {
@@ -33,7 +33,6 @@ impl<'a> SymbolHeader<'a> {
             }
         }
     }
-
 }
 
 impl SymbolRead for SymbolHeader<'_> {}
@@ -56,7 +55,8 @@ impl<'a> SymbolHeader<'a> {
 
 impl OperateRead for SymbolHeader<'_> {
     fn get<T: ReadInteger<T>>(&self, start: usize) -> T {
-        self.endian.read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
+        self.endian
+            .read_integer::<T>(&self.mmap[start..(start + std::mem::size_of::<T>())])
     }
 }
 
@@ -68,8 +68,6 @@ impl OperateWrite for SymbolHeader<'_> {
         }
     }
 }
-
-
 
 #[derive(Debug)]
 pub struct SymbolHeaderTable<'a> {
@@ -83,7 +81,14 @@ pub struct SymbolHeaderTable<'a> {
 }
 
 impl<'a> SymbolHeaderTable<'a> {
-    pub fn from(file: &'a File, endian: Endian, strtab: &'a Mmap, start: usize, size: usize, end: usize) -> Self {
+    pub fn from(
+        file: &'a File,
+        endian: Endian,
+        strtab: &'a Mmap,
+        start: usize,
+        size: usize,
+        end: usize,
+    ) -> Self {
         Self {
             file,
             endian,
@@ -112,9 +117,15 @@ impl<'a> Iterator for SymbolHeaderTable<'a> {
         match offset < self.end {
             true => {
                 self.count += 1;
-                let mmap = unsafe { MmapOptions::new().offset(offset as u64).len(self.size).map_mut(self.file).unwrap() };
+                let mmap = unsafe {
+                    MmapOptions::new()
+                        .offset(offset as u64)
+                        .len(self.size)
+                        .map_mut(self.file)
+                        .unwrap()
+                };
                 Some(SymbolHeader::from(mmap, self.endian, self.strtab))
-            },
+            }
             false => {
                 self.count = 0;
                 None
