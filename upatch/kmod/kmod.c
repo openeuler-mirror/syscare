@@ -122,7 +122,6 @@ static int check_status(unsigned long user_addr)
     entity = upatch_entity_get(file_inode(elf_file));
     if (!entity) {
         ret = -ENOENT;
-        pr_err("no related entity found \n");
         goto out;
     }
 
