@@ -5,8 +5,8 @@
 %define kernel_name %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" %{kernel_devel_rpm}))
 
 Name:           syscare
-Version:        1.0.1
-Release:        9
+Version:        1.0.2
+Release:        1
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -117,6 +117,9 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Fri Jun 09 2023 renoseven<dev@renoseven.net> - 1.0.2-1
+- Fix 'rpmpbuild getcwd failed' issue
+- Fix 'upatch ko prints redundant log' issue
 * Fri Jun 09 2023 renoseven<dev@renoseven.net> - 1.0.1-9
 - Fix 'patch file is not checked' issue
 - Rename patched source package
