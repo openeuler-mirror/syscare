@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.1
-Release:        8
+Release:        9
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -117,6 +117,10 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Fri Jun 09 2023 renoseven<dev@renoseven.net> - 1.0.1-9
+- Fix 'patch file is not checked' issue
+- Rename patched source package
+- Update dependencies
 * Tue Jun 06 2023 renoseven<dev@renoseven.net> - 1.0.1-8
 - Fix 'kernel patch sys interface collision' issue
 - Fix 'patch GOT table jump fails' issue
