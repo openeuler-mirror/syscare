@@ -50,10 +50,10 @@ impl ElfPatch {
     fn status(&self) -> std::io::Result<PatchStatus> {
         let stdout = self.do_action(UserPatchAction::Info)?;
         let status = match stdout.to_str() {
-            Some("Status: removed") => PatchStatus::NotApplied,
-            Some("Status: installed") => PatchStatus::Deactived,
-            Some("Status: actived") => PatchStatus::Actived,
-            Some("Status: deactived") => PatchStatus::Deactived,
+            Some("removed") => PatchStatus::NotApplied,
+            Some("installed") => PatchStatus::Deactived,
+            Some("actived") => PatchStatus::Actived,
+            Some("deactived") => PatchStatus::Deactived,
             _ => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
