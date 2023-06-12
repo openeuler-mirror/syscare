@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::Read;
+use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::thread;
 
@@ -347,6 +348,7 @@ impl UpatchBuild {
                 &self.args.debug_infoes[i], &new_debug_info
             );
             fs::copy(&self.args.debug_infoes[i], &new_debug_info)?;
+            fs::set_permissions(&new_debug_info, fs::Permissions::from_mode(0o644))?;
             resolve::resolve_dynamic(&new_debug_info)?;
 
             self.create_diff(source_objects, patch_objects, &diff_dir, &new_debug_info)?;

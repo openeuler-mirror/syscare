@@ -1,5 +1,4 @@
 use std::fs::{File, OpenOptions};
-use std::os::unix::prelude::PermissionsExt;
 use std::path::Path;
 
 use memmap2::{Mmap, MmapOptions};
@@ -19,7 +18,6 @@ pub struct Elf {
 
 impl Elf {
     pub fn parse<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o664))?;
         let file = OpenOptions::new().read(true).write(true).open(&path)?;
         match check_elf(&file) {
             Ok(true) => (),
