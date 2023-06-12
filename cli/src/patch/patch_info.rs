@@ -13,7 +13,7 @@ use super::package_info::PackageInfo;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * this should be updated and keep sync with patch builder.
  */
-const PATCH_INFO_MAGIC: &str = "44C194B5C07832BD554531";
+pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum PatchType {
@@ -69,15 +69,12 @@ impl PatchInfo {
             self.name, self.version, self.release, self.arch
         )
     }
-
-    pub fn version() -> &'static str {
-        PATCH_INFO_MAGIC
-    }
 }
 
 impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
+        const DIGEST_DISPLAY_LENGTH: usize = 32;
 
         let patch_elfs = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
@@ -98,7 +95,11 @@ impl PatchInfo {
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
         log!(level, "target_elf:  {}", patch_elfs);
-        log!(level, "digest:      {}", self.digest);
+        log!(
+            level,
+            "digest:      {}",
+            &self.digest[..DIGEST_DISPLAY_LENGTH]
+        );
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");

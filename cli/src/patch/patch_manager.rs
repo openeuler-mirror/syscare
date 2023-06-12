@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::path::Path;
 
-use common::util::{fs, serde::serde_unversioned};
+use common::util::{fs, serde};
 use log::{debug, error};
 
 use super::patch_impl::Patch;
@@ -25,10 +25,16 @@ impl PatchManager {
                     debug!("Detected patch {{{}}} ({})", patch, patch.full_name());
                     patch_list.push(patch);
                 }
+                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    error!(
+                        "Failed to load patch {{{}}} metadata, file not found",
+                        fs::file_name(patch_root).to_string_lossy(),
+                    );
+                }
                 Err(e) => {
                     error!(
-                        "Cannot read patch info from \"{}\", {}",
-                        patch_root.display(),
+                        "Failed to load patch {{{}}} metadata, {}",
+                        fs::file_name(patch_root).to_string_lossy(),
                         e.to_string().to_lowercase()
                     );
                 }
@@ -100,15 +106,31 @@ impl PatchManager {
             status_map.insert(patch.uuid.as_str(), patch.status()?);
             debug!("  - Patch {{{}}} ({})", patch, patch.full_name());
         }
-        serde_unversioned::serialize(&status_map, PATCH_STATUS_FILE)?;
+        serde::serialize(&status_map, PATCH_STATUS_FILE).map_err(|e| {
+            std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!(
+                    "Failed to save patch status, {}",
+                    e.to_string().to_lowercase()
+                ),
+            )
+        })?;
 
         Ok(())
     }
 
     pub fn restore_all_patch_status(&self, accepted_only: bool) -> std::io::Result<()> {
         debug!("Reading all patch status");
-        let mut status_map: HashMap<String, PatchStatus> =
-            serde_unversioned::deserialize(PATCH_STATUS_FILE)?;
+        let mut status_map: HashMap<String, PatchStatus> = serde::deserialize(PATCH_STATUS_FILE)
+            .map_err(|e| {
+                std::io::Error::new(
+                    std::io::ErrorKind::Other,
+                    format!(
+                        "Failed to read patch status, {}",
+                        e.to_string().to_lowercase()
+                    ),
+                )
+            })?;
         /*
          * Merge patch status map with current patch list
          * and treat new patch as NOT-APPLIED

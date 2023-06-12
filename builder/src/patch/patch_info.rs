@@ -13,7 +13,6 @@ use crate::package::PackageInfo;
 
 use common::util::{digest, fs};
 
-const PATCH_DIGEST_LENGTH: usize = 8;
 /*
  * In order to solve PatchInfo binary compatibility issue,
  * we use this version string to perform compatibility check
@@ -21,7 +20,7 @@ const PATCH_DIGEST_LENGTH: usize = 8;
  * Therefore, whenever the PatchInfo is modified (including PackageInfo),
  * it should be updated and keep sync with patch management cli.
  */
-const PATCH_INFO_MAGIC: &str = "44C194B5C07832BD554531";
+pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub enum PatchType {
@@ -79,7 +78,7 @@ impl PatchFile {
     pub fn new<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
         let file_path = fs::canonicalize(path)?;
         let file_name = fs::file_name(&file_path);
-        let file_digest = digest::file(&file_path)?[..PATCH_DIGEST_LENGTH].to_owned();
+        let file_digest = digest::file(&file_path)?;
 
         if !Self::is_file_digest_exists(&file_digest) {
             return Err(std::io::Error::new(
@@ -127,7 +126,7 @@ impl PatchInfo {
         let arch = args.patch_arch.to_owned();
         let target = target_pkg_info;
         let entities = Vec::new();
-        let digest = digest::file_list(&args.patches)?[..PATCH_DIGEST_LENGTH].to_owned();
+        let digest = digest::file_list(&args.patches)?;
         let license = args.target_license.to_owned().unwrap();
         let description = args.patch_description.to_owned();
         let patches = args.patches.iter().flat_map(PatchFile::new).collect();
@@ -158,17 +157,14 @@ impl PatchInfo {
             self.name, self.version, self.release, self.arch
         )
     }
-
-    pub fn version() -> &'static str {
-        PATCH_INFO_MAGIC
-    }
 }
 
 impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
+        const DIGEST_DISPLAY_LENGTH: usize = 32;
 
-        let patch_entities = match self.entities.is_empty() {
+        let patch_elfs = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
             false => self
                 .entities
@@ -186,8 +182,12 @@ impl PatchInfo {
         log!(level, "arch:        {}", self.arch);
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
-        log!(level, "target_elf:  {}", patch_entities);
-        log!(level, "digest:      {}", self.digest);
+        log!(level, "target_elf:  {}", patch_elfs);
+        log!(
+            level,
+            "digest:      {}",
+            &self.digest[..DIGEST_DISPLAY_LENGTH]
+        );
         log!(level, "license:     {}", self.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");

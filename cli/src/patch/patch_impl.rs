@@ -5,12 +5,11 @@ use std::rc::Rc;
 use lazy_static::lazy_static;
 use log::{debug, error, info};
 
-use common::util::fs;
-use common::util::serde::serde_versioned;
+use common::util::{fs, serde};
 
 use super::kernel_patch::KernelPatchAdapter;
 use super::patch_action::PatchActionAdapter;
-use super::patch_info::{PatchInfo, PatchType};
+use super::patch_info::{PatchInfo, PatchType, PATCH_INFO_MAGIC};
 use super::patch_status::PatchStatus;
 use super::user_patch::UserPatchAdapter;
 
@@ -27,12 +26,12 @@ impl Patch {
         const PATCH_ACCEPT_FLAG_NAME: &str = "accept_flag";
 
         let patch_root = patch_root.as_ref().to_path_buf();
-        let patch_info = Rc::new(serde_versioned::deserialize::<_, PatchInfo>(
+        let patch_info = Rc::new(serde::deserialize_with_magic::<PatchInfo, _, _>(
             patch_root.join(PATCH_INFO_NAME),
-            PatchInfo::version(),
+            PATCH_INFO_MAGIC,
         )?);
-        let patch_accept_flag = patch_root.join(PATCH_ACCEPT_FLAG_NAME);
 
+        let patch_accept_flag = patch_root.join(PATCH_ACCEPT_FLAG_NAME);
         let patch_adapter: Box<dyn PatchActionAdapter> = match patch_info.kind {
             PatchType::UserPatch => {
                 Box::new(UserPatchAdapter::new(&patch_root, patch_info.clone()))
