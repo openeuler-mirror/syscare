@@ -24,7 +24,7 @@ inline int copy_para_from_user(unsigned long addr, char *buf, size_t buf_len)
         return -EINVAL;
 
     len = strnlen_user((void __user *)addr, MAX_ARG_STRLEN);
-    if (len > buf_len)
+    if (len < 0 || len > buf_len)
         return -EOVERFLOW;
 
     if (copy_from_user(buf, (void __user *)addr, len))

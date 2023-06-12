@@ -147,7 +147,7 @@ static struct step *check_env_for_step(char __user **envp, unsigned long *cmd_ad
     env_pos = *cmd_addr;
     len = strnlen_user((void __user *)env_pos, MAX_ARG_STRLEN);
 
-    if (len >= CMD_MAX_LEN)
+    if (len < 0 || len >= CMD_MAX_LEN)
         return NULL;
 
     if (copy_from_user(__env, (void __user *)env_pos, len))
