@@ -5,6 +5,13 @@ use sha2::Sha256;
 
 use super::fs;
 
+pub fn bytes<S: AsRef<[u8]>>(bytes: S) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+
+    format!("{:#x}", hasher.finalize())
+}
+
 pub fn file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
     let mut hasher = Sha256::new();
     hasher.update(fs::read(file)?);
