@@ -3,7 +3,7 @@ use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
 use lazy_static::lazy_static;
-use log::{debug, error, info};
+use log::{debug, error, warn};
 
 use common::util::{fs, serde};
 
@@ -228,7 +228,7 @@ impl Patch {
     pub fn apply(&self) -> std::io::Result<()> {
         let current_status = self.status()?;
         if current_status >= PatchStatus::Deactived {
-            info!("Patch {{{}}} is already applied", self);
+            warn!("Patch {{{}}} is already applied", self);
             return Ok(());
         }
         self.do_transition(current_status, PatchStatus::Actived)
@@ -262,7 +262,7 @@ impl Patch {
 
     pub fn accept(&self) -> std::io::Result<()> {
         let status = self.status()?;
-        if status != PatchStatus::Actived {
+        if status < PatchStatus::Actived {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
                 format!("Patch {{{}}} is not actived", self),
