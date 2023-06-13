@@ -379,23 +379,23 @@ out:
 
 static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
 {
-    struct upatch_patch_func __user *upatch_funs;
+    struct upatch_patch_func *upatch_funs;
     unsigned int i;
     unsigned long pc;
     bool set_pc = false;
+    int ret = 0;
 
     upatch_funs = kzalloc(sizeof(struct upatch_patch_func) * module->num_upatch_funcs,
         GFP_KERNEL);
     if (!upatch_funs) {
         pr_err("malloc upatch funcs failed \n");
-        return 0;
+        goto out;
     }
 
     if (copy_from_user(upatch_funs, module->upatch_funs,
         sizeof(struct upatch_patch_func) * module->num_upatch_funcs)) {
         pr_err("copy from user failed \n");
-        kfree(upatch_funs);
-        return 0;
+        goto out;
     }
 
     pc = instruction_pointer(regs);
@@ -411,10 +411,15 @@ static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
 
     if (!set_pc) {
         pr_err("unable to activate the patch, no address found \n");
-        return 0;
+        goto out;
     }
 
-    return UPROBE_ALTER_PC;
+    ret = UPROBE_ALTER_PC;
+
+out:
+    if (upatch_funs)
+        kfree(upatch_funs);
+    return ret;
 }
 
 /* TODO: check modules that doesn't live anymore */
