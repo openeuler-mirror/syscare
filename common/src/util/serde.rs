@@ -1,6 +1,5 @@
 use std::path::Path;
 
-use flexbuffers::FlexbufferSerializer;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{digest, fs};
@@ -16,11 +15,7 @@ struct PackedData {
 
 impl PackedData {
     fn pack<T: Serialize, S: AsRef<str>>(magic: S, obj: &T) -> std::io::Result<Self> {
-        let mut serializer = FlexbufferSerializer::new();
-        obj.serialize(&mut serializer)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
-
-        let payload = serializer.take_buffer();
+        let payload = serde_cbor::to_vec(obj).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
         let checksum = digest::bytes(&payload);
 
         Ok(Self {
@@ -45,21 +40,18 @@ impl PackedData {
             ));
         }
 
-        flexbuffers::from_slice::<T>(&self.payload)
+        serde_cbor::from_slice(&self.payload)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Deserialize data failed"))
     }
 
     fn read_from<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        flexbuffers::from_slice(&fs::read(path)?)
+        serde_cbor::from_reader(fs::open_file(path)?)
             .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Invalid data format"))
     }
 
     fn write_to<P: AsRef<Path>>(self, path: P) -> std::io::Result<()> {
-        let mut serializer = FlexbufferSerializer::new();
-        self.serialize(&mut serializer)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
-
-        fs::write(path, serializer.take_buffer())
+        serde_cbor::to_writer(fs::create_file(path)?, &self)
+            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))
     }
 }
 

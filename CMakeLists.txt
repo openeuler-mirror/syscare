@@ -28,8 +28,6 @@ add_custom_target(syscare-deps ALL
 
 add_custom_target(syscare ALL
     COMMENT "Compiling syscare..."
-    COMMAND cargo update -p clap --precise 4.0.32
-    COMMAND cargo update -p clap_lex --precise 0.3.0
     COMMAND UPATCH_VERSION=${SYSCARE_VERSION}; SYSCARE_VERSION=${SYSCARE_VERSION}; cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
