@@ -201,10 +201,9 @@ where
     let mut results = Vec::new();
     let mut subdirs = Vec::new();
 
-    for dir_entry in read_dir(directory)? {
-        let entry = dir_entry?;
-        let file_type = entry.file_type()?;
-        let file_path = entry.path();
+    for dir_entry in read_dir(directory)?.flatten() {
+        let file_type = dir_entry.file_type()?;
+        let file_path = dir_entry.path();
 
         if predicate(&file_type, &file_path) {
             results.push(file_path.clone());
@@ -225,20 +224,14 @@ pub fn list_dirs<P>(directory: P, options: TraverseOptions) -> std::io::Result<V
 where
     P: AsRef<Path>,
 {
-    traverse(directory, options, |file_type, _| file_type.is_dir())?
-        .into_iter()
-        .map(canonicalize)
-        .collect()
+    traverse(directory, options, |file_type, _| file_type.is_dir())
 }
 
 pub fn list_files<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
 where
     P: AsRef<Path>,
 {
-    traverse(directory, options, |file_type, _| file_type.is_file())?
-        .into_iter()
-        .map(canonicalize)
-        .collect()
+    traverse(directory, options, |file_type, _| file_type.is_file())
 }
 
 pub fn list_files_by_ext<P, S>(
@@ -258,10 +251,7 @@ where
             .extension()
             .map(|s| s == ext.as_ref())
             .unwrap_or(false);
-    })?
-    .into_iter()
-    .map(canonicalize)
-    .collect()
+    })
 }
 
 pub fn list_symlinks<P>(directory: P, options: TraverseOptions) -> std::io::Result<Vec<PathBuf>>
@@ -288,10 +278,9 @@ where
 {
     let mut subdirs = Vec::new();
 
-    for dir_entry in read_dir(directory)? {
-        let entry = dir_entry?;
-        let file_type = entry.file_type()?;
-        let file_path = entry.path();
+    for dir_entry in read_dir(directory)?.flatten() {
+        let file_type = dir_entry.file_type()?;
+        let file_path = dir_entry.path();
 
         if predicate(&file_type, &file_path) {
             return Ok(Some(file_path));
