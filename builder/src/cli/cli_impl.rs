@@ -18,6 +18,7 @@ use super::workdir::CliWorkDir;
 const CLI_NAME: &str = "syscare build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+const CLI_UMASK: u32 = 0o022;
 
 pub struct PatchBuildCLI {
     workdir: CliWorkDir,
@@ -342,6 +343,7 @@ impl PatchBuildCLI {
 
 impl PatchBuildCLI {
     fn initialize(&mut self) -> std::io::Result<()> {
+        os::umask::set_umask(CLI_UMASK);
         self.canonicalize_input_args()?;
         self.workdir.create(&self.args.workdir)?;
 

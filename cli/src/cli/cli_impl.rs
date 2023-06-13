@@ -9,6 +9,7 @@ use super::logger::Logger;
 const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+const CLI_UMASK: u32 = 0o022;
 
 #[derive(Debug, Parser)]
 #[command(bin_name=CLI_NAME, version=CLI_VERSION, about=CLI_ABOUT)]
@@ -22,12 +23,24 @@ pub struct SyscareCLI {
 }
 
 impl SyscareCLI {
-    fn cli_main(cmd: Command) -> std::io::Result<i32> {
-        let cmd_str = cmd.to_string();
+    fn initialize(&self) -> std::io::Result<()> {
+        os::umask::set_umask(CLI_UMASK);
+        Logger::initialize(match self.verbose {
+            false => LevelFilter::Info,
+            true => LevelFilter::Debug,
+        });
+
+        Ok(())
+    }
+
+    fn cli_main(self) -> std::io::Result<i32> {
+        self.initialize()?;
+
+        let cmd_str = self.cmd.to_string();
         let cmd_arguments;
         let cmd_executor;
 
-        match cmd {
+        match self.cmd {
             Command::Build { args } => {
                 cmd_executor = Box::new(BuildCommandExecutor {}) as Box<dyn CommandExecutor>;
                 cmd_arguments = CommandArguments::CommandLineArguments { args };
@@ -102,14 +115,7 @@ impl SyscareCLI {
     }
 
     pub fn run() -> std::io::Result<i32> {
-        let cli = Self::parse();
-
-        Logger::initialize(match cli.verbose {
-            false => LevelFilter::Info,
-            true => LevelFilter::Debug,
-        });
-
-        Self::cli_main(cli.cmd)
+        Self::parse().cli_main()
     }
 
     pub fn check_root_permission() -> std::io::Result<()> {
