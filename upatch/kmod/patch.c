@@ -380,12 +380,10 @@ out:
 static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
 {
     struct upatch_patch_func __user *upatch_funs;
-    unsigned int nums;
     unsigned int i;
     unsigned long pc;
     bool set_pc = false;
 
-    nums = module->num_upatch_funcs;
     upatch_funs = kzalloc(sizeof(struct upatch_patch_func) * module->num_upatch_funcs,
         GFP_KERNEL);
     if (!upatch_funs) {
@@ -401,7 +399,7 @@ static int do_module_active(struct upatch_module *module, struct pt_regs *regs)
     }
 
     pc = instruction_pointer(regs);
-    for (i = 0; i < nums; i ++) {
+    for (i = 0; i < module->num_upatch_funcs; i ++) {
         if (pc == upatch_funs[i].old_addr + module->load_bias) {
             pc = upatch_funs[i].new_addr;
             instruction_pointer_set(regs, pc);
