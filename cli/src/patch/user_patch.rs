@@ -190,7 +190,6 @@ impl UserPatchAdapter {
 
 impl PatchActionAdapter for UserPatchAdapter {
     fn check(&self) -> std::io::Result<()> {
-        self.patch_info.target.check_installed()?;
         for elf_patch in &self.elf_patchs {
             let real_checksum = digest::file(&elf_patch.patch_file)?;
             let expect_checksum = elf_patch.checksum.as_str();
@@ -215,7 +214,7 @@ impl PatchActionAdapter for UserPatchAdapter {
         if status_set.len() != 1 {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Patch {{{}}} status is not syncing", self.patch_info),
+                format!("Patch {{{}}} status is not syncing", self.patch_info.uuid),
             ));
         }
 

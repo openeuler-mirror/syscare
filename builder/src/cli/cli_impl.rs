@@ -66,7 +66,7 @@ impl PatchBuildCLI {
     fn collect_package_info(&self) -> std::io::Result<(PackageInfo, Vec<PackageInfo>)> {
         info!("Collecting package info");
         let src_pkg_info = PackageInfo::new(&self.args.source)?;
-        if src_pkg_info.pkg_type() != PackageType::SourcePackage {
+        if src_pkg_info.kind != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
@@ -84,7 +84,7 @@ impl PatchBuildCLI {
         let mut dbg_pkg_infos = Vec::with_capacity(self.args.debuginfo.len());
         for pkg_path in &self.args.debuginfo {
             let pkg_info = PackageInfo::new(pkg_path)?;
-            if pkg_info.pkg_type() != PackageType::BinaryPackage {
+            if pkg_info.kind != PackageType::BinaryPackage {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!("File \"{}\" is not a debuginfo package", pkg_path.display()),
@@ -100,17 +100,17 @@ impl PatchBuildCLI {
         Ok((src_pkg_info, dbg_pkg_infos))
     }
 
-    fn collect_patch_info(&self, target_pkg_info: PackageInfo) -> std::io::Result<PatchInfo> {
+    fn collect_patch_info(&self) -> PatchInfo {
         info!("Collecting patch info");
 
-        let patch_info = PatchInfo::new(target_pkg_info, &self.args)?;
+        let patch_info = PatchInfo::from(&self.args);
         info!("------------------------------");
         info!("Syscare Patch");
         info!("------------------------------");
         patch_info.print_log(log::Level::Info);
         info!("------------------------------");
 
-        Ok(patch_info)
+        patch_info
     }
 
     fn extract_source_package(&self) -> std::io::Result<()> {
@@ -166,13 +166,12 @@ impl PatchBuildCLI {
         }
 
         for pkg_info in dbg_pkg_infos {
-            if !src_pkg_info.is_source_pkg_of(pkg_info) {
+            if !src_pkg_info.is_source_of(pkg_info) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
                     format!(
                         "Package \"{}\" is not source package of \"{}\"",
-                        src_pkg_info.pkg_name(),
-                        pkg_info.pkg_name(),
+                        src_pkg_info.source_pkg, pkg_info.source_pkg,
                     ),
                 ));
             }
@@ -369,7 +368,7 @@ impl PatchBuildCLI {
         self.complete_build_params(&mut src_pkg_info, &dbg_pkg_infos)?;
         self.check_build_params()?;
 
-        let mut patch_info = self.collect_patch_info(src_pkg_info)?;
+        let mut patch_info = self.collect_patch_info();
         self.extract_debuginfo_packages()?;
         self.build_prepare()?;
         self.build_patch(&mut patch_info)?;

@@ -22,7 +22,7 @@ use common::util::{digest, fs};
  */
 pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum PatchType {
     UserPatch,
     KernelPatch,
@@ -103,50 +103,13 @@ pub struct PatchInfo {
     pub release: u32,
     pub arch: String,
     pub kind: PatchType,
-    pub digest: String,
     pub target: PackageInfo,
     pub entities: Vec<PatchEntity>,
-    pub license: String,
     pub description: String,
     pub patches: Vec<PatchFile>,
 }
 
 impl PatchInfo {
-    pub fn new(target_pkg_info: PackageInfo, args: &CliArguments) -> std::io::Result<Self> {
-        const KERNEL_PKG_NAME: &str = "kernel";
-
-        let uuid = Uuid::new_v4().to_string();
-        let name = args.patch_name.to_owned();
-        let kind = match target_pkg_info.name == KERNEL_PKG_NAME {
-            true => PatchType::KernelPatch,
-            false => PatchType::UserPatch,
-        };
-        let version = args.patch_version.to_owned();
-        let release = args.patch_release;
-        let arch = args.patch_arch.to_owned();
-        let target = target_pkg_info;
-        let entities = Vec::new();
-        let digest = digest::file_list(&args.patches)?;
-        let license = args.target_license.to_owned().unwrap();
-        let description = args.patch_description.to_owned();
-        let patches = args.patches.iter().flat_map(PatchFile::new).collect();
-
-        Ok(PatchInfo {
-            uuid,
-            name,
-            kind,
-            version,
-            release,
-            arch,
-            target,
-            entities,
-            digest,
-            license,
-            description,
-            patches,
-        })
-    }
-
     pub fn short_name(&self) -> String {
         format!("{}-{}-{}", self.name, self.version, self.release)
     }
@@ -157,19 +120,21 @@ impl PatchInfo {
             self.name, self.version, self.release, self.arch
         )
     }
-}
 
-impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
-        const DIGEST_DISPLAY_LENGTH: usize = 32;
 
         let patch_elfs = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
             false => self
                 .entities
                 .iter()
-                .map(|entity| format!("{}, ", entity.patch_name.to_string_lossy()))
+                .map(|entity| {
+                    format!(
+                        "{}, ",
+                        fs::file_name(&entity.patch_target).to_string_lossy()
+                    )
+                })
                 .collect::<String>()
                 .trim_end_matches(", ")
                 .to_string(),
@@ -183,18 +148,37 @@ impl PatchInfo {
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
         log!(level, "target_elf:  {}", patch_elfs);
-        log!(
-            level,
-            "digest:      {}",
-            &self.digest[..DIGEST_DISPLAY_LENGTH]
-        );
-        log!(level, "license:     {}", self.license);
+        log!(level, "license:     {}", self.target.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");
         let mut patch_id = 1usize;
         for patch_file in &self.patches {
             log!(level, "{}. {}", patch_id, patch_file.name.to_string_lossy());
             patch_id += 1;
+        }
+    }
+}
+
+impl From<&CliArguments> for PatchInfo {
+    fn from(args: &CliArguments) -> Self {
+        const KERNEL_PKG_NAME: &str = "kernel";
+
+        let patch_type = match args.target_name.as_ref().unwrap() == KERNEL_PKG_NAME {
+            true => PatchType::KernelPatch,
+            false => PatchType::UserPatch,
+        };
+
+        Self {
+            uuid: Uuid::new_v4().to_string(),
+            name: args.patch_name.to_owned(),
+            kind: patch_type,
+            version: args.patch_version.to_owned(),
+            release: args.patch_release.to_owned(),
+            arch: args.patch_arch.to_owned(),
+            target: PackageInfo::from(args),
+            entities: Vec::new(),
+            description: args.patch_description.to_owned(),
+            patches: args.patches.iter().flat_map(PatchFile::new).collect(),
         }
     }
 }

@@ -15,7 +15,7 @@ use super::package_info::PackageInfo;
  */
 pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
 pub enum PatchType {
     UserPatch,
     KernelPatch,
@@ -50,10 +50,8 @@ pub struct PatchInfo {
     pub release: u32,
     pub arch: String,
     pub kind: PatchType,
-    pub digest: String,
     pub target: PackageInfo,
     pub entities: Vec<PatchEntity>,
-    pub license: String,
     pub description: String,
     pub patches: Vec<PatchFile>,
 }
@@ -69,12 +67,9 @@ impl PatchInfo {
             self.name, self.version, self.release, self.arch
         )
     }
-}
 
-impl PatchInfo {
     pub fn print_log(&self, level: log::Level) {
         const PATCH_FLAG_NONE: &str = "(none)";
-        const DIGEST_DISPLAY_LENGTH: usize = 32;
 
         let patch_elfs = match self.entities.is_empty() {
             true => PATCH_FLAG_NONE.to_owned(),
@@ -95,12 +90,7 @@ impl PatchInfo {
         log!(level, "type:        {}", self.kind);
         log!(level, "target:      {}", self.target.short_name());
         log!(level, "target_elf:  {}", patch_elfs);
-        log!(
-            level,
-            "digest:      {}",
-            &self.digest[..DIGEST_DISPLAY_LENGTH]
-        );
-        log!(level, "license:     {}", self.license);
+        log!(level, "license:     {}", self.target.license);
         log!(level, "description: {}", self.description);
         log!(level, "patch:");
         let mut patch_id = 1usize;
@@ -108,11 +98,5 @@ impl PatchInfo {
             log!(level, "{}. {}", patch_id, patch_file.name.to_string_lossy());
             patch_id += 1;
         }
-    }
-}
-
-impl std::fmt::Display for PatchInfo {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str(&self.uuid)
     }
 }

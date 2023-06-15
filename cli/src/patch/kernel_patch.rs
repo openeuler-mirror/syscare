@@ -68,7 +68,7 @@ impl KernelPatchAdapter {
         if sec_type != KPATCH_PATCH_SEC_TYPE {
             debug!(
                 "Setting patch {{{}}} security context type to \"{}\"",
-                self.patch_info, KPATCH_PATCH_SEC_TYPE
+                self.patch_info.uuid, KPATCH_PATCH_SEC_TYPE
             );
             os::selinux::set_security_context_type(&self.patch_file, KPATCH_PATCH_SEC_TYPE)?;
         }

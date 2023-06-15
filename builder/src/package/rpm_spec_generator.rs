@@ -137,7 +137,11 @@ impl RpmSpecGenerator {
             patch_info.release.to_string(),
         )?;
         write_line2(w, "%global pkg_group             ", PKG_GROUP)?;
-        write_line2(w, "%global pkg_license           ", &patch_info.license)?;
+        write_line2(
+            w,
+            "%global pkg_license           ",
+            &patch_info.target.license,
+        )?;
         write_line2(
             w,
             "%global pkg_summary           ",
