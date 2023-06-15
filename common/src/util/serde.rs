@@ -1,5 +1,6 @@
 use std::path::Path;
 
+use log::debug;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 
 use super::{digest, fs};
@@ -15,7 +16,10 @@ struct PackedData {
 
 impl PackedData {
     fn pack<T: Serialize, S: AsRef<str>>(magic: S, obj: &T) -> std::io::Result<Self> {
-        let payload = serde_cbor::to_vec(obj).map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))?;
+        let payload = serde_cbor::to_vec(obj).map_err(|e| {
+            debug!("Packing data failed, {}", e.to_string());
+            std::io::Error::new(std::io::ErrorKind::Other, "Packing data failed")
+        })?;
         let checksum = digest::bytes(&payload);
 
         Ok(Self {
@@ -40,18 +44,24 @@ impl PackedData {
             ));
         }
 
-        serde_cbor::from_slice(&self.payload)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Deserialize data failed"))
+        serde_cbor::from_slice(&self.payload).map_err(|e| {
+            debug!("Unpacking data failed, {}", e.to_string());
+            std::io::Error::new(std::io::ErrorKind::Other, "Unpacking data failed")
+        })
     }
 
     fn read_from<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        serde_cbor::from_reader(fs::open_file(path)?)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Invalid data format"))
+        serde_cbor::from_reader::<Self, _>(fs::open_file(path)?).map_err(|e| {
+            debug!("Deserialize packed data failed, {}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, "Invalid data format")
+        })
     }
 
-    fn write_to<P: AsRef<Path>>(self, path: P) -> std::io::Result<()> {
-        serde_cbor::to_writer(fs::create_file(path)?, &self)
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::Other, "Serialize data failed"))
+    fn write_to<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
+        serde_cbor::to_writer(fs::create_file(path)?, &self).map_err(|e| {
+            debug!("Serialize packed data failed, {}", e);
+            std::io::Error::new(std::io::ErrorKind::Other, "Write data failed")
+        })
     }
 }
 
