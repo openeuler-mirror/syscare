@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.2
-Release:        1
+Release:        2
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -17,7 +17,7 @@ BuildRequires:  rust cargo gcc gcc-g++ cmake make
 BuildRequires:  elfutils-libelf-devel
 
 Requires:       coreutils systemd kpatch-runtime
-Requires:       %{name}-kmod >= 1.0.1-1
+Requires:       %{name}-kmod >= 1.0.2-1
 
 %description
 SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
@@ -35,8 +35,8 @@ Syscare kernel modules dependency.
 %package build
 Summary:  Tools for build syscare patch.
 Requires: %{name} = %{version}-%{release}
-Requires: %{name}-kmod >= 1.0.1-1
-Requires: make gcc patch
+Requires: %{name}-kmod >= 1.0.2-1
+Requires: make patch gcc g++
 Requires: bison flex
 Requires: kpatch dwarves
 Requires: elfutils-libelf-devel
@@ -117,6 +117,9 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Mon Jun 19 2023 renoseven<dev@renoseven.net> - 1.0.2-2
+- Fix various issue
+- Update dependencies
 * Fri Jun 09 2023 renoseven<dev@renoseven.net> - 1.0.2-1
 - Fix 'rpmpbuild getcwd failed' issue
 - Fix 'upatch ko prints redundant log' issue

@@ -15,7 +15,7 @@ pushd "$REPO_NAME"
 
 cargo update -p clap --precise 4.0.32
 cargo update -p clap_lex --precise 0.3.0
-cargo vendor
+cargo vendor --respect-source-config
 
 mkdir -p .cargo
 cat << EOF > .cargo/config.toml
