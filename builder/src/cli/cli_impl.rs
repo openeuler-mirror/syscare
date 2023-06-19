@@ -1,14 +1,13 @@
-use std::ffi::OsStr;
-
 use common::os;
 use common::util::fs::TraverseOptions;
 use common::util::{fs, serde};
+
 use log::LevelFilter;
 use log::{debug, error, info, warn};
 
 use crate::package::{PackageInfo, PackageType, DEBUGINFO_FILE_EXT, PKG_FILE_EXT};
 use crate::package::{RpmBuilder, RpmHelper};
-use crate::patch::{PatchBuilderFactory, PatchHelper};
+use crate::patch::PatchBuilderFactory;
 use crate::patch::{PatchInfo, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME, PATCH_INFO_MAGIC};
 
 use super::args::CliArguments;
@@ -84,12 +83,16 @@ impl PatchBuildCLI {
         let mut dbg_pkg_infos = Vec::with_capacity(self.args.debuginfo.len());
         for pkg_path in &self.args.debuginfo {
             let pkg_info = PackageInfo::new(pkg_path)?;
-            if pkg_info.kind != PackageType::BinaryPackage {
+            if !src_pkg_info.is_source_of(&pkg_info) {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!("File \"{}\" is not a debuginfo package", pkg_path.display()),
+                    format!(
+                        "Package \"{}\" is not source package of \"{}\"",
+                        src_pkg_info.source_pkg, pkg_info.source_pkg,
+                    ),
                 ));
             }
+
             info!("Debuginfo package");
             info!("------------------------------");
             pkg_info.print_log(log::Level::Info);
@@ -113,22 +116,6 @@ impl PatchBuildCLI {
         patch_info
     }
 
-    fn extract_source_package(&self) -> std::io::Result<()> {
-        info!("Extracting source package");
-
-        RpmHelper::extract_package(&self.args.source, &self.workdir.package.source)
-    }
-
-    fn extract_debuginfo_packages(&self) -> std::io::Result<()> {
-        info!("Extracting debuginfo package(s)");
-
-        for debuginfo_pkg in &self.args.debuginfo {
-            RpmHelper::extract_package(debuginfo_pkg, &self.workdir.package.debug)?;
-        }
-
-        Ok(())
-    }
-
     fn complete_build_params(
         &mut self,
         src_pkg_info: &mut PackageInfo,
@@ -137,48 +124,57 @@ impl PatchBuildCLI {
         info!("Completing build parameters");
 
         let mut args = &mut self.args;
+        let source_pkg_root = self.workdir.package.source.as_path();
 
-        // Find source directory from extracted package root
-        let pkg_source_dir = RpmHelper::find_build_root(&self.workdir.package.source)?.sources;
-        let pkg_metadata_dir = RpmHelper::metadata_dir(&pkg_source_dir);
+        debug!("- Extracting source package");
+        RpmHelper::extract_package(&args.source, source_pkg_root)?;
 
-        // Try to decompress metadata
-        RpmHelper::decompress_medatadata(&pkg_source_dir).ok();
+        debug!("- Finding package source directory");
+        let pkg_source_dir = RpmHelper::find_build_root(source_pkg_root)?.sources;
 
-        // Collect patch info from metadata directory
-        let patch_info_file = pkg_metadata_dir.join(PATCH_INFO_FILE_NAME);
-        match serde::deserialize_with_magic::<PatchInfo, _, _>(patch_info_file, PATCH_INFO_MAGIC) {
-            Ok(patch_info) => {
-                debug!("Found patch metadata, overrides build parameters");
-                // Override path release
-                args.patch_release = u32::max(args.patch_release, patch_info.release + 1);
-                // Overide path list
-                let mut new_patches = PatchHelper::collect_patches(pkg_metadata_dir)?;
-                if !new_patches.is_empty() {
-                    new_patches.append(&mut args.patches);
-                    args.patches = new_patches;
+        debug!("- Decompressing patch metadata");
+        if RpmHelper::decompress_medatadata(&pkg_source_dir).is_ok() {
+            let pkg_metadata_dir = RpmHelper::metadata_dir(&pkg_source_dir);
+            let patch_info_file = pkg_metadata_dir.join(PATCH_INFO_FILE_NAME);
+
+            debug!("- Reading patch metadata");
+            match serde::deserialize_with_magic::<PatchInfo, _, _>(
+                patch_info_file,
+                PATCH_INFO_MAGIC,
+            ) {
+                Ok(patch_info) => {
+                    debug!("- Applying patch metadata");
+
+                    // Override path release
+                    args.patch_release = u32::max(args.patch_release, patch_info.release + 1);
+
+                    // Overide path list
+                    let mut new_patches = fs::list_files_by_ext(
+                        pkg_metadata_dir,
+                        PATCH_FILE_EXT,
+                        fs::TraverseOptions { recursive: false },
+                    )?;
+                    if !new_patches.is_empty() {
+                        new_patches.append(&mut args.patches);
+                        args.patches = new_patches;
+                    }
+
+                    // Override package info
+                    *src_pkg_info = patch_info.target;
                 }
-                // Override package info
-                *src_pkg_info = patch_info.target;
+                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {}
+                Err(e) => return Err(e),
             }
-            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e),
-        }
+        };
 
-        for pkg_info in dbg_pkg_infos {
-            if !src_pkg_info.is_source_of(pkg_info) {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::InvalidData,
-                    format!(
-                        "Package \"{}\" is not source package of \"{}\"",
-                        src_pkg_info.source_pkg, pkg_info.source_pkg,
-                    ),
-                ));
-            }
-        }
-
+        debug!("- Writing build parameters");
         // Source package arch is meaningless, override with debuginfo's arch
-        src_pkg_info.arch = dbg_pkg_infos.get(0).as_ref().unwrap().arch.to_owned();
+        src_pkg_info.arch = dbg_pkg_infos
+            .get(0)
+            .as_ref()
+            .expect("Debuginfo package is empty")
+            .arch
+            .to_owned();
 
         // Override other arguments
         args.target_name.get_or_insert(src_pkg_info.name.to_owned());
@@ -195,25 +191,24 @@ impl PatchBuildCLI {
         Ok(())
     }
 
-    fn check_build_params(&self) -> std::io::Result<()> {
-        info!("Checking build parameters");
+    fn check_build_requirements(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
+        info!("Checking build requirements");
 
-        let args: &CliArguments = &self.args;
-
-        if OsStr::new(&args.patch_arch) != os::cpu::arch() {
+        let patch_arch = patch_info.arch.as_str();
+        if patch_arch != os::cpu::arch() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
-                format!("Patch arch \"{}\" is unsupported", args.patch_arch),
+                format!("Patch arch \"{}\" is unsupported", patch_arch),
             ));
         }
 
-        let target_arch = self.args.target_arch.as_deref().unwrap();
-        if args.patch_arch != target_arch {
+        let target_arch = patch_info.arch.as_str();
+        if patch_arch != target_arch {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
-                    "Target arch \"{}\" does not match patch arch \"{}\"",
-                    target_arch, args.patch_arch
+                    "Patch arch \"{}\" does not match target arch \"{}\"",
+                    patch_arch, target_arch
                 ),
             ));
         }
@@ -232,38 +227,50 @@ impl PatchBuildCLI {
     fn build_prepare(&self) -> std::io::Result<()> {
         info!("Pareparing to build patch");
 
-        let pkg_build_root = RpmHelper::find_build_root(&self.workdir.package.source)?;
-        let pkg_spec_file = RpmHelper::find_spec_file(&pkg_build_root.specs)?;
+        let pkg_root = &self.workdir.package;
 
-        let debug_files = fs::list_files_by_ext(
-            &self.workdir.package.debug,
+        debug!("- Extracting debuginfo package(s)");
+        let debug_pkg_root = pkg_root.debug.as_path();
+        for debuginfo_pkg in &self.args.debuginfo {
+            RpmHelper::extract_package(debuginfo_pkg, debug_pkg_root)?;
+        }
+
+        debug!("- Checking debuginfo files");
+        let debuginfo_files = fs::list_files_by_ext(
+            debug_pkg_root,
             DEBUGINFO_FILE_EXT,
             TraverseOptions { recursive: true },
         )?;
-        if debug_files.is_empty() {
+        if debuginfo_files.is_empty() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
                 "Cannot find any debuginfo file",
             ));
         }
 
-        RpmBuilder::new(pkg_build_root).build_prepare(pkg_spec_file)
+        debug!("- Preparing to build");
+        let pkg_build_root = RpmHelper::find_build_root(pkg_root.source.as_path())?;
+        let pkg_spec_file = RpmHelper::find_spec_file(pkg_build_root.specs.as_path())?;
+        RpmBuilder::new(pkg_build_root).build_prepare(pkg_spec_file)?;
+
+        Ok(())
     }
 
     fn build_patch(&self, patch_info: &mut PatchInfo) -> std::io::Result<()> {
         info!("Building patch, this may take a while");
 
-        let patch_output_dir = self.workdir.patch.output.as_path();
-        let patch_info_file = patch_output_dir.join(PATCH_INFO_FILE_NAME);
-
+        debug!("- Collecting build requirements");
         let patch_builder = PatchBuilderFactory::get_builder(patch_info.kind, &self.workdir);
         let builder_args = patch_builder.parse_builder_args(patch_info, &self.args)?;
+        let patch_info_file = self.workdir.patch.output.join(PATCH_INFO_FILE_NAME);
 
+        debug!("- Building patch");
         patch_builder.build_patch(&builder_args)?;
+
+        debug!("- Generating patch metadata");
         patch_builder.write_patch_info(patch_info, &builder_args)?;
 
-        // Write patch info into patch package source directory
-        debug!("Writing patch info to {:?}", patch_info_file);
+        debug!("- Writing patch metadata");
         serde::serialize_with_magic(patch_info, patch_info_file, PATCH_INFO_MAGIC)?;
 
         Ok(())
@@ -272,18 +279,19 @@ impl PatchBuildCLI {
     fn build_patch_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         info!("Building patch package");
 
+        debug!("- Collecting build requirements");
         let pkg_builder = RpmBuilder::new(self.workdir.package.patch.to_owned());
         let pkg_source_dir = pkg_builder.build_root().sources.as_path();
         let patch_output_dir = self.workdir.patch.output.as_path();
 
-        // Copy all build outputs to patch package source directory
+        debug!("- Generating spec file");
+        let spec_file = pkg_builder.generate_spec_file(patch_info)?;
+
+        debug!("- Copying patch outputs");
         fs::copy_dir_contents(patch_output_dir, pkg_source_dir)?;
 
-        // Build package
-        pkg_builder.build_binary_package(
-            pkg_builder.generate_spec_file(patch_info)?,
-            &self.args.output,
-        )?;
+        debug!("- Building package");
+        pkg_builder.build_binary_package(spec_file, &self.args.output)?;
 
         Ok(())
     }
@@ -291,18 +299,19 @@ impl PatchBuildCLI {
     fn build_source_package(&self, patch_info: &PatchInfo) -> std::io::Result<()> {
         info!("Building source package");
 
+        debug!("- Collecting build requirements");
         let pkg_build_root = RpmHelper::find_build_root(&self.workdir.package.source)?;
         let pkg_source_dir = pkg_build_root.sources.clone();
         let pkg_spec_file = RpmHelper::find_spec_file(&pkg_build_root.specs)?;
         let pkg_builder = RpmBuilder::new(pkg_build_root);
 
-        // Create metadata directory in source
+        debug!("- Checking patch metadata");
         let pkg_metadata_dir = RpmHelper::metadata_dir(&pkg_source_dir);
         if !pkg_metadata_dir.exists() {
             fs::create_dir(&pkg_metadata_dir)?;
         }
 
-        // Copy all patch files into metadata directory
+        debug!("- Copying patch files");
         for patch_file in &patch_info.patches {
             let src_path = patch_file.path.as_path();
             let dst_path = pkg_metadata_dir.join(&patch_file.name);
@@ -311,21 +320,24 @@ impl PatchBuildCLI {
             }
         }
 
-        // Copy patch info into metadata directory
+        debug!("- Copying patch metadata");
         let patch_output_dir = self.workdir.patch.output.as_path();
         let patch_info_src_path = patch_output_dir.join(PATCH_INFO_FILE_NAME);
         let patch_info_dst_path = pkg_metadata_dir.join(PATCH_INFO_FILE_NAME);
         fs::copy(patch_info_src_path, patch_info_dst_path)?;
 
-        // Compress all files
-        if !RpmHelper::has_metadata(&pkg_source_dir) {
-            // Lacking of metadata means that the package is not patched
-            // Thus, we should add a 'Source' tag into spec file
-            RpmHelper::add_metadata_to_spec_file(&pkg_spec_file)?;
-        }
+        debug!("- Compressing patch metadata");
+        let has_metadata = RpmHelper::has_metadata(&pkg_source_dir);
         RpmHelper::compress_metadata(&pkg_source_dir)?;
 
-        // Build package
+        if !has_metadata {
+            // Lacking of patch metadata means that the package is not patched
+            // Thus, we should add a 'Source' tag into spec file
+            debug!("- Modifying spec file");
+            RpmHelper::add_metadata_to_spec_file(&pkg_spec_file)?;
+        }
+
+        debug!("- Building package");
         pkg_builder.build_source_package(patch_info, &pkg_spec_file, &self.args.output)?;
 
         Ok(())
@@ -364,12 +376,11 @@ impl PatchBuildCLI {
         info!("{}", CLI_ABOUT);
         info!("==============================");
         let (mut src_pkg_info, dbg_pkg_infos) = self.collect_package_info()?;
-        self.extract_source_package()?;
         self.complete_build_params(&mut src_pkg_info, &dbg_pkg_infos)?;
-        self.check_build_params()?;
 
         let mut patch_info = self.collect_patch_info();
-        self.extract_debuginfo_packages()?;
+        self.check_build_requirements(&patch_info)?;
+
         self.build_prepare()?;
         self.build_patch(&mut patch_info)?;
         self.build_patch_package(&patch_info)?;
