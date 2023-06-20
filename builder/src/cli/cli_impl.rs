@@ -28,36 +28,52 @@ impl PatchBuildCLI {
     fn canonicalize_input_args(&mut self) -> std::io::Result<()> {
         let args = &mut self.args;
 
-        if fs::file_ext(&args.source) != PKG_FILE_EXT {
+        let source_rpm = &mut args.source;
+        if !source_rpm.is_file() || fs::file_ext(&source_rpm) != PKG_FILE_EXT {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 "Source should be a rpm package",
             ));
         }
+        *source_rpm = fs::canonicalize(&source_rpm)?;
 
-        for debuginfo in &mut args.debuginfo {
-            if fs::file_ext(&debuginfo) != PKG_FILE_EXT {
+        for debuginfo_rpm in &mut args.debuginfo {
+            if !debuginfo_rpm.is_file() || fs::file_ext(&debuginfo_rpm) != PKG_FILE_EXT {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Debuginfo should be a rpm package",
                 ));
             }
-            *debuginfo = fs::canonicalize(&debuginfo)?;
+            *debuginfo_rpm = fs::canonicalize(&debuginfo_rpm)?;
         }
 
-        for patch in &mut args.patches {
-            if fs::file_ext(&patch) != PATCH_FILE_EXT {
+        for patch_file in &mut args.patches {
+            if !patch_file.is_file() || fs::file_ext(&patch_file) != PATCH_FILE_EXT  {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Patches should be patch files",
                 ));
             }
-            *patch = fs::canonicalize(&patch)?;
+            *patch_file = fs::canonicalize(&patch_file)?;
         }
 
-        args.source = fs::canonicalize(&args.source)?;
-        args.workdir = fs::canonicalize(&args.workdir)?;
-        args.output = fs::canonicalize(&args.output)?;
+        let workdir = &mut args.workdir;
+        if !workdir.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Working directory should be a directory",
+            ));
+        }
+        *workdir = fs::canonicalize(&workdir)?;
+
+        let output = &mut args.output;
+        if !output.is_dir() {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Output directory should be a directory",
+            ));
+        }
+        *output = fs::canonicalize(&output)?;
 
         Ok(())
     }
