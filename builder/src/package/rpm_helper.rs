@@ -4,7 +4,6 @@ use std::path::{Path, PathBuf};
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 use common::util::fs;
 use common::util::os_str::OsStrExt;
-use log::debug;
 
 use crate::patch::{PatchInfo, PatchType};
 use crate::workdir::PackageBuildRoot;
@@ -88,7 +87,6 @@ impl RpmHelper {
     pub fn compress_metadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
         let metadata_source_dir = pkg_source_dir.as_ref();
         let metadata_file = metadata_source_dir.join(METADATA_PKG_NAME);
-        debug!("Compressing metadata into {:?}", metadata_file);
 
         TAR.execvp(
             ExternCommandArgs::new()
@@ -105,7 +103,6 @@ impl RpmHelper {
     pub fn decompress_medatadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
         let metadata_source_dir = pkg_source_dir.as_ref();
         let metadata_file = metadata_source_dir.join(METADATA_PKG_NAME);
-        debug!("Decompressing metadata from {:?}", metadata_file);
 
         TAR.execvp(
             ExternCommandArgs::new()
@@ -127,7 +124,6 @@ impl RpmHelper {
     pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
         const PKG_BUILD_ROOT: &str = "rpmbuild";
 
-        debug!("Finding package build root from {:?}", directory.as_ref());
         Ok(PackageBuildRoot::new(fs::find_dir(
             directory,
             PKG_BUILD_ROOT,
@@ -139,7 +135,6 @@ impl RpmHelper {
     }
 
     pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
-        debug!("Finding package spec file from {:?}", directory.as_ref());
         let spec_file = fs::find_file_by_ext(
             directory,
             SPEC_FILE_EXT,
@@ -158,7 +153,6 @@ impl RpmHelper {
     ) -> std::io::Result<PathBuf> {
         const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 
-        debug!("Finding package build source from {:?}", directory.as_ref());
         let search_name = match patch_info.kind {
             PatchType::UserPatch => &patch_info.target.name,
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
@@ -187,8 +181,6 @@ impl RpmHelper {
     }
 
     pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
-        debug!("Finding package debuginfo from {:?}", directory.as_ref());
-
         let debuginfo_files = fs::list_files_by_ext(
             &directory,
             DEBUGINFO_FILE_EXT,

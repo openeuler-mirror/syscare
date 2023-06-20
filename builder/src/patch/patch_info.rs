@@ -13,13 +13,8 @@ use crate::package::PackageInfo;
 
 use common::util::{digest, fs};
 
-/*
- * In order to solve PatchInfo binary compatibility issue,
- * we use this version string to perform compatibility check
- * before PatchInfo deserialization.
- * Therefore, whenever the PatchInfo is modified (including PackageInfo),
- * it should be updated and keep sync with patch management cli.
- */
+pub const PATCH_FILE_EXT: &str = "patch";
+pub const PATCH_INFO_FILE_NAME: &str = "patch_info";
 pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -71,7 +66,7 @@ impl PatchFile {
         }
         FILE_DIGESTS
             .lock()
-            .unwrap()
+            .expect("Lock failed")
             .insert(digest.as_ref().to_owned())
     }
 
@@ -163,7 +158,8 @@ impl From<&CliArguments> for PatchInfo {
     fn from(args: &CliArguments) -> Self {
         const KERNEL_PKG_NAME: &str = "kernel";
 
-        let patch_type = match args.target_name.as_ref().unwrap() == KERNEL_PKG_NAME {
+        let target_package = PackageInfo::from(args);
+        let patch_type = match target_package.name == KERNEL_PKG_NAME {
             true => PatchType::KernelPatch,
             false => PatchType::UserPatch,
         };
@@ -175,7 +171,7 @@ impl From<&CliArguments> for PatchInfo {
             version: args.patch_version.to_owned(),
             release: args.patch_release.to_owned(),
             arch: args.patch_arch.to_owned(),
-            target: PackageInfo::from(args),
+            target: target_package,
             entities: Vec::new(),
             description: args.patch_description.to_owned(),
             patches: args.patches.iter().flat_map(PatchFile::new).collect(),

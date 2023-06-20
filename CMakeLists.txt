@@ -1,14 +1,30 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 
 cmake_minimum_required(VERSION 3.14)
+find_package(Git QUIET)
 
 project(syscare)
 
 # Variables
-set(SYSCARE_VERSION     ${BUILD_VERSION})
-set(SYSCARE_BINARY_DIR  ${CMAKE_INSTALL_PREFIX}/bin)
-set(SYSCARE_LIBEXEC_DIR ${CMAKE_INSTALL_PREFIX}/libexec/syscare)
-set(SYSCARE_SERVICE_DIR ${CMAKE_INSTALL_PREFIX}/lib/systemd/system)
+if(NOT DEFINED BUILD_VERSION)
+    set(BUILD_VERSION "dev")
+endif()
+
+if(GIT_FOUND)
+    execute_process(
+        COMMAND ${GIT_EXECUTABLE} rev-parse --short HEAD
+        OUTPUT_VARIABLE GIT_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    )
+    set(SYSCARE_VERSION "${BUILD_VERSION}-${GIT_VERSION}")
+else()
+    set(SYSCARE_VERSION "${BUILD_VERSION}")
+endif()
+set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_PREFIX}/bin")
+set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_PREFIX}/libexec/syscare")
+set(SYSCARE_SERVICE_DIR "${CMAKE_INSTALL_PREFIX}/lib/systemd/system")
 
 message("-- Syscare verion: ${SYSCARE_VERSION}")
 message("-- Syscare binary  directory: ${SYSCARE_BINARY_DIR}")

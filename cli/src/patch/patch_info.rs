@@ -1,6 +1,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use common::util::fs;
 use log::log;
 use serde::{Deserialize, Serialize};
 
@@ -76,7 +77,12 @@ impl PatchInfo {
             false => self
                 .entities
                 .iter()
-                .map(|entity| format!("{}, ", entity.patch_name.to_string_lossy()))
+                .map(|entity| {
+                    format!(
+                        "{}, ",
+                        fs::file_name(&entity.patch_target).to_string_lossy()
+                    )
+                })
                 .collect::<String>()
                 .trim_end_matches(", ")
                 .to_string(),

@@ -1,6 +1,6 @@
  [package]
 name        = "syscare-build"
-version     = "1.0.1"
+version     = "1.0.2"
 edition     = "2021"
 authors     = ["renoseven <dev@renoseven.net>"]
 description = "Syscare patch build utility"

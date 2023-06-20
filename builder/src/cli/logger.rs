@@ -83,9 +83,12 @@ impl Logger {
             .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
             .build(LevelFilter::Trace);
 
-        let log_config = Config::builder().appenders(appenders).build(root).unwrap();
+        let log_config = Config::builder()
+            .appenders(appenders)
+            .build(root)
+            .expect("Cannot build log config");
 
-        log4rs::init_config(log_config).unwrap();
+        log4rs::init_config(log_config).expect("Cannot init config");
         LOGGER_INIT_FLAG.store(true, Ordering::Relaxed);
 
         Ok(())

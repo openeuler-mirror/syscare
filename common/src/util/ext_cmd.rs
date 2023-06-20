@@ -236,7 +236,6 @@ impl ExternCommandExitStatus {
 
     pub fn check_exit_code(&self) -> std::io::Result<()> {
         if self.exit_code != 0 {
-            debug!("{}", self.stderr.to_string_lossy());
             return Err(std::io::Error::new(
                 std::io::ErrorKind::BrokenPipe,
                 format!(
