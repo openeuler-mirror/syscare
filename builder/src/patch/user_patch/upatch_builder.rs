@@ -23,19 +23,30 @@ impl<'a> UserPatchBuilder<'a> {
     fn detect_compiler_names(&self) -> Vec<OsString> {
         /*
          * This is a temporary solution for compiler detection
-         * We assume the compiler would be 'gcc/g++' by default
-         * If gcc_secure is installed, the real compiler would be 'gcc_old/g++_old'
+         * We assume the compiler would be 'cc/gcc/c++/g++' by default
+         * If gcc_secure is installed, the real compiler would be 'gcc_old/c++_old/g++_old'
          */
         const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
         const GCC_SECURE_COMPILER_SUFFIX: &str = "_old";
 
-        const GCC_CC_NAME: &str = "gcc";
-        const GCC_CXX_NAME: &str = "g++";
+        const CC_NAME: &str = "cc";
+        const GCC_NAME: &str = "gcc";
+        const CXX_NAME: &str = "c++";
+        const GXX_NAME: &str = "g++";
 
-        let mut compiler_list = vec![OsString::from(GCC_CC_NAME), OsString::from(GCC_CXX_NAME)];
+        let mut compiler_list = vec![
+            OsString::from(CC_NAME),
+            OsString::from(GCC_NAME),
+            OsString::from(CXX_NAME),
+            OsString::from(GXX_NAME),
+        ];
 
         if RpmHelper::is_package_installed(GCC_SECURE_PKG_NAME) {
             for compiler in &mut compiler_list {
+                // gcc_secure does not provide cc_old
+                if compiler == CC_NAME {
+                    continue;
+                }
                 compiler.push(GCC_SECURE_COMPILER_SUFFIX)
             }
         }
