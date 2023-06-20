@@ -1,7 +1,7 @@
 use std::ffi::OsString;
 use std::path::Path;
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
 use common::util::fs;
 use common::util::os_str::OsStringExt;
 
@@ -68,9 +68,14 @@ impl<'a> UserPatchBuilder<'a> {
             .append("--define \"__spec_install_post %{nil}\"")
             .append("--define \"__find_provides %{nil}\"")
             .append("--define \"__find_requires %{nil}\"")
+            .append("--define \"_use_internal_dependency_generator 0\"")
     }
 
-    fn parse_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
+    fn build_cmd_envs(&self) -> ExternCommandEnvs {
+        ExternCommandEnvs::new().env("QA_RPATHS", "0x0011")
+    }
+
+    fn build_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
             .arg("--work-dir")
             .arg(&args.work_dir)
@@ -179,7 +184,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
 
         match args {
             PatchBuilderArguments::UserPatch(uargs) => UPATCH_BUILD
-                .execvp(self.parse_cmd_args(uargs))?
+                .execve(self.build_cmd_args(uargs), self.build_cmd_envs())?
                 .check_exit_code(),
             _ => unreachable!(),
         }
