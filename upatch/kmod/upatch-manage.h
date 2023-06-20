@@ -11,7 +11,7 @@
 #define _UPATCH_MANAGE_H
 
 #ifndef UPATCH_VERSION
-#define UPATCH_VERSION "0.1.1"
+#define UPATCH_VERSION "1.0.2"
 #endif
 
 enum upatch_module_state {
