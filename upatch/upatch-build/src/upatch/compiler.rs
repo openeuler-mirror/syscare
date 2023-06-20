@@ -3,6 +3,7 @@ use std::ffi::{CString, OsStr, OsString};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use log::*;
@@ -24,8 +25,9 @@ const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
 #[derive(Clone)]
 pub struct Compiler {
     compiler: Vec<PathBuf>,
-    assembler: HashSet<PathBuf>,
-    linker: PathBuf,
+    assembler: Vec<PathBuf>,
+    linker: Vec<PathBuf>,
+    inode: HashSet<u64>,
     hack_request: Vec<u64>,
     unhack_request: Vec<u64>,
 }
@@ -34,14 +36,15 @@ impl Compiler {
     pub fn new() -> Self {
         Self {
             compiler: Vec::new(),
-            assembler: HashSet::new(),
-            linker: PathBuf::new(),
+            assembler: Vec::new(),
+            linker: Vec::new(),
+            inode: HashSet::new(),
             hack_request: Vec::new(),
             unhack_request: Vec::new(),
         }
     }
 
-    pub fn readlink(&self, name: &OsStr) -> Result<PathBuf> {
+    pub fn which(&self, name: &OsStr) -> Result<PathBuf> {
         match which(name) {
             Ok(result) => Ok(result),
             Err(e) => Err(Error::Compiler(format!("get {:?} failed: {}", name, e))),
@@ -65,20 +68,39 @@ impl Compiler {
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
     {
-        self.compiler = compiler_file
-            .into_iter()
-            .map(|e| e.as_ref().to_owned())
-            .collect();
-        info!("Using compiler at: {:?}", &self.compiler);
+        for compiler in compiler_file {
+            // soft link
+            let compiler = realpath(compiler)?;
+            let assembler =
+                realpath(self.which(&self.read_from_compiler(&compiler, "-print-prog-name=as")?)?)?;
+            let linker =
+                realpath(self.which(&self.read_from_compiler(&compiler, "-print-prog-name=ld")?)?)?;
 
-        for compiler in &self.compiler {
-            self.assembler.insert(realpath(
-                self.readlink(&self.read_from_compiler(compiler, "-print-prog-name=as")?)?,
-            )?);
+            // hard link
+            if self.check_inode(&compiler)? {
+                self.compiler.push(compiler);
+            }
+
+            if self.check_inode(&assembler)? {
+                self.assembler.push(assembler);
+            }
+
+            if self.check_inode(&linker)? {
+                self.linker.push(linker);
+            }
         }
-        self.linker = realpath(
-            self.readlink(&self.read_from_compiler(&self.compiler[0], "-print-prog-name=ld")?)?,
-        )?;
+
+        info!("Using compiler at: {:?}", &self.compiler);
+        trace!("Using assembler at: {:?}", &self.assembler);
+        trace!("Using linker at: {:?}", &self.linker);
+        if self.assembler.is_empty() {
+            return Err(Error::Compiler(
+                "can't find assembler in compiler".to_string(),
+            ));
+        }
+        if self.linker.is_empty() {
+            return Err(Error::Compiler("can't find linker in compiler".to_string()));
+        }
 
         self.hack_request = vec![UPATCH_REGISTER_COMPILER; self.compiler.len()];
         self.hack_request
@@ -97,8 +119,7 @@ impl Compiler {
             if fd < 0 {
                 return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
             }
-            let result =
-                self.ioctl_register(fd, self.compiler.len() + self.assembler.len(), &hack_array);
+            let result = self.ioctl_register(fd, hack_array.len(), &hack_array);
             let ret = libc::close(fd);
             if ret < 0 {
                 return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
@@ -115,8 +136,7 @@ impl Compiler {
             if fd < 0 {
                 return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
             }
-            let result =
-                self.ioctl_unregister(fd, self.compiler.len() + self.assembler.len(), &hack_array);
+            let result = self.ioctl_unregister(fd, hack_array.len(), &hack_array);
             let ret = libc::close(fd);
             if ret < 0 {
                 return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
@@ -199,7 +219,7 @@ impl Compiler {
             .args(["-r", "-o"])
             .arg(output_file.as_ref())
             .args(link_list);
-        let output = ExternCommand::new(&self.linker).execv(args_list)?;
+        let output = ExternCommand::new(&self.linker[0]).execv(args_list)?;
         if !output.exit_status().success() {
             return Err(Error::Compiler(format!(
                 "link object file error {}: {}",
@@ -253,6 +273,11 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    fn check_inode<P: AsRef<Path>>(&mut self, path: P) -> Result<bool> {
+        let inode = std::fs::metadata(path)?.ino(); // hard link
+        Ok(self.inode.insert(inode))
     }
 }
 

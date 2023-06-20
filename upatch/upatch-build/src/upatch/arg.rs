@@ -6,6 +6,11 @@ use which::which;
 
 use crate::tool::*;
 
+const CC_NAME: &str = "cc";
+const CXX_NAME: &str = "c++";
+const GCC_NAME: &str = "gcc";
+const GXX_NAME: &str = "g++";
+
 #[derive(Parser, Debug)]
 #[command(bin_name = "upatch-build", version, term_width = 200)]
 pub struct Arguments {
@@ -87,14 +92,19 @@ impl Arguments {
             },
         });
 
-        let mut default_compiler = vec![PathBuf::from("gcc"), PathBuf::from("g++")];
+        let mut default_compiler = vec![
+            PathBuf::from(GCC_NAME),
+            PathBuf::from(GXX_NAME),
+            PathBuf::from(CC_NAME),
+            PathBuf::from(CXX_NAME),
+        ];
         let compiler_paths = self
             .compiler
             .as_deref_mut()
             .unwrap_or(&mut default_compiler);
         self.compiler = Some({
             for compiler_path in &mut compiler_paths.iter_mut() {
-                *compiler_path = match compiler_path.exists() {
+                *compiler_path = match compiler_path.is_file() {
                     true => real_arg(&compiler_path)?,
                     false => which(&compiler_path).map_err(|e| {
                         std::io::Error::new(
