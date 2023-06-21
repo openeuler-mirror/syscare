@@ -1,6 +1,6 @@
 use clap::Parser;
 use common::os;
-use log::{debug, LevelFilter};
+use log::{debug, error, LevelFilter};
 
 use crate::cmd::*;
 
@@ -28,7 +28,7 @@ impl SyscareCLI {
         Logger::initialize(match self.verbose {
             false => LevelFilter::Info,
             true => LevelFilter::Debug,
-        });
+        })?;
 
         Ok(())
     }
@@ -114,8 +114,22 @@ impl SyscareCLI {
         CLI_VERSION
     }
 
-    pub fn run() -> std::io::Result<i32> {
-        Self::parse().cli_main()
+    pub fn run() -> i32 {
+        let cli = Self::parse();
+
+        if let Err(e) = cli.cli_main() {
+            match Logger::is_inited() {
+                false => {
+                    eprintln!("Error: {}", e);
+                }
+                true => {
+                    error!("{}", e);
+                }
+            }
+            return -1;
+        }
+
+        0
     }
 
     pub fn check_root_permission() -> std::io::Result<()> {

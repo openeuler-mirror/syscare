@@ -48,7 +48,7 @@ impl PatchBuildCLI {
         }
 
         for patch_file in &mut args.patches {
-            if !patch_file.is_file() || fs::file_ext(&patch_file) != PATCH_FILE_EXT  {
+            if !patch_file.is_file() || fs::file_ext(&patch_file) != PATCH_FILE_EXT {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
                     "Patches should be patch files",
@@ -439,6 +439,7 @@ impl PatchBuildCLI {
             }
             return -1;
         }
+
         0
     }
 }

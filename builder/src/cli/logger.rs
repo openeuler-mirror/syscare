@@ -15,9 +15,9 @@ use crate::cli::CliWorkDir;
 
 const LOG_PATTERN: &str = "{m}{n}";
 
-pub struct Logger;
-
 static LOGGER_INIT_FLAG: AtomicBool = AtomicBool::new(false);
+
+pub struct Logger;
 
 impl Logger {
     fn init_console_log(max_level: LevelFilter) -> Vec<Appender> {
@@ -69,11 +69,7 @@ impl Logger {
             ))
     }
 
-    pub fn is_inited() -> bool {
-        LOGGER_INIT_FLAG.load(Ordering::Relaxed)
-    }
-
-    pub fn initialize(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
+    fn do_init(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
         let mut appenders = Vec::new();
 
         appenders.extend(Self::init_console_log(max_level));
@@ -86,11 +82,32 @@ impl Logger {
         let log_config = Config::builder()
             .appenders(appenders)
             .build(root)
-            .expect("Cannot build log config");
+            .map_err(|_| {
+                std::io::Error::new(std::io::ErrorKind::Other, "Failed to build log config")
+            })?;
 
-        log4rs::init_config(log_config).expect("Cannot init config");
-        LOGGER_INIT_FLAG.store(true, Ordering::Relaxed);
+        log4rs::init_config(log_config).map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::Other, "Failed to init log config")
+        })?;
 
         Ok(())
+    }
+}
+
+impl Logger {
+    pub fn is_inited() -> bool {
+        LOGGER_INIT_FLAG.load(Ordering::Acquire)
+    }
+
+    pub fn initialize(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
+        static INIT_ONCE: std::sync::Once = std::sync::Once::new();
+
+        let mut result = Ok(());
+        INIT_ONCE.call_once(|| {
+            result = Self::do_init(work_dir, max_level);
+            LOGGER_INIT_FLAG.store(true, Ordering::SeqCst);
+        });
+
+        result
     }
 }
