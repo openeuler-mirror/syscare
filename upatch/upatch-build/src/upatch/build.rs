@@ -75,6 +75,7 @@ impl UpatchBuild {
         self.tool.check()?;
 
         // check patches
+        info!("Testing patch file(s)");
         let project = Project::new(&self.args.debug_source);
         project.patch_all(&self.args.patches, Level::Debug)?;
         project.unpatch_all(&self.args.patches, Level::Debug)?;
