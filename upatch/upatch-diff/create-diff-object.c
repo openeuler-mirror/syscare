@@ -787,7 +787,8 @@ static void include_debug_sections(struct upatch_elf *uelf)
             continue;
 
         list_for_each_entry_safe(rela, saferela, &sec->relas, list)
-            if (rela->sym->sec && !rela->sym->sec->include)
+            // The shndex of symbol is SHN_COMMON, there is no related section
+            if (rela->sym && !rela->sym->include)
                 list_del(&rela->list);
     }
 
