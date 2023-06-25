@@ -121,16 +121,25 @@ impl PatchManager {
 
     pub fn restore_all_patch_status(&self, accepted_only: bool) -> std::io::Result<()> {
         debug!("Reading all patch status");
-        let mut status_map: HashMap<String, PatchStatus> = serde::deserialize(PATCH_STATUS_FILE)
-            .map_err(|e| {
-                std::io::Error::new(
+        let mut status_map;
+        match serde::deserialize::<HashMap<String, PatchStatus>, _>(PATCH_STATUS_FILE) {
+            Ok(map) => {
+                status_map = map;
+            }
+            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                debug!("Cannot find patch status file");
+                return Ok(());
+            }
+            Err(e) => {
+                return Err(std::io::Error::new(
                     std::io::ErrorKind::Other,
                     format!(
                         "Failed to read patch status, {}",
                         e.to_string().to_lowercase()
                     ),
-                )
-            })?;
+                ));
+            }
+        };
         /*
          * Merge patch status map with current patch list
          * and treat new patch as NOT-APPLIED
