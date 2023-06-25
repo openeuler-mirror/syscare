@@ -72,7 +72,9 @@ impl<'a> UserPatchBuilder<'a> {
     }
 
     fn build_cmd_envs(&self) -> ExternCommandEnvs {
-        ExternCommandEnvs::new().env("QA_RPATHS", "0x0011")
+        ExternCommandEnvs::new()
+            .env("OMP_PROC_BIND", "false")
+            .env("QA_RPATHS", "0x0011")
     }
 
     fn build_cmd_args(&self, args: &UserPatchBuilderArguments) -> ExternCommandArgs {
