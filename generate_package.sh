@@ -30,7 +30,7 @@ popd
 
 # Create tarball
 mv "$REPO_NAME" "$repo_dir"
-tar -czvf "$repo_dir.tar.gz" --exclude-vcs "$repo_dir"
+tar -czvf "$repo_dir.tar.gz" "$repo_dir"
 
 # Clean up
 rm -rf "$repo_dir"
