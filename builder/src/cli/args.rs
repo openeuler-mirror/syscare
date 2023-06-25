@@ -81,7 +81,7 @@ pub struct CliArguments {
     pub output: PathBuf,
 
     /// Parallel build jobs
-    #[arg(long, value_name="N", default_value=DEFAULT_BUILD_JOBS.as_str())]
+    #[arg(short, long, value_name="N", default_value=DEFAULT_BUILD_JOBS.as_str())]
     pub jobs: usize,
 
     /// Skip compiler version check (not recommended)
