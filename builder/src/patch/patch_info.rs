@@ -105,6 +105,27 @@ pub struct PatchInfo {
 }
 
 impl PatchInfo {
+    pub fn new(args: &CliArguments, target_package: &PackageInfo) -> Self {
+        const KERNEL_PKG_NAME: &str = "kernel";
+
+        let patch_type = match target_package.name == KERNEL_PKG_NAME {
+            true => PatchType::KernelPatch,
+            false => PatchType::UserPatch,
+        };
+
+        Self {
+            uuid: Uuid::new_v4().to_string(),
+            name: args.patch_name.to_owned(),
+            kind: patch_type,
+            version: args.patch_version.to_owned(),
+            release: args.patch_release.to_owned(),
+            arch: args.patch_arch.to_owned(),
+            target: target_package.to_owned(),
+            entities: Vec::new(),
+            description: args.patch_description.to_owned(),
+            patches: args.patches.iter().flat_map(PatchFile::new).collect(),
+        }
+    }
     pub fn short_name(&self) -> String {
         format!("{}-{}-{}", self.name, self.version, self.release)
     }
@@ -150,31 +171,6 @@ impl PatchInfo {
         for patch_file in &self.patches {
             log!(level, "{}. {}", patch_id, patch_file.name.to_string_lossy());
             patch_id += 1;
-        }
-    }
-}
-
-impl From<&CliArguments> for PatchInfo {
-    fn from(args: &CliArguments) -> Self {
-        const KERNEL_PKG_NAME: &str = "kernel";
-
-        let target_package = PackageInfo::from(args);
-        let patch_type = match target_package.name == KERNEL_PKG_NAME {
-            true => PatchType::KernelPatch,
-            false => PatchType::UserPatch,
-        };
-
-        Self {
-            uuid: Uuid::new_v4().to_string(),
-            name: args.patch_name.to_owned(),
-            kind: patch_type,
-            version: args.patch_version.to_owned(),
-            release: args.patch_release.to_owned(),
-            arch: args.patch_arch.to_owned(),
-            target: target_package,
-            entities: Vec::new(),
-            description: args.patch_description.to_owned(),
-            patches: args.patches.iter().flat_map(PatchFile::new).collect(),
         }
     }
 }

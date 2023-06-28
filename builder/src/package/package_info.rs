@@ -1,12 +1,10 @@
 use std::path::Path;
 
+use common::util::fs;
 use log::log;
 use serde::{Deserialize, Serialize};
 
-use crate::cli::CliArguments;
-
 use super::rpm_helper::RpmHelper;
-use super::rpm_helper::PKG_FILE_EXT;
 use super::rpm_spec_helper::TAG_VALUE_NONE;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Debug)]
@@ -64,9 +62,8 @@ impl PackageInfo {
         let release = pkg_info[4].to_owned();
         let license = pkg_info[5].to_owned();
         let source_pkg = match kind {
-            PackageType::SourcePackage => {
-                format!("{}-{}-{}.src.{}", name, version, release, PKG_FILE_EXT)
-            }
+            // For source package, it doesn't have %SOURCERPM, we reuse this field to store file name
+            PackageType::SourcePackage => fs::file_name(pkg_path).to_string_lossy().to_string(),
             PackageType::BinaryPackage => pkg_info[6].to_owned(),
         };
 
@@ -94,12 +91,9 @@ impl PackageInfo {
     }
 
     pub fn is_source_of(&self, pkg_info: &PackageInfo) -> bool {
-        if (self.kind == PackageType::SourcePackage)
+        (self.kind == PackageType::SourcePackage)
             && (pkg_info.kind == PackageType::BinaryPackage)
-        {
-            return self.source_pkg == pkg_info.source_pkg;
-        }
-        false
+            && (self.source_pkg == pkg_info.source_pkg)
     }
 
     pub fn print_log(&self, level: log::Level) {
@@ -110,38 +104,5 @@ impl PackageInfo {
         log!(level, "version: {}", self.version);
         log!(level, "release: {}", self.release);
         log!(level, "license: {}", self.license);
-    }
-}
-
-impl From<&CliArguments> for PackageInfo {
-    fn from(args: &CliArguments) -> Self {
-        let name = args.target_name.clone().expect("target name is empty");
-        let kind = PackageType::SourcePackage;
-        let arch = args.target_arch.clone().expect("target arch is empty");
-        let epoch = args.target_epoch.clone().expect("target epoch is empty");
-        let version = args
-            .target_version
-            .clone()
-            .expect("target version is empty");
-        let release = args
-            .target_release
-            .clone()
-            .expect("target release is empty");
-        let license = args
-            .target_license
-            .clone()
-            .expect("target license is empty");
-        let source_pkg = format!("{}-{}-{}.src.{}", name, version, release, PKG_FILE_EXT);
-
-        Self {
-            name,
-            kind,
-            arch,
-            epoch,
-            version,
-            release,
-            license,
-            source_pkg,
-        }
     }
 }
