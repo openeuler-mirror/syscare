@@ -2,7 +2,7 @@
 kernel ?= /lib/modules/$(shell uname -r)/build
 
 EXTRA_CFLAGS += -I$(PWD)
-EXTRA_CFLAGS += -I$(PWD)/../upatch-diff
+EXTRA_CFLAGS += -I$(PWD)/../../upatch-diff
 
 ifdef UPATCH_VERSION
 	EXTRA_CFLAGS += -DUPATCH_VERSION=\"$(UPATCH_VERSION)\"

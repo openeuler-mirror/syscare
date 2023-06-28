@@ -4,7 +4,7 @@ add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
 
 add_subdirectory(upatch-diff)
 add_subdirectory(upatch-tool)
-add_subdirectory(kmod)
+add_subdirectory(kmod/kmod-manage)
 
 # Install service
 install(
