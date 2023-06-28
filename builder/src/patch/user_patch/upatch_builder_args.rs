@@ -12,7 +12,7 @@ pub struct UserPatchBuilderArguments {
     pub build_source_cmd: OsString,
     pub build_patch_cmd: OsString,
     pub output_dir: PathBuf,
-    pub compilers: Vec<OsString>,
+    pub compiler_list: Vec<PathBuf>,
     pub skip_compiler_check: bool,
     pub verbose: bool,
     pub patch_list: Vec<PatchFile>,
