@@ -1,5 +1,8 @@
+use std::collections::HashSet;
 use std::ffi::OsString;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+
+use which::which;
 
 use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
 use common::util::fs;
@@ -20,38 +23,40 @@ impl<'a> UserPatchBuilder<'a> {
         Self { workdir }
     }
 
-    fn detect_compiler_names(&self) -> Vec<OsString> {
+    fn detect_compilers(&self) -> Vec<PathBuf> {
         /*
          * This is a temporary solution for compiler detection
          * We assume the compiler would be 'cc/gcc/c++/g++' by default
-         * If gcc_secure is installed, the real compiler would be 'gcc_old/c++_old/g++_old'
+         * If gcc_secure is installed, the real compiler would be added by '_old'
          */
+        const COMPILER_NAMES: [&str; 4] = ["cc", "gcc", "c++", "g++"];
         const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
-        const GCC_SECURE_COMPILER_SUFFIX: &str = "_old";
+        const GCC_SECURE_SUFFIX: &str = "_old";
 
-        const CC_NAME: &str = "cc";
-        const GCC_NAME: &str = "gcc";
-        const CXX_NAME: &str = "c++";
-        const GXX_NAME: &str = "g++";
+        let mut compiler_list = COMPILER_NAMES
+            .into_iter()
+            .map(OsString::from)
+            .collect::<Vec<_>>();
 
-        let mut compiler_list = vec![
-            OsString::from(CC_NAME),
-            OsString::from(GCC_NAME),
-            OsString::from(CXX_NAME),
-            OsString::from(GXX_NAME),
-        ];
-
+        // Handle gcc_secure
         if RpmHelper::is_package_installed(GCC_SECURE_PKG_NAME) {
             for compiler in &mut compiler_list {
-                // gcc_secure does not provide cc_old
-                if compiler == CC_NAME {
-                    continue;
-                }
-                compiler.push(GCC_SECURE_COMPILER_SUFFIX)
+                compiler.push(GCC_SECURE_SUFFIX);
             }
         }
 
-        compiler_list
+        // Get compiler path and filter invalid one
+        let compiler_set = compiler_list
+            .into_iter()
+            .filter_map(|compiler_name| {
+                which(compiler_name)
+                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))
+                    .and_then(fs::canonicalize)
+                    .ok()
+            })
+            .collect::<HashSet<_>>();
+
+        compiler_set.into_iter().collect()
     }
 
     fn create_topdir_macro<P: AsRef<Path>>(&self, buildroot: P) -> OsString {
@@ -92,7 +97,7 @@ impl<'a> UserPatchBuilder<'a> {
             .arg("--output-dir")
             .arg(&args.output_dir);
 
-        for compiler in &args.compilers {
+        for compiler in &args.compiler_list {
             cmd_args = cmd_args.arg("--compiler").arg(compiler)
         }
 
@@ -141,7 +146,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let debuginfos = RpmHelper::find_debuginfo(debug_pkg_dir)?;
         let debug_relations =
             RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
-        let compiler_names = self.detect_compiler_names();
+        let compilers = self.detect_compilers();
         let output_dir = self.workdir.patch.output.as_path();
 
         let topdir_macro = self.create_topdir_macro(pkg_build_root.as_ref());
@@ -171,7 +176,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
             elf_relations: debug_relations,
             build_source_cmd: build_original_cmd.append("&&").append(build_prep_cmd),
             build_patch_cmd: build_patched_cmd,
-            compilers: compiler_names,
+            compiler_list: compilers,
             output_dir: output_dir.to_path_buf(),
             skip_compiler_check: args.skip_compiler_check,
             verbose: args.verbose,
