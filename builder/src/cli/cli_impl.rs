@@ -189,18 +189,6 @@ impl PatchBuildCLI {
             .arch
             .to_owned();
 
-        // Override other arguments
-        args.target_name.get_or_insert(src_pkg_info.name.to_owned());
-        args.target_arch.get_or_insert(src_pkg_info.arch.to_owned());
-        args.target_epoch
-            .get_or_insert(src_pkg_info.epoch.to_owned());
-        args.target_version
-            .get_or_insert(src_pkg_info.version.to_owned());
-        args.target_release
-            .get_or_insert(src_pkg_info.release.to_owned());
-        args.target_license
-            .get_or_insert(src_pkg_info.license.to_owned());
-
         Ok(())
     }
 

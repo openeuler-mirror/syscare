@@ -20,12 +20,6 @@ Options:
       --patch-version <PATCH_VERSION>          Patch version [default: 1]
       --patch-release <PATCH_RELEASE>          Patch release [default: 1]
       --patch-description <PATCH_DESCRIPTION>  Patch description [default: (none)]
-      --target-name <TARGET_NAME>              Patch target name
-      --target-arch <TARGET_ARCH>              parch target architecture
-      --target-epoch <TARGET_EPOCH>            Patch target epoch
-      --target-version <TARGET_VERSION>        Patch target version
-      --target-release <TARGET_RELEASE>        Patch target release
-      --target-license <TARGET_LICENSE>        Patch target license
   -s, --source <SOURCE>                        Source package
   -d, --debuginfo <DEBUGINFO>                  Debuginfo package
       --workdir <WORKDIR>                      Working directory [default: .]
@@ -51,12 +45,6 @@ Options:
 |--patch-version ```<PATCH_VERSION>```|补丁版本号|字符串|默认值为1，需符合RPM命名规范|
 |--patch-release ```<PATCH_RELEASE>```|补丁release|数字|默认值为1，需符合RPM命名规范|
 |--patch-description ```<PATCH_DESCRIPTION>```|补丁描述|字符串|默认为(none)|
-|--target-name ```<TARGET_NAME>```|目标软件rpm包名称|字符串|默认由'--source'参数提供的src.rpm包推导|
-|--target-arch ```<TARGET_ARCH>```|目标软件rpm包架构|字符串|默认由'--source'参数提供的src.rpm包推导|
-|--target-epoch ```<TARGET_EPOCH>```|目标软件rpm包epoch|字符串|默认由'--source'参数提供的src.rpm包推导|
-|--target-version ```<TARGET_VERSION>```|目标软件rpm包版本号|字符串|默认由'--source'参数提供的src.rpm包推导|
-|--target-release ```<TARGET_RELEASE>```|目标软件rpm包release|字符串|默认由'--source'参数提供的src.rpm包推导|
-|--target-license ```<TARGET_LICENSE>```|目标软件rpm包license|字符串|默认由'--source'参数提供的src.rpm包推导|
 |-s, --source ```<SOURCE>```|目标软件src.rpm源码包路径|字符串|必选参数，需为合法路径|
 |-d, --debuginfo ```<DEBUGINFO>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
 |--workdir ```<WORKDIR>```|临时文件夹路径|字符串|默认为当前执行目录，需为合法路径|

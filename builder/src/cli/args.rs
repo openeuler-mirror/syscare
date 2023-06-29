@@ -40,30 +40,6 @@ pub struct CliArguments {
     #[arg(long, default_value=DEFAULT_PATCH_DESCRIPTION)]
     pub patch_description: String,
 
-    /// Patch target name
-    #[arg(long)]
-    pub target_name: Option<String>,
-
-    /// Patch target architecture
-    #[arg(long)]
-    pub target_arch: Option<String>,
-
-    /// Patch target epoch
-    #[arg(long)]
-    pub target_epoch: Option<String>,
-
-    /// Patch target version
-    #[arg(long)]
-    pub target_version: Option<String>,
-
-    /// Patch target release
-    #[arg(long)]
-    pub target_release: Option<String>,
-
-    /// Patch target license
-    #[arg(long)]
-    pub target_license: Option<String>,
-
     /// Source package
     #[arg(short, long)]
     pub source: PathBuf,
