@@ -1,6 +1,7 @@
+use std::env;
 use std::ffi::{OsStr, OsString};
 use std::fs::{File, FileType, Metadata, Permissions, ReadDir};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use super::os_str::OsStrExt;
 
@@ -182,6 +183,37 @@ pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
         .extension()
         .map(OsStr::to_os_string)
         .unwrap_or_default()
+}
+
+pub fn normalize<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
+    let mut new_path = PathBuf::new();
+
+    let orig_path = path.as_ref();
+    if orig_path.is_relative() {
+        new_path.push(env::current_dir()?);
+    }
+
+    for component in orig_path.components() {
+        match component {
+            Component::CurDir => {}
+            Component::ParentDir => {
+                new_path.pop();
+                if !new_path.has_root() {
+                    new_path.push(Component::RootDir);
+                }
+            }
+            _ => {
+                new_path.push(component);
+                if new_path.is_symlink() {
+                    if let Ok(canonicalized_path) = self::canonicalize(new_path.as_path()) {
+                        new_path = canonicalized_path;
+                    }
+                }
+            }
+        }
+    }
+
+    Ok(new_path)
 }
 
 #[derive(Clone, Copy)]
