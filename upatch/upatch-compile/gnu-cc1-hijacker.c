@@ -2,11 +2,13 @@
 #include <unistd.h>
 #include <limits.h>
 #include <errno.h>
+#include <string.h>
+#include <stdio.h>
 
-#include "hijacker.h"
+#include "upatch-env.h"
 
 /*
- * ATTENTION: written by ebpf/kmod directly.
+ * ATTENTION: written by ebpf directly.
  * 
  * The whole part:
  * 1. the compiler path + other inode number(before execve) -> the hijacker
@@ -16,11 +18,12 @@
  */
 static char original_path[PATH_MAX] = {0xff};
 
-static const int append_args_len = 3;
+static const int append_args_len = 4;
 static const char *compiler_append_args[] = {
     "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
     "-fdata-sections",
+    "-frecord-gcc-switches",
     NULL,
 };
 
@@ -30,7 +33,7 @@ int main(int argc, char *argv[], char *envp[])
     const char **__argv = (const char **)argv;
     char *upatch_env = NULL;
 
-    upatch_env = getenv(HIJACKER_ENV);
+    upatch_env = getenv(UPATCH_HIJACKER_ENV);
     if (!upatch_env)
         goto out;
 
@@ -39,12 +42,15 @@ int main(int argc, char *argv[], char *envp[])
     if (!__argv)
         return -ENOMEM;
 
+    __argv[0] = argv[0];
     for (tmp = 0; tmp < append_args_len; tmp ++)
         __argv[new_index ++] = compiler_append_args[tmp];
     while (old_index < argc)
         __argv[new_index ++] = argv[old_index ++];
     __argv[new_index] = NULL;
 out:
-    __argv[0] = (char *)&original_path;
+    tmp = readlink("/proc/self/exe", (char *)&original_path, PATH_MAX);
+    original_path[tmp] = '\0';
+    printf("[hacked] original path is %s \n", &original_path);
     return execve((const char *)&original_path, (void *)__argv, envp);
 }

@@ -8,7 +8,7 @@
 #include <sys/syscall.h>
 #include <sys/stat.h>
 
-#include "hijacker.h"
+#include "upatch-env.h"
 
 #ifndef SYS_gettid
 #error "SYS_gettid unavailable on this system"
@@ -19,15 +19,8 @@
 /* %u used to find object file and 0x0 use to match it */
 #define DEFSYM_FORMAT     "upatch_tag_0x%x=0x0"
 
-/*
- * ATTENTION: written by ebpf directly.
- * 
- * The whole part:
- * 1. the compiler path + other inode number(before execve) -> the hijacker
- * 2. the hijacker inode number + the hijacker path -> the compiler path(after execve)
- * 
- * Pid keeps the same.
- */
+#define UPATCH_LINK_PATH_FORMAT  "%s/0x%x"
+
 static char original_path[PATH_MAX] = {0xff};
 
 int main(int argc, char *argv[], char *envp[])
@@ -38,7 +31,7 @@ int main(int argc, char *argv[], char *envp[])
     int new_index = 1, old_index = 1;
     int tid = gettid();
 
-    upatch_env = getenv(HIJACKER_ENV);
+    upatch_env = getenv(UPATCH_HIJACKER_ENV);
     if (!upatch_env)
         goto out;
 
@@ -48,6 +41,7 @@ int main(int argc, char *argv[], char *envp[])
         return -ENOMEM;
     
     /* add defsymbols */
+    __argv[0] = argv[0];
     snprintf(buff, 64, DEFSYM_FORMAT, tid);
     __argv[new_index ++] = "--defsym";
     __argv[new_index ++] = buff;
@@ -68,7 +62,7 @@ int main(int argc, char *argv[], char *envp[])
     else if (!strcmp(object_path, "/dev/null"))
         goto out;
 
-    snprintf((char *)original_path, PATH_MAX, LINK_PATH_FORMAT, upatch_env, tid);
+    snprintf((char *)original_path, PATH_MAX, UPATCH_LINK_PATH_FORMAT, upatch_env, tid);
     /* check if the link path is the only one */
     if (!access(original_path, F_OK))
         return -EEXIST;
@@ -78,7 +72,8 @@ int main(int argc, char *argv[], char *envp[])
     if (symlink(original_path, object_path) == -1)
         return -errno;
 out:
-    /* fill the filename for the argument */
-    __argv[0] = (char *)&original_path;
+    new_index = readlink("/proc/self/exe", (char *)&original_path, PATH_MAX);
+    original_path[new_index] = '\0';
+    printf("[hacked] original path is %s \n", &original_path);
     return execve((const char *)&original_path, (void *)__argv, envp);
 }
