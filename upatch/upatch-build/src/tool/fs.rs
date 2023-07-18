@@ -223,8 +223,18 @@ pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(
 }
 
 pub fn search_tool<P: AsRef<Path>>(tool: P) -> std::io::Result<PathBuf> {
-    let current_tool = tool.as_ref();
-    match self::check_file(current_tool) {
+    let current_exe = std::env::current_exe()?;
+    let search_dir = match current_exe.parent() {
+        Some(search_dir) => search_dir,
+        None => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("can't get current binary {:?}'s directory", &current_exe),
+            ))
+        }
+    };
+    let current_tool = search_dir.join(tool);
+    match self::check_file(&current_tool) {
         Err(e) => Err(std::io::Error::new(
             std::io::ErrorKind::NotFound,
             format!(

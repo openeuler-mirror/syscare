@@ -1,35 +1,33 @@
+use std::cmp;
 use std::collections::HashSet;
 use std::ffi::{CString, OsStr, OsString};
 use std::fs::File;
 use std::io::Write;
 use std::os::unix::ffi::OsStrExt;
-use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use log::*;
 use which::which;
 
+use crate::ffi::*;
 use crate::cmd::*;
 use crate::dwarf::Dwarf;
-use crate::tool::realpath;
+use crate::tool::search_tool;
 
 use super::Error;
 use super::Result;
-use super::UPATCH_DEV_NAME;
 
-const UPATCH_REGISTER_COMPILER: u64 = 1074324737;
-const UPATCH_UNREGISTER_COMPILER: u64 = 1074324738;
-const UPATCH_REGISTER_ASSEMBLER: u64 = 1074324739;
-const UPATCH_UNREGISTER_ASSEMBLER: u64 = 1074324740;
+const COMPILER_HIJACKER: &str = "upatch-gnu-compiler-hijacker";
+const ASSEMBLER_HIJACKER: &str = "upatch-gnu-as-hijacker";
 
 #[derive(Clone)]
 pub struct Compiler {
     compiler: Vec<PathBuf>,
     assembler: Vec<PathBuf>,
     linker: Vec<PathBuf>,
-    inode: HashSet<u64>,
-    hack_request: Vec<u64>,
-    unhack_request: Vec<u64>,
+    compiler_hijacker: PathBuf,
+    assembler_hijacker: PathBuf,
+    hijacker_dir: PathBuf,
 }
 
 impl Compiler {
@@ -38,9 +36,9 @@ impl Compiler {
             compiler: Vec::new(),
             assembler: Vec::new(),
             linker: Vec::new(),
-            inode: HashSet::new(),
-            hack_request: Vec::new(),
-            unhack_request: Vec::new(),
+            compiler_hijacker: PathBuf::new(),
+            assembler_hijacker: PathBuf::new(),
+            hijacker_dir: PathBuf::new(),
         }
     }
 
@@ -63,29 +61,30 @@ impl Compiler {
         Ok(output.stdout().to_os_string())
     }
 
-    pub fn analyze<I, P>(&mut self, compiler_file: I) -> Result<()>
+    pub fn analyze<I, P, Q>(&mut self, compiler_file: I, hijacker_dir: Q) -> Result<()>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
+        Q: AsRef<Path>,
     {
+        self.compiler_hijacker = search_tool(COMPILER_HIJACKER)?;
+        self.assembler_hijacker = search_tool(ASSEMBLER_HIJACKER)?;
+        self.hijacker_dir = hijacker_dir.as_ref().to_path_buf();
         for compiler in compiler_file {
-            // soft link
-            let compiler = realpath(compiler)?;
+            let compiler = compiler.as_ref().to_path_buf();
             let assembler =
-                realpath(self.which(&self.read_from_compiler(&compiler, "-print-prog-name=as")?)?)?;
-            let linker =
-                realpath(self.which(&self.read_from_compiler(&compiler, "-print-prog-name=ld")?)?)?;
+                self.which(&self.read_from_compiler(&compiler, "-print-prog-name=as")?)?;
+            let linker = self.which(&self.read_from_compiler(&compiler, "-print-prog-name=ld")?)?;
 
-            // hard link
-            if self.check_inode(&compiler)? {
+            if !self.compiler.contains(&compiler) {
                 self.compiler.push(compiler);
             }
 
-            if self.check_inode(&assembler)? {
+            if !self.assembler.contains(&assembler) {
                 self.assembler.push(assembler);
             }
 
-            if self.check_inode(&linker)? {
+            if !self.linker.contains(&linker) {
                 self.linker.push(linker);
             }
         }
@@ -101,47 +100,26 @@ impl Compiler {
         if self.linker.is_empty() {
             return Err(Error::Compiler("can't find linker in compiler".to_string()));
         }
-
-        self.hack_request = vec![UPATCH_REGISTER_COMPILER; self.compiler.len()];
-        self.hack_request
-            .append(&mut vec![UPATCH_REGISTER_ASSEMBLER; self.assembler.len()]);
-        self.unhack_request = vec![UPATCH_UNREGISTER_COMPILER; self.compiler.len()];
-        self.unhack_request
-            .append(&mut vec![UPATCH_UNREGISTER_ASSEMBLER; self.assembler.len()]);
         Ok(())
     }
 
     pub fn hack(&self) -> Result<()> {
-        let (ioctl_str, hack_array) = self.get_cstring()?;
-
         unsafe {
-            let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
-            if fd < 0 {
-                return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
+            let ret = upatch_hijacker_init();
+            if ret != 0 {
+                return Err(Error::Mod(format!("upatch hijacker init failed - {}", ret)));
             }
-            let result = self.ioctl_register(fd, hack_array.len(), &hack_array);
-            let ret = libc::close(fd);
-            if ret < 0 {
-                return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
-            }
-            result
+            self.hijacker_register(self.compiler.len() + self.assembler.len())
         }
     }
 
     pub fn unhack(&self) -> Result<()> {
-        let (ioctl_str, hack_array) = self.get_cstring()?;
-
         unsafe {
-            let fd = libc::open(ioctl_str.as_ptr(), libc::O_RDWR);
-            if fd < 0 {
-                return Err(Error::Mod(format!("open {:?} error", ioctl_str)));
+            let ret = upatch_hijacker_init();
+            if ret != 0 {
+                return Err(Error::Mod(format!("upatch hijacker init failed - {}", ret)));
             }
-            let result = self.ioctl_unregister(fd, hack_array.len(), &hack_array);
-            let ret = libc::close(fd);
-            if ret < 0 {
-                return Err(Error::Mod(format!("close {:?} error", ioctl_str)));
-            }
-            result
+            self.hijacker_unregister(self.compiler.len() + self.assembler.len())
         }
     }
 
@@ -232,52 +210,98 @@ impl Compiler {
 }
 
 impl Compiler {
-    fn get_cstring(&self) -> Result<(CString, Vec<CString>)> {
-        let ioctl_str = CString::new(format!("/dev/{}", UPATCH_DEV_NAME)).unwrap();
-        let mut hack_array = Vec::with_capacity(self.compiler.len() + self.assembler.len());
-        for compiler in &self.compiler {
-            hack_array.push(CString::new(compiler.as_os_str().as_bytes()).unwrap());
-        }
-        for assembler in &self.assembler {
-            hack_array.push(CString::new(assembler.as_os_str().as_bytes()).unwrap());
-        }
-        Ok((ioctl_str, hack_array))
-    }
+    fn hijacker_register(&self, num: usize) -> Result<()> {
+        for i in 0..cmp::min(num, self.compiler.len()) {
+            let compiler_hijacker = self.hijacker_dir.join(i.to_string());
+            std::fs::hard_link(&self.compiler_hijacker, &compiler_hijacker)?;
 
-    fn ioctl_register(&self, fd: i32, num: usize, hack_array: &[CString]) -> Result<()> {
-        for i in 0..num {
-            trace!("hack {:?}", hack_array[i]);
-            let ret = unsafe { libc::ioctl(fd, self.hack_request[i], hack_array[i].as_ptr()) };
+            trace!("hack {:?} -> {:?}", self.compiler[i], compiler_hijacker);
+            let compiler_cstr = CString::new(self.compiler[i].as_os_str().as_bytes()).unwrap();
+            let compiler_hijacker_cstr =
+                CString::new(compiler_hijacker.as_os_str().as_bytes()).unwrap();
+            let ret = unsafe {
+                upatch_hijacker_register(compiler_cstr.as_ptr(), compiler_hijacker_cstr.as_ptr())
+            };
             if ret != 0 {
-                trace!("hack {:?} error {}, try to rollback", hack_array[i], ret);
-                self.ioctl_unregister(fd, i, hack_array)?;
+                trace!("hack {:?} error {}, try to rollback", self.compiler[i], ret);
+                self.hijacker_unregister(i)?;
                 return Err(Error::Mod(format!(
                     "hack {:?} error {}",
-                    hack_array[i], ret
+                    self.compiler[i], ret
+                )));
+            }
+        }
+        for i in self.compiler.len()..num {
+            let assembler_hijacker = self.hijacker_dir.join(i.to_string());
+            std::fs::hard_link(&self.assembler_hijacker, &assembler_hijacker)?;
+
+            let i = i - self.compiler.len();
+            trace!("hack {:?} -> {:?}", self.assembler[i], assembler_hijacker);
+            let assembler_cstr = CString::new(self.assembler[i].as_os_str().as_bytes()).unwrap();
+            let assembler_hijacker_cstr =
+                CString::new(assembler_hijacker.as_os_str().as_bytes()).unwrap();
+            let ret = unsafe {
+                upatch_hijacker_register(assembler_cstr.as_ptr(), assembler_hijacker_cstr.as_ptr())
+            };
+            if ret != 0 {
+                trace!(
+                    "hack {:?} error {}, try to rollback",
+                    self.assembler[i],
+                    ret
+                );
+                self.hijacker_unregister(i)?;
+                return Err(Error::Mod(format!(
+                    "hack {:?} error {}",
+                    self.assembler[i], ret
                 )));
             }
         }
         Ok(())
     }
 
-    fn ioctl_unregister(&self, fd: i32, num: usize, hack_array: &[CString]) -> Result<()> {
-        for i in (0..num).rev() {
-            trace!("unhack {:?}", hack_array[i]);
-            let ret = unsafe { libc::ioctl(fd, self.unhack_request[i], hack_array[i].as_ptr()) };
+    fn hijacker_unregister(&self, num: usize) -> Result<()> {
+        for i in (self.compiler.len()..num).rev() {
+            let assembler_hijacker = self.hijacker_dir.join(i.to_string());
+
+            let i = i - self.compiler.len();
+            trace!("unhack {:?} -> {:?}", self.assembler[i], assembler_hijacker);
+            let assembler_cstr = CString::new(self.assembler[i].as_os_str().as_bytes()).unwrap();
+            let assembler_hijacker_cstr =
+                CString::new(assembler_hijacker.as_os_str().as_bytes()).unwrap();
+            let ret = unsafe {
+                upatch_hijacker_unregister(
+                    assembler_cstr.as_ptr(),
+                    assembler_hijacker_cstr.as_ptr(),
+                )
+            };
             if ret != 0 {
-                trace!("unhack {:?} error {}", hack_array[i], ret);
+                trace!("unhack {:?} error {}", self.assembler[i], ret);
                 return Err(Error::Mod(format!(
                     "unhack {:?} error {}",
-                    hack_array[i], ret
+                    self.assembler[i], ret
+                )));
+            }
+        }
+
+        for i in (0..cmp::min(num, self.compiler.len())).rev() {
+            let compiler_hijacker = self.hijacker_dir.join(i.to_string());
+
+            trace!("unhack {:?} -> {:?}", self.compiler[i], compiler_hijacker);
+            let compiler_cstr = CString::new(self.compiler[i].as_os_str().as_bytes()).unwrap();
+            let compiler_hijacker_cstr =
+                CString::new(compiler_hijacker.as_os_str().as_bytes()).unwrap();
+            let ret = unsafe {
+                upatch_hijacker_unregister(compiler_cstr.as_ptr(), compiler_hijacker_cstr.as_ptr())
+            };
+            if ret != 0 {
+                trace!("unhack {:?} error {}", self.compiler[i], ret);
+                return Err(Error::Mod(format!(
+                    "unhack {:?} error {}",
+                    self.compiler[i], ret
                 )));
             }
         }
         Ok(())
-    }
-
-    fn check_inode<P: AsRef<Path>>(&mut self, path: P) -> Result<bool> {
-        let inode = std::fs::metadata(path)?.ino(); // hard link
-        Ok(self.inode.insert(inode))
     }
 }
 

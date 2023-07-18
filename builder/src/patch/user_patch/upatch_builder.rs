@@ -24,26 +24,12 @@ impl<'a> UserPatchBuilder<'a> {
     }
 
     fn detect_compilers(&self) -> Vec<PathBuf> {
-        /*
-         * This is a temporary solution for compiler detection
-         * We assume the compiler would be 'cc/gcc/c++/g++' by default
-         * If gcc_secure is installed, the real compiler would be added by '_old'
-         */
         const COMPILER_NAMES: [&str; 4] = ["cc", "gcc", "c++", "g++"];
-        const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
-        const GCC_SECURE_SUFFIX: &str = "_old";
 
-        let mut compiler_list = COMPILER_NAMES
+        let compiler_list = COMPILER_NAMES
             .into_iter()
             .map(OsString::from)
             .collect::<Vec<_>>();
-
-        // Handle gcc_secure
-        if RpmHelper::is_package_installed(GCC_SECURE_PKG_NAME) {
-            for compiler in &mut compiler_list {
-                compiler.push(GCC_SECURE_SUFFIX);
-            }
-        }
 
         // Get compiler path and filter invalid one
         let compiler_set = compiler_list
@@ -51,7 +37,6 @@ impl<'a> UserPatchBuilder<'a> {
             .filter_map(|compiler_name| {
                 which(compiler_name)
                     .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))
-                    .and_then(fs::canonicalize)
                     .ok()
             })
             .collect::<HashSet<_>>();

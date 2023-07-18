@@ -113,7 +113,7 @@ impl Arguments {
         self.compiler = Some({
             for compiler_path in &mut compiler_paths.iter_mut() {
                 *compiler_path = match compiler_path.is_file() {
-                    true => real_arg(&compiler_path)?,
+                    true => compiler_path.to_path_buf(),
                     false => which(&compiler_path).map_err(|e| {
                         std::io::Error::new(
                             std::io::ErrorKind::NotFound,

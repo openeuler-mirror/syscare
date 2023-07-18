@@ -17,9 +17,9 @@
 #define gettid() ((pid_t)syscall(SYS_gettid))
 
 /* %u used to find object file and 0x0 use to match it */
-#define DEFSYM_FORMAT     "upatch_tag_0x%x=0x0"
+#define DEFSYM_FORMAT     ".upatch_0x%x="
 
-#define UPATCH_LINK_PATH_FORMAT  "%s/0x%x"
+#define UPATCH_LINK_PATH_FORMAT  "%s/0x%x.o"
 
 static char original_path[PATH_MAX] = {0xff};
 

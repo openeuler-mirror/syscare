@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: GPL-2.0
 
 include_directories(
-    ../kmod/kmod-manage
+    ../upatch-manage/kmod/kmod-manage/
     ./
     ./insn/
 )

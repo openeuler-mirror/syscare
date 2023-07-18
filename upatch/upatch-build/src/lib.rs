@@ -1,3 +1,4 @@
+pub mod ffi;
 pub mod cmd;
 pub mod dwarf;
 pub mod elf;
