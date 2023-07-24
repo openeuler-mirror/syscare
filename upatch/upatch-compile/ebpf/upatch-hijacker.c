@@ -30,7 +30,7 @@ static void sig_int(int signo)
 {
 	stop = 1;
 	if (upatch_socket != -1)
-		close(upatch_socket);
+	    close(upatch_socket);
 	upatch_socket = -1;
 }
 

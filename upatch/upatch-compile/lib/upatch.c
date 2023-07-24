@@ -53,9 +53,10 @@ static int hijacker_ioctl_handler(int dev_fd, const char *prey_name,
 {
     int ret;
     struct upatch_hijack_msg msg;
-    
+
     msg.prey_name = prey_name;
     ret = get_ino(msg.prey_name, &msg.prey_ino);
+
     if (ret)
         return ret;
 
@@ -65,8 +66,13 @@ static int hijacker_ioctl_handler(int dev_fd, const char *prey_name,
         return ret;
 
     if (if_register)
-        return ioctl(ioctl_fd, UPATCH_HIJACKER_REGISTER, &msg);
-    return ioctl(ioctl_fd, UPATCH_HIJACKER_UNREGISTER, &msg);
+        ret = ioctl(dev_fd, UPATCH_HIJACKER_REGISTER, &msg);
+    else
+        ret = ioctl(dev_fd, UPATCH_HIJACKER_UNREGISTER, &msg);
+
+    if (ret == -1)
+        ret = -errno;
+    return ret;
 }
 
 static int hijacker_socket_handler(const char *prey_name,
@@ -90,6 +96,7 @@ static int hijacker_socket_handler(const char *prey_name,
         msg.prey_ino = 0;
     else
         ret = get_ino((char *)&msg.prey_name, &msg.prey_ino);
+
     if (ret)
         return ret;
 
