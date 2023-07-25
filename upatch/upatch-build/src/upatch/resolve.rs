@@ -11,6 +11,7 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(
     let mut patch_elf = write::Elf::parse(patch)?;
     let mut debug_info_elf = read::Elf::parse(debug_info)?;
     let debug_info_e_ident = debug_info_elf.header()?.get_e_ident();
+    let debug_info_e_type = debug_info_elf.header()?.get_e_type();
     patch_elf.header()?.set_e_ident(debug_info_e_ident);
     let ei_osabi = elf_ei_osabi(debug_info_e_ident);
 
@@ -40,6 +41,19 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(
             } else {
                 __partly_resolve_patch(&mut symbol, debug_info_symbols, ei_osabi)?;
             }
+        }
+
+        /*
+         * In a shared library with position-independent code (PIC) (no pie),
+         * Such code accesses all constant addresses through a global offset table (GOT).
+         * TODO: consider check PIE
+         */
+        let sym_info = symbol.get_st_info();
+        if debug_info_e_type == ET_DYN
+            && elf_st_bind(sym_info) == STB_GLOBAL
+            && elf_st_type(sym_info) == STT_OBJECT
+        {
+            symbol.set_st_shndx(SHN_UNDEF);
         }
     }
     Ok(())

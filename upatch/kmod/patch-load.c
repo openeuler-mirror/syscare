@@ -526,6 +526,16 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name, Elf_Sym patc
     if (ELF_ST_TYPE(patch_sym.st_info) == STT_IFUNC &&
         (elf_info->hdr->e_ident[EI_OSABI] == ELFOSABI_GNU || elf_info->hdr->e_ident[EI_OSABI] == ELFOSABI_FREEBSD))
         goto out_plt;
+
+    /*
+     * In a shared library with position-independent code (PIC) (no pie),
+     * Such code accesses all constant addresses through a global offset table (GOT).
+     * TODO: consider check PIE
+     */
+    if (elf_info->hdr->e_type == ET_DYN &&
+        ELF_ST_BIND(patch_sym.st_info) == STB_GLOBAL && ELF_ST_TYPE(patch_sym.st_info) == STT_OBJECT)
+        goto out_got;
+
     /* handle symbol table first, in most cases, symbol table does not exist */
     sechdr = &elf_info->sechdrs[elf_info->index.sym];
     sym = (void *)elf_info->hdr + sechdr->sh_offset;
