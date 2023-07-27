@@ -395,6 +395,9 @@ impl UpatchBuild {
     }
 
     fn check_binary_elf<P: AsRef<Path>>(&self, path: P) -> std::io::Result<bool> {
+        if path.as_ref().is_dir() {
+            return Ok(false);
+        }
         let file = OpenOptions::new().read(true).open(path)?;
         check_elf(&file)
     }
