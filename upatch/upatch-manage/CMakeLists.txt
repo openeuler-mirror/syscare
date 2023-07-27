@@ -10,7 +10,7 @@ else()
 endif()
 
 add_custom_target(upatch-kmod ALL
-    COMMENT           "Compiling upatch-mod..."
+    COMMENT           "Compiling upatch-kmod..."
     BYPRODUCTS        ${UPATCH_KMOD}
     COMMAND           ${UPATCH_KMOD_CMD}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

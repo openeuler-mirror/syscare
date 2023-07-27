@@ -23,14 +23,6 @@ struct upatch_conmsg {
 
 #define UPATCH_IOCTL_MAGIC 0xE5
 
-#define UPATCH_REGISTER_COMPILER _IOW(UPATCH_IOCTL_MAGIC, 0x1, const char *)
-
-#define UPATCH_UNREGISTER_COMPILER _IOW(UPATCH_IOCTL_MAGIC, 0x2, const char *)
-
-#define UPATCH_REGISTER_ASSEMBLER _IOW(UPATCH_IOCTL_MAGIC, 0x3, const char *)
-
-#define UPATCH_UNREGISTER_ASSEMBLER _IOW(UPATCH_IOCTL_MAGIC, 0x4, const char *)
-
 /* when apply: patch information will be recored to the context of the process */
 #define UPATCH_ATTACH_PATCH _IOW(UPATCH_IOCTL_MAGIC, 0x7, const struct upatch_conmsg *)
 

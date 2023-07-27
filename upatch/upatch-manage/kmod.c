@@ -16,7 +16,6 @@
 
 #include "kmod.h"
 #include "patch.h"
-#include "compiler.h"
 #include "common.h"
 
 static int upatch_open(struct inode *inode, struct file *file)
@@ -187,11 +186,6 @@ static long upatch_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
         return -EINVAL;
 
     switch (cmd) {
-    case UPATCH_REGISTER_COMPILER:
-    case UPATCH_UNREGISTER_COMPILER:
-    case UPATCH_REGISTER_ASSEMBLER:
-    case UPATCH_UNREGISTER_ASSEMBLER:
-        return handle_compiler_cmd(arg, cmd);
     case UPATCH_ATTACH_PATCH:
         return attach_upatch(arg);
     case UPATCH_ACTIVE_PATCH:
@@ -270,10 +264,6 @@ static int __init upatch_module_init(void)
         return ret;
     }
 
-    ret = compiler_hack_init();
-    if (ret < 0)
-        return ret;
-
     ret = misc_register(&upatch_dev);
     if (ret) {
         pr_err("register misc device for %s failed\n", UPATCH_DEV_NAME);
@@ -288,7 +278,6 @@ static int __init upatch_module_init(void)
 static void __exit upatch_module_exit(void)
 {
     misc_deregister(&upatch_dev);
-    compiler_hack_exit();
     upatch_exit();
     kprobe_exit();
 }

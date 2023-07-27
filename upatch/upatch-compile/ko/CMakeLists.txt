@@ -9,8 +9,8 @@ else()
     set(UPATCH_HIJACKER_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION})
 endif()
 
-add_custom_target(upatch-kmod ALL
-    COMMENT           "Compiling upatch-mod..."
+add_custom_target(upatch-hijacker-kmod ALL
+    COMMENT           "Compiling upatch-hijacker-kmod..."
     BYPRODUCTS        ${UPATCH_HIJACKER_KMOD}
     COMMAND           ${UPATCH_HIJACKER_KMOD_CMD}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
