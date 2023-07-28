@@ -158,26 +158,18 @@ impl RpmHelper {
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 
-        let find_source_result = fs::find_dir(
-            &directory,
-            search_name,
-            fs::FindOptions {
-                fuzz: true,
-                recursive: true,
-            },
-        );
+        let find_opts = fs::FindOptions {
+            fuzz: true,
+            recursive: true,
+        };
 
-        match find_source_result {
-            Ok(source_dir) => Ok(source_dir),
-            Err(_) => fs::find_dir(
-                &directory,
-                "",
-                fs::FindOptions {
-                    fuzz: true,
-                    recursive: true,
-                },
-            ),
-        }
+        fs::find_dir(directory, search_name, find_opts).map(|source_dir| {
+            let dup_source_dir = source_dir.join(fs::file_name(&source_dir));
+            match dup_source_dir.exists() {
+                false => source_dir,
+                true => dup_source_dir,
+            }
+        })
     }
 
     pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
