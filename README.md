@@ -146,6 +146,7 @@ $ syscare reboot
 * 当前仅支持gcc / g++编译器；
 * 编译器需要支持```-gdwarf``` ```-ffunction-sections``` ```-fdata-sections```参数；
 * 仅支持DWARF格式的调试信息，且不支持g3等级；
+* 不支持修改全局变量；
 * 暂不支持交叉编译；
 * 暂不支持汇编修改；
 * 暂不支持新增外部符号（动态库依赖）；
@@ -156,7 +157,8 @@ $ syscare reboot
 * 暂不支持C++ exception修改；
 * 暂不支持group section: ```-g3```编译选项，特定编译优化选项，特定gcc plugin等；
 * 暂不支持新增ifunc: ```__attribute__((ifunc("foo")))```；
-* 暂不支持新增TLS变量: ```__thread int foo```。
+* 暂不支持新增TLS变量: ```__thread int foo```；
+* 暂不支持编译开启LTO选项。
 
 
 
