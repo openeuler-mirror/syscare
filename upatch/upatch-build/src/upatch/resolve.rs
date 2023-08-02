@@ -51,7 +51,8 @@ pub fn resolve_upatch<P: AsRef<Path>, Q: AsRef<Path>>(
         let sym_info = symbol.get_st_info();
         if debug_info_e_type == ET_DYN
             && elf_st_bind(sym_info) == STB_GLOBAL
-            && elf_st_type(sym_info) == STT_OBJECT
+            && (elf_st_type(sym_info) == STT_OBJECT || elf_st_type(sym_info) == STT_FUNC)
+            && symbol.get_st_shndx() == SHN_LIVEPATCH
         {
             symbol.set_st_shndx(SHN_UNDEF);
         }
