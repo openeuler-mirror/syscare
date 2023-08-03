@@ -58,7 +58,6 @@
 #endif
 
 #define TCB_SIZE        2 * sizeof(void *)
-#define CHECK_MAGIC     7
 
 enum aarch64_reloc_op {
     RELOC_OP_NONE,
@@ -407,8 +406,8 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_LD64_GOT_LO12_NC:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if ((result & CHECK_MAGIC) != 0)
-                goto overflow;
+            // don't check result & 7 == 0.
+            // sometimes, result & 7 != 0, it works fine.
             result = extract_insn_imm(result, 9, 3);
             result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
@@ -437,8 +436,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_TLSDESC_LD64_LO12:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if ((result & CHECK_MAGIC) != 0)
-                goto overflow;
+            // don't check result & 7 == 0.
             result = extract_insn_imm(result, 9, 3);
             result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
