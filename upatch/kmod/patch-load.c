@@ -533,7 +533,8 @@ resolve_symbol(struct running_elf_info *elf_info, const char *name, Elf_Sym patc
      * TODO: consider check PIE
      */
     if (elf_info->hdr->e_type == ET_DYN &&
-        ELF_ST_BIND(patch_sym.st_info) == STB_GLOBAL && ELF_ST_TYPE(patch_sym.st_info) == STT_OBJECT)
+        ELF_ST_BIND(patch_sym.st_info) == STB_GLOBAL &&
+        (ELF_ST_TYPE(patch_sym.st_info) == STT_OBJECT || ELF_ST_TYPE(patch_sym.st_info) == STT_FUNC))
         goto out_plt;
 
     /* handle symbol table first, in most cases, symbol table does not exist */

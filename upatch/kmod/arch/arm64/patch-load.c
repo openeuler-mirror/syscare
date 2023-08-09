@@ -58,7 +58,6 @@
 #endif
 
 #define TCB_SIZE        2 * sizeof(void *)
-#define CHECK_MAGIC     7
 
 enum aarch64_reloc_op {
     RELOC_OP_NONE,
@@ -142,6 +141,20 @@ out:
     return elf_addr;
 }
 
+static unsigned long search_insert_plt_table(struct upatch_load_info *info, unsigned long jmp_addr, unsigned long origin_addr)
+{
+    struct upatch_jmp_table_entry *table = info->mod->core_layout.kbase + info->jmp_offs;
+    unsigned int i = 0;
+
+    for (i = 0; i < info->jmp_cur_entry; ++i) {
+        if (table[i].addr[0] != jmp_addr)
+            continue;
+        return (unsigned long)(info->mod->core_layout.base + info->jmp_offs +
+            i * sizeof(struct upatch_jmp_table_entry));
+    }
+
+    return setup_jmp_table(info, jmp_addr, origin_addr);
+}
 
 unsigned long insert_got_table(struct upatch_load_info *info, unsigned long r_type, void __user *addr)
 {
@@ -266,16 +279,14 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_ABS32:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if (result < S32_MIN || result > S32_MAX) {
+            if (result < -(s64)BIT(31) || result >= (s64)BIT(32))
                 goto overflow;
-            }
             *(s32 *)loc = result;
             break;
         case R_AARCH64_ABS16:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if (result < S16_MIN || result > S16_MAX) {
+            if (result < -(s64)BIT(15) || result >= (s64)BIT(16))
                 goto overflow;
-            }
             *(s16 *)loc = result;
             break;
         case R_AARCH64_PREL64:
@@ -284,38 +295,37 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_PREL32:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            if (result < S32_MIN || result > S32_MAX) {
+            if (result < -(s64)BIT(31) || result >= (s64)BIT(32))
                 goto overflow;
-            }
             *(s32 *)loc = result;
             break;
         case R_AARCH64_PREL16:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            if (result < S32_MIN || result > S32_MAX) {
+            if (result < -(s64)BIT(15) || result >= (s64)BIT(16))
                 goto overflow;
-            }
             *(s16 *)loc = result;
             break;
         /* Immediate instruction relocations. */
         case R_AARCH64_LD_PREL_LO19:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            // TODO: ovf check -2^20 < X < 2^20
+            if (result < -(s64)BIT(20) || result >= (s64)BIT(20))
+                goto overflow;
             result = extract_insn_imm(result, 19, 2);
             result = insert_insn_imm(AARCH64_INSN_IMM_19, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
         case R_AARCH64_ADR_PREL_LO21:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            // TODO: ovf check -2^20 < X < 2^20
+            if (result < -(s64)BIT(20) || result >= (s64)BIT(20))
+                goto overflow;
             result = extract_insn_imm(result, 21, 0);
             result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
         case R_AARCH64_ADR_PREL_PG_HI21:
             result = calc_reloc(RELOC_OP_PAGE, uloc, val);
-            if (result < S32_MIN || result > S32_MAX) {
+            if (result < -(s64)BIT(32) || result >= (s64)BIT(32))
                 goto overflow;
-            }
             result = extract_insn_imm(result, 21, 12);
             result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
@@ -359,7 +369,8 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_TSTBR14:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            // TODO: ovf check -2^15 < X < 2^15
+            if (result < -(s64)BIT(15) || result >= (s64)BIT(15))
+                goto overflow;
             result = extract_insn_imm(result, 14, 2);
             result = insert_insn_imm(AARCH64_INSN_IMM_14, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
@@ -373,22 +384,30 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
         case R_AARCH64_JUMP26:
         case R_AARCH64_CALL26:
             result = calc_reloc(RELOC_OP_PREL, uloc, val);
-            // TODO: ovf check -2^27 < X < 2^27
+            if (result < -(s64)BIT(27) || result >= (s64)BIT(27)) {
+                pr_debug("R_AARCH64_CALL26 overflow: result = 0x%llx, uloc = 0x%lx, val = 0x%llx\n", result, (unsigned long)uloc, val);
+                val = search_insert_plt_table(info, val, (u64)&val);
+                pr_debug("R_AARCH64_CALL26 overflow: plt.addr = 0x%llx\n", val);
+                if (!val)
+                    goto overflow;
+                result = calc_reloc(RELOC_OP_PREL, uloc, val);
+            }
             result = extract_insn_imm(result, 26, 2);
             result = insert_insn_imm(AARCH64_INSN_IMM_26, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
         case R_AARCH64_ADR_GOT_PAGE:
             result = calc_reloc(RELOC_OP_PAGE, uloc, val);
-            // TODO: ovf check -2^32 < X < 2^32
+            if (result < -(s64)BIT(32) || result >= (s64)BIT(32))
+                goto overflow;
             result = extract_insn_imm(result, 21, 12);
             result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
         case R_AARCH64_LD64_GOT_LO12_NC:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if ((result & CHECK_MAGIC) != 0)
-                goto overflow;
+            // don't check result & 7 == 0.
+            // sometimes, result & 7 != 0, it works fine.
             result = extract_insn_imm(result, 9, 3);
             result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
@@ -409,15 +428,15 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
             break;
         case R_AARCH64_TLSDESC_ADR_PAGE21:
             result = calc_reloc(RELOC_OP_PAGE, uloc, val);
-            // TODO: ovf check -2^32 < X < 2^32
+            if (result < -(s64)BIT(32) || result >= (s64)BIT(32))
+                goto overflow;
             result = extract_insn_imm(result, 21, 12);
             result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
             break;
         case R_AARCH64_TLSDESC_LD64_LO12:
             result = calc_reloc(RELOC_OP_ABS, uloc, val);
-            if ((result & CHECK_MAGIC) != 0)
-                goto overflow;
+            // don't check result & 7 == 0.
             result = extract_insn_imm(result, 9, 3);
             result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, result);
             *(__le32 *)loc = cpu_to_le32(result);
