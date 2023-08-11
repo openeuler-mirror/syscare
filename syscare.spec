@@ -6,7 +6,7 @@
 
 Name:           syscare
 Version:        1.0.2
-Release:        4
+Release:        5
 Summary:        system hot-fix service
 
 License:        MulanPSL-2.0 and GPL-2.0-only
@@ -117,6 +117,9 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
 
 %changelog
+* Fri Aug 11 2023 renoseven<dev@renoseven.net> - 1.0.2-5
+- Fix patch release miscalculate issue
+- Fix patch relocation failure on aarch64
 * Wed Jun 28 2023 renoseven<dev@renoseven.net> - 1.0.2-4
 - Fix builder check failure issue
 * Sun Jun 25 2023 renoseven<dev@renoseven.net> - 1.0.2-3
