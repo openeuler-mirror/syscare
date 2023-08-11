@@ -136,7 +136,7 @@ impl PatchBuildCLI {
     ) -> std::io::Result<()> {
         info!("Completing build parameters");
 
-        let mut args = &mut self.args;
+        let args = &mut self.args;
         let source_pkg_root = self.workdir.package.source.as_path();
 
         debug!("- Extracting source package");
@@ -159,7 +159,9 @@ impl PatchBuildCLI {
                     debug!("- Applying patch metadata");
 
                     // Override path release
-                    args.patch_release = u32::max(args.patch_release, patch_info.release + 1);
+                    if args.patch_version == patch_info.version {
+                        args.patch_release = u32::max(args.patch_release, patch_info.release + 1);
+                    }
 
                     // Overide path list
                     let mut new_patches = fs::list_files_by_ext(
