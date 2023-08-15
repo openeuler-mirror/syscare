@@ -1,0 +1,84 @@
+use std::rc::Rc;
+
+use anyhow::Result;
+use function_name::named;
+
+use syscared::abi::patch::{PatchInfo, PatchListRecord, PatchStateRecord, PatchTargetRecord};
+
+use crate::rpc::{RpcArguments, RpcRemote};
+
+pub struct PatchProxy {
+    remote: Rc<RpcRemote>,
+}
+
+impl PatchProxy {
+    #[named]
+    pub fn apply_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn remove_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn active_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn deactive_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn accept_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn get_patch_list(&self) -> Result<Vec<PatchListRecord>> {
+        self.remote.call(function_name!())
+    }
+
+    #[named]
+    pub fn get_patch_status(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn get_patch_info(&self, identifier: &str) -> Result<PatchInfo> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn get_patch_target(&self, identifier: &str) -> Result<Vec<PatchTargetRecord>> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
+    pub fn save_patch_status(&self) -> Result<()> {
+        self.remote.call(function_name!())
+    }
+
+    #[named]
+    pub fn restore_patch_status(&self, accepted_only: bool) -> Result<()> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(accepted_only))
+    }
+}
+
+impl From<Rc<RpcRemote>> for PatchProxy {
+    fn from(remote: Rc<RpcRemote>) -> Self {
+        Self { remote }
+    }
+}

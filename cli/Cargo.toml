@@ -9,11 +9,13 @@ rust-version = "1.51"
 build        = "build.rs"
 
 [dependencies]
-syscared     = { package = "syscared", path = "../daemon" }
-anyhow       = { version = "1.0" }
-clap         = { version = "3.2.23", features = ["derive"] }
-flexi_logger = { version = "0.25" }
-lazy_static  = { version = "1.0" }
-log          = { version = "0.4" }
-parking_lot  = { version = "0.12" }
-mio          = { version = "0.8", features = ["net"] }
+common        = { package = "syscare-common", path = "../common" }
+syscared      = { package = "syscared", path = "../daemon" }
+anyhow        = { version = "1.0" }
+clap          = { version = "3.2.23", features = ["derive"] }
+flexi_logger  = { version = "0.25" }
+lazy_static   = { version = "1.0" }
+log           = { version = "0.4" }
+parking_lot   = { version = "0.12" }
+jsonrpc       = { version = "0.16", features = ["simple_uds"] }
+function_name = { version = "0.3" }
