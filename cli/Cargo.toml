@@ -4,15 +4,15 @@ version      = "1.0.2"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare command line interface"
 license      = "MulanPSL-2.0"
-edition      = "2018"
-rust-version = "1.51"
+edition      = "2021"
+rust-version = "1.64"
 build        = "build.rs"
 
 [dependencies]
 common        = { package = "syscare-common", path = "../common" }
 syscared      = { package = "syscared", path = "../daemon" }
 anyhow        = { version = "1.0" }
-clap          = { version = "3.2.23", features = ["derive"] }
+clap          = { version = "4.3.21", features = ["derive"] }
 flexi_logger  = { version = "0.25" }
 lazy_static   = { version = "1.0" }
 log           = { version = "0.4" }
