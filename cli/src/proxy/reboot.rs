@@ -11,7 +11,7 @@ pub struct RebootProxy {
 
 impl RebootProxy {
     #[named]
-    pub fn reboot(&self, target: Option<String>, force: bool) -> Result<()> {
+    pub fn fast_reboot(&self, target: Option<String>, force: bool) -> Result<()> {
         self.remote
             .call_with_args(function_name!(), RpcArguments::new().arg(target).arg(force))
     }

@@ -3,7 +3,7 @@ use std::rc::Rc;
 use anyhow::Result;
 use function_name::named;
 
-use syscared::abi::patch::{PatchInfo, PatchListRecord, PatchStateRecord, PatchTargetRecord};
+use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
 use crate::rpc::{RpcArguments, RpcRemote};
 
@@ -60,7 +60,7 @@ impl PatchProxy {
     }
 
     #[named]
-    pub fn get_patch_target(&self, identifier: &str) -> Result<Vec<PatchTargetRecord>> {
+    pub fn get_patch_target(&self, identifier: &str) -> Result<PackageInfo> {
         self.remote
             .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
     }

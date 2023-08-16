@@ -1,7 +1,8 @@
 use anyhow::Result;
 use log::info;
 
-use syscared::abi::patch::{PatchInfo, PatchListRecord, PatchStateRecord, PatchTargetRecord};
+use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
+use syscare_common::util::fs;
 
 use crate::{args::CliCommand, proxy::PatchProxy};
 
@@ -19,18 +20,53 @@ impl PatchCommandExecutor {
 
 impl PatchCommandExecutor {
     fn show_patch_info(patch_info: PatchInfo) {
-        info!("{:?}", patch_info)
+        const PATCH_FLAG_NONE: &str = "(none)";
+
+        let patch_elfs = match patch_info.entities.is_empty() {
+            true => PATCH_FLAG_NONE.to_owned(),
+            false => patch_info
+                .entities
+                .iter()
+                .map(|entity| {
+                    format!(
+                        "{}, ",
+                        fs::file_name(&entity.patch_target).to_string_lossy()
+                    )
+                })
+                .collect::<String>()
+                .trim_end_matches(", ")
+                .to_string(),
+        };
+
+        info!("uuid:        {}", patch_info.uuid);
+        info!("name:        {}", patch_info.name);
+        info!("version:     {}", patch_info.version);
+        info!("release:     {}", patch_info.release);
+        info!("arch:        {}", patch_info.arch);
+        info!("type:        {}", patch_info.kind);
+        info!("target:      {}", patch_info.target.short_name());
+        info!("target_elf:  {}", patch_elfs);
+        info!("license:     {}", patch_info.target.license);
+        info!("description: {}", patch_info.description);
+        info!("patch:");
+        for patch_file in patch_info.patches {
+            info!("{}", patch_file.name.to_string_lossy())
+        }
+    }
+
+    fn show_patch_target(package: PackageInfo) {
+        info!("name:    {}", package.name);
+        info!("type:    {}", package.kind);
+        info!("arch:    {}", package.arch);
+        info!("epoch:   {}", package.epoch);
+        info!("version: {}", package.version);
+        info!("release: {}", package.release);
+        info!("license: {}", package.license);
     }
 
     fn show_patch_state(list: impl IntoIterator<Item = PatchStateRecord>) {
         for record in list {
             info!("{}: {}", record.name, record.status)
-        }
-    }
-
-    fn show_patch_target(list: impl IntoIterator<Item = PatchTargetRecord>) {
-        for record in list {
-            info!("{}: {}", record.name, record.target.full_name())
         }
     }
 

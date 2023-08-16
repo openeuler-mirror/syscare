@@ -17,7 +17,7 @@ impl RebootCommandExecutor {
 impl CommandExecutor for RebootCommandExecutor {
     fn invoke(&self, command: &CliCommand) -> Result<()> {
         if let CliCommand::Reboot { target, force } = command {
-            self.proxy.reboot(target.to_owned(), *force)?;
+            self.proxy.fast_reboot(target.to_owned(), *force)?;
         }
         Ok(())
     }
