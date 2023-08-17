@@ -1,7 +1,8 @@
+use syscare_abi::PatchInfo;
+
 use crate::cli::CliArguments;
 
 use super::patch_builder_args::PatchBuilderArguments;
-use super::patch_info::PatchInfo;
 
 pub trait PatchBuilder {
     fn parse_builder_args(

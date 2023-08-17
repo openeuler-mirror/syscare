@@ -4,13 +4,16 @@ use std::path::{Path, PathBuf};
 
 use which::which;
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
-use common::util::fs;
-use common::util::os_str::OsStringExt;
+use syscare_abi::PatchInfo;
+use syscare_common::util::{
+    ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs},
+    fs,
+    os_str::OsStringExt,
+};
 
 use crate::cli::{CliArguments, CliWorkDir};
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
@@ -208,7 +211,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     ) {
                         patch_info
                             .entities
-                            .push(PatchEntity::new(patch_file, elf_file)?);
+                            .push(PatchHelper::parse_patch_entity(patch_file, elf_file)?);
                     }
                 }
 

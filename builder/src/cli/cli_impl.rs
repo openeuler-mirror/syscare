@@ -1,14 +1,16 @@
-use common::os;
-use common::util::fs::TraverseOptions;
-use common::util::{fs, serde};
+use syscare_abi::{PackageInfo, PackageType};
+use syscare_abi::{PatchInfo, PATCH_INFO_MAGIC};
+use syscare_common::os;
+use syscare_common::util::fs::TraverseOptions;
+use syscare_common::util::{fs, serde};
 
 use log::LevelFilter;
 use log::{debug, error, info, warn};
 
-use crate::package::{PackageInfo, PackageType, DEBUGINFO_FILE_EXT, PKG_FILE_EXT};
+use crate::package::{PackageHelper, DEBUGINFO_FILE_EXT, PKG_FILE_EXT};
 use crate::package::{RpmBuilder, RpmHelper};
 use crate::patch::PatchBuilderFactory;
-use crate::patch::{PatchInfo, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME, PATCH_INFO_MAGIC};
+use crate::patch::{PatchHelper, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME};
 
 use super::args::CliArguments;
 use super::logger::Logger;
@@ -80,7 +82,7 @@ impl PatchBuildCLI {
 
     fn collect_package_info(&self) -> std::io::Result<(PackageInfo, Vec<PackageInfo>)> {
         info!("Collecting package info");
-        let src_pkg_info = PackageInfo::new(&self.args.source)?;
+        let src_pkg_info = PackageHelper::parse_pkg_info(&self.args.source)?;
         if src_pkg_info.kind != PackageType::SourcePackage {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -93,12 +95,12 @@ impl PatchBuildCLI {
         info!("------------------------------");
         info!("Source package");
         info!("------------------------------");
-        src_pkg_info.print_log(log::Level::Info);
+        PackageHelper::print_pkg_info(&src_pkg_info, log::Level::Info);
         info!("------------------------------");
 
         let mut dbg_pkg_infos = Vec::with_capacity(self.args.debuginfo.len());
         for pkg_path in &self.args.debuginfo {
-            let pkg_info = PackageInfo::new(pkg_path)?;
+            let pkg_info = PackageHelper::parse_pkg_info(pkg_path)?;
             if pkg_info.kind != PackageType::BinaryPackage {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidInput,
@@ -108,7 +110,7 @@ impl PatchBuildCLI {
 
             info!("Debuginfo package");
             info!("------------------------------");
-            pkg_info.print_log(log::Level::Info);
+            PackageHelper::print_pkg_info(&pkg_info, log::Level::Info);
             info!("------------------------------");
             dbg_pkg_infos.push(pkg_info);
         }
@@ -119,11 +121,11 @@ impl PatchBuildCLI {
     fn collect_patch_info(&self, target_package: &PackageInfo) -> PatchInfo {
         info!("Collecting patch info");
 
-        let patch_info = PatchInfo::new(&self.args, target_package);
+        let patch_info = PatchHelper::parse_patch_info(&self.args, target_package);
         info!("------------------------------");
         info!("Syscare Patch");
         info!("------------------------------");
-        patch_info.print_log(log::Level::Info);
+        PatchHelper::print_patch_info(&patch_info, log::Level::Info);
         info!("------------------------------");
 
         patch_info

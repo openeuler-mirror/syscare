@@ -1,14 +1,14 @@
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use common::util::fs;
-use common::util::os_str::OsStrExt;
+use syscare_abi::PackageInfo;
+use syscare_abi::{PatchInfo, PatchType};
+use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use syscare_common::util::fs;
+use syscare_common::util::os_str::OsStrExt;
 
-use crate::patch::{PatchInfo, PatchType};
 use crate::workdir::PackageBuildRoot;
 
-use super::package_info::PackageInfo;
 use super::rpm_spec_helper::{RpmSpecHelper, SPEC_FILE_EXT};
 
 pub const PKG_FILE_EXT: &str = "rpm";

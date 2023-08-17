@@ -1,12 +1,12 @@
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
-use common::util::ext_cmd::ExternCommandArgs;
-use common::util::fs;
-use common::util::os_str::OsStringExt;
+use syscare_common::util::ext_cmd::ExternCommandArgs;
+use syscare_common::util::fs;
+use syscare_common::util::os_str::OsStringExt;
 
-use crate::patch::PatchInfo;
 use crate::workdir::PackageBuildRoot;
+use syscare_abi::PatchInfo;
 
 use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
 use super::rpm_spec_generator::RpmSpecGenerator;
@@ -76,7 +76,7 @@ impl RpmBuilder {
         let dst_pkg_name = format!(
             "{}-{}.src.{}",
             patch_info.target.short_name(),
-            patch_info.short_name(),
+            patch_info.name(),
             PKG_FILE_EXT
         );
         let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);

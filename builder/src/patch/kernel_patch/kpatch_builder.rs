@@ -1,11 +1,12 @@
 use std::ffi::OsString;
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
-use common::util::fs;
+use syscare_abi::PatchInfo;
+use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
+use syscare_common::util::fs;
 
 use crate::cli::{CliArguments, CliWorkDir};
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
 
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 use super::kpatch_helper::KernelPatchHelper;
@@ -127,7 +128,7 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
                         recursive: false,
                     },
                 ) {
-                    patch_info.entities.push(PatchEntity::new(
+                    patch_info.entities.push(PatchHelper::parse_patch_entity(
                         patch_file,
                         OsString::from(VMLINUX_FILE_NAME),
                     )?);

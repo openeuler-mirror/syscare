@@ -1,9 +1,10 @@
 use crate::cli::CliWorkDir;
 
-use super::{PatchBuilder, PatchType};
+use syscare_abi::PatchType;
 
 use super::kernel_patch::KernelPatchBuilder;
 use super::user_patch::UserPatchBuilder;
+use super::PatchBuilder;
 
 pub struct PatchBuilderFactory;
 

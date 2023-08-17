@@ -9,7 +9,7 @@ use log4rs::config::{Appender, Root};
 use log4rs::encode::pattern::PatternEncoder;
 use log4rs::Config;
 
-use common::log::LogLevelFilter;
+use syscare_common::log::LogLevelFilter;
 
 use crate::cli::CliWorkDir;
 

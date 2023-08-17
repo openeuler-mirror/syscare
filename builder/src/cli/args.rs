@@ -3,7 +3,7 @@ use std::path::PathBuf;
 use clap::Parser;
 use lazy_static::lazy_static;
 
-use common::os;
+use syscare_common::os;
 
 use super::PatchBuildCLI;
 

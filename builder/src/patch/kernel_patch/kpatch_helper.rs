@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use common::util::fs;
 use log::debug;
+use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use syscare_common::util::fs;
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 pub const KPATCH_PATCH_PREFIX: &str = "syscare";

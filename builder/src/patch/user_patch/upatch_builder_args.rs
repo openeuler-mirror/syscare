@@ -1,8 +1,9 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
+use syscare_abi::PatchFile;
+
 use crate::package::RpmElfRelation;
-use crate::patch::PatchFile;
 
 pub struct UserPatchBuilderArguments {
     pub work_dir: PathBuf,

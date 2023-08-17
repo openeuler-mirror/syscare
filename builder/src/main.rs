@@ -1,6 +1,11 @@
 use std::process::exit;
 
-use syscare_build::cli::PatchBuildCLI;
+pub mod cli;
+pub mod package;
+pub mod patch;
+pub mod workdir;
+
+use cli::PatchBuildCLI;
 
 fn main() {
     exit(PatchBuildCLI::run());
