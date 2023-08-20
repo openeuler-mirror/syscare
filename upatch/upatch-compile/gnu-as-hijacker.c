@@ -74,6 +74,6 @@ int main(int argc, char *argv[], char *envp[])
 out:
     new_index = readlink("/proc/self/exe", (char *)&original_path, PATH_MAX);
     original_path[new_index] = '\0';
-    printf("[hacked] original path is %s \n", &original_path);
+    printf("[hacked] original path is %s \n", (char *)&original_path);
     return execve((const char *)&original_path, (void *)__argv, envp);
 }

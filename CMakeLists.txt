@@ -5,6 +5,8 @@ find_package(Git QUIET)
 
 project(syscare)
 
+add_compile_options(-g -Wall -O2)
+
 # Variables
 if(NOT DEFINED BUILD_VERSION)
     set(BUILD_VERSION "dev")

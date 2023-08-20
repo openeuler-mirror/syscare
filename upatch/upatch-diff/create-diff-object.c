@@ -877,7 +877,6 @@ int main(int argc, char*argv[])
     struct running_elf relf;
 
     int num_changed, new_globals_exist;
-    int ret;
 
     memset(&arguments, 0, sizeof(arguments));
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);

@@ -63,7 +63,7 @@ generate_bpf_skel(
     "${UPATCH_HIJACKER_EBPF}.bpf.o"
     "${_skel_output}"
 )
-add_compile_options(-g -Wall)
+
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
 add_executable(${UPATCH_HIJACKER_EBPF_EXE} ${UPATCH_HIJACKER_EBPF}.c ${_skel_output})
