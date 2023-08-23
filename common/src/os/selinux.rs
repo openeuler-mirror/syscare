@@ -14,7 +14,7 @@ const SELINUX_SECURITY_CONTEXT: &str = "security.selinux";
 const SELINUX_SECURITY_CONTEXT_SPLITTER: char = ':';
 const SELINUX_SECURITY_CONTEXT_TYPE_NUM: usize = 4;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Eq)]
 pub enum SELinuxStatus {
     Permissive,
     Enforcing,

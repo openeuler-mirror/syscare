@@ -29,13 +29,9 @@ impl<'a> UserPatchBuilder<'a> {
     fn detect_compilers(&self) -> Vec<PathBuf> {
         const COMPILER_NAMES: [&str; 4] = ["cc", "gcc", "c++", "g++"];
 
-        let compiler_list = COMPILER_NAMES
-            .into_iter()
-            .map(OsString::from)
-            .collect::<Vec<_>>();
-
         // Get compiler path and filter invalid one
-        let compiler_set = compiler_list
+        let compiler_set = COMPILER_NAMES
+            .map(OsString::from)
             .into_iter()
             .filter_map(|compiler_name| {
                 which(compiler_name)
