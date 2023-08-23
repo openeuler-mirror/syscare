@@ -97,10 +97,8 @@ static int entry_get(unsigned long entry_ino, const char *entry_name,
 	ret = entry_lookup_by_name(entry_name, &entry, &entry_des);
 	if (ret == 0)
 		entry_des.ref ++;
-	else if (ret == -ENOENT)
-		entry_des_create(&entry_des, entry_ino, jumper_name, if_hijacker);
 	else
-		return ret;
+		entry_des_create(&entry_des, entry_ino, jumper_name, if_hijacker);
 
 	if (strcmp((char *)&entry_des.jumper_path, jumper_name) != 0
         || entry_des.if_hijacker != if_hijacker)
@@ -154,10 +152,7 @@ static inline bool find_hijacker_range(char start, char end, char *path,
 	const char *hijacker_path, unsigned long hijacker_ino)
 {
 	for (path[1] = start; path[1] != end + 1; path[1] ++) {
-		/* if file exists, check if it is the hijacker. */
-		if (access(path, F_OK) == 0 && check_if_hijacker(path, hijacker_ino))
-			return true;
-		else if (symlink(hijacker_path, path) == 0)
+		if (symlink(hijacker_path, path) == 0)
 			return true;
 	}
 	return false;
