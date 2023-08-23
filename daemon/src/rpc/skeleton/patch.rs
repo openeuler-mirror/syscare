@@ -1,6 +1,6 @@
-use crate::rpc::{rpc, RpcResult};
-
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
+
+use super::function::{rpc, RpcResult};
 
 #[rpc(server)]
 pub trait PatchSkeleton {

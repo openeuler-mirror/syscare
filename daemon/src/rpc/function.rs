@@ -1,8 +1,6 @@
 pub use jsonrpc_core::Result as RpcResult;
 use jsonrpc_core::{Error, ErrorCode};
-
 pub use jsonrpc_derive::rpc;
-
 use log::error;
 
 const RPC_OP_ERROR: i64 = -1;

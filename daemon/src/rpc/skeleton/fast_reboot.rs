@@ -1,4 +1,4 @@
-use crate::rpc::{rpc, RpcResult};
+use super::function::{rpc, RpcResult};
 
 #[rpc(server)]
 pub trait FastRebootSkeleton {
