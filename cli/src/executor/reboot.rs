@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{args::CliCommand, proxy::RebootProxy};
+use crate::{args::CliCommand, rpc::RebootProxy};
 
 use super::CommandExecutor;
 

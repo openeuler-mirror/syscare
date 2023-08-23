@@ -5,13 +5,17 @@ use function_name::named;
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
-use crate::rpc::{RpcArguments, RpcRemote};
+use super::{args::RpcArguments, remote::RpcRemote};
 
 pub struct PatchProxy {
     remote: Rc<RpcRemote>,
 }
 
 impl PatchProxy {
+    pub fn new(remote: Rc<RpcRemote>) -> Self {
+        Self { remote }
+    }
+
     #[named]
     pub fn apply_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
         self.remote
@@ -74,11 +78,5 @@ impl PatchProxy {
     pub fn restore_patch_status(&self, accepted_only: bool) -> Result<()> {
         self.remote
             .call_with_args(function_name!(), RpcArguments::new().arg(accepted_only))
-    }
-}
-
-impl From<Rc<RpcRemote>> for PatchProxy {
-    fn from(remote: Rc<RpcRemote>) -> Self {
-        Self { remote }
     }
 }

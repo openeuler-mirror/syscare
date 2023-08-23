@@ -4,7 +4,7 @@ use log::info;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 use syscare_common::util::fs;
 
-use crate::{args::CliCommand, proxy::PatchProxy};
+use crate::{args::CliCommand, rpc::PatchProxy};
 
 use super::CommandExecutor;
 

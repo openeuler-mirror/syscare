@@ -1,5 +1,6 @@
 mod args;
+mod proxy;
 mod remote;
 
-pub use args::RpcArguments;
-pub use remote::RpcRemote;
+pub use proxy::*;
+pub use remote::*;
