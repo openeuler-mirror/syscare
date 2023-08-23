@@ -3,53 +3,56 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use log::{debug, info};
 
+use parking_lot::RwLock;
 use syscare_abi::{PatchStateRecord, PatchStatus};
 
 use super::manager::{Patch, PatchManager};
 
 type TransationRecord = (Arc<Patch>, PatchStatus);
 
-pub struct PatchTransaction<'a, F> {
+pub struct PatchTransaction<F> {
     name: String,
-    manager: &'a PatchManager,
+    patch_manager: Arc<RwLock<PatchManager>>,
     action: F,
-    patch_list: Vec<Arc<Patch>>,
+    identifier: String,
     finish_list: Vec<TransationRecord>,
 }
 
-impl<'a, F> PatchTransaction<'a, F>
+impl<F> PatchTransaction<F>
 where
-    F: Fn(&PatchManager, &Patch) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
 {
     pub fn new(
         name: String,
-        manager: &'a PatchManager,
+        patch_manager: Arc<RwLock<PatchManager>>,
         action: F,
-        patch_list: Vec<Arc<Patch>>,
-    ) -> Self {
-        let patch_num = patch_list.len();
+        identifier: String,
+    ) -> Result<Self> {
         let instance = Self {
             name,
-            manager,
+            patch_manager,
             action,
-            patch_list,
-            finish_list: Vec::with_capacity(patch_num),
+            identifier,
+            finish_list: Vec::new(),
         };
 
         debug!("{} is created", instance);
-        instance
+        Ok(instance)
     }
 }
 
-impl<F> PatchTransaction<'_, F>
+impl<F> PatchTransaction<F>
 where
-    F: Fn(&PatchManager, &Patch) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
 {
     fn start(&mut self) -> Result<Vec<PatchStateRecord>> {
-        let mut records = Vec::with_capacity(self.patch_list.len());
-        while let Some(patch) = self.patch_list.pop() {
-            let old_status = self.manager.get_patch_status(&patch)?;
-            let new_status = (self.action)(self.manager, &patch)?;
+        let mut manager = self.patch_manager.write();
+        let mut patch_list = manager.match_patch(&self.identifier)?;
+        let mut records = Vec::with_capacity(patch_list.len());
+
+        while let Some(patch) = patch_list.pop() {
+            let old_status = manager.get_patch_status(&patch)?;
+            let new_status = (self.action)(&mut manager, &patch)?;
 
             records.push(PatchStateRecord {
                 name: patch.to_string(),
@@ -61,8 +64,9 @@ where
     }
 
     fn rollback(&mut self) -> Result<()> {
+        let mut manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            self.manager.do_status_transition(&patch, status)?;
+            manager.do_status_transition(&patch, status)?;
         }
         Ok(())
     }
@@ -87,7 +91,7 @@ where
     }
 }
 
-impl<F> std::fmt::Display for PatchTransaction<'_, F> {
+impl<F> std::fmt::Display for PatchTransaction<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("Transaction \"{}\"", self.name))
     }

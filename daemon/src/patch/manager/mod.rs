@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     collections::HashMap,
     ops::Deref,
     path::{Path, PathBuf},
@@ -9,7 +10,6 @@ use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn};
-use parking_lot::RwLock;
 
 use syscare_abi::{PatchStatus, PatchType};
 use syscare_common::util::{fs, serde};
@@ -29,7 +29,7 @@ const PATCH_INSTALL_DIR: &str = "patches";
 const PATCH_STATUS_FILE: &str = "patch_status";
 
 type Transition = (PatchStatus, PatchStatus);
-type TransitionAction = &'static (dyn Fn(&PatchManager, &Patch) -> Result<()> + Sync);
+type TransitionAction = &'static (dyn Fn(&mut PatchManager, &Patch) -> Result<()> + Sync);
 
 const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
 const PATCH_REMOVE: TransitionAction = &PatchManager::driver_remove_patch;
@@ -107,27 +107,24 @@ struct PatchEntry {
 }
 
 pub struct PatchManager {
-    patch_root: RwLock<PathBuf>,
-    entry_map: RwLock<IndexMap<String, PatchEntry>>,
+    patch_root: PathBuf,
+    entry_map: IndexMap<String, PatchEntry>,
 }
 
 impl PatchManager {
-    pub fn new() -> Self {
-        Self {
-            patch_root: Default::default(),
-            entry_map: Default::default(),
-        }
+    pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
+        let mut instance = Self {
+            patch_root: patch_root.as_ref().to_owned(),
+            entry_map: IndexMap::new(),
+        };
+
+        instance.rescan()?;
+        Ok(instance)
     }
 
-    pub fn initialize<P: AsRef<Path>>(&self, patch_root: P) -> Result<()> {
-        *self.patch_root.write() = patch_root.as_ref().to_path_buf();
-
-        self.rescan()
-    }
-
-    pub fn match_patch(&self, identifier: String) -> Result<Vec<Arc<Patch>>> {
+    pub fn match_patch(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         debug!("Matching patch by \"{}\"...", identifier);
-        let match_result = match self.find_patch_by_uuid(&identifier) {
+        let match_result = match self.find_patch_by_uuid(identifier) {
             Ok(patch) => vec![patch],
             Err(_) => self.find_patch_by_name(&identifier)?,
         };
@@ -142,19 +139,18 @@ impl PatchManager {
 
     pub fn get_patch_list(&self) -> Vec<Arc<Patch>> {
         self.entry_map
-            .read()
             .values()
             .map(|entry| entry.patch.clone())
             .collect::<Vec<_>>()
     }
 
-    pub fn get_patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn get_patch_status(&mut self, patch: &Patch) -> Result<PatchStatus> {
         let mut status = self
             .entry_map
-            .read()
             .get(&patch.uuid)
             .with_context(|| format!("Cannot find patch \"{}\"", patch))?
             .status;
+
         if status == PatchStatus::Unknown {
             status = self.driver_get_patch_status(patch)?;
             self.set_patch_status(patch, status)
@@ -164,12 +160,11 @@ impl PatchManager {
         Ok(status)
     }
 
-    pub fn set_patch_status(&self, patch: &Patch, value: PatchStatus) -> Result<()> {
+    pub fn set_patch_status(&mut self, patch: &Patch, value: PatchStatus) -> Result<()> {
         if value == PatchStatus::Unknown {
             bail!("Cannot set patch {} status to {}", patch, value);
         }
         self.entry_map
-            .write()
             .get_mut(&patch.uuid)
             .with_context(|| format!("Cannot find patch \"{}\"", patch))?
             .status = value;
@@ -177,17 +172,17 @@ impl PatchManager {
         Ok(())
     }
 
-    pub fn apply_patch(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn apply_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
         info!("Apply patch \"{}\"", patch);
         self.do_status_transition(patch, PatchStatus::Actived)
     }
 
-    pub fn remove_patch(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn remove_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
         info!("Remove patch \"{}\"", patch);
         self.do_status_transition(patch, PatchStatus::NotApplied)
     }
 
-    pub fn active_patch(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn active_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
         info!("Active patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Actived;
@@ -198,7 +193,7 @@ impl PatchManager {
         self.do_status_transition(patch, target_status)
     }
 
-    pub fn deactive_patch(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn deactive_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
         info!("Deactive patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Deactived;
@@ -209,7 +204,7 @@ impl PatchManager {
         self.do_status_transition(patch, target_status)
     }
 
-    pub fn accept_patch(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn accept_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
         info!("Accept patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Accepted;
@@ -220,7 +215,7 @@ impl PatchManager {
         self.do_status_transition(patch, target_status)
     }
 
-    pub fn save_patch_status(&self) -> Result<()> {
+    pub fn save_patch_status(&mut self) -> Result<()> {
         info!("Saving all patch status...");
 
         debug!("Updating all patch status...");
@@ -230,22 +225,21 @@ impl PatchManager {
         }
 
         let mut status_map = HashMap::new();
-        let entry_map = self.entry_map.read();
-        for (uuid, entry) in entry_map.iter() {
+        for (uuid, entry) in self.entry_map.iter() {
             status_map.insert(uuid, entry.status);
         }
 
         debug!("Writing patch status file");
-        let status_file = self.patch_root.read().join(PATCH_STATUS_FILE);
+        let status_file = self.patch_root.join(PATCH_STATUS_FILE);
         serde::serialize(&status_map, status_file).context("Failed to write patch status file")?;
 
         info!("All patch status were saved");
         Ok(())
     }
 
-    pub fn restore_patch_status(&self, accepted_only: bool) -> Result<()> {
+    pub fn restore_patch_status(&mut self, accepted_only: bool) -> Result<()> {
         debug!("Reading patch status from file...");
-        let status_file = self.patch_root.read().join(PATCH_STATUS_FILE);
+        let status_file = self.patch_root.join(PATCH_STATUS_FILE);
         let read_result = serde::deserialize::<HashMap<String, PatchStatus>, _>(status_file);
         let status_map = match read_result {
             Ok(map) => map,
@@ -285,9 +279,9 @@ impl PatchManager {
             .collect::<Vec<_>>();
         restore_list.sort_by(|(lhs_patch, lhs_status), (rhs_patch, rhs_status)| {
             match lhs_status.cmp(rhs_status) {
-                std::cmp::Ordering::Less => std::cmp::Ordering::Less,
-                std::cmp::Ordering::Equal => lhs_patch.cmp(rhs_patch),
-                std::cmp::Ordering::Greater => std::cmp::Ordering::Greater,
+                Ordering::Less => Ordering::Less,
+                Ordering::Equal => lhs_patch.cmp(rhs_patch),
+                Ordering::Greater => Ordering::Greater,
             }
         });
 
@@ -303,9 +297,9 @@ impl PatchManager {
         Ok(())
     }
 
-    pub fn rescan(&self) -> Result<()> {
-        let patch_install_dir = self.patch_root.read().join(PATCH_INSTALL_DIR);
-        let mut entry_map = self.entry_map.write();
+    pub fn rescan(&mut self) -> Result<()> {
+        let patch_install_dir = self.patch_root.join(PATCH_INSTALL_DIR);
+        let entry_map = &mut self.entry_map;
 
         // Add new patches
         for (uuid, entry) in Self::scan_patches(patch_install_dir)? {
@@ -325,7 +319,7 @@ impl PatchManager {
     }
 
     pub(super) fn do_status_transition(
-        &self,
+        &mut self,
         patch: &Patch,
         status: PatchStatus,
     ) -> Result<PatchStatus> {
@@ -406,7 +400,6 @@ impl PatchManager {
 
     fn find_patch_by_uuid(&self, uuid: &str) -> Result<Arc<Patch>> {
         self.entry_map
-            .read()
             .get(uuid)
             .map(|entry| entry.patch.clone())
             .with_context(|| format!("Cannot find patch by uuid {{{}}}", uuid))
@@ -415,7 +408,6 @@ impl PatchManager {
     fn find_patch_by_name(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         let match_result = self
             .entry_map
-            .read()
             .values()
             .filter_map(|entry| {
                 let patch = &entry.patch;
@@ -430,7 +422,7 @@ impl PatchManager {
             .collect::<Vec<_>>();
 
         if match_result.is_empty() {
-            bail!("Cannot match any patch of \"{}\"", identifier);
+            bail!("Cannot find any patch named \"{}\"", identifier);
         }
         Ok(match_result)
     }
@@ -455,7 +447,7 @@ impl PatchManager {
             .with_context(|| format!("Driver: Failed to get patch \"{}\" status", patch))
     }
 
-    fn driver_apply_patch(&self, patch: &Patch) -> Result<()> {
+    fn driver_apply_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::check)
             .with_context(|| format!("Driver: Patch \"{}\" check failed", patch))?;
 
@@ -465,32 +457,32 @@ impl PatchManager {
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn driver_remove_patch(&self, patch: &Patch) -> Result<()> {
+    fn driver_remove_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::remove)
             .with_context(|| format!("Driver: Failed to remove patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::NotApplied)
     }
 
-    fn driver_active_patch(&self, patch: &Patch) -> Result<()> {
+    fn driver_active_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::active)
             .with_context(|| format!("Driver: Failed to active patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 
-    fn driver_deactive_patch(&self, patch: &Patch) -> Result<()> {
+    fn driver_deactive_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::deactive)
             .with_context(|| format!("Driver: Failed to deactive patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn do_patch_accept(&self, patch: &Patch) -> Result<()> {
+    fn do_patch_accept(&mut self, patch: &Patch) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Accepted)
     }
 
-    fn do_patch_decline(&self, patch: &Patch) -> Result<()> {
+    fn do_patch_decline(&mut self, patch: &Patch) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 }
