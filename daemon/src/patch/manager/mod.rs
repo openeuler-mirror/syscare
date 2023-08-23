@@ -9,7 +9,7 @@ use std::{
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn};
+use log::{debug, error, info, trace, warn};
 
 use syscare_abi::{PatchStatus, PatchType};
 use syscare_common::util::{fs, serde};
@@ -25,8 +25,9 @@ pub use patch::Patch;
 use patch_driver::PatchDriver;
 use user_patch_driver::UserPatchDriver;
 
+pub const PATCH_INFO_FILE_NAME: &str = "patch_info";
 const PATCH_INSTALL_DIR: &str = "patches";
-const PATCH_STATUS_FILE: &str = "patch_status";
+const PATCH_STATUS_FILE_NAME: &str = "patch_status";
 
 type Transition = (PatchStatus, PatchStatus);
 type TransitionAction = &'static (dyn Fn(&mut PatchManager, &Patch) -> Result<()> + Sync);
@@ -107,32 +108,39 @@ struct PatchEntry {
 }
 
 pub struct PatchManager {
-    patch_root: PathBuf,
+    patch_install_dir: PathBuf,
+    patch_status_file: PathBuf,
     entry_map: IndexMap<String, PatchEntry>,
 }
 
 impl PatchManager {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
-        let mut instance = Self {
-            patch_root: patch_root.as_ref().to_owned(),
-            entry_map: IndexMap::new(),
-        };
+        let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
+        let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
+        let entry_map = Self::scan_patches(&patch_install_dir)?;
 
-        instance.rescan()?;
-        Ok(instance)
+        Ok(Self {
+            patch_install_dir,
+            patch_status_file,
+            entry_map,
+        })
+    }
+
+    pub fn patch_install_dir(&self) -> &Path {
+        &self.patch_install_dir
     }
 
     pub fn match_patch(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         debug!("Matching patch by \"{}\"...", identifier);
         let match_result = match self.find_patch_by_uuid(identifier) {
             Ok(patch) => vec![patch],
-            Err(_) => self.find_patch_by_name(&identifier)?,
+            Err(_) => self.find_patch_by_name(identifier)?,
         };
 
         for patch in &match_result {
             debug!("Matched \"{}\"", patch)
         }
-        debug!("Found {} patch(es)", match_result.len());
+        debug!("Matched {} patch(es)", match_result.len());
 
         Ok(match_result)
     }
@@ -230,8 +238,8 @@ impl PatchManager {
         }
 
         debug!("Writing patch status file");
-        let status_file = self.patch_root.join(PATCH_STATUS_FILE);
-        serde::serialize(&status_map, status_file).context("Failed to write patch status file")?;
+        serde::serialize(&status_map, &self.patch_status_file)
+            .context("Failed to write patch status file")?;
 
         info!("All patch status were saved");
         Ok(())
@@ -239,18 +247,17 @@ impl PatchManager {
 
     pub fn restore_patch_status(&mut self, accepted_only: bool) -> Result<()> {
         debug!("Reading patch status from file...");
-        let status_file = self.patch_root.join(PATCH_STATUS_FILE);
-        let read_result = serde::deserialize::<HashMap<String, PatchStatus>, _>(status_file);
-        let status_map = match read_result {
-            Ok(map) => map,
-            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
-                warn!("Cannot find patch status file");
-                return Ok(());
-            }
-            Err(_) => {
-                bail!("Failed to read patch status");
-            }
-        };
+        let status_map =
+            match serde::deserialize::<HashMap<String, PatchStatus>, _>(&self.patch_status_file) {
+                Ok(map) => map,
+                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
+                    warn!("Cannot find patch status file");
+                    return Ok(());
+                }
+                Err(_) => {
+                    bail!("Failed to read patch status");
+                }
+            };
 
         /*
          * To ensure that we won't load multiple patches for same target at the same time,
@@ -297,13 +304,21 @@ impl PatchManager {
         Ok(())
     }
 
-    pub fn rescan(&mut self) -> Result<()> {
-        let patch_install_dir = self.patch_root.join(PATCH_INSTALL_DIR);
+    pub fn rescan_patches(&mut self) -> Result<()> {
         let entry_map = &mut self.entry_map;
+        let new_patch_list = Self::scan_patches(&self.patch_install_dir)?;
 
-        // Add new patches
-        for (uuid, entry) in Self::scan_patches(patch_install_dir)? {
+        // Delete already removed patch
+        for uuid in entry_map.keys().cloned().collect::<Vec<_>>() {
+            if !new_patch_list.contains_key(&uuid) {
+                trace!("Remove patch {{{}}} from patch manager", uuid);
+                entry_map.remove(&uuid);
+            }
+        }
+        // Insert new installed patch
+        for (uuid, entry) in new_patch_list {
             if !entry_map.contains_key(&uuid) {
+                trace!("Insert patch {{{}}} from patch manager", uuid);
                 entry_map.insert(uuid, entry);
             }
         }
@@ -361,10 +376,10 @@ impl PatchManager {
 }
 
 impl PatchManager {
-    fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<Vec<(String, PatchEntry)>> {
+    fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<IndexMap<String, PatchEntry>> {
         const TRAVERSE_OPTION: fs::TraverseOptions = fs::TraverseOptions { recursive: false };
 
-        let mut patch_list = Vec::new();
+        let mut patch_map = IndexMap::new();
 
         info!(
             "Scanning patches from \"{}\"...",
@@ -381,21 +396,21 @@ impl PatchManager {
                 Ok(patches) => {
                     for patch in patches {
                         debug!("Detected patch \"{}\"", patch);
-                        patch_list.push((
+                        patch_map.insert(
                             patch.uuid.clone(),
                             PatchEntry {
                                 patch: Arc::new(patch),
                                 status: PatchStatus::Unknown,
                             },
-                        ));
+                        );
                     }
                 }
                 Err(e) => error!("{:?}", e),
             }
         }
-        info!("Found {} patch(es)", patch_list.len());
+        info!("Found {} patch(es)", patch_map.len());
 
-        Ok(patch_list)
+        Ok(patch_map)
     }
 
     fn find_patch_by_uuid(&self, uuid: &str) -> Result<Arc<Patch>> {
@@ -422,7 +437,7 @@ impl PatchManager {
             .collect::<Vec<_>>();
 
         if match_result.is_empty() {
-            bail!("Cannot find any patch named \"{}\"", identifier);
+            bail!("Cannot match any patch named \"{}\"", identifier);
         }
         Ok(match_result)
     }

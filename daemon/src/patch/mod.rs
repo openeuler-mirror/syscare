@@ -6,6 +6,7 @@ use parking_lot::RwLock;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
 mod manager;
+mod monitor;
 mod skeleton;
 mod transaction;
 
@@ -15,14 +16,21 @@ use transaction::PatchTransaction;
 
 use crate::rpc::{RpcFunction, RpcResult};
 
+use self::monitor::PatchMonitor;
+
 pub struct PatchSkeletonImpl {
     patch_manager: Arc<RwLock<PatchManager>>,
+    _patch_monitor: PatchMonitor,
 }
 
 impl PatchSkeletonImpl {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
+        let patch_manager = Arc::new(RwLock::new(PatchManager::new(patch_root)?));
+        let patch_monitor = PatchMonitor::new(patch_manager.clone())?;
+
         Ok(Self {
-            patch_manager: Arc::new(RwLock::new(PatchManager::new(patch_root)?)),
+            patch_manager,
+            _patch_monitor: patch_monitor,
         })
     }
 }

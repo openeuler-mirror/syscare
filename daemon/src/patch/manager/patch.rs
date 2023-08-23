@@ -5,9 +5,10 @@ use anyhow::Result;
 use syscare_abi::{PatchInfo, PatchType, PATCH_INFO_MAGIC};
 use syscare_common::util::serde;
 
-use super::info_ext::{KernelPatchExt, PatchInfoExt, UserPatchExt};
-
-const PATCH_INFO_FILE_NAME: &str = "patch_info";
+use super::{
+    info_ext::{KernelPatchExt, PatchInfoExt, UserPatchExt},
+    PATCH_INFO_FILE_NAME,
+};
 
 /// Patch management target abstraction
 #[derive(Debug)]
