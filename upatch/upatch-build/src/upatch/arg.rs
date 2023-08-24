@@ -6,67 +6,64 @@ use which::which;
 
 use crate::tool::*;
 
-const CC_NAME: &str = "cc";
-const CXX_NAME: &str = "c++";
 const GCC_NAME: &str = "gcc";
-const GXX_NAME: &str = "g++";
 
 #[derive(Parser, Debug)]
-#[command(bin_name = "upatch-build", version, term_width = 200)]
+#[clap(bin_name = "upatch-build", version, term_width = 200)]
 pub struct Arguments {
     /// Specify work directory
     /// will add upatch in work_dir [default: ~/.upatch]
-    #[arg(short, long, default_value = None, verbatim_doc_comment)]
+    #[clap(short, long, verbatim_doc_comment)]
     pub work_dir: Option<PathBuf>,
 
     /// Specify source directory
     /// will modify the debug_source
-    #[arg(short = 's', long, verbatim_doc_comment)]
+    #[clap(short = 's', long, verbatim_doc_comment)]
     pub debug_source: PathBuf,
 
     /// Specify build source command
-    #[arg(short, long)]
+    #[clap(short, long)]
     pub build_source_cmd: String,
 
     /// Specify build patched command [default: <BUILD_SOURCE_COMMAND>]
-    #[arg(long, default_value_t = String::new(), hide_default_value = true)]
+    #[clap(long, default_value_t = String::new(), hide_default_value = true)]
     pub build_patch_cmd: String,
 
     /// Specify debug info list
-    #[arg(short = 'i', long = "debug-info", required = true)]
+    #[clap(short = 'i', long = "debug-info", required = true)]
     pub debug_infoes: Vec<PathBuf>,
 
     /// Specify elf's relative path relate to elf-dir or absolute path list.
     /// one-to-one correspondence with debug-info
-    #[arg(short, long = "elf-path", required = true, verbatim_doc_comment)]
+    #[clap(short, long = "elf-path", required = true, verbatim_doc_comment)]
     pub elf_pathes: Vec<PathBuf>,
 
     /// Specify the directory of searching elf [default: <DEBUG_SOURCE>]
-    #[arg(long, default_value = None, required = false)]
+    #[clap(long, required = false)]
     pub elf_dir: Option<PathBuf>,
 
     /// Specify compiler [default: gcc]
-    #[arg(short, long, default_value = None)]
+    #[clap(short, long)]
     pub compiler: Option<Vec<PathBuf>>,
 
     /// Specify output directory [default: <WORK_DIR>]
-    #[arg(short, long)]
+    #[clap(short, long)]
     pub output_dir: Option<PathBuf>,
 
     /// Specify output name
-    #[arg(short, long, default_value = "", hide_default_value = true)]
+    #[clap(short, long, default_value = "", hide_default_value = true)]
     pub name: OsString,
 
     /// Skip compiler version check (not recommended)
-    #[arg(long, default_value = "false")]
+    #[clap(long)]
     pub skip_compiler_check: bool,
 
     /// Provide more detailed info
-    #[arg(short, long, default_value = "false")]
+    #[clap(short, long)]
     pub verbose: bool,
 
     /// Patch file(s)
-    #[arg(required = true)]
+    #[clap(required = true)]
     pub patches: Vec<PathBuf>,
 }
 
@@ -100,12 +97,7 @@ impl Arguments {
             },
         });
 
-        let mut default_compiler = vec![
-            PathBuf::from(GCC_NAME),
-            PathBuf::from(GXX_NAME),
-            PathBuf::from(CC_NAME),
-            PathBuf::from(CXX_NAME),
-        ];
+        let mut default_compiler = vec![PathBuf::from(GCC_NAME)];
         let compiler_paths = self
             .compiler
             .as_deref_mut()

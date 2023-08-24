@@ -5,13 +5,13 @@ authors      = ["lizongwu@huawei.com"]
 description  = "upatch-build tool"
 license      = "MulanPSL-2.0"
 edition      = "2021"
-rust-version = "1.64"
+rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
 common         = { path = "../../common", package = "syscare-common" }
 anyhow         = { version = "1.0" }
-clap           = { version = "4.3.21", features = ["derive"] }
+clap           = { version = "3.2.23", features = ["derive"] }
 gimli          = { version = "0.26.1" }
 lazy_static    = { version = "1.4.0" }
 log            = { version = "0.4" }
@@ -27,5 +27,4 @@ jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 function_name  = { version = "0.3" }
 
 [build-dependencies]
-bindgen = { version = "0.66.1" }
-cc      = { version = "1.0.79", features = ["parallel"] }
+cc      = { version = "1.0" }
