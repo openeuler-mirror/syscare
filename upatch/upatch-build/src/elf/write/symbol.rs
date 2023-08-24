@@ -99,14 +99,6 @@ impl<'a> SymbolHeaderTable<'a> {
             count: 0,
         }
     }
-
-    pub fn reset(&mut self, n: usize) {
-        let offset = n * self.size + self.start;
-        match offset < self.end {
-            true => self.count = n,
-            false => self.count = 0,
-        }
-    }
 }
 
 impl<'a> Iterator for SymbolHeaderTable<'a> {

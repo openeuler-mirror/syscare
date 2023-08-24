@@ -67,10 +67,6 @@ impl LinkMessages {
             None => None,
         }
     }
-
-    pub fn get_all_objects(&self) -> &HashMap<PathBuf, HashSet<PathBuf>> {
-        &self.link_message
-    }
 }
 
 impl std::fmt::Debug for LinkMessages {

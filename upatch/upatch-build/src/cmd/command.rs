@@ -76,19 +76,6 @@ impl ExternCommandEnvs {
             .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
         self
     }
-
-    pub fn envs<I, K, V>(mut self, envs: I) -> Self
-    where
-        I: IntoIterator<Item = (K, V)>,
-        K: AsRef<OsStr>,
-        V: AsRef<OsStr>,
-    {
-        for (k, v) in envs {
-            self.envs
-                .insert(k.as_ref().to_os_string(), v.as_ref().to_os_string());
-        }
-        self
-    }
 }
 
 impl Default for ExternCommandEnvs {
@@ -217,19 +204,6 @@ impl<'a> ExternCommand<'a> {
         command.args(args.into_iter());
 
         self.execute_command(&mut command, Level::Debug)
-    }
-
-    pub fn execve_dir_stdio<P, T>(
-        &self,
-        args: ExternCommandArgs,
-        current_dir: P,
-        stdio: T,
-    ) -> std::io::Result<ExternCommandExitStatus>
-    where
-        P: AsRef<Path>,
-        T: Into<Stdio>,
-    {
-        self.execve_dir_stdio_level(args, current_dir, stdio, Level::Debug)
     }
 
     pub fn execve_dir_stdio_level<P, T>(

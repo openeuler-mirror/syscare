@@ -1,12 +1,5 @@
-use std::ffi::{OsStr, OsString};
-use std::os::unix::ffi::OsStrExt;
+use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-
-use crate::tool::os_str::OsStrContains;
-
-pub fn stringtify<P: AsRef<Path>>(path: P) -> String {
-    format!("{}", path.as_ref().display())
-}
 
 pub fn check_exist<P: AsRef<Path>>(path: P) -> std::io::Result<()> {
     let path_ref = path.as_ref();
@@ -167,59 +160,8 @@ pub fn list_all_files_ext<P: AsRef<Path>>(
     Ok(file_list)
 }
 
-pub fn find_file_ext<P: AsRef<Path>>(
-    directory: P,
-    file_ext: &str,
-    recursive: bool,
-) -> std::io::Result<PathBuf> {
-    let search_path = directory.as_ref();
-
-    self::check_dir(search_path)?;
-
-    for file in self::list_all_files_ext(search_path, file_ext, recursive)? {
-        if let Some(currrent_file_ext) = file.extension().and_then(OsStr::to_str) {
-            if currrent_file_ext == file_ext {
-                return Ok(file);
-            }
-        }
-    }
-
-    Err(std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        format!(
-            "Cannot find '*.{}' file in '{}'",
-            file_ext,
-            search_path.display()
-        ),
-    ))
-}
-
 pub fn realpath<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
     path.as_ref().canonicalize()
-}
-
-pub fn find_files<P: AsRef<Path>, Q: AsRef<Path>>(
-    directory: P,
-    file_name: Q,
-    fuzz: bool,
-    recursive: bool,
-) -> std::io::Result<Vec<PathBuf>> {
-    let search_path = directory.as_ref();
-    let file_name = file_name.as_ref();
-    let mut file_list = Vec::new();
-
-    self::check_dir(search_path)?;
-
-    for file in self::list_all_files(search_path, recursive)? {
-        if let Ok(curr_file_name) = self::file_name(file.as_path()) {
-            if curr_file_name == file_name
-                || (fuzz && curr_file_name.contains(file_name.as_os_str().as_bytes()))
-            {
-                file_list.push(file);
-            }
-        }
-    }
-    Ok(file_list)
 }
 
 pub fn search_tool<P: AsRef<Path>>(tool: P) -> std::io::Result<PathBuf> {

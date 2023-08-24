@@ -22,8 +22,6 @@ use super::Tool;
 use super::WorkDir;
 use super::{Compiler, CompilerHackGuard};
 
-pub const UPATCH_DEV_NAME: &str = "upatch";
-
 pub struct UpatchBuild {
     args: Arguments,
     work_dir: WorkDir,

@@ -19,13 +19,6 @@ impl RpcRemote {
         }
     }
 
-    pub fn call<T>(&self, cmd: &str) -> Result<T>
-    where
-        T: for<'a> Deserialize<'a>,
-    {
-        self.call_with_args::<T>(cmd, RpcArguments::default())
-    }
-
     pub fn call_with_args<T>(&self, cmd: &str, args: RpcArguments) -> Result<T>
     where
         T: for<'a> Deserialize<'a>,
