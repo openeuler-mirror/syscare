@@ -7,12 +7,17 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use serde::{Deserialize, Serialize};
 
-const GNU_GCC: &str = "/usr/bin/gcc";
-const GNU_GXX: &str = "/usr/bin/g++";
-const GNU_AS: &str = "/usr/bin/as";
+const CC_BINARY: &str = "/usr/bin/cc";
+const CXX_BINARY: &str = "/usr/bin/c++";
+const GCC_BINARY: &str = "/usr/bin/gcc";
+const GXX_BINARY: &str = "/usr/bin/g++";
+const AS_BINARY: &str = "/usr/bin/as";
 
-const GNU_COMPILER_HIJACKER: &str = "/usr/libexec/syscare/upatch-gnu-compiler-hijacker";
-const GNU_ASSEMBLER_HIJACKER: &str = "/usr/libexec/syscare/upatch-gnu-as-hijacker";
+const CC_HIJACKER: &str = "/usr/libexec/syscare/cc-hijacker";
+const CXX_HIJACKER: &str = "/usr/libexec/syscare/c++-hijacker";
+const GCC_HIJACKER: &str = "/usr/libexec/syscare/gcc-hijacker";
+const GXX_HIJACKER: &str = "/usr/libexec/syscare/g++-hijacker";
+const AS_HIJACKER: &str = "/usr/libexec/syscare/as-hijacker";
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Config {
@@ -45,9 +50,11 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             elf_map: HashMap::from([
-                (PathBuf::from(GNU_GCC), PathBuf::from(GNU_COMPILER_HIJACKER)),
-                (PathBuf::from(GNU_GXX), PathBuf::from(GNU_COMPILER_HIJACKER)),
-                (PathBuf::from(GNU_AS), PathBuf::from(GNU_ASSEMBLER_HIJACKER)),
+                (PathBuf::from(CC_BINARY), PathBuf::from(CC_HIJACKER)),
+                (PathBuf::from(CXX_BINARY), PathBuf::from(CXX_HIJACKER)),
+                (PathBuf::from(GCC_BINARY), PathBuf::from(GCC_HIJACKER)),
+                (PathBuf::from(GXX_BINARY), PathBuf::from(GXX_HIJACKER)),
+                (PathBuf::from(AS_BINARY), PathBuf::from(AS_HIJACKER)),
             ]),
         }
     }

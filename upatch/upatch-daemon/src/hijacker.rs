@@ -67,18 +67,21 @@ impl Hijacker {
 }
 
 #[test]
-fn test() {
-    let hijacker = Hijacker::new(HashMap::from([(
-        PathBuf::from("/usr/bin/gcc"),
-        PathBuf::from("/usr/bin/gcc"),
-    )]))
-    .expect("Failed to create hijacker");
+fn test() -> Result<()> {
+    use super::Config;
+
+    println!("This test requires root privilege");
+
+    let hijacker_config = Config::default();
+    let hijacker = Hijacker::new(hijacker_config.elf_map).context("Failed to create hijacker")?;
 
     hijacker
         .hijack("/usr/bin/gcc")
-        .expect("Failed to hijack gcc");
+        .context("Failed to hijack gcc")?;
 
     hijacker
         .release("/usr/bin/gcc")
-        .expect("Failed to release gcc");
+        .context("Failed to release gcc")?;
+
+    Ok(())
 }

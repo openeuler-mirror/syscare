@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use log::info;
@@ -15,17 +15,15 @@ pub struct SkeletonImpl {
 }
 
 impl SkeletonImpl {
-    pub fn new(hijack_map: HashMap<PathBuf, PathBuf>) -> Result<Self> {
-        Ok(Self {
-            hijacker: Hijacker::new(hijack_map).context("Failed to initialize hijacker")?,
-        })
+    pub fn new(hijacker: Hijacker) -> Result<Self> {
+        Ok(Self { hijacker })
     }
 }
 
 impl Skeleton for SkeletonImpl {
     fn enable_hijack(&self, elf_path: PathBuf) -> RpcResult<()> {
         RpcFunction::call(|| {
-            info!("enable hijack: {}", elf_path.display());
+            info!("Enable hijack: \"{}\"", elf_path.display());
             self.hijacker
                 .hijack(&elf_path)
                 .with_context(|| format!("Failed to hijack \"{}\"", elf_path.display()))
@@ -34,10 +32,10 @@ impl Skeleton for SkeletonImpl {
 
     fn disable_hijack(&self, elf_path: PathBuf) -> RpcResult<()> {
         RpcFunction::call(|| {
-            info!("disable hijack: {}", elf_path.display());
+            info!("Disable hijack: \"{}\"", elf_path.display());
             self.hijacker
                 .release(&elf_path)
-                .with_context(|| format!("Failed to release hajack for \"{}\"", elf_path.display()))
+                .with_context(|| format!("Failed to release hijack for \"{}\"", elf_path.display()))
         })
     }
 }
