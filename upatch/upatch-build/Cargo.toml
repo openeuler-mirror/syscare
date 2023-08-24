@@ -25,6 +25,3 @@ typed-arena    = { version = "2.0.1" }
 which          = { version = "4.4.0" }
 jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 function_name  = { version = "0.3" }
-
-[build-dependencies]
-cc      = { version = "1.0" }

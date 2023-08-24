@@ -1,44 +1,39 @@
 use std::cmp;
 use std::collections::HashSet;
-use std::ffi::{CString, OsStr, OsString};
+use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::Write;
-use std::os::unix::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
 use log::*;
 use which::which;
 
-use crate::ffi::*;
 use crate::cmd::*;
 use crate::dwarf::Dwarf;
-use crate::tool::search_tool;
+use crate::rpc::*;
 
 use super::Error;
 use super::Result;
 
-const COMPILER_HIJACKER: &str = "upatch-gnu-compiler-hijacker";
-const ASSEMBLER_HIJACKER: &str = "upatch-gnu-as-hijacker";
+const UPATCHD_SOCKET: &str = "/var/run/upatchd.sock";
 
 #[derive(Clone)]
 pub struct Compiler {
     compiler: Vec<PathBuf>,
     assembler: Vec<PathBuf>,
     linker: Vec<PathBuf>,
-    compiler_hijacker: PathBuf,
-    assembler_hijacker: PathBuf,
-    hijacker_dir: PathBuf,
+    upatch_proxy: UpatchProxy,
 }
 
 impl Compiler {
     pub fn new() -> Self {
+        let remote = RpcRemote::new(UPATCHD_SOCKET);
         Self {
             compiler: Vec::new(),
             assembler: Vec::new(),
             linker: Vec::new(),
-            compiler_hijacker: PathBuf::new(),
-            assembler_hijacker: PathBuf::new(),
-            hijacker_dir: PathBuf::new(),
+            upatch_proxy: UpatchProxy::new(Rc::new(remote)),
         }
     }
 
@@ -61,15 +56,11 @@ impl Compiler {
         Ok(output.stdout().to_os_string())
     }
 
-    pub fn analyze<I, P, Q>(&mut self, compiler_file: I, hijacker_dir: Q) -> Result<()>
+    pub fn analyze<I, P>(&mut self, compiler_file: I) -> Result<()>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
-        Q: AsRef<Path>,
     {
-        self.compiler_hijacker = search_tool(COMPILER_HIJACKER)?;
-        self.assembler_hijacker = search_tool(ASSEMBLER_HIJACKER)?;
-        self.hijacker_dir = hijacker_dir.as_ref().to_path_buf();
         for compiler in compiler_file {
             let compiler = compiler.as_ref().to_path_buf();
             let assembler =
@@ -104,23 +95,11 @@ impl Compiler {
     }
 
     pub fn hack(&self) -> Result<()> {
-        unsafe {
-            let ret = upatch_hijacker_init();
-            if ret != 0 {
-                return Err(Error::Mod(format!("upatch hijacker init failed - {}", ret)));
-            }
-            self.hijacker_register(self.compiler.len() + self.assembler.len())
-        }
+        self.hijacker_register(self.compiler.len() + self.assembler.len())
     }
 
     pub fn unhack(&self) -> Result<()> {
-        unsafe {
-            let ret = upatch_hijacker_init();
-            if ret != 0 {
-                return Err(Error::Mod(format!("upatch hijacker init failed - {}", ret)));
-            }
-            self.hijacker_unregister(self.compiler.len() + self.assembler.len())
-        }
+        self.hijacker_unregister(self.compiler.len() + self.assembler.len())
     }
 
     pub fn check_version<P, I, Q>(&self, cache_dir: P, debug_infoes: I) -> Result<()>
@@ -212,47 +191,31 @@ impl Compiler {
 impl Compiler {
     fn hijacker_register(&self, num: usize) -> Result<()> {
         for i in 0..cmp::min(num, self.compiler.len()) {
-            let compiler_hijacker = self.hijacker_dir.join(i.to_string());
-            std::fs::hard_link(&self.compiler_hijacker, &compiler_hijacker)?;
-
-            trace!("hack {:?} -> {:?}", self.compiler[i], compiler_hijacker);
-            let compiler_cstr = CString::new(self.compiler[i].as_os_str().as_bytes()).unwrap();
-            let compiler_hijacker_cstr =
-                CString::new(compiler_hijacker.as_os_str().as_bytes()).unwrap();
-            let ret = unsafe {
-                upatch_hijacker_register(compiler_cstr.as_ptr(), compiler_hijacker_cstr.as_ptr())
-            };
-            if ret != 0 {
-                trace!("hack {:?} error {}, try to rollback", self.compiler[i], ret);
+            trace!("hack {}", self.compiler[i].display());
+            if let Err(e) = self.upatch_proxy.enable_hijack(self.compiler[i].clone()) {
+                trace!("hack {:?} error {}, try to rollback", self.compiler[i], e);
                 self.hijacker_unregister(i)?;
                 return Err(Error::Mod(format!(
-                    "hack {:?} error {}",
-                    self.compiler[i], ret
+                    "hack {} error {}",
+                    self.compiler[i].display(),
+                    e
                 )));
             }
         }
         for i in self.compiler.len()..num {
-            let assembler_hijacker = self.hijacker_dir.join(i.to_string());
-            std::fs::hard_link(&self.assembler_hijacker, &assembler_hijacker)?;
-
             let i = i - self.compiler.len();
-            trace!("hack {:?} -> {:?}", self.assembler[i], assembler_hijacker);
-            let assembler_cstr = CString::new(self.assembler[i].as_os_str().as_bytes()).unwrap();
-            let assembler_hijacker_cstr =
-                CString::new(assembler_hijacker.as_os_str().as_bytes()).unwrap();
-            let ret = unsafe {
-                upatch_hijacker_register(assembler_cstr.as_ptr(), assembler_hijacker_cstr.as_ptr())
-            };
-            if ret != 0 {
+            trace!("hack {}", self.assembler[i].display());
+            if let Err(e) = self.upatch_proxy.enable_hijack(self.assembler[i].clone()) {
                 trace!(
-                    "hack {:?} error {}, try to rollback",
-                    self.assembler[i],
-                    ret
+                    "hack {} error {}, try to rollback",
+                    self.assembler[i].display(),
+                    e
                 );
                 self.hijacker_unregister(i)?;
                 return Err(Error::Mod(format!(
-                    "hack {:?} error {}",
-                    self.assembler[i], ret
+                    "hack {} error {}",
+                    self.assembler[i].display(),
+                    e
                 )));
             }
         }
@@ -261,43 +224,26 @@ impl Compiler {
 
     fn hijacker_unregister(&self, num: usize) -> Result<()> {
         for i in (self.compiler.len()..num).rev() {
-            let assembler_hijacker = self.hijacker_dir.join(i.to_string());
-
             let i = i - self.compiler.len();
-            trace!("unhack {:?} -> {:?}", self.assembler[i], assembler_hijacker);
-            let assembler_cstr = CString::new(self.assembler[i].as_os_str().as_bytes()).unwrap();
-            let assembler_hijacker_cstr =
-                CString::new(assembler_hijacker.as_os_str().as_bytes()).unwrap();
-            let ret = unsafe {
-                upatch_hijacker_unregister(
-                    assembler_cstr.as_ptr(),
-                    assembler_hijacker_cstr.as_ptr(),
-                )
-            };
-            if ret != 0 {
-                trace!("unhack {:?} error {}", self.assembler[i], ret);
+            trace!("unhack {}", self.assembler[i].display());
+            if let Err(e) = self.upatch_proxy.disable_hijack(self.assembler[i].clone()) {
+                trace!("unhack {} error {}", self.assembler[i].display(), e);
                 return Err(Error::Mod(format!(
-                    "unhack {:?} error {}",
-                    self.assembler[i], ret
+                    "unhack {} error {}",
+                    self.assembler[i].display(),
+                    e
                 )));
             }
         }
 
         for i in (0..cmp::min(num, self.compiler.len())).rev() {
-            let compiler_hijacker = self.hijacker_dir.join(i.to_string());
-
-            trace!("unhack {:?} -> {:?}", self.compiler[i], compiler_hijacker);
-            let compiler_cstr = CString::new(self.compiler[i].as_os_str().as_bytes()).unwrap();
-            let compiler_hijacker_cstr =
-                CString::new(compiler_hijacker.as_os_str().as_bytes()).unwrap();
-            let ret = unsafe {
-                upatch_hijacker_unregister(compiler_cstr.as_ptr(), compiler_hijacker_cstr.as_ptr())
-            };
-            if ret != 0 {
-                trace!("unhack {:?} error {}", self.compiler[i], ret);
+            trace!("unhack {}", self.compiler[i].display());
+            if let Err(e) = self.upatch_proxy.disable_hijack(self.compiler[i].clone()) {
+                trace!("unhack {} error {}", self.compiler[i].display(), e);
                 return Err(Error::Mod(format!(
-                    "unhack {:?} error {}",
-                    self.compiler[i], ret
+                    "unhack {} error {}",
+                    self.compiler[i].display(),
+                    e
                 )));
             }
         }

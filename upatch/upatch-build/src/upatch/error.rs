@@ -1,10 +1,9 @@
-use std::result;
 use std::{
     fmt::{self, Debug},
     io,
 };
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = anyhow::Result<T, Error>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Error {

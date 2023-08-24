@@ -72,10 +72,8 @@ impl UpatchBuild {
         project.unpatch_all(&self.args.patches, Level::Debug)?;
 
         // check compiler
-        self.compiler.analyze(
-            self.args.compiler.as_ref().unwrap(),
-            self.work_dir.hijacker_dir(),
-        )?;
+        self.compiler
+            .analyze(self.args.compiler.as_ref().unwrap())?;
         if !self.args.skip_compiler_check {
             self.compiler
                 .check_version(self.work_dir.cache_dir(), &self.args.debug_infoes)?;

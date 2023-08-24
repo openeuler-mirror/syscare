@@ -5,6 +5,7 @@ use function_name::named;
 
 use super::{args::RpcArguments, remote::RpcRemote};
 
+#[derive(Clone)]
 pub struct UpatchProxy {
     remote: Rc<RpcRemote>,
 }

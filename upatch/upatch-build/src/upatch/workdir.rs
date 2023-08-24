@@ -9,7 +9,6 @@ pub struct WorkDir {
     source_dir: PathBuf,
     patch_dir: PathBuf,
     debuginfo_dir: PathBuf,
-    hijacker_dir: PathBuf,
     output_dir: PathBuf,
     log_file: PathBuf,
 }
@@ -21,7 +20,6 @@ impl WorkDir {
             source_dir: PathBuf::new(),
             patch_dir: PathBuf::new(),
             debuginfo_dir: PathBuf::new(),
-            hijacker_dir: PathBuf::new(),
             output_dir: PathBuf::new(),
             log_file: PathBuf::new(),
         }
@@ -32,7 +30,6 @@ impl WorkDir {
         self.source_dir = self.cache_dir.join("source");
         self.patch_dir = self.cache_dir.join("patch");
         self.debuginfo_dir = self.cache_dir.join("debug_info");
-        self.hijacker_dir = self.cache_dir.join("hijacker");
         self.output_dir = self.cache_dir.join("output");
         self.log_file = self.cache_dir.join("build.log");
 
@@ -44,7 +41,6 @@ impl WorkDir {
         fs::create_dir(&self.source_dir)?;
         fs::create_dir(&self.patch_dir)?;
         fs::create_dir(&self.debuginfo_dir)?;
-        fs::create_dir(&self.hijacker_dir)?;
         fs::create_dir(&self.output_dir)?;
         File::create(&self.log_file)?;
         Ok(())
@@ -64,10 +60,6 @@ impl WorkDir {
 
     pub fn debuginfo_dir(&self) -> &Path {
         &self.debuginfo_dir
-    }
-
-    pub fn hijacker_dir(&self) -> &Path {
-        &self.hijacker_dir
     }
 
     pub fn output_dir(&self) -> &Path {

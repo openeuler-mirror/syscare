@@ -31,13 +31,13 @@ impl RpcRemote {
         T: for<'a> Deserialize<'a>,
     {
         let request = self.client.build_request(cmd, &args);
-        debug!("{:#?}", request);
+        debug!("{:?}", request);
 
         let response = self
             .client
             .send_request(request)
             .map_err(|e| self.parse_error(e))?;
-        debug!("{:#?}", response);
+        debug!("{:?}", response);
 
         response.result().map_err(|e| self.parse_error(e))
     }

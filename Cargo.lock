@@ -1566,7 +1566,6 @@ name = "upatch-build"
 version = "1.0.2"
 dependencies = [
  "anyhow",
- "cc",
  "clap",
  "function_name",
  "gimli",
