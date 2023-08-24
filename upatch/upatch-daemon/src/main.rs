@@ -4,7 +4,7 @@ use anyhow::{ensure, Context, Result};
 use config::Config;
 use daemonize::Daemonize;
 use jsonrpc_core::IoHandler;
-use jsonrpc_ipc_server::{Server, ServerBuilder};
+use jsonrpc_ipc_server::{SecurityAttributes, Server, ServerBuilder};
 use log::{error, info};
 
 use syscare_common::os;
@@ -111,13 +111,9 @@ impl Daemon {
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
         let socket_file = self.args.socket_file.as_path();
-        if socket_file.exists() {
-            std::fs::remove_file(socket_file).ok();
-        }
-
         let builder = ServerBuilder::new(io_handler).set_client_buffer_size(1);
-
-        let server = builder.start(
+        let security_attr = SecurityAttributes::empty().allow_everyone_connect()?;
+        let server = builder.set_security_attributes(security_attr).start(
             socket_file
                 .to_str()
                 .context("Failed to convert socket path to string")?,
