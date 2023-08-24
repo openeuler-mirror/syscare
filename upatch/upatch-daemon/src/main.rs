@@ -70,11 +70,9 @@ impl Daemon {
     }
 
     fn initialize_logger(&self) -> Result<()> {
-        Logger::initialize(&self.args.log_dir, self.args.log_level)?;
-
-        if !self.args.daemon {
-            Logger::duplicate_to_stdout()?;
-        }
+        let max_level = self.args.log_level;
+        let duplicate_stdout = !self.args.daemon;
+        Logger::initialize(&self.args.log_dir, max_level, duplicate_stdout)?;
 
         Ok(())
     }

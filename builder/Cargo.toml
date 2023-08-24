@@ -5,7 +5,7 @@ authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare patch build utility"
 license      = "MulanPSL-2.0"
 edition      = "2021"
-rust-version = "1.64"
+rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
@@ -14,7 +14,7 @@ syscare-abi    = { package = "syscare-abi", path = "../abi" }
 lazy_static    = { version = "1.4.0" }
 log            = { version = "0.4" }
 log4rs         = { version = "1" }
-clap           = { version = "4.3.21", features = ["derive"] }
+clap           = { version = "3.2.23", features = ["derive"] }
 uuid           = { version = "1.3.0", features = ["v4"] }
 serde          = { version = "1.0", features = ["derive"] }
 which          = { version = "4.4.0" }

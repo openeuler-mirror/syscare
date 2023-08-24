@@ -1,11 +1,14 @@
 use anyhow::Result;
 use flexi_logger::{DeferredNow, LogSpecification, Logger as FlexiLogger, LoggerHandle, WriteMode};
+use lazy_static::lazy_static;
 use log::{LevelFilter, Record};
 use parking_lot::{Mutex, MutexGuard};
 
 pub struct Logger;
 
-static LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
+lazy_static! {
+    static ref LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
+}
 
 impl Logger {
     fn format_log(

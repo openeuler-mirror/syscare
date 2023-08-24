@@ -5,15 +5,15 @@ authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare command line interface"
 license      = "MulanPSL-2.0"
 edition      = "2021"
-rust-version = "1.64"
+rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
 syscare-common = { package = "syscare-common", path = "../common" }
 syscare-abi    = { package = "syscare-abi", path = "../abi" }
 anyhow         = { version = "1.0" }
-clap           = { version = "4.3.21", features = ["derive"] }
-flexi_logger   = { version = "0.25" }
+clap           = { version = "3.2.23", features = ["derive"] }
+flexi_logger   = { version = "0.24" }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
 parking_lot    = { version = "0.12" }

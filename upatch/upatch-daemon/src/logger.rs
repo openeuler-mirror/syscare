@@ -1,10 +1,11 @@
 use std::{path::Path, thread::Thread};
 
-use anyhow::{bail, Result};
+use anyhow::{Context, Result};
 use flexi_logger::{
     Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, LogSpecification,
     Logger as FlexiLogger, LoggerHandle, Naming, WriteMode,
 };
+use lazy_static::lazy_static;
 use log::{LevelFilter, Record};
 use parking_lot::{Mutex, MutexGuard};
 
@@ -12,7 +13,9 @@ use super::DAEMON_NAME;
 
 pub struct Logger;
 
-static LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
+lazy_static! {
+    static ref LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
+}
 
 impl Logger {
     fn thread_name(thread: &Thread) -> &str {
@@ -47,17 +50,21 @@ impl Logger {
         LOGGER.lock().is_some()
     }
 
-    pub fn initialize<P: AsRef<Path>>(log_dir: P, max_level: LevelFilter) -> Result<()> {
-        let mut logger: MutexGuard<Option<LoggerHandle>> = LOGGER.lock();
+    pub fn initialize<P: AsRef<Path>>(
+        log_dir: P,
+        max_level: LevelFilter,
+        duplicate_stdout: bool,
+    ) -> Result<()> {
+        let mut log_handle: MutexGuard<Option<LoggerHandle>> = LOGGER.lock();
 
-        if logger.is_none() {
+        if log_handle.is_none() {
             let log_spec = LogSpecification::builder().default(max_level).build();
 
             let file_spec = FileSpec::default()
                 .directory(log_dir.as_ref())
                 .use_timestamp(false);
 
-            let log_handle = FlexiLogger::with(log_spec)
+            let mut logger = FlexiLogger::with(log_spec)
                 .log_to_file(file_spec)
                 .format(Self::format_log)
                 .rotate(
@@ -65,23 +72,12 @@ impl Logger {
                     Naming::Timestamps,
                     Cleanup::KeepCompressedFiles(30),
                 )
-                .write_mode(WriteMode::Direct)
-                .start()?;
+                .write_mode(WriteMode::Direct);
 
-            let _ = logger.insert(log_handle);
-        }
-
-        Ok(())
-    }
-
-    pub fn duplicate_to_stdout() -> Result<()> {
-        let mut logger = LOGGER.lock();
-
-        match logger.as_mut() {
-            Some(handle) => {
-                handle.adapt_duplication_to_stdout(Duplicate::All)?;
+            if duplicate_stdout {
+                logger = logger.duplicate_to_stdout(Duplicate::All);
             }
-            None => bail!("Logger is not initialized"),
+            let _ = log_handle.insert(logger.start().context("Failed to start logger")?);
         }
 
         Ok(())
