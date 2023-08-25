@@ -32,7 +32,7 @@ impl KExecManager {
         let kernel_file_name = format!("vmlinuz-{}", kernel_version);
         let kernel_file = fs::find_file(
             BOOT_DIRECTORY.as_path(),
-            &kernel_file_name,
+            kernel_file_name,
             fs::FindOptions {
                 fuzz: false,
                 recursive: false,
@@ -44,7 +44,7 @@ impl KExecManager {
         let initramfs_file_name = format!("initramfs-{}.img", kernel_version);
         let initramfs_file = fs::find_file(
             BOOT_DIRECTORY.as_path(),
-            &initramfs_file_name,
+            initramfs_file_name,
             fs::FindOptions {
                 fuzz: false,
                 recursive: false,

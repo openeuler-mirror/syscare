@@ -133,14 +133,16 @@ impl Daemon {
         info!("Daemon is running...");
         server.wait();
 
-        info!("Daemon exited");
         Ok(())
     }
 }
 
 pub fn main() {
     let exit_code = match Daemon::new().start_and_run() {
-        Ok(_) => 0,
+        Ok(_) => {
+            info!("Daemon exited");
+            0
+        }
         Err(e) => {
             match Logger::is_inited() {
                 false => {
@@ -148,7 +150,7 @@ pub fn main() {
                 }
                 true => {
                     error!("{:#}", e);
-                    error!("Process exited unsuccessfully");
+                    error!("Daemon exited unsuccessfully");
                 }
             }
             -1
