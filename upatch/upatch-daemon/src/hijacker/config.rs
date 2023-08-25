@@ -19,12 +19,10 @@ const GCC_HIJACKER: &str = "/usr/libexec/syscare/gcc-hijacker";
 const GXX_HIJACKER: &str = "/usr/libexec/syscare/g++-hijacker";
 const AS_HIJACKER: &str = "/usr/libexec/syscare/as-hijacker";
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct Config {
-    pub elf_map: HashMap<PathBuf, PathBuf>,
-}
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct HijackerConfig(pub HashMap<PathBuf, PathBuf>);
 
-impl Config {
+impl HijackerConfig {
     pub fn parse_from<P: AsRef<Path>>(path: P) -> Result<Self> {
         let config_path = path.as_ref();
         let config_file = File::open(config_path)
@@ -46,16 +44,41 @@ impl Config {
     }
 }
 
-impl Default for Config {
+impl Default for HijackerConfig {
     fn default() -> Self {
-        Self {
-            elf_map: HashMap::from([
-                (PathBuf::from(CC_BINARY), PathBuf::from(CC_HIJACKER)),
-                (PathBuf::from(CXX_BINARY), PathBuf::from(CXX_HIJACKER)),
-                (PathBuf::from(GCC_BINARY), PathBuf::from(GCC_HIJACKER)),
-                (PathBuf::from(GXX_BINARY), PathBuf::from(GXX_HIJACKER)),
-                (PathBuf::from(AS_BINARY), PathBuf::from(AS_HIJACKER)),
-            ]),
-        }
+        Self(HashMap::from([
+            (PathBuf::from(CC_BINARY), PathBuf::from(CC_HIJACKER)),
+            (PathBuf::from(CXX_BINARY), PathBuf::from(CXX_HIJACKER)),
+            (PathBuf::from(GCC_BINARY), PathBuf::from(GCC_HIJACKER)),
+            (PathBuf::from(GXX_BINARY), PathBuf::from(GXX_HIJACKER)),
+            (PathBuf::from(AS_BINARY), PathBuf::from(AS_HIJACKER)),
+        ]))
     }
+}
+
+impl std::fmt::Display for HijackerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!("{:#?}", &self.0))
+    }
+}
+
+#[test]
+fn test() -> Result<()> {
+    use anyhow::ensure;
+
+    let tmp_file = PathBuf::from("/tmp/upatch_hijacker_config.yaml");
+
+    let orig_cfg = HijackerConfig::default();
+    println!("{}", orig_cfg);
+
+    orig_cfg
+        .write_to(&tmp_file)
+        .context("Failed to write config")?;
+
+    let new_cfg = HijackerConfig::parse_from(tmp_file).context("Failed to read config")?;
+    println!("{}", new_cfg);
+
+    ensure!(orig_cfg == new_cfg, "Config does not match");
+
+    Ok(())
 }
