@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0 OR BSD-3-Clause
-cmake_minimum_required(VERSION 3.22)
-project(upatch-hijacker)
+set(UPATCH_HIJACKER_EBPF "upatch-hijacker")
+set(UPATCH_HIJACKER_EBPF_EXE "upatch_hijacker")
 
 find_program(BASH bash HINTS /bin)
 find_package(ZLIB)
@@ -56,15 +56,26 @@ function(generate_bpf_skel bpf_source bpf_headers bpf_object skel_output)
     )
 endfunction(generate_bpf_skel)
 
-set(_skel_output "${CMAKE_PROJECT_NAME}.skel.h")
+set(_skel_output "${UPATCH_HIJACKER_EBPF}.skel.h")
 generate_bpf_skel(
-    "${CMAKE_CURRENT_SOURCE_DIR}/${CMAKE_PROJECT_NAME}.bpf.c"
+    "${CMAKE_CURRENT_SOURCE_DIR}/${UPATCH_HIJACKER_EBPF}.bpf.c"
     "vmlinux.h"
-    "${CMAKE_PROJECT_NAME}.bpf.o"
+    "${UPATCH_HIJACKER_EBPF}.bpf.o"
     "${_skel_output}"
 )
 add_compile_options(-g -Wall)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
-add_executable(${CMAKE_PROJECT_NAME} ${CMAKE_PROJECT_NAME}.c ${_skel_output})
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE libbpf.a elf ZLIB::ZLIB)
+add_executable(${UPATCH_HIJACKER_EBPF_EXE} ${UPATCH_HIJACKER_EBPF}.c ${_skel_output})
+target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE libbpf.a elf ZLIB::ZLIB)
+
+install(
+    TARGETS
+        ${UPATCH_HIJACKER_EBPF_EXE}
+    PERMISSIONS
+        OWNER_EXECUTE OWNER_WRITE OWNER_READ
+        GROUP_EXECUTE GROUP_READ
+        WORLD_READ WORLD_EXECUTE
+    DESTINATION
+        ${SYSCARE_LIBEXEC_DIR}
+)

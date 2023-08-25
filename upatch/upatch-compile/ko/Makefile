@@ -3,8 +3,8 @@ kernel ?= /lib/modules/$(shell uname -r)/build
 
 ccflags-y += -I$(PWD)/../common
 
-obj-m += upatch-hijacker.o
-upatch-hijacker-objs := hijacker.o entry.o
+obj-m += upatch_hijacker.o
+upatch_hijacker-objs := hijacker.o entry.o
 
 all:
 	make -C $(kernel) M=$(shell pwd) modules

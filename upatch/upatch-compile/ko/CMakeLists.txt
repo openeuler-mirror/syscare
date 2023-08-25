@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0
 
-set(UPATCH_HIJACKER_KMOD "upatch-hijacker.ko")
+set(UPATCH_HIJACKER_KMOD "upatch_hijacker.ko")
 
 if (DEFINED KERNEL_VERSION)
     set(KERNEL_BUILD /lib/modules/${KERNEL_VERSION}/build)
