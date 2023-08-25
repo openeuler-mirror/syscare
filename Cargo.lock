@@ -1393,6 +1393,7 @@ dependencies = [
  "jsonrpc-ipc-server",
  "lazy_static",
  "log",
+ "once_cell",
  "parking_lot 0.11.2",
  "serde",
  "syscare-abi",

@@ -5,17 +5,15 @@ use flexi_logger::{
     Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, LogSpecification,
     Logger as FlexiLogger, LoggerHandle, Naming, WriteMode,
 };
-use lazy_static::lazy_static;
+
 use log::{LevelFilter, Record};
-use parking_lot::{Mutex, MutexGuard};
+use once_cell::sync::OnceCell;
 
 use super::DAEMON_NAME;
 
 pub struct Logger;
 
-lazy_static! {
-    static ref LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
-}
+static LOGGER: OnceCell<LoggerHandle> = OnceCell::new();
 
 impl Logger {
     fn thread_name(thread: &Thread) -> &str {
@@ -47,7 +45,7 @@ impl Logger {
 
 impl Logger {
     pub fn is_inited() -> bool {
-        LOGGER.lock().is_some()
+        LOGGER.get().is_some()
     }
 
     pub fn initialize<P: AsRef<Path>>(
@@ -55,9 +53,7 @@ impl Logger {
         max_level: LevelFilter,
         duplicate_stdout: bool,
     ) -> Result<()> {
-        let mut log_handle: MutexGuard<Option<LoggerHandle>> = LOGGER.lock();
-
-        if log_handle.is_none() {
+        LOGGER.get_or_try_init(|| -> Result<LoggerHandle> {
             let log_spec = LogSpecification::builder().default(max_level).build();
 
             let file_spec = FileSpec::default()
@@ -77,8 +73,9 @@ impl Logger {
             if duplicate_stdout {
                 logger = logger.duplicate_to_stdout(Duplicate::All);
             }
-            let _ = log_handle.insert(logger.start().context("Failed to start logger")?);
-        }
+
+            logger.start().context("Failed to start logger")
+        })?;
 
         Ok(())
     }
