@@ -45,6 +45,8 @@ add_custom_target(syscare ALL
 install(
     PROGRAMS
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
+        ${CMAKE_CURRENT_BINARY_DIR}/release/syscared
+        ${CMAKE_CURRENT_BINARY_DIR}/release/upatchd
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ
