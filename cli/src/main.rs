@@ -73,7 +73,7 @@ fn main() {
                     eprintln!("Error: {:?}", e)
                 }
                 true => {
-                    error!("{:#}", e);
+                    error!("Error: {:#}", e);
                 }
             }
             1

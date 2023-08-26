@@ -16,6 +16,7 @@ impl RebootCommandExecutor {
 
 impl CommandExecutor for RebootCommandExecutor {
     fn invoke(&self, command: &CliCommand) -> Result<()> {
+        self.check_root_permission()?;
         if let CliCommand::Reboot { target, force } = command {
             self.proxy.fast_reboot(target.to_owned(), *force)?;
         }

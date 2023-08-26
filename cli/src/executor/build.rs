@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Context, Result};
 
-use std::process::{Command, exit};
+use std::process::{exit, Command};
 
 use super::CommandExecutor;
 use crate::args::CliCommand;

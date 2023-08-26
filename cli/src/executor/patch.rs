@@ -83,6 +83,7 @@ impl PatchCommandExecutor {
 
 impl CommandExecutor for PatchCommandExecutor {
     fn invoke(&self, command: &CliCommand) -> Result<()> {
+        self.check_root_permission()?;
         match command {
             CliCommand::Info { identifier } => {
                 let patch_info = self.proxy.get_patch_info(identifier)?;
