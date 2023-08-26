@@ -74,10 +74,9 @@ fn main() {
                 }
                 true => {
                     error!("{:#}", e);
-                    error!("Process exited unsuccessfully");
                 }
             }
-            -1
+            1
         }
     };
     exit(exit_code);

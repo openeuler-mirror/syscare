@@ -10,10 +10,10 @@ use super::{DAEMON_NAME, DAEMON_VERSION};
 
 const DEFAULT_DATA_ROOT: &str = "/usr/lib/syscare";
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
-const DEFAULT_PID_FILE: &str = "/var/run/syscare.pid";
+const DEFAULT_PID_FILE: &str = "/var/run/syscared.pid";
+const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
 const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
 const DEFAULT_LOG_LEVEL: &str = "info";
-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscare.sock";
 
 #[derive(Debug, Clone, Parser)]
 #[clap(bin_name=DAEMON_NAME, version=DAEMON_VERSION)]

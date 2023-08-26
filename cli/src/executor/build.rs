@@ -1,6 +1,6 @@
-use anyhow::{anyhow, ensure, Context, Result};
+use anyhow::{anyhow, Context, Result};
 
-use std::process::Command;
+use std::process::{Command, exit};
 
 use super::CommandExecutor;
 use crate::args::CliCommand;
@@ -33,12 +33,7 @@ impl CommandExecutor for BuildCommandExecutor {
                 })
                 .with_context(|| format!("Failed to start \"{}\" process", SYSCARE_BUILD_NAME))?;
 
-            ensure!(
-                exit_code == 0,
-                "Process \"{}\" exited unsuccessfully, exit_code={}",
-                SYSCARE_BUILD_NAME,
-                exit_code,
-            );
+            exit(exit_code);
         }
 
         Ok(())

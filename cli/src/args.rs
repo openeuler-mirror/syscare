@@ -4,7 +4,7 @@ use clap::{Parser, Subcommand};
 
 use super::{CLI_NAME, CLI_VERSION};
 
-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscare.sock";
+const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
 
 #[derive(Parser, Debug)]
 #[clap(bin_name=CLI_NAME, version=CLI_VERSION)]
