@@ -4,12 +4,14 @@ use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
+use kmod::KernelModuleGuard;
 use log::{error, info};
 
 use syscare_common::{os, util::fs};
 
 mod args;
 mod fast_reboot;
+mod kmod;
 mod logger;
 mod patch;
 mod rpc;
@@ -29,14 +31,16 @@ const DAEMON_UMASK: u32 = 0o027;
 struct Daemon {
     uid: u32,
     args: Arguments,
+    _guard: KernelModuleGuard,
 }
 
 impl Daemon {
-    fn new() -> Self {
-        Self {
+    fn new() -> Result<Self> {
+        Ok(Self {
             uid: os::user::id(),
             args: Arguments::new(),
-        }
+            _guard: KernelModuleGuard::new()?,
+        })
     }
 
     fn check_root_permission(&self) -> Result<()> {
@@ -135,7 +139,7 @@ impl Daemon {
 }
 
 pub fn main() {
-    let exit_code = match Daemon::new().start_and_run() {
+    let exit_code = match Daemon::new().and_then(|daemon| daemon.start_and_run()) {
         Ok(_) => {
             info!("Daemon exited");
             0
