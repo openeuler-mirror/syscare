@@ -11,6 +11,8 @@ build        = "build.rs"
 [dependencies]
 syscare-common = { package = "syscare-common", path = "../common" }
 syscare-abi    = { package = "syscare-abi", path = "../abi" }
+anyhow         = { version = "1.0" }
+once_cell      = { version = "1.0" }
 lazy_static    = { version = "1.4.0" }
 log            = { version = "0.4" }
 log4rs         = { version = "1" }

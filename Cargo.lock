@@ -1351,10 +1351,12 @@ dependencies = [
 name = "syscare-build"
 version = "1.0.2"
 dependencies = [
+ "anyhow",
  "clap",
  "lazy_static",
  "log",
  "log4rs",
+ "once_cell",
  "serde",
  "syscare-abi",
  "syscare-common",

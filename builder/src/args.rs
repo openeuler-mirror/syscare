@@ -1,11 +1,13 @@
 use std::path::PathBuf;
 
+use anyhow::Result;
 use clap::Parser;
 use lazy_static::lazy_static;
 
-use syscare_common::os;
+use syscare_common::{os, util::fs};
 
-use super::PatchBuildCLI;
+use super::CLI_NAME;
+use super::CLI_VERSION;
 
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";
@@ -19,8 +21,8 @@ lazy_static! {
 }
 
 #[derive(Parser, Debug)]
-#[clap(bin_name=PatchBuildCLI::name(), version=PatchBuildCLI::version())]
-pub struct CliArguments {
+#[clap(bin_name=CLI_NAME, version=CLI_VERSION)]
+pub struct Arguments {
     /// Patch name
     #[clap(short = 'n', long)]
     pub patch_name: String,
@@ -78,13 +80,29 @@ pub struct CliArguments {
     pub patches: Vec<PathBuf>,
 }
 
-impl CliArguments {
+impl Arguments {
     pub fn new() -> Self {
-        CliArguments::parse()
+        Arguments::parse()
+            .normalize_pathes()
+            .expect("Failed to parse arguments")
+    }
+
+    fn normalize_pathes(mut self) -> Result<Self> {
+        self.source = fs::normalize(&self.source)?;
+        for debuginfo in &mut self.debuginfo {
+            *debuginfo = fs::normalize(&debuginfo)?
+        }
+        self.workdir = fs::normalize(&self.workdir)?;
+        self.output = fs::normalize(&self.output)?;
+        for patch in &mut self.patches {
+            *patch = fs::normalize(&patch)?
+        }
+
+        Ok(self)
     }
 }
 
-impl Default for CliArguments {
+impl Default for Arguments {
     fn default() -> Self {
         Self::new()
     }

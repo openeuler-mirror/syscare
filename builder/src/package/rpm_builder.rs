@@ -1,39 +1,24 @@
-use std::ffi::OsString;
-use std::path::{Path, PathBuf};
+use std::{ffi::OsString, path::Path};
 
-use syscare_common::util::ext_cmd::ExternCommandArgs;
-use syscare_common::util::fs;
-use syscare_common::util::os_str::OsStringExt;
-
-use crate::workdir::PackageBuildRoot;
+use anyhow::{Context, Result};
 use syscare_abi::PatchInfo;
+use syscare_common::util::{ext_cmd::ExternCommandArgs, fs, os_str::OsStringExt};
+
+use crate::workdir::RpmBuildRoot;
 
 use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
-use super::rpm_spec_generator::RpmSpecGenerator;
 
 pub struct RpmBuilder {
-    build_root: PackageBuildRoot,
+    build_root: RpmBuildRoot,
 }
 
 impl RpmBuilder {
-    pub fn new(build_root: PackageBuildRoot) -> Self {
+    pub fn new(build_root: RpmBuildRoot) -> Self {
         Self { build_root }
     }
 
-    pub fn build_root(&self) -> &PackageBuildRoot {
-        &self.build_root
-    }
-
-    pub fn generate_spec_file(&self, patch_info: &PatchInfo) -> std::io::Result<PathBuf> {
-        RpmSpecGenerator::generate_spec_file(
-            patch_info,
-            &self.build_root.sources,
-            &self.build_root.specs,
-        )
-    }
-
-    pub fn build_prepare<P: AsRef<Path>>(&self, spec_file: P) -> std::io::Result<()> {
-        RPM_BUILD
+    pub fn build_prepare<P: AsRef<Path>>(&self, spec_file: P) -> Result<()> {
+        Ok(RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
@@ -41,7 +26,7 @@ impl RpmBuilder {
                     .arg("-bp")
                     .arg(spec_file.as_ref()),
             )?
-            .check_exit_code()
+            .check_exit_code()?)
     }
 
     pub fn build_source_package<P, Q>(
@@ -49,7 +34,7 @@ impl RpmBuilder {
         patch_info: &PatchInfo,
         spec_file: P,
         output_dir: Q,
-    ) -> std::io::Result<()>
+    ) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -64,14 +49,21 @@ impl RpmBuilder {
             )?
             .check_exit_code()?;
 
+        let srpms_dir = &self.build_root.srpms;
         let src_pkg_file = fs::find_file_by_ext(
-            &self.build_root.srpms,
+            srpms_dir,
             PKG_FILE_EXT,
             fs::FindOptions {
                 fuzz: false,
                 recursive: false,
             },
-        )?;
+        )
+        .with_context(|| {
+            format!(
+                "Cannot find source package from \"{}\"",
+                srpms_dir.display()
+            )
+        })?;
 
         let dst_pkg_name = format!(
             "{}-{}.src.{}",
@@ -81,7 +73,7 @@ impl RpmBuilder {
         );
         let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);
 
-        fs::copy(src_pkg_file, dst_pkg_file)?;
+        fs::copy(src_pkg_file, dst_pkg_file).context("Cannot copy package to output directory")?;
 
         Ok(())
     }
@@ -90,7 +82,7 @@ impl RpmBuilder {
         &self,
         spec_file: P,
         output_dir: Q,
-    ) -> std::io::Result<()> {
+    ) -> Result<()> {
         RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
@@ -103,7 +95,8 @@ impl RpmBuilder {
             )?
             .check_exit_code()?;
 
-        fs::copy_dir_contents(&self.build_root.rpms, &output_dir)?;
+        fs::copy_dir_contents(&self.build_root.rpms, &output_dir)
+            .context("Cannot copy package to output directory")?;
 
         Ok(())
     }

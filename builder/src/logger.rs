@@ -11,7 +11,7 @@ use log4rs::Config;
 
 use syscare_common::log::LogLevelFilter;
 
-use crate::cli::CliWorkDir;
+use crate::workdir::WorkDir;
 
 const LOG_PATTERN: &str = "{m}{n}";
 
@@ -69,7 +69,7 @@ impl Logger {
             ))
     }
 
-    fn do_init(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
+    fn do_init(work_dir: &WorkDir, max_level: LevelFilter) -> std::io::Result<()> {
         let mut appenders = Vec::new();
 
         appenders.extend(Self::init_console_log(max_level));
@@ -99,7 +99,7 @@ impl Logger {
         LOGGER_INIT_FLAG.load(Ordering::Acquire)
     }
 
-    pub fn initialize(work_dir: &CliWorkDir, max_level: LevelFilter) -> std::io::Result<()> {
+    pub fn initialize(work_dir: &WorkDir, max_level: LevelFilter) -> std::io::Result<()> {
         static INIT_ONCE: std::sync::Once = std::sync::Once::new();
 
         let mut result = Ok(());

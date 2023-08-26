@@ -6,7 +6,7 @@ use syscare_abi::{PackageInfo, PatchEntity, PatchFile, PatchInfo, PatchType};
 use syscare_common::util::{digest, fs};
 use uuid::Uuid;
 
-use crate::cli::CliArguments;
+use crate::args::Arguments;
 
 pub const PATCH_FILE_EXT: &str = "patch";
 pub const PATCH_INFO_FILE_NAME: &str = "patch_info";
@@ -59,7 +59,7 @@ impl PatchHelper {
         })
     }
 
-    pub fn parse_patch_info(args: &CliArguments, target_package: &PackageInfo) -> PatchInfo {
+    pub fn parse_patch_info(args: &Arguments, target_package: &PackageInfo) -> PatchInfo {
         const KERNEL_PKG_NAME: &str = "kernel";
 
         let patch_type = match target_package.name == KERNEL_PKG_NAME {

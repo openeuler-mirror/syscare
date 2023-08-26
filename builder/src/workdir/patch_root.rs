@@ -1,11 +1,17 @@
-use std::ffi::OsStr;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
-use syscare_common::util::fs;
+use anyhow::Result;
 
-use super::workdir_impl::WorkDirManager;
+use super::fs_util;
 
+const BUILD_DIR_NAME: &str = "build";
+const OUTPUT_DIR_NAME: &str = "output";
+
+#[derive(Debug, Clone)]
 pub struct PatchRoot {
     pub path: PathBuf,
     pub build: PathBuf,
@@ -13,32 +19,20 @@ pub struct PatchRoot {
 }
 
 impl PatchRoot {
-    pub fn new<P: AsRef<Path>>(base_dir: P) -> Self {
+    pub fn new<P: AsRef<Path>>(base_dir: P) -> Result<Self> {
         let path = base_dir.as_ref().to_path_buf();
-        let build = path.join("build");
-        let output = path.join("output");
+        let build = path.join(BUILD_DIR_NAME);
+        let output = path.join(OUTPUT_DIR_NAME);
 
-        Self {
+        fs_util::create_dir_all(&path)?;
+        fs_util::create_dir_all(&build)?;
+        fs_util::create_dir_all(&output)?;
+
+        Ok(Self {
             path,
             build,
             output,
-        }
-    }
-}
-
-impl WorkDirManager for PatchRoot {
-    fn create_all(&self) -> std::io::Result<()> {
-        fs::create_dir(&self.path)?;
-        fs::create_dir(&self.build)?;
-        fs::create_dir(&self.output)?;
-
-        Ok(())
-    }
-
-    fn remove_all(&self) -> std::io::Result<()> {
-        fs::remove_dir_all(&self.path)?;
-
-        Ok(())
+        })
     }
 }
 

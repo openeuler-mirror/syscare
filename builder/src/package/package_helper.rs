@@ -1,6 +1,7 @@
 use log::{log, Level};
 use std::path::Path;
 
+use anyhow::{bail, Result};
 use syscare_abi::{PackageInfo, PackageType};
 use syscare_common::util::fs;
 
@@ -9,7 +10,7 @@ use super::{rpm_spec_helper::TAG_VALUE_NONE, RpmHelper};
 pub struct PackageHelper;
 
 impl PackageHelper {
-    pub fn parse_pkg_info<P: AsRef<Path>>(pkg_path: P) -> std::io::Result<PackageInfo> {
+    pub fn parse_pkg_info<P: AsRef<Path>>(pkg_path: P) -> Result<PackageInfo> {
         let query_result = RpmHelper::query_package_info(
             pkg_path.as_ref(),
             "%{NAME}|%{ARCH}|%{EPOCH}|%{VERSION}|%{RELEASE}|%{LICENSE}|%{SOURCERPM}",
@@ -19,13 +20,10 @@ impl PackageHelper {
 
         let pkg_info = query_result.split('|').collect::<Vec<_>>();
         if pkg_info.len() < 7 {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!(
-                    "Parse package info from \"{}\" failed",
-                    pkg_path.as_ref().display()
-                ),
-            ));
+            bail!(
+                "Parse package info from \"{}\" failed",
+                pkg_path.as_ref().display()
+            );
         }
 
         let name = pkg_info[0].to_owned();
