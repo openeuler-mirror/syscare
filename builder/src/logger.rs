@@ -1,113 +1,66 @@
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 
-use log::LevelFilter;
+use anyhow::{Context, Result};
+use flexi_logger::{
+    DeferredNow, Duplicate, FileSpec, LogSpecification, Logger as FlexiLogger, LoggerHandle,
+    WriteMode,
+};
 
-use log4rs::append::console::{ConsoleAppender, Target};
-use log4rs::append::file::FileAppender;
-use log4rs::config::{Appender, Root};
-use log4rs::encode::pattern::PatternEncoder;
-use log4rs::Config;
-
-use syscare_common::log::LogLevelFilter;
-
-use crate::workdir::WorkDir;
-
-const LOG_PATTERN: &str = "{m}{n}";
-
-static LOGGER_INIT_FLAG: AtomicBool = AtomicBool::new(false);
+use log::{LevelFilter, Record};
+use once_cell::sync::OnceCell;
 
 pub struct Logger;
 
+static LOGGER: OnceCell<LoggerHandle> = OnceCell::new();
+
 impl Logger {
-    fn init_console_log(max_level: LevelFilter) -> Vec<Appender> {
-        const STDOUT_APPENDER_NAME: &str = "stdout";
-        const STDERR_APPENDER_NAME: &str = "stderr";
-
-        vec![
-            Appender::builder()
-                .filter(Box::new(LogLevelFilter::new(LevelFilter::Info, max_level)))
-                .build(
-                    STDOUT_APPENDER_NAME,
-                    Box::new(
-                        ConsoleAppender::builder()
-                            .target(Target::Stdout)
-                            .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
-                            .build(),
-                    ),
-                ),
-            Appender::builder()
-                .filter(Box::new(LogLevelFilter::new(
-                    LevelFilter::Error,
-                    LevelFilter::Warn,
-                )))
-                .build(
-                    STDERR_APPENDER_NAME,
-                    Box::new(
-                        ConsoleAppender::builder()
-                            .target(Target::Stderr)
-                            .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
-                            .build(),
-                    ),
-                ),
-        ]
+    fn format_log(
+        w: &mut dyn std::io::Write,
+        _now: &mut DeferredNow,
+        record: &Record,
+    ) -> Result<(), std::io::Error> {
+        write!(w, "{}", &record.args())
     }
 
-    fn init_file_log<P: AsRef<Path>>(path: P, max_level: LevelFilter) -> std::io::Result<Appender> {
-        const FILE_APPENDER_NAME: &str = "log_file";
-
-        Ok(Appender::builder()
-            .filter(Box::new(LogLevelFilter::new(LevelFilter::Error, max_level)))
-            .build(
-                FILE_APPENDER_NAME,
-                Box::new(
-                    FileAppender::builder()
-                        .encoder(Box::new(PatternEncoder::new(LOG_PATTERN)))
-                        .append(false)
-                        .build(path)?,
-                ),
-            ))
-    }
-
-    fn do_init(work_dir: &WorkDir, max_level: LevelFilter) -> std::io::Result<()> {
-        let mut appenders = Vec::new();
-
-        appenders.extend(Self::init_console_log(max_level));
-        appenders.push(Self::init_file_log(&work_dir.log_file, LevelFilter::Trace)?);
-
-        let root = Root::builder()
-            .appenders(appenders.iter().map(Appender::name).collect::<Vec<_>>())
-            .build(LevelFilter::Trace);
-
-        let log_config = Config::builder()
-            .appenders(appenders)
-            .build(root)
-            .map_err(|_| {
-                std::io::Error::new(std::io::ErrorKind::Other, "Failed to build log config")
-            })?;
-
-        log4rs::init_config(log_config).map_err(|_| {
-            std::io::Error::new(std::io::ErrorKind::Other, "Failed to init log config")
-        })?;
-
-        Ok(())
+    fn level_to_duplicate(level: LevelFilter) -> Duplicate {
+        match level {
+            LevelFilter::Off => Duplicate::None,
+            LevelFilter::Error => Duplicate::Error,
+            LevelFilter::Warn => Duplicate::Warn,
+            LevelFilter::Info => Duplicate::Info,
+            LevelFilter::Debug => Duplicate::Debug,
+            LevelFilter::Trace => Duplicate::Trace,
+        }
     }
 }
 
 impl Logger {
     pub fn is_inited() -> bool {
-        LOGGER_INIT_FLAG.load(Ordering::Acquire)
+        LOGGER.get().is_some()
     }
 
-    pub fn initialize(work_dir: &WorkDir, max_level: LevelFilter) -> std::io::Result<()> {
-        static INIT_ONCE: std::sync::Once = std::sync::Once::new();
+    pub fn initialize<P: AsRef<Path>>(
+        log_dir: P,
+        max_level: LevelFilter,
+        stdout_level: LevelFilter,
+    ) -> Result<()> {
+        LOGGER.get_or_try_init(|| -> Result<LoggerHandle> {
+            let log_spec = LogSpecification::builder().default(max_level).build();
 
-        let mut result = Ok(());
-        INIT_ONCE.call_once(|| {
-            result = Self::do_init(work_dir, max_level);
-            LOGGER_INIT_FLAG.store(true, Ordering::SeqCst);
-        });
+            let file_spec = FileSpec::default()
+                .directory(log_dir.as_ref())
+                .basename("build")
+                .use_timestamp(false);
 
-        result
+            let logger = FlexiLogger::with(log_spec)
+                .log_to_file(file_spec)
+                .duplicate_to_stdout(Self::level_to_duplicate(stdout_level))
+                .format(Self::format_log)
+                .write_mode(WriteMode::Direct);
+
+            logger.start().context("Failed to start logger")
+        })?;
+
+        Ok(())
     }
 }

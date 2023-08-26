@@ -1,3 +1,4 @@
+use std::ops::Deref;
 use std::process::exit;
 
 use anyhow::{bail, Context, Result};
@@ -383,7 +384,8 @@ impl SyscareBuilder {
             .context("Failed to create working directory")?;
 
         Logger::initialize(
-            self.workdir(),
+            self.workdir().deref(),
+            LevelFilter::Trace,
             match &self.args.verbose {
                 false => LevelFilter::Info,
                 true => LevelFilter::Debug,
