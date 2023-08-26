@@ -4,7 +4,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use log::error;
+use log::{debug, error};
 
 const EBPF_BIN_PATH: &str = "/usr/libexec/syscare/upatch_hijacker";
 const EBPF_SOCKET_PATH: &str = "/var/run/upatch-hijacker";
@@ -22,6 +22,7 @@ impl EbpfProgramGuard {
             process: None,
         };
 
+        debug!("Starting ebpf program \"{}\"...", EBPF_BIN_PATH);
         instance.start().context("Failed to start hijacker ebpf")?;
 
         Ok(instance)
@@ -56,6 +57,7 @@ impl EbpfProgramGuard {
 
 impl Drop for EbpfProgramGuard {
     fn drop(&mut self) {
+        debug!("Stopping ebpf program \"{}\"...", EBPF_BIN_PATH);
         if let Err(e) = self.stop().context("Failed to stop hijacker ebpf") {
             error!("{:?}", e)
         }

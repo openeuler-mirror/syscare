@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use log::error;
+use log::{debug, error};
 
 const KMOD_NAME: &str = "upatch_hijacker";
 const KMOD_SYS_DIR: &str = "/sys/module";
@@ -26,11 +26,12 @@ pub struct KernelModuleGuard {
 
 impl KernelModuleGuard {
     pub fn new() -> Result<Self> {
-        let instance = Self {
+        let instance: KernelModuleGuard = Self {
             name: KMOD_NAME.to_string(),
             sys_path: Path::new(KMOD_SYS_DIR).join(KMOD_NAME),
         };
 
+        debug!("Loading kernel module \"{}\"...", instance);
         instance
             .load()
             .with_context(|| format!("Failed to load module \"{}\"", instance))?;
@@ -79,6 +80,7 @@ impl KernelModuleGuard {
 
 impl Drop for KernelModuleGuard {
     fn drop(&mut self) {
+        debug!("Unloading kernel module \"{}\"...", self);
         if let Err(e) = self
             .unload()
             .with_context(|| format!("Failed to unload module \"{}\"", self))

@@ -1,7 +1,7 @@
 use std::path::Path;
 
 use anyhow::{anyhow, bail, Context, Result};
-use log::{debug, error};
+use log::error;
 
 mod cstring;
 mod ebpf;
@@ -19,8 +19,7 @@ enum HijackDependency {
 
 impl HijackDependency {
     fn new() -> Result<Self> {
-        debug!("Trying to initialize hijacker kmod...");
-        match KernelModuleGuard::new().context("Failed to initialize hijacker kmod") {
+        match KernelModuleGuard::new() {
             Ok(kmod) => {
                 return Ok(HijackDependency::KernelModule(kmod));
             }
@@ -28,9 +27,7 @@ impl HijackDependency {
                 error!("{:?}", e);
             }
         };
-
-        debug!("Trying to initialize hijacker ebpf...");
-        match EbpfProgramGuard::new().context("Failed to initialize hijacker ebpf") {
+        match EbpfProgramGuard::new() {
             Ok(ebpf) => {
                 return Ok(HijackDependency::EbpfProgram(ebpf));
             }
