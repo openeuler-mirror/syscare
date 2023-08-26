@@ -145,3 +145,10 @@ int upatch_hijacker_unregister(const char *prey_name, const char *hijacker_name)
         return hijacker_ioctl_handler(ioctl_fd, prey_name, hijacker_name, 0);
     return hijacker_socket_handler(prey_name, hijacker_name, 0);
 }
+
+void upatch_hijacker_cleanup(void)
+{
+    if (ioctl_fd != -1)
+        close(ioctl_fd);
+    ioctl_fd = -1;
+}

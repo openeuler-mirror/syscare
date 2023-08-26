@@ -19,6 +19,6 @@ struct upatch_socket_msg {
 };
 
 #define UPATCH_SOCKET_MAGIC 0xEEE55EE5
-#define UPATCH_SOCKET_PATH "/tmp/upatch-hijacker"
+#define UPATCH_SOCKET_PATH "/var/run/upatch-hijacker"
 
 #endif /* _UPATCH_SOCKET_H */
