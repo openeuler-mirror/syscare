@@ -10,9 +10,13 @@ use log::error;
 
 const KMOD_NAME: &str = "upatch_hijacker";
 const KMOD_SYS_DIR: &str = "/sys/module";
-
 const CMD_MODPROBE: &str = "modprobe";
-const CMD_RMMOD: &str = "rmmod";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ModuleOperation {
+    Insert,
+    Remove,
+}
 
 /// An RAII guard of the hijack kernel module implementation.
 pub struct KernelModuleGuard {
@@ -36,13 +40,15 @@ impl KernelModuleGuard {
 }
 
 impl KernelModuleGuard {
-    fn exec_module_ops(&self, cmd: &str) -> Result<()> {
-        let output = Command::new(cmd)
-            .arg(&self.name)
-            .stderr(Stdio::piped())
-            .spawn()?
-            .wait_with_output()?;
+    fn exec_module_ops(&self, module_op: ModuleOperation) -> Result<()> {
+        let mut cmd = Command::new(CMD_MODPROBE);
+        cmd.arg(&self.name).stderr(Stdio::piped());
 
+        if module_op == ModuleOperation::Remove {
+            cmd.arg("--remove");
+        }
+
+        let output = cmd.spawn()?.wait_with_output()?;
         if !output.status.success() {
             bail!(OsStr::from_bytes(&output.stderr)
                 .to_string_lossy()
@@ -58,14 +64,14 @@ impl KernelModuleGuard {
 
     fn load(&self) -> Result<()> {
         if !self.exists() {
-            self.exec_module_ops(CMD_MODPROBE)?;
+            self.exec_module_ops(ModuleOperation::Insert)?;
         }
         Ok(())
     }
 
     fn unload(&self) -> Result<()> {
         if self.exists() {
-            self.exec_module_ops(CMD_RMMOD)?;
+            self.exec_module_ops(ModuleOperation::Remove)?;
         }
         Ok(())
     }

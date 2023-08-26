@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use log::error;
 
 const EBPF_BIN_PATH: &str = "/usr/libexec/syscare/upatch_hijacker";
-const EBPF_PID_PATH: &str = "/var/run/upatch_hijacker.pid";
+const EBPF_SOCKET_PATH: &str = "/var/run/upatch-hijacker";
 
 /// An RAII guard of the hijack ebpf implementation.
 pub struct EbpfProgramGuard {
@@ -30,7 +30,7 @@ impl EbpfProgramGuard {
 
 impl EbpfProgramGuard {
     fn exists(&self) -> bool {
-        Path::new(EBPF_PID_PATH).exists()
+        Path::new(EBPF_SOCKET_PATH).exists()
     }
 
     fn start(&mut self) -> Result<()> {

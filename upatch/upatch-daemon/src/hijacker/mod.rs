@@ -10,10 +10,10 @@ mod config;
 mod lib;
 
 use config::HijackerConfig;
-use lib::HijackerLibrary;
+use lib::HijackLibrary;
 
 pub struct Hijacker {
-    lib: HijackerLibrary,
+    lib: HijackLibrary,
     elf_map: HashMap<PathBuf, PathBuf>,
 }
 
@@ -35,7 +35,7 @@ impl Hijacker {
 
 impl Hijacker {
     pub fn new<P: AsRef<Path>>(config_path: P) -> Result<Self> {
-        let lib = HijackerLibrary::new()?;
+        let lib = HijackLibrary::new()?;
 
         debug!("Initializing configuation...");
         let elf_map = Self::initialize_config(config_path)
