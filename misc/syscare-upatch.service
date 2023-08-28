@@ -1,16 +1,14 @@
 [Unit]
-Description=Syscare user patch management
+Description=Syscare user patch build daemon
 Requires=local-fs.target
-After=local-fs.target
-Before=syscare.service
+After=network-online.target
 
 [Service]
-ExecStart=modprobe upatch
-ExecStop=rmmod upatch
+Type=forking
+ExecStart=/usr/bin/upatchd -d
+ExecStop=/usr/bin/kill -s SIGTERM $MAINPID
 User=root
 Group=root
-Type=oneshot
-RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target

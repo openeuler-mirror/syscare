@@ -1,16 +1,14 @@
 [Unit]
-Description=Syscare patch management
-Requires=syscare-upatch.service local-fs.target
-After=syscare-upatch.service local-fs.target
-Before=network-online.target
+Description=Syscare patch management daemon
+Requires=local-fs.target
+After=network-online.target
 
 [Service]
-ExecStart=/usr/bin/syscare restore --accepted
-ExecStop=/usr/bin/syscare save
+Type=forking
+ExecStart=/usr/bin/syscared -d
+ExecStop=/usr/bin/kill -s SIGTERM $MAINPID
 User=root
 Group=root
-Type=oneshot
-RemainAfterExit=yes
 
 [Install]
 WantedBy=multi-user.target
