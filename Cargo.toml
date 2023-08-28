@@ -8,3 +8,12 @@ members = [
     "upatch/upatch-build",
     "upatch/upatch-daemon",
 ]
+
+[profile.release]
+opt-level = 'z'
+debug = false
+rpath = false
+lto = true
+debug-assertions = false
+incremental = false
+overflow-checks = false
