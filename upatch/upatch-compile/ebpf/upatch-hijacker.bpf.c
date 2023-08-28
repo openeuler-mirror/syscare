@@ -8,6 +8,10 @@
 
 #include "upatch-entry.h"
 
+#ifndef NULL
+#define NULL ((void*)0)
+#endif
+
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
 volatile unsigned int hijacker_total_ref = 0;
