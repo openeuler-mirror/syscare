@@ -1,8 +1,17 @@
-use std::{path::Path, sync::Arc, thread::JoinHandle, time::Duration};
+use std::{
+    path::Path,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle,
+    time::Duration,
+};
 
 use anyhow::{ensure, Context, Result};
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{error, info};
+use once_cell::sync::OnceCell;
 use parking_lot::RwLock;
 
 use super::manager::{PatchManager, PATCH_INFO_FILE_NAME};
@@ -13,7 +22,8 @@ const PATCH_INSTALLED_WAIT_TIMEOUT: u64 = 500;
 const PATCH_INSTALLED_MAX_RETRY: usize = 10;
 
 pub struct PatchMonitor {
-    thread_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+    run_flag: Arc<AtomicBool>,
+    thread_handle: OnceCell<JoinHandle<()>>,
 }
 
 impl PatchMonitor {
@@ -34,7 +44,7 @@ impl PatchMonitor {
     fn monitor_thread(
         mut inotify: Inotify,
         patch_manager: Arc<RwLock<PatchManager>>,
-        thread_handle: Arc<RwLock<Option<JoinHandle<()>>>>,
+        run_flag: Arc<AtomicBool>,
     ) {
         let patch_install_dir = patch_manager.read().patch_install_dir().to_path_buf();
         info!(
@@ -42,7 +52,7 @@ impl PatchMonitor {
             patch_install_dir.display()
         );
 
-        while thread_handle.read().is_some() {
+        while run_flag.load(Ordering::Relaxed) {
             let mut buffer = [0; 1024];
             if let Ok(events) = inotify.read_events(&mut buffer) {
                 for event in events {
@@ -91,26 +101,29 @@ impl PatchMonitor {
             )
             .context("Failed to monitor patch directory")?;
 
-        let thread_handle = Arc::new(RwLock::new(None));
-        {
-            let mut write_guard = thread_handle.write();
-            let patch_manager = patch_manager.clone();
-            let thread_handle = thread_handle.clone();
-            let new_thread_handle = std::thread::Builder::new()
-                .name(MONITOR_THREAD_NAME.to_string())
-                .spawn(move || Self::monitor_thread(inotify, patch_manager, thread_handle))
-                .with_context(|| format!("Failed to create {} thread", MONITOR_THREAD_NAME))?;
+        let run_flag = Arc::new(AtomicBool::new(true));
+        let thread_handle = OnceCell::new();
 
-            let _ = write_guard.insert(new_thread_handle);
-        }
+        let thread_run_flag = run_flag.clone();
+        thread_handle
+            .get_or_try_init(|| {
+                std::thread::Builder::new()
+                    .name(MONITOR_THREAD_NAME.to_string())
+                    .spawn(move || Self::monitor_thread(inotify, patch_manager, thread_run_flag))
+            })
+            .with_context(|| format!("Failed to create {} thread", MONITOR_THREAD_NAME))?;
 
-        Ok(Self { thread_handle })
+        Ok(Self {
+            run_flag,
+            thread_handle,
+        })
     }
 }
 
 impl Drop for PatchMonitor {
     fn drop(&mut self) {
-        if let Some(handle) = self.thread_handle.write().take() {
+        self.run_flag.store(false, Ordering::Relaxed);
+        if let Some(handle) = self.thread_handle.take() {
             handle.join().ok();
         }
     }
