@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{ops::Deref, path::Path};
 
 use anyhow::{Context, Result};
 use flexi_logger::{
@@ -9,9 +9,11 @@ use flexi_logger::{
 use log::{LevelFilter, Record};
 use once_cell::sync::OnceCell;
 
-pub struct Logger;
+static LOGGER: OnceCell<Logger> = OnceCell::new();
 
-static LOGGER: OnceCell<LoggerHandle> = OnceCell::new();
+pub struct Logger {
+    handle: LoggerHandle,
+}
 
 impl Logger {
     fn format_log(
@@ -22,8 +24,8 @@ impl Logger {
         write!(w, "{}", &record.args())
     }
 
-    fn level_to_duplicate(level: LevelFilter) -> Duplicate {
-        match level {
+    fn stdout_duplicate(stdout_level: LevelFilter) -> Duplicate {
+        match stdout_level {
             LevelFilter::Off => Duplicate::None,
             LevelFilter::Error => Duplicate::Error,
             LevelFilter::Warn => Duplicate::Warn,
@@ -44,23 +46,31 @@ impl Logger {
         max_level: LevelFilter,
         stdout_level: LevelFilter,
     ) -> Result<()> {
-        LOGGER.get_or_try_init(|| -> Result<LoggerHandle> {
+        LOGGER.get_or_try_init(|| -> Result<Logger> {
             let log_spec = LogSpecification::builder().default(max_level).build();
-
             let file_spec = FileSpec::default()
                 .directory(log_dir.as_ref())
-                .basename("build")
                 .use_timestamp(false);
 
             let logger = FlexiLogger::with(log_spec)
                 .log_to_file(file_spec)
-                .duplicate_to_stdout(Self::level_to_duplicate(stdout_level))
+                .duplicate_to_stdout(Self::stdout_duplicate(stdout_level))
                 .format(Self::format_log)
                 .write_mode(WriteMode::Direct);
 
-            logger.start().context("Failed to start logger")
+            let handle = logger.start().context("Failed to start logger")?;
+
+            Ok(Self { handle })
         })?;
 
         Ok(())
+    }
+}
+
+impl Deref for Logger {
+    type Target = LoggerHandle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
     }
 }

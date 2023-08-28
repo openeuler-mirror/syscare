@@ -5,7 +5,7 @@ use daemonize::Daemonize;
 use hijacker::Hijacker;
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{SecurityAttributes, Server, ServerBuilder};
-use log::{error, info};
+use log::{error, info, LevelFilter};
 
 use syscare_common::os;
 
@@ -77,8 +77,11 @@ impl Daemon {
 
     fn initialize_logger(&self) -> Result<()> {
         let max_level = self.args.log_level;
-        let duplicate_stdout = !self.args.daemon;
-        Logger::initialize(&self.args.log_dir, max_level, duplicate_stdout)?;
+        let stdout_level = match self.args.daemon {
+            true => LevelFilter::Off,
+            false => max_level,
+        };
+        Logger::initialize(&self.args.log_dir, max_level, stdout_level)?;
 
         Ok(())
     }

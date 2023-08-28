@@ -1,13 +1,15 @@
+use std::ops::Deref;
+
 use anyhow::Result;
 use flexi_logger::{DeferredNow, LogSpecification, Logger as FlexiLogger, LoggerHandle, WriteMode};
-use lazy_static::lazy_static;
+
 use log::{LevelFilter, Record};
-use parking_lot::{Mutex, MutexGuard};
+use once_cell::sync::OnceCell;
 
-pub struct Logger;
+static LOGGER: OnceCell<Logger> = OnceCell::new();
 
-lazy_static! {
-    static ref LOGGER: Mutex<Option<LoggerHandle>> = Mutex::new(None);
+pub struct Logger {
+    handle: LoggerHandle,
 }
 
 impl Logger {
@@ -22,23 +24,29 @@ impl Logger {
 
 impl Logger {
     pub fn is_inited() -> bool {
-        LOGGER.lock().is_some()
+        LOGGER.get().is_some()
     }
 
     pub fn initialize(max_level: LevelFilter) -> Result<()> {
-        let mut logger: MutexGuard<Option<LoggerHandle>> = LOGGER.lock();
-
-        if logger.is_none() {
+        LOGGER.get_or_try_init(|| -> Result<Logger> {
             let log_spec = LogSpecification::builder().default(max_level).build();
-            let log_handle = FlexiLogger::with(log_spec)
+            let handle = FlexiLogger::with(log_spec)
                 .log_to_stdout()
                 .format(Self::format_log)
                 .write_mode(WriteMode::Direct)
                 .start()?;
 
-            let _ = logger.insert(log_handle);
-        }
+            Ok(Self { handle })
+        })?;
 
         Ok(())
+    }
+}
+
+impl Deref for Logger {
+    type Target = LoggerHandle;
+
+    fn deref(&self) -> &Self::Target {
+        &self.handle
     }
 }

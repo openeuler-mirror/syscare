@@ -10,7 +10,7 @@ mod executor;
 mod logger;
 mod rpc;
 
-use args::CliArguments;
+use args::Arguments;
 use executor::{
     build::BuildCommandExecutor, patch::PatchCommandExecutor, reboot::RebootCommandExecutor,
     CommandExecutor,
@@ -22,13 +22,13 @@ const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 struct SyscareCLI {
-    args: CliArguments,
+    args: Arguments,
 }
 
 impl SyscareCLI {
     fn new() -> Self {
         Self {
-            args: CliArguments::parse(),
+            args: Arguments::parse(),
         }
     }
 

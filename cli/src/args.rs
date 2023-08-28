@@ -8,7 +8,7 @@ const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
 
 #[derive(Parser, Debug)]
 #[clap(bin_name=CLI_NAME, version=CLI_VERSION)]
-pub struct CliArguments {
+pub struct Arguments {
     /// Command name
     #[clap(subcommand)]
     pub command: CliCommand,
@@ -92,7 +92,7 @@ pub enum CliCommand {
     },
 }
 
-impl std::fmt::Display for CliArguments {
+impl std::fmt::Display for Arguments {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_fmt(format_args!("{:?}", self))
     }

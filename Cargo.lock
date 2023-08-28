@@ -248,9 +248,9 @@ checksum = "4443176a9f2c162692bd3d352d745ef9413eec5782a80d8fd6f8a1ac692a07f7"
 
 [[package]]
 name = "flate2"
-version = "1.0.27"
+version = "1.0.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c6c98ee8095e9d1dcbf2fcc6d95acccb90d1c81db1e44725c6a984b1dbdfb010"
+checksum = "3b9429470923de8e8cbd4d2dc513535400b4b3fef0319fb5c4e1f520a7bef743"
 dependencies = [
  "crc32fast",
  "miniz_oxide",
@@ -1217,6 +1217,7 @@ dependencies = [
  "jsonrpc",
  "lazy_static",
  "log",
+ "once_cell",
  "parking_lot",
  "syscare-abi",
  "syscare-common",
@@ -1439,6 +1440,7 @@ dependencies = [
  "jsonrpc-core",
  "jsonrpc-derive",
  "jsonrpc-ipc-server",
+ "lazy_static",
  "log",
  "once_cell",
  "parking_lot",
