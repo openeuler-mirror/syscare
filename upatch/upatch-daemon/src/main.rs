@@ -1,4 +1,4 @@
-use std::{fs, process};
+use std::{fs, path::Path, process};
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
@@ -46,9 +46,20 @@ impl Daemon {
         Ok(())
     }
 
-    fn prepare_environment(&self) {
-        fs::create_dir_all(&self.args.work_dir).ok();
-        fs::create_dir_all(&self.args.log_dir).ok();
+    fn prepare_directory<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let dir_path = path.as_ref();
+        if !dir_path.exists() {
+            fs::create_dir_all(dir_path).with_context(|| {
+                format!("Failed to create directory \"{}\"", dir_path.display())
+            })?;
+        }
+        Ok(())
+    }
+
+    fn prepare_environment(&self) -> Result<()> {
+        self.prepare_directory(&self.args.work_dir)?;
+        self.prepare_directory(&self.args.log_dir)?;
+        Ok(())
     }
 
     fn daemonize(&self) -> Result<()> {
@@ -100,7 +111,7 @@ impl Daemon {
         info!("Syscare Builder Daemon - v{}", DAEMON_VERSION);
         info!("============================");
         info!("Preparing environment...");
-        self.prepare_environment();
+        self.prepare_environment()?;
 
         info!("Start with {:#?}", self.args);
         self.daemonize()?;

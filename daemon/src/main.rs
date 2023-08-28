@@ -1,4 +1,4 @@
-use std::process::exit;
+use std::{fs, path::Path, process::exit};
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
@@ -7,7 +7,8 @@ use jsonrpc_ipc_server::{Server, ServerBuilder};
 use kmod::KernelModuleGuard;
 use log::{error, info};
 
-use syscare_common::{os, util::fs};
+use once_cell::sync::OnceCell;
+use syscare_common::os;
 
 mod args;
 mod fast_reboot;
@@ -31,16 +32,16 @@ const DAEMON_UMASK: u32 = 0o027;
 struct Daemon {
     uid: u32,
     args: Arguments,
-    _guard: KernelModuleGuard,
+    guard: OnceCell<KernelModuleGuard>,
 }
 
 impl Daemon {
-    fn new() -> Result<Self> {
-        Ok(Self {
+    fn new() -> Self {
+        Self {
             uid: os::user::id(),
             args: Arguments::new(),
-            _guard: KernelModuleGuard::new()?,
-        })
+            guard: OnceCell::new(),
+        }
     }
 
     fn check_root_permission(&self) -> Result<()> {
@@ -62,10 +63,26 @@ impl Daemon {
         Ok(())
     }
 
-    fn prepare_environment(&self) {
-        fs::create_dir_all(&self.args.work_dir).ok();
-        fs::create_dir_all(&self.args.data_dir).ok();
-        fs::create_dir_all(&self.args.log_dir).ok();
+    fn prepare_directory<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+        let dir_path = path.as_ref();
+        if !dir_path.exists() {
+            fs::create_dir_all(dir_path).with_context(|| {
+                format!("Failed to create directory \"{}\"", dir_path.display())
+            })?;
+        }
+        Ok(())
+    }
+
+    fn prepare_environment(&self) -> Result<()> {
+        self.prepare_directory(&self.args.work_dir)?;
+        self.prepare_directory(&self.args.data_dir)?;
+        self.prepare_directory(&self.args.log_dir)?;
+
+        self.guard
+            .get_or_try_init(KernelModuleGuard::new)
+            .context("Failed to initialize dependency")?;
+
+        Ok(())
     }
 
     fn daemonize(&self) -> Result<()> {
@@ -92,18 +109,15 @@ impl Daemon {
     }
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
-        let socket_file = self.args.socket_file.as_path();
-        if socket_file.exists() {
-            std::fs::remove_file(socket_file).ok();
-        }
+        let socket_path = &self
+            .args
+            .socket_file
+            .to_str()
+            .context("Failed to convert socket path to string")?;
 
-        let builder = ServerBuilder::new(io_handler).set_client_buffer_size(1);
-
-        let server = builder.start(
-            socket_file
-                .to_str()
-                .context("Failed to convert socket path to string")?,
-        )?;
+        let server = ServerBuilder::new(io_handler)
+            .set_client_buffer_size(1)
+            .start(socket_path)?;
 
         Ok(server)
     }
@@ -116,7 +130,7 @@ impl Daemon {
         info!("Syscare Daemon - v{}", DAEMON_VERSION);
         info!("============================");
         info!("Preparing environment...");
-        self.prepare_environment();
+        self.prepare_environment()?;
 
         info!("Start with {:#?}", self.args);
         self.daemonize()?;
@@ -139,7 +153,7 @@ impl Daemon {
 }
 
 pub fn main() {
-    let exit_code = match Daemon::new().and_then(|daemon| daemon.start_and_run()) {
+    let exit_code = match Daemon::new().start_and_run() {
         Ok(_) => {
             info!("Daemon exited");
             0
