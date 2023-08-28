@@ -14,7 +14,7 @@ use syscare_common::{
     },
 };
 
-use super::{info_ext::KernelPatchExt, patch::Patch, patch_driver::PatchDriver};
+use super::{KernelPatchExt, Patch, PatchDriver};
 
 const INSMOD: ExternCommand = ExternCommand::new("insmod");
 const RMMOD: ExternCommand = ExternCommand::new("rmmod");

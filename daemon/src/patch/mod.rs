@@ -1,7 +1,5 @@
 mod manager;
-mod monitor;
 mod transaction;
 
-pub use manager::*;
-pub use monitor::*;
-pub use transaction::*;
+pub use manager::{Patch, PatchManager};
+pub use transaction::PatchTransaction;

@@ -8,7 +8,7 @@ use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
 };
 
-use super::{info_ext::UserPatchExt, patch::Patch, patch_driver::PatchDriver};
+use super::{Patch, PatchDriver, UserPatchExt};
 
 const UPATCH_TOOL: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-tool");
 

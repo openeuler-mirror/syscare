@@ -2,7 +2,13 @@ use anyhow::Result;
 
 use syscare_abi::PatchStatus;
 
-use super::patch::Patch;
+mod kernel_patch_driver;
+mod user_patch_driver;
+
+pub use kernel_patch_driver::*;
+pub use user_patch_driver::*;
+
+use super::entity::*;
 
 /// Basic abstraction of patch operation
 pub trait PatchDriver: Send + Sync {

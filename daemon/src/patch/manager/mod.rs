@@ -11,19 +11,20 @@ use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
 
+use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
 use syscare_abi::{PatchStatus, PatchType};
 use syscare_common::util::{fs, serde};
 
-mod info_ext;
-mod kernel_patch_driver;
-mod patch;
-mod patch_driver;
-mod user_patch_driver;
+mod dependency;
+mod driver;
+mod entity;
+mod monitor;
 
-use kernel_patch_driver::KernelPatchDriver;
-pub use patch::Patch;
-use patch_driver::PatchDriver;
-use user_patch_driver::UserPatchDriver;
+use dependency::PatchManagerDependency;
+use driver::{KernelPatchDriver, PatchDriver, UserPatchDriver};
+pub use entity::Patch;
+use monitor::PatchMonitor;
 
 pub const PATCH_INFO_FILE_NAME: &str = "patch_info";
 const PATCH_INSTALL_DIR: &str = "patches";
@@ -38,6 +39,9 @@ const PATCH_ACTIVE: TransitionAction = &PatchManager::driver_active_patch;
 const PATCH_DEACTIVE: TransitionAction = &PatchManager::driver_deactive_patch;
 const PATCH_ACCEPT: TransitionAction = &PatchManager::do_patch_accept;
 const PATCH_DECLINE: TransitionAction = &PatchManager::do_patch_decline;
+
+static INSTANCE: OnceCell<Arc<RwLock<PatchManager>>> = OnceCell::new();
+static MONITOR: OnceCell<PatchMonitor> = OnceCell::new();
 
 lazy_static! {
     static ref DRIVER_MAP: IndexMap<PatchType, Box<dyn PatchDriver>> = IndexMap::from([
@@ -108,28 +112,48 @@ struct PatchEntry {
 }
 
 pub struct PatchManager {
+    _dependency: PatchManagerDependency,
     patch_install_dir: PathBuf,
     patch_status_file: PathBuf,
     entry_map: IndexMap<String, PatchEntry>,
 }
 
 impl PatchManager {
-    pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
-        let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
-        let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
-        let entry_map = Self::scan_patches(&patch_install_dir)?;
+    pub fn initialize<P: AsRef<Path>>(patch_root: P) -> Result<()> {
+        debug!("Initializing patch manager...");
+        INSTANCE
+            .get_or_try_init(|| -> Result<Arc<RwLock<PatchManager>>> {
+                let _dependency = PatchManagerDependency::new()?;
+                let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
+                let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
+                let entry_map = Self::scan_patches(&patch_install_dir)?;
 
-        Ok(Self {
-            patch_install_dir,
-            patch_status_file,
-            entry_map,
-        })
+                Ok(Arc::new(RwLock::new(Self {
+                    _dependency,
+                    patch_install_dir,
+                    patch_status_file,
+                    entry_map,
+                })))
+            })
+            .context("Failed to initialize patch manager")?;
+
+        debug!("Initializing patch monitor...");
+        MONITOR
+            .get_or_try_init(|| -> Result<PatchMonitor> { PatchMonitor::new() })
+            .context("Failed to initialize patch monitor")?;
+
+        Ok(())
     }
 
-    pub fn patch_install_dir(&self) -> &Path {
-        &self.patch_install_dir
+    pub fn get_instance() -> Result<Arc<RwLock<Self>>> {
+        INSTANCE
+            .get()
+            .context("Patch manager is not initialized")
+            .cloned()
     }
+}
 
+impl PatchManager {
     pub fn match_patch(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         debug!("Matching patch by \"{}\"...", identifier);
         let match_result = match self.find_patch_by_uuid(identifier) {

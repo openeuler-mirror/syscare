@@ -13,16 +13,13 @@ use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
-use kmod::KernelModuleGuard;
 use log::{error, info, LevelFilter};
-use once_cell::sync::OnceCell;
 use signal_hook::consts::TERM_SIGNALS;
 
 use syscare_common::os;
 
 mod args;
 mod fast_reboot;
-mod kmod;
 mod logger;
 mod patch;
 mod rpc;
@@ -38,13 +35,12 @@ use rpc::{
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_UMASK: u32 = 0o027;
-const DAEMON_PARK_TIMEOUT: u64 = 100;
+const DAEMON_SLEEP_TIME: u64 = 100;
 
 struct Daemon {
     uid: u32,
     args: Arguments,
     term_flag: Arc<AtomicBool>,
-    guard: OnceCell<KernelModuleGuard>,
 }
 
 impl Daemon {
@@ -53,7 +49,6 @@ impl Daemon {
             uid: os::user::id(),
             args: Arguments::new(),
             term_flag: Arc::new(AtomicBool::new(false)),
-            guard: OnceCell::new(),
         }
     }
 
@@ -94,10 +89,6 @@ impl Daemon {
         self.prepare_directory(&self.args.data_dir)?;
         self.prepare_directory(&self.args.log_dir)?;
 
-        self.guard
-            .get_or_try_init(KernelModuleGuard::new)
-            .context("Failed to initialize dependency")?;
-
         Ok(())
     }
 
@@ -117,8 +108,10 @@ impl Daemon {
     fn initialize_skeletons(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        let patch_skeleton = PatchSkeletonImpl::new(&self.args.data_dir)?;
-        io_handler.extend_with(patch_skeleton.to_delegate());
+        PatchSkeletonImpl::initialize(&self.args.data_dir)
+            .context("Failed to initialize patch skeleton")?;
+
+        io_handler.extend_with(PatchSkeletonImpl.to_delegate());
         io_handler.extend_with(FastRebootSkeletonImpl.to_delegate());
 
         Ok(io_handler)
@@ -176,7 +169,7 @@ impl Daemon {
 
         info!("Daemon is running...");
         while !self.term_flag.load(Ordering::Relaxed) {
-            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIMEOUT));
+            std::thread::sleep(Duration::from_millis(DAEMON_SLEEP_TIME));
         }
 
         info!("Shutting down...");
