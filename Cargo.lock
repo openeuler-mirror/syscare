@@ -1280,6 +1280,7 @@ dependencies = [
  "once_cell",
  "parking_lot",
  "serde",
+ "signal-hook",
  "syscare-abi",
  "syscare-common",
 ]
@@ -1446,6 +1447,7 @@ dependencies = [
  "parking_lot",
  "serde",
  "serde_yaml",
+ "signal-hook",
  "syscare-common",
 ]
 

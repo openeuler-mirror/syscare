@@ -1,4 +1,13 @@
-use std::{fs, path::Path, process::exit};
+use std::{
+    fs,
+    path::Path,
+    process::exit,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    time::Duration,
+};
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
@@ -6,8 +15,9 @@ use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
 use kmod::KernelModuleGuard;
 use log::{error, info, LevelFilter};
-
 use once_cell::sync::OnceCell;
+use signal_hook::consts::TERM_SIGNALS;
+
 use syscare_common::os;
 
 mod args;
@@ -28,10 +38,12 @@ use rpc::{
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_UMASK: u32 = 0o027;
+const DAEMON_PARK_TIMEOUT: u64 = 100;
 
 struct Daemon {
     uid: u32,
     args: Arguments,
+    term_flag: Arc<AtomicBool>,
     guard: OnceCell<KernelModuleGuard>,
 }
 
@@ -40,6 +52,7 @@ impl Daemon {
         Self {
             uid: os::user::id(),
             args: Arguments::new(),
+            term_flag: Arc::new(AtomicBool::new(false)),
             guard: OnceCell::new(),
         }
     }
@@ -111,6 +124,15 @@ impl Daemon {
         Ok(io_handler)
     }
 
+    fn initialize_signal_handler(&self) -> Result<()> {
+        for signal in TERM_SIGNALS {
+            signal_hook::flag::register(*signal, self.term_flag.clone())
+                .with_context(|| format!("Failed to register handler for signal {}", signal))?;
+        }
+
+        Ok(())
+    }
+
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
         let socket_path = &self
             .args
@@ -138,6 +160,10 @@ impl Daemon {
         info!("Start with {:#?}", self.args);
         self.daemonize()?;
 
+        info!("Initializing signal handler...");
+        self.initialize_signal_handler()
+            .context("Failed to initialize signal handler")?;
+
         info!("Initializing skeletons...");
         let io_handler = self
             .initialize_skeletons()
@@ -149,7 +175,12 @@ impl Daemon {
             .context("Failed to create remote procedure call server")?;
 
         info!("Daemon is running...");
-        server.wait();
+        while !self.term_flag.load(Ordering::Relaxed) {
+            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIMEOUT));
+        }
+
+        info!("Shutting down...");
+        server.close();
 
         Ok(())
     }

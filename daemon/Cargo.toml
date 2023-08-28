@@ -13,6 +13,7 @@ syscare-common     = { package = "syscare-common", path = "../common" }
 syscare-abi        = { package = "syscare-abi", path = "../abi" }
 anyhow             = { version = "1.0" }
 once_cell          = { version = "1.0" }
+signal-hook        = { version = "0.3.14" }
 lazy_static        = { version = "1.0" }
 parking_lot        = { version = "0.11" }
 indexmap           = { version = "1" }

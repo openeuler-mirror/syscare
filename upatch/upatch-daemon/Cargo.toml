@@ -12,6 +12,7 @@ build        = "build.rs"
 syscare-common     = { package = "syscare-common", path = "../../common" }
 anyhow             = { version = "1.0" }
 once_cell          = { version = "1.0" }
+signal-hook        = { version = "0.3.14" }
 lazy_static        = { version = "1.0" }
 parking_lot        = { version = "0.11" }
 log                = { version = "0.4" }
