@@ -2,6 +2,7 @@ use std::{path::Path, sync::Arc};
 
 use anyhow::{Context, Result};
 
+use log::error;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
 use crate::patch::{Patch, PatchManager, PatchTransaction};
@@ -180,5 +181,13 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 .restore_patch_status(accepted_only)
                 .context("Failed to restore patch status")
         })
+    }
+}
+
+impl Drop for PatchSkeletonImpl {
+    fn drop(&mut self) {
+        if let Err(e) = self.save_patch_status() {
+            error!("{:?}", e)
+        }
     }
 }
