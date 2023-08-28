@@ -9,6 +9,7 @@ use flexi_logger::{
 use log::{LevelFilter, Record};
 use once_cell::sync::OnceCell;
 
+const LOG_FILE_NAME: &str = "build";
 static LOGGER: OnceCell<Logger> = OnceCell::new();
 
 pub struct Logger {
@@ -50,6 +51,7 @@ impl Logger {
             let log_spec = LogSpecification::builder().default(max_level).build();
             let file_spec = FileSpec::default()
                 .directory(log_dir.as_ref())
+                .basename(LOG_FILE_NAME)
                 .use_timestamp(false);
 
             let logger = FlexiLogger::with(log_spec)
