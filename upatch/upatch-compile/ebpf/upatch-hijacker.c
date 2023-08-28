@@ -15,7 +15,7 @@
 #include <sys/un.h>
 
 #include <sys/resource.h>
-#include <bpf/libbpf.h>
+#include <bpf/bpf.h>
 
 #include "upatch-hijacker.skel.h"
 #include "upatch-entry.h"
@@ -50,8 +50,7 @@ static inline int entry_lookup_by_name(const char *entry_name,
 	const struct bpf_map *map = skel->maps.hijacker_entries;
 	memset(entry, 0, sizeof(*entry));
 	strncpy(entry->name, entry_name, sizeof(entry->name) - 1);
-	return bpf_map__lookup_elem(map, entry, sizeof(*entry),
-		entry_des, sizeof(*entry_des), 0);
+	return bpf_map_lookup_elem(bpf_map__fd(map), entry, entry_des);
 }
 
 static int entry_put(const char *entry_name)
@@ -75,8 +74,7 @@ static int entry_put(const char *entry_name)
 
 	/* ATTENTION: since we have no lock between kernel and user, no delete */
 	entry_des.ref --;
-	return bpf_map__update_elem(map, &entry, sizeof(entry),
-			&entry_des, sizeof(entry_des), 0);
+	return bpf_map_update_elem(bpf_map__fd(map), &entry, &entry_des, 0);
 }
 
 static int entry_get(unsigned long entry_ino, const char *entry_name,
@@ -104,8 +102,7 @@ static int entry_get(unsigned long entry_ino, const char *entry_name,
         || entry_des.if_hijacker != if_hijacker)
 		return -EPERM;
 
-	return bpf_map__update_elem(map, &entry, sizeof(entry),
-		&entry_des, sizeof(entry_des), 0);
+	return bpf_map_update_elem(bpf_map__fd(map), &entry, &entry_des, 0);
 }
 
 static int register_entry(unsigned long prey_ino, const char *prey_name,
@@ -173,11 +170,33 @@ static int establish_hijacker_link(char *buff, int buff_len,
 	return -EMLINK;
 }
 
+static int check_entry_path(const char *path)
+{
+	char resolved_path[PATH_MAX];
+	char *real_name = NULL;
+
+	real_name = realpath(path, (char *)&resolved_path);
+	if (real_name == NULL)
+		return -errno;
+
+	if (strcmp(real_name, path) == 0)
+		return 0;
+	return -ELOOP;
+}
+
 int upatch_register_entry(unsigned long prey_ino, const char *prey_name,
 	unsigned long hijacker_ino, const char *hijacker_name)
 {
 	int ret;
 	char path[] = "/1";
+
+	ret = check_entry_path(prey_name);
+	if (ret)
+		return ret;
+
+	ret = check_entry_path(hijacker_name);
+	if (ret)
+		return ret;
 
 	ret = establish_hijacker_link((char *)&path, sizeof(path),
 		hijacker_name, hijacker_ino);
