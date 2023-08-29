@@ -108,17 +108,16 @@ impl PatchMonitorThread {
             if let Ok(events) = self.inotify.read_events(&mut buffer) {
                 for event in events {
                     if let Some(patch_directory) = event.name {
-                        if event.mask.contains(EventMask::CREATE) {
-                            if Self::wait_patch_installed(
+                        if event.mask.contains(EventMask::CREATE)
+                            && Self::wait_patch_installed(
                                 monitor_dir.join(patch_directory).join(PATCH_INFO_FILE_NAME),
                                 Duration::from_millis(PATCH_INSTALLED_WAIT_TIMEOUT),
                                 PATCH_INSTALLED_WAIT_RETRY,
                             )
                             .is_err()
-                            {
-                                error!("Waiting for patch installation timed out");
-                                continue;
-                            }
+                        {
+                            error!("Waiting for patch installation timed out");
+                            continue;
                         }
 
                         info!("Detected patch change, rescanning patches...");
