@@ -13,8 +13,6 @@ git clone "$REPO_URL"
 # Prepare package build requirements 
 pushd "$REPO_NAME"
 
-cargo update -p clap --precise 4.0.32
-cargo update -p clap_lex --precise 0.3.0
 cargo vendor --respect-source-config
 
 mkdir -p .cargo
