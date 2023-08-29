@@ -183,7 +183,7 @@ pub fn main() {
                     eprintln!("Error: {:?}", e)
                 }
                 true => {
-                    error!("{:#}", e);
+                    error!("{:?}", e);
                     error!("Daemon exited unsuccessfully");
                 }
             }
