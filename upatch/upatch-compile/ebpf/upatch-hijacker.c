@@ -21,12 +21,11 @@
 #include "upatch-entry.h"
 #include "upatch-socket.h"
 
-static char path_buff[PATH_MAX];
 static volatile sig_atomic_t stop;
 static int upatch_socket = -1;
 static struct upatch_hijacker_bpf *skel = NULL;
 
-static void sig_int(int signo)
+static void upatch_sig_handler(int signo)
 {
 	stop = 1;
 	if (upatch_socket != -1)
@@ -106,42 +105,50 @@ static int entry_get(unsigned long entry_ino, const char *entry_name,
 }
 
 static int register_entry(unsigned long prey_ino, const char *prey_name,
-	unsigned long hijacker_ino, const char *hijacker_name)
+    unsigned long hijacker_ino, const char *hijacker_name)
 {
-	int ret;
+    int ret;
+    char resolved_path[PATH_MAX];
+    char *real_name = NULL;
 
-	/* check soft link first */
-	ret = readlink(hijacker_name, (char *)&path_buff, PATH_MAX);
-	if (ret == -1)
-		return -errno;
-	path_buff[ret] = '\0';
+    real_name = realpath(hijacker_name, (char *)&resolved_path);
+    if (real_name == NULL)
+        return -errno;
 
-	ret = entry_get(prey_ino, prey_name, hijacker_name, 0);
-	if (ret)
-		goto out;
+    /* use soft link filename as jump path */
+    ret = entry_get(prey_ino, prey_name, hijacker_name, 0);
+    if (ret)
+        goto out;
 
-	ret = entry_get(hijacker_ino, (char *)&path_buff, prey_name, 1);
-	if (ret)
-		goto out_clean;
+    /* use real filename as judge path */
+    ret = entry_get(hijacker_ino, real_name, prey_name, 1);
+    if (ret)
+        goto out_clean;
 
-	goto out;
+    goto out;
 out_clean:
-	entry_put(prey_name);
+    entry_put(prey_name);
 out:
-	return ret;
+    return ret;
 }
 
-static inline bool check_if_hijacker(const char *path, unsigned long hijacker_ino)
+static int check_if_hijacker(const char *path, const char *hijacker_path)
 {
-    struct stat path_lstat, path_stat;
+    struct stat path_lstat;
+    char real_path[PATH_MAX];
+    int ret;
 
     /* check if it is a link to the hijacker */
-    if (lstat(path, &path_lstat) == -1 || stat(path, &path_stat) == -1)
+    if (lstat(path, &path_lstat) == -1)
         return false;
 
-    if (S_ISLNK(path_lstat.st_mode) && path_stat.st_ino == hijacker_ino)
-        return true;
+    ret = readlink(path, (char *)&real_path, PATH_MAX);
+    if (ret == -1)
+        return false;
+    real_path[ret] = '\0';
 
+    if (S_ISLNK(path_lstat.st_mode) && strcmp(real_path, hijacker_path) == 0)
+        return true;
     return false;
 }
 
@@ -149,7 +156,9 @@ static inline bool find_hijacker_range(char start, char end, char *path,
 	const char *hijacker_path, unsigned long hijacker_ino)
 {
 	for (path[1] = start; path[1] != end + 1; path[1] ++) {
-		if (symlink(hijacker_path, path) == 0)
+		if (access(path, F_OK) == 0 && check_if_hijacker(path, hijacker_path))
+            return true;
+        else if (symlink(hijacker_path, path) == 0)
 			return true;
 	}
 	return false;
@@ -327,7 +336,8 @@ int main(int argc, char **argv)
 		goto cleanup;
 	}
 
-	if (signal(SIGINT, sig_int) == SIG_ERR) {
+	if (signal(SIGINT, upatch_sig_handler) == SIG_ERR
+		|| signal(SIGTERM, upatch_sig_handler) == SIG_ERR) {
 		fprintf(stderr, "can't set signal handler: %s\n", strerror(errno));
 		goto cleanup;
 	}
