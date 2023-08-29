@@ -1216,6 +1216,7 @@ dependencies = [
  "function_name",
  "jsonrpc",
  "lazy_static",
+ "libc",
  "log",
  "once_cell",
  "parking_lot",

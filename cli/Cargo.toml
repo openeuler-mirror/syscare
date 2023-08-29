@@ -14,9 +14,10 @@ syscare-abi    = { package = "syscare-abi", path = "../abi" }
 anyhow         = { version = "1.0" }
 clap           = { version = "3.2.23", features = ["derive"] }
 flexi_logger   = { version = "0.24" }
-once_cell      = { version = "1.0" }
+function_name  = { version = "0.3" }
+jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
+libc           = { version = "0.2.147" }
+once_cell      = { version = "1.0" }
 parking_lot    = { version = "0.11" }
-jsonrpc        = { version = "0.16", features = ["simple_uds"] }
-function_name  = { version = "0.3" }

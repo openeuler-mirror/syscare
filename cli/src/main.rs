@@ -1,5 +1,4 @@
-use std::process::exit;
-use std::rc::Rc;
+use std::{process::exit, rc::Rc};
 
 use anyhow::Result;
 use clap::Parser;
@@ -7,6 +6,7 @@ use log::{debug, error};
 
 mod args;
 mod executor;
+mod flock;
 mod logger;
 mod rpc;
 
@@ -15,11 +15,13 @@ use executor::{
     build::BuildCommandExecutor, patch::PatchCommandExecutor, reboot::RebootCommandExecutor,
     CommandExecutor,
 };
+use flock::ExclusiveFileLockGuard;
 use logger::Logger;
 use rpc::{PatchProxy, RebootProxy, RpcRemote};
 
 const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CLI_LOCK_FILE_PATH: &str = "/var/run/syscare.lock";
 
 struct SyscareCLI {
     args: Arguments,
@@ -38,6 +40,9 @@ impl SyscareCLI {
             false => log::LevelFilter::Info,
         })?;
         debug!("{:#?}", self.args);
+
+        debug!("Acquiring file lock...");
+        let _guard = ExclusiveFileLockGuard::new(CLI_LOCK_FILE_PATH)?;
 
         debug!("Initializing remote procedure call client...");
         let remote = Rc::new(RpcRemote::new(&self.args.socket_file));
