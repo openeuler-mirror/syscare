@@ -40,6 +40,8 @@ const PATCH_DEACTIVE: TransitionAction = &PatchManager::driver_deactive_patch;
 const PATCH_ACCEPT: TransitionAction = &PatchManager::do_patch_accept;
 const PATCH_DECLINE: TransitionAction = &PatchManager::do_patch_decline;
 
+const PATCH_INIT_RESTORE_ACCEPTED_ONLY: bool = true;
+
 static INSTANCE: OnceCell<Arc<RwLock<PatchManager>>> = OnceCell::new();
 static MONITOR: OnceCell<PatchMonitor> = OnceCell::new();
 
@@ -128,12 +130,18 @@ impl PatchManager {
                 let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
                 let entry_map = Self::scan_patches(&patch_install_dir)?;
 
-                Ok(Arc::new(RwLock::new(Self {
+                let mut instance = Self {
                     _dependency,
                     patch_install_dir,
                     patch_status_file,
                     entry_map,
-                })))
+                };
+
+                instance
+                    .restore_patch_status(PATCH_INIT_RESTORE_ACCEPTED_ONLY)
+                    .context("Failed to restore patch status")?;
+
+                Ok(Arc::new(RwLock::new(instance)))
             })
             .context("Failed to initialize patch manager")?;
 
@@ -270,7 +278,7 @@ impl PatchManager {
     }
 
     pub fn restore_patch_status(&mut self, accepted_only: bool) -> Result<()> {
-        debug!("Reading patch status from file...");
+        debug!("Reading patch status...");
         let status_map =
             match serde::deserialize::<HashMap<String, PatchStatus>, _>(&self.patch_status_file) {
                 Ok(map) => map,
@@ -308,6 +316,7 @@ impl PatchManager {
                 }
             })
             .collect::<Vec<_>>();
+
         restore_list.sort_by(|(lhs_patch, lhs_status), (rhs_patch, rhs_status)| {
             match lhs_status.cmp(rhs_status) {
                 Ordering::Less => Ordering::Less,
