@@ -1,9 +1,10 @@
+use std::os::unix::prelude::MetadataExt;
 use std::{
     collections::HashMap,
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use log::{debug, info};
 
 mod config;
@@ -19,6 +20,8 @@ pub struct Hijacker {
 
 impl Hijacker {
     fn initialize_config<P: AsRef<Path>>(config_path: P) -> Result<HijackerConfig> {
+        const MODE_EXEC_MASK: u32 = 0o111;
+
         let config = match config_path.as_ref().exists() {
             true => HijackerConfig::parse_from(config_path)?,
             false => {
@@ -29,6 +32,20 @@ impl Hijacker {
                 config
             }
         };
+
+        for hijacker in config.0.values() {
+            let is_executable_file = hijacker
+                .symlink_metadata()
+                .map(|m| m.is_file() && (m.mode() & MODE_EXEC_MASK != 0))
+                .with_context(|| format!("Failed to read \"{}\" metadata", hijacker.display()))?;
+            if !is_executable_file {
+                bail!(
+                    "Hijack program \"{}\" is not an executable file",
+                    hijacker.display()
+                );
+            }
+        }
+
         Ok(config)
     }
 }
