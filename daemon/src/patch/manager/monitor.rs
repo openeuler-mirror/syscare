@@ -16,9 +16,9 @@ use parking_lot::RwLock;
 use super::{PatchManager, PATCH_INFO_FILE_NAME};
 
 const MONITOR_THREAD_NAME: &str = "patch_monitor";
-const MONITOR_CHECK_PERIOD: u64 = 500;
-const PATCH_INSTALLED_WAIT_TIMEOUT: u64 = 500;
-const PATCH_INSTALLED_MAX_RETRY: usize = 10;
+const MONITOR_CHECK_PERIOD: u64 = 300;
+const PATCH_INSTALLED_WAIT_TIMEOUT: u64 = 100;
+const PATCH_INSTALLED_WAIT_RETRY: usize = 10;
 
 pub struct PatchMonitor {
     run_flag: Arc<AtomicBool>,
@@ -109,14 +109,10 @@ impl PatchMonitorThread {
                 for event in events {
                     if let Some(patch_directory) = event.name {
                         if event.mask.contains(EventMask::CREATE) {
-                            let patch_info_file =
-                                monitor_dir.join(patch_directory).join(PATCH_INFO_FILE_NAME);
-                            let wait_timeout = Duration::from_millis(PATCH_INSTALLED_WAIT_TIMEOUT);
-
                             if Self::wait_patch_installed(
-                                patch_info_file,
-                                wait_timeout,
-                                PATCH_INSTALLED_MAX_RETRY,
+                                monitor_dir.join(patch_directory).join(PATCH_INFO_FILE_NAME),
+                                Duration::from_millis(PATCH_INSTALLED_WAIT_TIMEOUT),
+                                PATCH_INSTALLED_WAIT_RETRY,
                             )
                             .is_err()
                             {
