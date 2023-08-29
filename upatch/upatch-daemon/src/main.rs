@@ -11,7 +11,6 @@ use std::{
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
-use hijacker::Hijacker;
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{SecurityAttributes, Server, ServerBuilder};
 use log::{error, info, LevelFilter};
@@ -99,9 +98,11 @@ impl Daemon {
         Ok(())
     }
 
-    fn initialize_skeleton(&self, hijacker: Hijacker) -> Result<IoHandler> {
+    fn initialize_skeleton(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
-        io_handler.extend_with(SkeletonImpl::new(hijacker)?.to_delegate());
+
+        SkeletonImpl::initialize(&self.args.config_file)?;
+        io_handler.extend_with(SkeletonImpl.to_delegate());
 
         Ok(io_handler)
     }
@@ -145,13 +146,9 @@ impl Daemon {
         self.initialize_signal_handler()
             .context("Failed to initialize signal handler")?;
 
-        info!("Initializing hijacker...");
-        let hijacker =
-            Hijacker::new(&self.args.config_file).context("Failed to initialize hijacker")?;
-
         info!("Initializing skeleton...");
         let io_handler = self
-            .initialize_skeleton(hijacker)
+            .initialize_skeleton()
             .context("Failed to initialize skeleton")?;
 
         info!("Starting remote procedure call server...");

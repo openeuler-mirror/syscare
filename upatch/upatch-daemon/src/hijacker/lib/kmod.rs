@@ -30,8 +30,6 @@ impl KernelModuleGuard {
             name: KMOD_NAME.to_string(),
             sys_path: Path::new(KMOD_SYS_DIR).join(KMOD_NAME),
         };
-
-        debug!("Loading kernel module \"{}\"...", instance);
         instance
             .load()
             .with_context(|| format!("Failed to load module \"{}\"", instance))?;
@@ -65,6 +63,7 @@ impl KernelModuleGuard {
 
     fn load(&self) -> Result<()> {
         if !self.exists() {
+            debug!("Loading kernel module \"{}\"...", self);
             self.exec_module_ops(ModuleOperation::Insert)?;
         }
         Ok(())
@@ -72,6 +71,7 @@ impl KernelModuleGuard {
 
     fn unload(&self) -> Result<()> {
         if self.exists() {
+            debug!("Unloading kernel module \"{}\"...", self);
             self.exec_module_ops(ModuleOperation::Remove)?;
         }
         Ok(())
@@ -80,7 +80,6 @@ impl KernelModuleGuard {
 
 impl Drop for KernelModuleGuard {
     fn drop(&mut self) {
-        debug!("Unloading kernel module \"{}\"...", self);
         if let Err(e) = self
             .unload()
             .with_context(|| format!("Failed to unload module \"{}\"", self))

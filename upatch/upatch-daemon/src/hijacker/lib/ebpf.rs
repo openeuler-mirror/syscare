@@ -21,8 +21,6 @@ impl EbpfProgramGuard {
             elf_path: PathBuf::from(EBPF_BIN_PATH),
             process: None,
         };
-
-        debug!("Starting ebpf program \"{}\"...", EBPF_BIN_PATH);
         instance.start().context("Failed to start hijacker ebpf")?;
 
         Ok(instance)
@@ -36,6 +34,7 @@ impl EbpfProgramGuard {
 
     fn start(&mut self) -> Result<()> {
         if !self.exists() {
+            debug!("Starting ebpf program \"{}\"...", EBPF_BIN_PATH);
             let process = &mut self.process;
             if process.is_none() {
                 let child = Command::new(&self.elf_path).spawn()?;
@@ -47,6 +46,7 @@ impl EbpfProgramGuard {
 
     fn stop(&mut self) -> Result<()> {
         if self.exists() {
+            debug!("Stopping ebpf program \"{}\"...", EBPF_BIN_PATH);
             if let Some(mut child) = self.process.take() {
                 child.kill()?
             }
@@ -57,7 +57,6 @@ impl EbpfProgramGuard {
 
 impl Drop for EbpfProgramGuard {
     fn drop(&mut self) {
-        debug!("Stopping ebpf program \"{}\"...", EBPF_BIN_PATH);
         if let Err(e) = self.stop().context("Failed to stop hijacker ebpf") {
             error!("{:?}", e)
         }
