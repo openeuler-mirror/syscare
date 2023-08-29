@@ -1,18 +1,24 @@
 use std::{fs::File, path::Path};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 
 mod ffi {
     use std::{fs::File, os::unix::io::AsRawFd};
 
-    pub fn flock_exclusive_unblock(file: &File) -> bool {
+    pub fn flock_exclusive(file: &File) -> std::io::Result<()> {
         let ret_code = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) };
-        ret_code == 0
+        if ret_code != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
     }
 
-    pub fn flock_unlock(file: &File) -> bool {
+    pub fn flock_unlock(file: &File) -> std::io::Result<()> {
         let ret_code = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_UN) };
-        ret_code == 0
+        if ret_code != 0 {
+            return Err(std::io::Error::last_os_error());
+        }
+        Ok(())
     }
 }
 
@@ -24,29 +30,21 @@ impl ExclusiveFileLockGuard {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file_path = path.as_ref();
         let file = match file_path.exists() {
-            false => File::create(file_path)
-                .with_context(|| format!("Failed to create file \"{}\"", file_path.display()))?,
-            true => File::open(file_path)
-                .with_context(|| format!("Failed to open file \"{}\"", file_path.display()))?,
+            false => File::create(file_path).context("Failed to create lock file")?,
+            true => File::open(file_path).context("Failed to open lock file")?,
         };
         let instance = Self { file };
-        instance.lock()?;
+        instance.acquire()?;
 
         Ok(instance)
     }
 
-    fn lock(&self) -> Result<()> {
-        if !ffi::flock_exclusive_unblock(&self.file) {
-            bail!("Failed to acquire exclusive lock")
-        }
-        Ok(())
+    fn acquire(&self) -> Result<()> {
+        ffi::flock_exclusive(&self.file).context("Failed to acquire exclusive file lock")
     }
 
     fn release(&self) -> Result<()> {
-        if !ffi::flock_unlock(&self.file) {
-            bail!("Failed to unlock exclusive lock")
-        }
-        Ok(())
+        ffi::flock_unlock(&self.file).context("Failed to release exclusive file lock")
     }
 }
 

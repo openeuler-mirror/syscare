@@ -39,9 +39,9 @@ impl SyscareCLI {
             true => log::LevelFilter::Debug,
             false => log::LevelFilter::Info,
         })?;
-        debug!("{:#?}", self.args);
+        debug!("Start with {:#?}", self.args);
 
-        debug!("Acquiring file lock...");
+        debug!("Acquiring exclusive file lock...");
         let _guard = ExclusiveFileLockGuard::new(CLI_LOCK_FILE_PATH)?;
 
         debug!("Initializing remote procedure call client...");
@@ -78,7 +78,7 @@ fn main() {
                     eprintln!("Error: {:?}", e)
                 }
                 true => {
-                    error!("Error: {:#}", e);
+                    error!("Error: {:?}", e);
                 }
             }
             1
