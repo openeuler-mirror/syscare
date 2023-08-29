@@ -1,15 +1,19 @@
-use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use common::util::fs;
-use common::util::os_str::OsStrExt;
+use anyhow::{bail, Result};
+use syscare_abi::{PackageInfo, PatchInfo, PatchType};
+use syscare_common::util::{
+    ext_cmd::{ExternCommand, ExternCommandArgs},
+    fs,
+    os_str::OsStrExt,
+};
 
-use crate::patch::{PatchInfo, PatchType};
-use crate::workdir::PackageBuildRoot;
+use crate::workdir::RpmBuildRoot;
 
-use super::package_info::PackageInfo;
-use super::rpm_spec_helper::{RpmSpecHelper, SPEC_FILE_EXT};
+use super::{rpm_spec_helper::SPEC_FILE_EXT, RpmSpecHelper};
 
 pub const PKG_FILE_EXT: &str = "rpm";
 pub const DEBUGINFO_FILE_EXT: &str = "debug";
@@ -29,16 +33,7 @@ pub struct RpmElfRelation {
 pub struct RpmHelper;
 
 impl RpmHelper {
-    pub fn is_package_installed<S: AsRef<OsStr>>(pkg_name: S) -> bool {
-        RPM.execvp(ExternCommandArgs::new().arg("--query").arg(&pkg_name))
-            .map(|exit_status| exit_status.exit_code() == 0)
-            .unwrap_or(false)
-    }
-
-    pub fn query_package_info<P: AsRef<Path>>(
-        pkg_path: P,
-        format: &str,
-    ) -> std::io::Result<OsString> {
+    pub fn query_package_info<P: AsRef<Path>>(pkg_path: P, format: &str) -> Result<OsString> {
         let exit_status = RPM.execvp(
             ExternCommandArgs::new()
                 .arg("--query")
@@ -55,7 +50,7 @@ impl RpmHelper {
     pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(
         pkg_path: P,
         output_dir: Q,
-    ) -> std::io::Result<()> {
+    ) -> Result<()> {
         RPM.execvp(
             ExternCommandArgs::new()
                 .arg("--install")
@@ -73,7 +68,9 @@ impl RpmHelper {
                 .arg("--package")
                 .arg(pkg_path.as_ref()),
         )?
-        .check_exit_code()
+        .check_exit_code()?;
+
+        Ok(())
     }
 
     pub fn metadata_dir<P: AsRef<Path>>(pkg_source_dir: P) -> PathBuf {
@@ -84,7 +81,7 @@ impl RpmHelper {
         pkg_source_dir.as_ref().join(METADATA_PKG_NAME).exists()
     }
 
-    pub fn compress_metadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
+    pub fn compress_metadata<P: AsRef<Path>>(pkg_source_dir: P) -> Result<()> {
         let metadata_source_dir = pkg_source_dir.as_ref();
         let metadata_file = metadata_source_dir.join(METADATA_PKG_NAME);
 
@@ -97,10 +94,12 @@ impl RpmHelper {
                 .arg(METADATA_DIR_NAME)
                 .arg("--restrict"),
         )?
-        .check_exit_code()
+        .check_exit_code()?;
+
+        Ok(())
     }
 
-    pub fn decompress_medatadata<P: AsRef<Path>>(pkg_source_dir: P) -> std::io::Result<()> {
+    pub fn decompress_medatadata<P: AsRef<Path>>(pkg_source_dir: P) -> Result<()> {
         let metadata_source_dir = pkg_source_dir.as_ref();
         let metadata_file = metadata_source_dir.join(METADATA_PKG_NAME);
 
@@ -114,27 +113,32 @@ impl RpmHelper {
                 .arg("--no-same-permissions")
                 .arg("--restrict"),
         )?
-        .check_exit_code()
+        .check_exit_code()?;
+
+        Ok(())
     }
 
-    pub fn add_metadata_to_spec_file<P: AsRef<Path>>(spec_file: P) -> std::io::Result<()> {
-        RpmSpecHelper::add_files_to_spec(&spec_file, vec![METADATA_PKG_NAME])
+    pub fn add_metadata_to_spec<P: AsRef<Path>>(spec_file: P) -> Result<()> {
+        Ok(RpmSpecHelper::add_files_to_spec(
+            &spec_file,
+            vec![METADATA_PKG_NAME],
+        )?)
     }
 
-    pub fn find_build_root<P: AsRef<Path>>(directory: P) -> std::io::Result<PackageBuildRoot> {
+    pub fn find_rpmbuild_root<P: AsRef<Path>>(directory: P) -> Result<RpmBuildRoot> {
         const PKG_BUILD_ROOT: &str = "rpmbuild";
 
-        Ok(PackageBuildRoot::new(fs::find_dir(
+        RpmBuildRoot::new(fs::find_dir(
             directory,
             PKG_BUILD_ROOT,
             fs::FindOptions {
                 fuzz: false,
                 recursive: true,
             },
-        )?))
+        )?)
     }
 
-    pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+    pub fn find_spec_file<P: AsRef<Path>>(directory: P) -> Result<PathBuf> {
         let spec_file = fs::find_file_by_ext(
             directory,
             SPEC_FILE_EXT,
@@ -150,7 +154,7 @@ impl RpmHelper {
     pub fn find_build_source<P: AsRef<Path>>(
         directory: P,
         patch_info: &PatchInfo,
-    ) -> std::io::Result<PathBuf> {
+    ) -> Result<PathBuf> {
         const KERNEL_SOURCE_DIR_PREFIX: &str = "linux-";
 
         let search_name = match patch_info.kind {
@@ -158,21 +162,29 @@ impl RpmHelper {
             PatchType::KernelPatch => KERNEL_SOURCE_DIR_PREFIX,
         };
 
-        let find_opts = fs::FindOptions {
-            fuzz: true,
-            recursive: true,
-        };
+        let build_source = fs::find_dir(
+            &directory,
+            search_name,
+            fs::FindOptions {
+                fuzz: true,
+                recursive: true,
+            },
+        )
+        .or_else(|_| {
+            fs::find_dir(
+                &directory,
+                "",
+                fs::FindOptions {
+                    fuzz: true,
+                    recursive: true,
+                },
+            )
+        })?;
 
-        fs::find_dir(directory, search_name, find_opts).map(|source_dir| {
-            let dup_source_dir = source_dir.join(fs::file_name(&source_dir));
-            match dup_source_dir.exists() {
-                false => source_dir,
-                true => dup_source_dir,
-            }
-        })
+        Ok(build_source)
     }
 
-    pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
+    pub fn find_debuginfo<P: AsRef<Path>>(directory: P) -> Result<Vec<PathBuf>> {
         let debuginfo_files = fs::list_files_by_ext(
             &directory,
             DEBUGINFO_FILE_EXT,
@@ -186,7 +198,7 @@ impl RpmHelper {
         debuginfos: I,
         root: P,
         target_pkg: &PackageInfo,
-    ) -> std::io::Result<Vec<RpmElfRelation>>
+    ) -> Result<Vec<RpmElfRelation>>
     where
         I: IntoIterator<Item = Q>,
         P: AsRef<Path>,
@@ -218,10 +230,10 @@ impl RpmHelper {
                     });
                 }
                 None => {
-                    return Err(std::io::Error::new(
-                        std::io::ErrorKind::Other,
-                        format!("Cannot parse elf path from {:?}", debuginfo_path),
-                    ));
+                    bail!(
+                        "Cannot parse elf path from \"{}\"",
+                        debuginfo_path.display()
+                    )
                 }
             }
         }

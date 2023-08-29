@@ -42,7 +42,6 @@ static void create_section_list(struct upatch_elf *uelf)
     size_t shstrndx, sections_nr;
 
     struct section *sec;
-    struct section *sec_arr = NULL;
     Elf_Scn *scn = NULL;
 
     if (elf_getshdrnum(uelf->elf, &sections_nr))
@@ -91,7 +90,6 @@ static void create_symbol_list(struct upatch_elf *uelf)
     unsigned int symbols_nr;
     Elf32_Word shndx;
     struct symbol *sym;
-    struct symbol *sym_arr = NULL;
     unsigned int index = 0;
 
     /* consider type first */
@@ -156,7 +154,6 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     unsigned long rela_nr;
     unsigned int symndx;
     struct rela *rela;
-    struct rela *rela_arr = NULL;
     int index = 0, skip = 0;
 
     /* for relocation sections, sh_info is the index which these informations apply */

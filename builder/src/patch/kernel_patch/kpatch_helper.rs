@@ -1,8 +1,8 @@
 use std::path::{Path, PathBuf};
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use common::util::fs;
-use log::debug;
+use anyhow::Result;
+use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+use syscare_common::util::fs;
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 pub const KPATCH_PATCH_PREFIX: &str = "syscare";
@@ -15,8 +15,6 @@ impl KernelPatchHelper {
         const MAKE: ExternCommand = ExternCommand::new("make");
         const DEFCONFIG_FILE_NAME: &str = "openeuler_defconfig";
 
-        debug!("Generating kernel default config");
-
         MAKE.execvp(
             ExternCommandArgs::new()
                 .arg("-C")
@@ -26,25 +24,20 @@ impl KernelPatchHelper {
         .check_exit_code()
     }
 
-    pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
+    pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> Result<PathBuf> {
         const KERNEL_CONFIG_FILE_NAME: &str = ".config";
 
-        debug!(
-            "Finding kernel config from \"{}\"",
-            directory.as_ref().display()
-        );
-        fs::find_file(
+        Ok(fs::find_file(
             directory,
             KERNEL_CONFIG_FILE_NAME,
             fs::FindOptions {
                 fuzz: false,
                 recursive: true,
             },
-        )
+        )?)
     }
 
     pub fn find_vmlinux<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
-        debug!("Finding vmlinux from \"{}\"", directory.as_ref().display());
         fs::find_file(
             directory,
             VMLINUX_FILE_NAME,

@@ -19,17 +19,7 @@ impl Tool {
     }
 
     pub fn check(&mut self) -> std::io::Result<()> {
-        let current_exe = std::env::current_exe()?;
-        let search_dir = match current_exe.parent() {
-            Some(search_dir) => search_dir,
-            None => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::NotFound,
-                    format!("can't get current binary {:?}'s directory", &current_exe),
-                ))
-            }
-        };
-        self.diff = search_tool(search_dir.join(SUPPORT_DIFF))?;
+        self.diff = search_tool(SUPPORT_DIFF)?;
         Ok(())
     }
 

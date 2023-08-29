@@ -1,6 +1,6 @@
 use std::path::PathBuf;
 
-use crate::patch::PatchFile;
+use syscare_abi::PatchFile;
 
 pub struct KernelPatchBuilderArguments {
     pub build_root: PathBuf,

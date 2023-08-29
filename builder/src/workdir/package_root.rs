@@ -1,50 +1,42 @@
-use std::ffi::OsStr;
-use std::ops::Deref;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    ops::Deref,
+    path::{Path, PathBuf},
+};
 
-use common::util::fs;
+use anyhow::Result;
 
-use super::package_build_root::PackageBuildRoot;
-use super::workdir_impl::WorkDirManager;
+use super::{fs_util, rpmbuild_root::RpmBuildRoot};
 
+const SOURCE_DIR_NAME: &str = "source";
+const DEBUGINFO_DIR_NAME: &str = "debuginfo";
+const PATCH_DIR_NAME: &str = "patch";
+
+#[derive(Debug, Clone)]
 pub struct PackageRoot {
     pub path: PathBuf,
     pub source: PathBuf,
-    pub debug: PathBuf,
-    pub patch: PackageBuildRoot,
+    pub debuginfo: PathBuf,
+    pub patch: RpmBuildRoot,
 }
 
 impl PackageRoot {
-    pub fn new<P: AsRef<Path>>(path: P) -> Self {
+    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
-        let source = path.join("source");
-        let debug = path.join("debuginfo");
-        let patch = PackageBuildRoot::new(path.join("patch"));
+        let source = path.join(SOURCE_DIR_NAME);
+        let debuginfo = path.join(DEBUGINFO_DIR_NAME);
+        let patch = RpmBuildRoot::new(path.join(PATCH_DIR_NAME))?;
 
-        Self {
+        fs_util::create_dir_all(&path)?;
+        fs_util::create_dir_all(&source)?;
+        fs_util::create_dir_all(&debuginfo)?;
+
+        Ok(Self {
             path,
             source,
-            debug,
+            debuginfo,
             patch,
-        }
-    }
-}
-
-impl WorkDirManager for PackageRoot {
-    fn create_all(&self) -> std::io::Result<()> {
-        fs::create_dir(&self.path)?;
-        fs::create_dir(&self.source)?;
-        fs::create_dir(&self.debug)?;
-        self.patch.create_all()?;
-
-        Ok(())
-    }
-
-    fn remove_all(&self) -> std::io::Result<()> {
-        self.patch.remove_all()?;
-        fs::remove_dir_all(&self.path)?;
-
-        Ok(())
+        })
     }
 }
 

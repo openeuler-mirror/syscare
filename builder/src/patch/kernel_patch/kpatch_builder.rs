@@ -1,22 +1,26 @@
 use std::ffi::OsString;
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
-use common::util::fs;
+use anyhow::{Context, Result};
+use log::debug;
+use syscare_abi::PatchInfo;
+use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
+use syscare_common::util::fs;
 
-use crate::cli::{CliArguments, CliWorkDir};
+use crate::args::Arguments;
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
+use crate::workdir::WorkDir;
 
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 use super::kpatch_helper::KernelPatchHelper;
 use super::kpatch_helper::{KPATCH_PATCH_PREFIX, KPATCH_PATCH_SUFFIX, VMLINUX_FILE_NAME};
 
 pub struct KernelPatchBuilder<'a> {
-    workdir: &'a CliWorkDir,
+    workdir: &'a WorkDir,
 }
 
 impl<'a> KernelPatchBuilder<'a> {
-    pub fn new(workdir: &'a CliWorkDir) -> Self {
+    pub fn new(workdir: &'a WorkDir) -> Self {
         Self { workdir }
     }
 }
@@ -59,21 +63,65 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
     fn parse_builder_args(
         &self,
         patch_info: &PatchInfo,
-        args: &CliArguments,
-    ) -> std::io::Result<PatchBuilderArguments> {
+        args: &Arguments,
+    ) -> Result<PatchBuilderArguments> {
         let patch_build_root = self.workdir.patch.build.as_path();
         let patch_output_dir = self.workdir.patch.output.as_path();
-
         let source_pkg_dir = self.workdir.package.source.as_path();
-        let debug_pkg_dir = self.workdir.package.debug.as_path();
+        let debuginfo_pkg_dir = self.workdir.package.debuginfo.as_path();
 
-        let source_pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
-        let source_pkg_build_dir = source_pkg_build_root.build.as_path();
-        let kernel_source_dir = RpmHelper::find_build_source(source_pkg_build_dir, patch_info)?;
+        debug!(
+            "Finding package build root from \"{}\"...",
+            source_pkg_dir.display()
+        );
+        let rpmbuild_root = RpmHelper::find_rpmbuild_root(source_pkg_dir).with_context(|| {
+            format!(
+                "Cannot find package build root from \"{}\"",
+                source_pkg_dir.display()
+            )
+        })?;
 
-        KernelPatchHelper::generate_defconfig(&kernel_source_dir)?;
-        let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)?;
-        let vmlinux_file = KernelPatchHelper::find_vmlinux(debug_pkg_dir)?;
+        let source_pkg_build_dir = rpmbuild_root.build.as_path();
+
+        debug!(
+            "Finding kernel source directory from \"{}\"...",
+            source_pkg_build_dir.display()
+        );
+        let kernel_source_dir = RpmHelper::find_build_source(source_pkg_build_dir, patch_info)
+            .with_context(|| {
+                format!(
+                    "Cannot find kernel source directory from \"{}\"",
+                    source_pkg_build_dir.display()
+                )
+            })?;
+
+        debug!("Generating kernel default config...");
+        KernelPatchHelper::generate_defconfig(&kernel_source_dir)
+            .context("Failed to generate default config")?;
+
+        debug!(
+            "Finding kernel config from \"{}\"...",
+            kernel_source_dir.display()
+        );
+        let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)
+            .with_context(|| {
+                format!(
+                    "Cannot find kernel config from \"{}\"",
+                    source_pkg_build_dir.display()
+                )
+            })?;
+
+        debug!(
+            "Finding vmlinux from \"{}\"...",
+            debuginfo_pkg_dir.display()
+        );
+        let vmlinux_file =
+            KernelPatchHelper::find_vmlinux(debuginfo_pkg_dir).with_context(|| {
+                format!(
+                    "Cannot find vmlinux from \"{}\"",
+                    source_pkg_build_dir.display()
+                )
+            })?;
 
         let kernel_patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, patch_info.uuid); // Use uuid to avoid patch name collision
         let builder_args = KernelPatchBuilderArguments {
@@ -91,22 +139,24 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
         Ok(PatchBuilderArguments::KernelPatch(builder_args))
     }
 
-    fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
+    fn build_patch(&self, args: &PatchBuilderArguments) -> Result<()> {
         const KPATCH_BUILD: ExternCommand = ExternCommand::new("kpatch-build");
 
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => KPATCH_BUILD
                 .execve(self.parse_cmd_args(kargs), self.parse_cmd_envs(kargs))?
-                .check_exit_code(),
+                .check_exit_code()?,
             _ => unreachable!(),
         }
+
+        Ok(())
     }
 
     fn write_patch_info(
         &self,
         patch_info: &mut PatchInfo,
         args: &PatchBuilderArguments,
-    ) -> std::io::Result<()> {
+    ) -> Result<()> {
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => {
                 /*
@@ -127,7 +177,7 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
                         recursive: false,
                     },
                 ) {
-                    patch_info.entities.push(PatchEntity::new(
+                    patch_info.entities.push(PatchHelper::parse_patch_entity(
                         patch_file,
                         OsString::from(VMLINUX_FILE_NAME),
                     )?);

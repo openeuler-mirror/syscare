@@ -1,12 +1,8 @@
-use std::result;
-use std::{
-    fmt::{self, Debug},
-    io,
-};
+use std::{fmt, io};
 
-pub type Result<T> = result::Result<T, Error>;
+pub type Result<T> = anyhow::Result<T, Error>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(PartialEq, Eq)]
 pub enum Error {
     Compiler(String),
     Project(String),
@@ -14,8 +10,7 @@ pub enum Error {
     Io(String),
     Mod(String),
     Diff(String),
-    TOOL(String),
-    NOTES(String),
+    Notes(String),
 }
 
 impl From<io::Error> for Error {
@@ -40,8 +35,7 @@ impl Error {
             Error::Build(err) => err.to_string(),
             Error::Mod(err) => err.to_string(),
             Error::Diff(err) => format!("upatch-diff error, {}", err),
-            Error::TOOL(err) => format!("upatch-tool error, {}", err),
-            Error::NOTES(err) => format!("upatch-notes error, {}", err),
+            Error::Notes(err) => format!("upatch-notes error, {}", err),
         }
     }
 
@@ -53,8 +47,7 @@ impl Error {
             Error::Build(_) => -4,
             Error::Mod(_) => -5,
             Error::Diff(_) => -6,
-            Error::TOOL(_) => -7,
-            Error::NOTES(_) => -8,
+            Error::Notes(_) => -7,
         }
     }
 }

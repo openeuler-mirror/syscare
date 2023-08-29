@@ -186,7 +186,7 @@ void uninstall(const char *file) {
 }
 
 void info(const char *file) {
-    char *status;
+    char *status = "error";
     int ret = ioctl(upatch_fd, UPATCH_INFO_PATCH, file);
     if (errno == ENOENT)
         ret = UPATCH_STATE_REMOVED;

@@ -2,7 +2,6 @@
 *.d
 *.rpm
 *.log
-*.lock
 
 # Compiled Object files
 *.slo

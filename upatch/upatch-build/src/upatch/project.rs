@@ -9,9 +9,7 @@ use crate::cmd::*;
 use super::Error;
 use super::Result;
 
-const COMPILER_CMD_ENV: &str = "UPATCH_COMPILER_CMD";
-const ASSEMBLER_CMD_ENV: &str = "UPATCH_ASSEMBLER_CMD";
-const ASSEMBLER_DIR_ENV: &str = "UPATCH_ASSEMBLER_OUTPUT";
+const COMPILER_CMD_ENV: &str = "UPATCH_HIJACKER";
 const BUILD_SHELL: &str = "build.sh";
 
 pub struct Project {
@@ -25,23 +23,14 @@ impl Project {
         }
     }
 
-    pub fn build<P: AsRef<Path>>(
-        &self,
-        compiler_cmd: &str,
-        assembler_cmd: &str,
-        assembler_output: P,
-        build_command: String,
-    ) -> Result<()> {
+    pub fn build<P: AsRef<Path>>(&self, assembler_output: P, build_command: String) -> Result<()> {
         let assembler_output = assembler_output.as_ref();
         let command_shell_path = assembler_output.join(BUILD_SHELL);
         let mut command_shell = File::create(&command_shell_path)?;
         command_shell.write_all(b"#!/bin/bash\n")?;
         command_shell.write_all(build_command.as_ref())?;
         let args_list = ExternCommandArgs::new().arg(command_shell_path);
-        let envs_list = ExternCommandEnvs::new()
-            .env(COMPILER_CMD_ENV, compiler_cmd)
-            .env(ASSEMBLER_CMD_ENV, assembler_cmd)
-            .env(ASSEMBLER_DIR_ENV, assembler_output);
+        let envs_list = ExternCommandEnvs::new().env(COMPILER_CMD_ENV, assembler_output);
         let output =
             ExternCommand::new("sh").execve_dir(args_list, envs_list, &self.project_dir)?;
         if !output.exit_status().success() {

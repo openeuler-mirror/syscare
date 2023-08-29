@@ -5,6 +5,8 @@ find_package(Git QUIET)
 
 project(syscare)
 
+add_compile_options(-g -Wall -O2)
+
 # Variables
 if(NOT DEFINED BUILD_VERSION)
     set(BUILD_VERSION "dev")
@@ -35,13 +37,6 @@ message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
 add_subdirectory(upatch)
 
 # Build syscare
-add_custom_target(syscare-deps ALL
-    COMMENT "Updating syscare dependency..."
-    COMMAND cargo update -p clap --precise 4.0.32
-    COMMAND cargo update -p clap_lex --precise 0.3.0
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-)
-
 add_custom_target(syscare ALL
     COMMENT "Compiling syscare..."
     COMMAND UPATCH_VERSION=${SYSCARE_VERSION}; SYSCARE_VERSION=${SYSCARE_VERSION}; cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
@@ -52,6 +47,8 @@ add_custom_target(syscare ALL
 install(
     PROGRAMS
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
+        ${CMAKE_CURRENT_BINARY_DIR}/release/syscared
+        ${CMAKE_CURRENT_BINARY_DIR}/release/upatchd
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ

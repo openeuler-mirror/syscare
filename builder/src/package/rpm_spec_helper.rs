@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use common::util::fs;
-use common::util::os_str::OsStrExt;
+use syscare_common::util::fs;
+use syscare_common::util::os_str::OsStrExt;
 
 pub(super) const SPEC_FILE_EXT: &str = "spec";
 pub(super) const SOURCE_TAG_NAME: &str = "Source";

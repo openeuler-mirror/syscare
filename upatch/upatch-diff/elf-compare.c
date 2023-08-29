@@ -38,11 +38,11 @@ static void compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin
 
     // check if correlated symbols have correlated sections
     if (sym->sec && symtwin->sec && sym->sec->twin != symtwin->sec)
-        DIFF_FATAL("symbol changed sections: %s", sym->name);
+		DIFF_FATAL("symbol changed sections: %s", sym->name);
 
     // data object can't change size
     if (sym->type == STT_OBJECT && sym->sym.st_size != symtwin->sym.st_size)
-        DIFF_FATAL("object size mismatch: %s", sym->name);
+		DIFF_FATAL("object size mismatch: %s", sym->name);
 
 	if (sym->sym.st_shndx == SHN_UNDEF || 
         sym->sym.st_shndx == SHN_ABS)

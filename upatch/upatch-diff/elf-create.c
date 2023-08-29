@@ -286,7 +286,7 @@ void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running
     usym_sec->sh.sh_size = usym_sec->data->d_size;
 
     urela_sec->data->d_size = index * sizeof(struct upatch_relocation);
-    urela_sec->sh.sh_size - urela_sec->data->d_size;
+    urela_sec->sh.sh_size = urela_sec->data->d_size;
 }
 
 void upatch_build_strings_section_data(struct upatch_elf *uelf)

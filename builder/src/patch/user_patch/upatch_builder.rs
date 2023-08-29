@@ -2,58 +2,41 @@ use std::collections::HashSet;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
 
+use anyhow::{Context, Result};
+use log::debug;
 use which::which;
 
-use common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
-use common::util::fs;
-use common::util::os_str::OsStringExt;
+use syscare_abi::PatchInfo;
+use syscare_common::util::{
+    ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs},
+    fs,
+    os_str::OsStringExt,
+};
 
-use crate::cli::{CliArguments, CliWorkDir};
+use crate::args::Arguments;
 use crate::package::RpmHelper;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchEntity, PatchInfo};
+use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
+use crate::workdir::WorkDir;
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
 pub struct UserPatchBuilder<'a> {
-    workdir: &'a CliWorkDir,
+    workdir: &'a WorkDir,
 }
 
 impl<'a> UserPatchBuilder<'a> {
-    pub fn new(workdir: &'a CliWorkDir) -> Self {
+    pub fn new(workdir: &'a WorkDir) -> Self {
         Self { workdir }
     }
 
     fn detect_compilers(&self) -> Vec<PathBuf> {
-        /*
-         * This is a temporary solution for compiler detection
-         * We assume the compiler would be 'cc/gcc/c++/g++' by default
-         * If gcc_secure is installed, the real compiler would be added by '_old'
-         */
         const COMPILER_NAMES: [&str; 4] = ["cc", "gcc", "c++", "g++"];
-        const GCC_SECURE_PKG_NAME: &str = "gcc_secure";
-        const GCC_SECURE_SUFFIX: &str = "_old";
-
-        let mut compiler_list = COMPILER_NAMES
-            .into_iter()
-            .map(OsString::from)
-            .collect::<Vec<_>>();
-
-        // Handle gcc_secure
-        if RpmHelper::is_package_installed(GCC_SECURE_PKG_NAME) {
-            for compiler in &mut compiler_list {
-                compiler.push(GCC_SECURE_SUFFIX);
-            }
-        }
 
         // Get compiler path and filter invalid one
-        let compiler_set = compiler_list
+        let compiler_set = COMPILER_NAMES
+            .map(OsString::from)
             .into_iter()
-            .filter_map(|compiler_name| {
-                which(compiler_name)
-                    .map_err(|e| std::io::Error::new(std::io::ErrorKind::NotFound, e))
-                    .and_then(fs::canonicalize)
-                    .ok()
-            })
+            .filter_map(|compiler_name| which(compiler_name).ok())
             .collect::<HashSet<_>>();
 
         compiler_set.into_iter().collect()
@@ -65,7 +48,7 @@ impl<'a> UserPatchBuilder<'a> {
             .concat("\"")
     }
 
-    fn create_build_macros(&self, args: &CliArguments) -> OsString {
+    fn create_build_macros(&self, args: &Arguments) -> OsString {
         OsString::new()
             .append("--define \"_smp_build_ncpus")
             .append(args.jobs.to_string())
@@ -125,54 +108,97 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     fn parse_builder_args(
         &self,
         patch_info: &PatchInfo,
-        args: &CliArguments,
-    ) -> std::io::Result<PatchBuilderArguments> {
+        args: &Arguments,
+    ) -> Result<PatchBuilderArguments> {
         const RPMBUILD_CMD: &str = "rpmbuild";
         const RPMBUILD_PERP_FLAGS: &str = "-bp";
         const RPMBUILD_FLAGS: &str = "-bi --noprep --nocheck --nodebuginfo --noclean";
 
         let source_pkg_dir = self.workdir.package.source.as_path();
-        let debug_pkg_dir = self.workdir.package.debug.as_path();
+        let debuginfo_pkg_dir = self.workdir.package.debuginfo.as_path();
 
-        let pkg_build_root = RpmHelper::find_build_root(source_pkg_dir)?;
-        let pkg_spec_dir = pkg_build_root.specs.as_path();
-        let pkg_build_dir = pkg_build_root.build.as_path();
-        let pkg_buildroot_dir = pkg_build_root.build_root.as_path();
-        let pkg_spec_file = RpmHelper::find_spec_file(pkg_spec_dir)?;
+        debug!(
+            "Finding package build root from \"{}\"...",
+            source_pkg_dir.display()
+        );
+        let rpmbuild_root = RpmHelper::find_rpmbuild_root(source_pkg_dir).with_context(|| {
+            format!(
+                "Cannot find package build root from \"{}\"",
+                source_pkg_dir.display()
+            )
+        })?;
+
+        let rpm_spec_dir = rpmbuild_root.specs.as_path();
+        let rpm_build_dir = rpmbuild_root.build.as_path();
+        let rpm_buildroot_dir = rpmbuild_root.buildroot.as_path();
+
+        debug!(
+            "Finding package spec file from \"{}\"...",
+            rpm_spec_dir.display()
+        );
+        let spec_file = RpmHelper::find_spec_file(rpm_spec_dir).with_context(|| {
+            format!(
+                "Cannot find package spec file from \"{}\"",
+                rpm_spec_dir.display()
+            )
+        })?;
+
+        debug!(
+            "Finding package source directory from \"{}\"...",
+            rpm_build_dir.display()
+        );
+        let source_dir =
+            RpmHelper::find_build_source(rpm_build_dir, patch_info).with_context(|| {
+                format!(
+                    "Cannot find package source directory from \"{}\"",
+                    rpm_build_dir.display()
+                )
+            })?;
+
+        debug!(
+            "Finding package debuginfos from \"{}\"...",
+            debuginfo_pkg_dir.display()
+        );
+        let debuginfos = RpmHelper::find_debuginfo(debuginfo_pkg_dir).with_context(|| {
+            format!(
+                "Cannot find package debuginfos from \"{}\"",
+                debuginfo_pkg_dir.display()
+            )
+        })?;
 
         let target_pkg = &patch_info.target;
-        let work_dir = self.workdir.patch.build.as_path();
-        let source_dir = RpmHelper::find_build_source(pkg_build_dir, patch_info)?;
-        let debuginfos = RpmHelper::find_debuginfo(debug_pkg_dir)?;
         let debug_relations =
-            RpmHelper::parse_elf_relations(debuginfos, debug_pkg_dir, target_pkg)?;
-        let compilers = self.detect_compilers();
-        let output_dir = self.workdir.patch.output.as_path();
+            RpmHelper::parse_elf_relations(debuginfos, debuginfo_pkg_dir, target_pkg)
+                .context("Cannot parse elf relations")?;
 
-        let topdir_macro = self.create_topdir_macro(pkg_build_root.as_ref());
+        let patch_build_dir = self.workdir.patch.build.as_path();
+        let output_dir = self.workdir.patch.output.as_path();
+        let compilers = self.detect_compilers();
+
+        let topdir_macro = self.create_topdir_macro(rpmbuild_root.as_ref());
         let build_macros = self.create_build_macros(args);
 
         let build_prep_cmd = OsString::from(RPMBUILD_CMD)
             .append(&topdir_macro)
             .append(RPMBUILD_PERP_FLAGS)
-            .append(&pkg_spec_file);
+            .append(&spec_file);
 
         let build_original_cmd = OsString::from(RPMBUILD_CMD)
             .append(&topdir_macro)
             .append(&build_macros)
             .append(RPMBUILD_FLAGS)
-            .append(&pkg_spec_file);
+            .append(&spec_file);
 
         let build_patched_cmd = OsString::from(RPMBUILD_CMD)
             .append(&topdir_macro)
             .append(&build_macros)
             .append(RPMBUILD_FLAGS)
-            .append(&pkg_spec_file);
+            .append(&spec_file);
 
         let builder_args = UserPatchBuilderArguments {
-            work_dir: work_dir.to_path_buf(),
+            work_dir: patch_build_dir.to_path_buf(),
             debug_source: source_dir,
-            elf_dir: pkg_buildroot_dir.to_path_buf(),
+            elf_dir: rpm_buildroot_dir.to_path_buf(),
             elf_relations: debug_relations,
             build_source_cmd: build_original_cmd.append("&&").append(build_prep_cmd),
             build_patch_cmd: build_patched_cmd,
@@ -186,22 +212,24 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         Ok(PatchBuilderArguments::UserPatch(builder_args))
     }
 
-    fn build_patch(&self, args: &PatchBuilderArguments) -> std::io::Result<()> {
+    fn build_patch(&self, args: &PatchBuilderArguments) -> Result<()> {
         const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-build");
 
         match args {
             PatchBuilderArguments::UserPatch(uargs) => UPATCH_BUILD
                 .execve(self.build_cmd_args(uargs), self.build_cmd_envs())?
-                .check_exit_code(),
+                .check_exit_code()?,
             _ => unreachable!(),
         }
+
+        Ok(())
     }
 
     fn write_patch_info(
         &self,
         patch_info: &mut PatchInfo,
         args: &PatchBuilderArguments,
-    ) -> std::io::Result<()> {
+    ) -> Result<()> {
         match args {
             PatchBuilderArguments::UserPatch(uargs) => {
                 /*
@@ -223,7 +251,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
                     ) {
                         patch_info
                             .entities
-                            .push(PatchEntity::new(patch_file, elf_file)?);
+                            .push(PatchHelper::parse_patch_entity(patch_file, elf_file)?);
                     }
                 }
 

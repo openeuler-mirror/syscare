@@ -152,7 +152,7 @@ static inline bool is_string_literal_section(struct section *sec)
 	return !strncmp(sec->name, ".rodata.", 8) && (strstr(sec->name, ".str") || strstr(sec->name, "__func__"));
 }
 
-static bool has_digit_tail(char *tail)
+static inline bool has_digit_tail(char *tail)
 {
 	if (*tail != '.')
 		return false;

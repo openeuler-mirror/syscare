@@ -87,10 +87,9 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
     return rela->addend + add_off;
 }
 
-unsigned int insn_length(struct upatch_elf *uelf, void * addr)
+unsigned int insn_length(struct upatch_elf *uelf, void *addr)
 {
     struct insn decoded_insn;
-    char *insn = addr;
     
     switch(uelf->arch) {
     case AARCH64:

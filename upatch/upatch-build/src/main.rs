@@ -1,17 +1,21 @@
-use log::error;
-use upatch_build::log::Logger;
-use upatch_build::upatch::UpatchBuild;
+mod cmd;
+mod dwarf;
+mod elf;
+mod log;
+mod rpc;
+mod tool;
+mod upatch;
 
 fn main() {
-    let mut upatch = UpatchBuild::new();
+    let mut upatch = upatch::UpatchBuild::new();
     std::process::exit(match upatch.run() {
         Ok(_) => {
             println!("SUCCESS!");
             0
         }
         Err(e) => {
-            match Logger::is_inited() {
-                true => error!("{}", e),
+            match log::Logger::is_inited() {
+                true => log::error!("{}", e),
                 false => eprintln!("ERROR: {}", e),
             };
             e.code()

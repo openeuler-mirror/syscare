@@ -1,0 +1,12 @@
+[package]
+name         = "syscare-abi"
+version      = "1.1.0"
+authors      = ["renoseven <dev@renoseven.net>"]
+description  = "Syscare binary interface"
+license      = "MulanPSL-2.0"
+edition      = "2021"
+rust-version = "1.60"
+build        = "build.rs"
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }

@@ -12,7 +12,6 @@ use typed_arena::Arena;
 
 use super::Relocate;
 use super::Result;
-use crate::tool::*;
 
 type RelocationMap = HashMap<usize, object::Relocation>;
 
@@ -48,15 +47,6 @@ impl Dwarf {
         Self {}
     }
 
-    pub fn file_in_binary<P: AsRef<Path>>(
-        &self,
-        dir_str: P,
-        binary: P,
-    ) -> io::Result<Vec<DwarfCompileUnit>> {
-        let path = self.find_binary(dir_str, binary)?;
-        self.file_in_obj(path)
-    }
-
     pub fn file_in_obj<P: AsRef<Path>>(&self, elf: P) -> io::Result<Vec<DwarfCompileUnit>> {
         // use mmap here, but depend on some devices
         let elf = elf.as_ref();
@@ -86,28 +76,6 @@ impl Default for DwarfCompileUnit {
 }
 
 impl Dwarf {
-    fn find_binary<P: AsRef<Path>>(&self, dir_str: P, binary: P) -> io::Result<String> {
-        let dir_str = dir_str.as_ref();
-        let binary = binary.as_ref();
-        let arr = find_files(dir_str, binary, false, true)?;
-        match arr.len() {
-            0 => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!("{} don't have {}", dir_str.display(), binary.display()),
-            )),
-            1 => Ok(stringtify(&arr[0])),
-            _ => Err(io::Error::new(
-                io::ErrorKind::NotFound,
-                format!(
-                    "{} have {} {}",
-                    dir_str.display(),
-                    arr.len(),
-                    binary.display()
-                ),
-            )),
-        }
-    }
-
     fn add_relocations(
         &self,
         relocations: &mut RelocationMap,

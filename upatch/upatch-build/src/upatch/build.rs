@@ -1,6 +1,5 @@
 use std::collections::{HashMap, HashSet};
-use std::fs::{self, File, OpenOptions};
-use std::io::Read;
+use std::fs::{self, OpenOptions};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::thread;
@@ -22,13 +21,6 @@ use super::Result;
 use super::Tool;
 use super::WorkDir;
 use super::{Compiler, CompilerHackGuard};
-
-pub const UPATCH_DEV_NAME: &str = "upatch";
-const SYSTEM_MOUDLES: &str = "/proc/modules";
-const COMPILER_CMD_SOURCE_ENTER: &str = "CSE";
-const COMPILER_CMD_PATCHED_ENTER: &str = "CPE";
-const ASSEMBLER_CMD_SOURCE_ENTER: &str = "ASE";
-const ASSEMBLER_CMD_PATCHED_ENTER: &str = "APE";
 
 pub struct UpatchBuild {
     args: Arguments,
@@ -68,9 +60,6 @@ impl UpatchBuild {
         self.init_logger()?;
         self.stop_hacker();
 
-        // check mod
-        self.check_mod()?;
-
         // find upatch-diff
         self.tool.check()?;
 
@@ -97,8 +86,6 @@ impl UpatchBuild {
         // build source
         info!("Building original {:?}", project_name);
         project.build(
-            COMPILER_CMD_SOURCE_ENTER,
-            ASSEMBLER_CMD_SOURCE_ENTER,
             self.work_dir.source_dir(),
             self.args.build_source_cmd.clone(),
         )?;
@@ -125,12 +112,7 @@ impl UpatchBuild {
 
         // build patched
         info!("Building patched {:?}", project_name);
-        project.build(
-            COMPILER_CMD_PATCHED_ENTER,
-            ASSEMBLER_CMD_PATCHED_ENTER,
-            self.work_dir.patch_dir(),
-            self.args.build_patch_cmd.clone(),
-        )?;
+        project.build(self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
         // collect patched link message and object message
         self.patch_link_messages =
@@ -168,16 +150,6 @@ impl UpatchBuild {
         Logger::init_logger(logger);
 
         Ok(())
-    }
-
-    fn check_mod(&self) -> Result<()> {
-        let mut file = File::open(SYSTEM_MOUDLES)?;
-        let mut contents = String::new();
-        file.read_to_string(&mut contents)?;
-        match contents.find(UPATCH_DEV_NAME) {
-            Some(_) => Ok(()),
-            None => Err(Error::Mod("can't find upatch mod in system".to_string())),
-        }
     }
 
     fn correlate_obj<P: AsRef<Path>, Q: AsRef<Path>>(
