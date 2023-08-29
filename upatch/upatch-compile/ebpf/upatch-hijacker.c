@@ -190,10 +190,7 @@ int upatch_register_entry(unsigned long prey_ino, const char *prey_name,
 	int ret;
 	char path[] = "/1";
 
-	ret = check_entry_path(prey_name);
-	if (ret)
-		return ret;
-
+	/* Consider usage like /usr/bin/cc */
 	ret = check_entry_path(hijacker_name);
 	if (ret)
 		return ret;
@@ -292,6 +289,14 @@ static void clean_socket()
 int main(int argc, char **argv)
 {
 	int err;
+	struct rlimit lck_mem = {};
+
+	lck_mem.rlim_cur = RLIM_INFINITY;
+	lck_mem.rlim_max = RLIM_INFINITY;
+	if (setrlimit(RLIMIT_MEMLOCK, &lck_mem) == -1) {
+		fprintf(stderr, "Set limit for memory lock failed \n");
+		return -errno;
+	}
 
 	/* Set up libbpf errors and debug info callback */
 	libbpf_set_print(libbpf_print_fn);
