@@ -1,125 +1,242 @@
-%global debug_package %{nil}
-
+%define build_version    %{version}-%{release}
 %define kernel_devel_rpm %(echo $(rpm -q kernel-devel | head -n 1))
-%define kernel_version %(echo $(rpm -q --qf "\%%{VERSION}" %{kernel_devel_rpm}))
-%define kernel_name %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" %{kernel_devel_rpm}))
+%define kernel_version   %(echo $(rpm -q --qf "\%%{VERSION}" %{kernel_devel_rpm}))
+%define kernel_name      %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" %{kernel_devel_rpm}))
 
-Name:           syscare
-Version:        1.0.2
-Release:        5
-Summary:        system hot-fix service
+%define pkg_kmod       %{name}-kmod
+%define pkg_build      %{name}-build
+%define pkg_build_kmod %{pkg_build}-kmod
+%define pkg_build_ebpf %{pkg_build}-ebpf
 
-License:        MulanPSL-2.0 and GPL-2.0-only
-URL:            https://gitee.com/openeuler/syscare
-Source0:        %{name}-%{version}.tar.gz
+############################################
+############ Package syscare ###############
+############################################
+Name:          syscare
+Version:       1.1.0
+Release:       1
+Summary:       System hot-fix service
+License:       MulanPSL-2.0 and GPL-2.0-only
+URL:           https://gitee.com/openeuler/syscare
+Source0:       %{name}-%{version}.tar.gz
+BuildRequires: cmake >= 3.14 make
+BuildRequires: rust >= 1.60 cargo >= 1.60
+BuildRequires: gcc gcc-c++
+Requires:      %{pkg_kmod} >= %{build_version}
+Requires:      coreutils systemd
+Requires:      kpatch-runtime
 
-BuildRequires:  rust cargo gcc gcc-g++ cmake make
-BuildRequires:  elfutils-libelf-devel
-
-Requires:       coreutils systemd kpatch-runtime
-Requires:       %{name}-kmod >= 1.0.2-1
-
+############### Description ################
 %description
-SysCare is a system-level hot-fix software that provides single-machine-level and cluster-level security patches and system error hot-fixes for the operating system.
+SysCare is a system-level hot-fix service that provides security patches and system error hot-fixes for the operating system.
 The host can fix the system problem without rebooting.
 
-%package kmod
-Summary:       Syscare kernel modules.
-Requires:      kernel >= %{kernel_version}
-BuildRequires: kernel-devel
-BuildRequires: make gcc bison flex
-
-%description kmod
-Syscare kernel modules dependency.
-
-%package build
-Summary:  Tools for build syscare patch.
-Requires: %{name} = %{version}-%{release}
-Requires: %{name}-kmod >= 1.0.2-1
-Requires: make patch gcc g++
-Requires: bison flex
-Requires: kpatch dwarves
-Requires: elfutils-libelf-devel
-Requires: rpm-build tar gzip
-
-%description build
-Syscare build tools.
-
+############## BuildPreparare ##############
 %prep
 %autosetup -p1
 
+################## Build ###################
 %build
 mkdir -p build
 cd build
 
-cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{version}-%{release} -DKERNEL_VERSION=%{kernel_name} ..
+cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{build_version} -DKERNEL_VERSION=%{kernel_name} ..
 make
 
+################# Install ##################
 %install
 cd build
 %make_install
-mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
-mv %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 
+mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+mv -f %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+mv -f %{buildroot}/usr/libexec/syscare/upatch_hijacker.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+
+############### PostInstall ################
 %post
-# Create runtime directory
 mkdir -p /usr/lib/syscare/patches
 
-# Start all services
+systemctl daemon-reload
 systemctl enable syscare
 systemctl start syscare
 
+############### PreUninstall ###############
 %preun
-# Stop all services
 systemctl stop syscare
 systemctl disable syscare
+systemctl daemon-reload
 
+############## PostUninstall ###############
 %postun
-# Remove runtime directory at uninstallation
 if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
     rm -rf /usr/lib/syscare
+    rm -f /var/log/syscare/syscared*.log*
+    if [ -z "$(ls -A /var/log/syscare)" ]; then
+        rm -rf /var/log/syscare
+    fi
 fi
 
-%post kmod
-# Create kmod weak-updates link
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --add-module --no-initramfs --verbose >&2
-
-# Start all services
-systemctl enable syscare-upatch
-systemctl start syscare-upatch
-
-%preun kmod
-# Stop all services
-systemctl stop syscare-upatch
-systemctl disable syscare-upatch
-
-%postun kmod
-# Remove kmod weak-updates link
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --remove-module --no-initramfs --verbose >&2
-
+################## Files ###################
 %files
 %defattr(-,root,root,-)
-%attr(755,root,root) /usr/bin/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %dir /usr/libexec/syscare
+%attr(644,root,root) /usr/lib/systemd/system/syscare.service
+%attr(755,root,root) /usr/bin/syscare
+%attr(755,root,root) /usr/bin/syscared
 %attr(755,root,root) /usr/libexec/syscare/upatch-tool
 
+############################################
+########## Package syscare-kmod ############
+############################################
+%package kmod
+Summary: Syscare kernel module.
+BuildRequires: make gcc
+BuildRequires: kernel-devel = %{kernel_version}
+Requires: kernel >= %{kernel_version}
+
+############### Description ################
+%description kmod
+Syscare dependency - kernel module.
+
+############### PostInstall ################
+%post kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --add-module --no-initramfs
+
+############### PreUninstall ###############
+%preun kmod
+# Nothing
+
+############## PostUninstall ###############
+%postun kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --remove-module --no-initramfs
+
+################## Files ###################
 %files kmod
 %dir /lib/modules/%{kernel_name}/extra/syscare
 %attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch.ko
-%attr(644,root,root) /usr/lib/systemd/system/syscare-upatch.service
 
+############################################
+########## Package syscare-build ###########
+############################################
+%package build
+Summary: Syscare build tools.
+BuildRequires: elfutils-libelf-devel
+Requires: (%{pkg_build_kmod} >= %{build_version} or %{pkg_build_ebpf} >= %{build_version})
+Requires: coreutils
+Requires: patch
+Requires: kpatch
+Requires: tar gzip
+Requires: rpm rpm-build
+
+############### Description ################
+%description build
+Syscare patch building toolset.
+
+############### PostInstall ################
+%post build
+mkdir -p /etc/syscare
+systemctl daemon-reload
+systemctl enable syscare-upatch
+systemctl start syscare-upatch
+
+############### PreUninstall ###############
+%preun build
+systemctl stop syscare-upatch
+systemctl disable syscare-upatch
+systemctl daemon-reload
+
+############## PostUninstall ###############
+%postun build
+if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
+    rm -rf /etc/syscare
+    rm -f /var/log/syscare/upatchd*.log*
+    if [ -z "$(ls -A /var/log/syscare)" ]; then
+        rm -rf /var/log/syscare
+    fi
+fi
+
+################## Files ###################
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
+%attr(644,root,root) /usr/lib/systemd/system/syscare-upatch.service
+%attr(755,root,root) /usr/bin/upatchd
 %attr(755,root,root) /usr/libexec/syscare/syscare-build
 %attr(755,root,root) /usr/libexec/syscare/upatch-build
 %attr(755,root,root) /usr/libexec/syscare/upatch-diff
+%attr(755,root,root) /usr/libexec/syscare/as-hijacker
+%attr(755,root,root) /usr/libexec/syscare/cc-hijacker
+%attr(755,root,root) /usr/libexec/syscare/c++-hijacker
+%attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
+%attr(755,root,root) /usr/libexec/syscare/g++-hijacker
 
+############################################
+######## Package syscare-build-kmod ########
+############################################
+%package build-kmod
+Summary: Kernel module for syscare patch build tools.
+BuildRequires: make gcc
+BuildRequires: kernel-devel = %{kernel_version}
+Requires: kernel >= %{kernel_version}
+Conflicts: %{pkg_build_ebpf}
+
+############### Description ################
+%description build-kmod
+Syscare build dependency - kernel module.
+
+############### PostInstall ################
+%post build-kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
+
+############### PreUninstall ###############
+%preun build-kmod
+# Nothing
+
+############## PostUninstall ###############
+%postun build-kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
+
+################## Files ###################
+%files build-kmod
+%dir /lib/modules/%{kernel_name}/extra/syscare
+%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko
+
+############################################
+######## Package syscare-build-ebpf ########
+############################################
+%package build-ebpf
+Summary: eBPF for syscare patch build tools.
+BuildRequires: make llvm clang bpftool
+BuildRequires: libbpf libbpf-devel libbpf-static
+Conflicts: %{pkg_build_kmod}
+
+############### Description ################
+%description build-ebpf
+Syscare build dependency - eBPF.
+
+############### PostInstall ################
+%post build-ebpf
+
+############### PreUninstall ###############
+%preun build-ebpf
+# Nothing
+
+############## PostUninstall ###############
+%postun build-ebpf
+# Nothing
+
+################## Files ###################
+%files build-ebpf
+%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker
+
+############################################
+################ Change log ################
+############################################
 %changelog
-* Fri Aug 11 2023 renoseven<dev@renoseven.net> - 1.0.2-5
-- Fix patch release miscalculate issue
-- Fix patch relocation failure on aarch64
+* Mon Aug 28 2023 renoseven<dev@renoseven.net> - 1.1.0-1
+- Support build patch without kernel module
+- Add syscare daemon
+- Add syscare-build daemon
+- Improve syscare cli
 * Wed Jun 28 2023 renoseven<dev@renoseven.net> - 1.0.2-4
 - Fix builder check failure issue
 * Sun Jun 25 2023 renoseven<dev@renoseven.net> - 1.0.2-3
