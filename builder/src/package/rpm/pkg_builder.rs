@@ -2,50 +2,53 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
 use syscare_abi::PatchInfo;
-use syscare_common::util::{ext_cmd::ExternCommandArgs, fs, os_str::OsStringExt};
+use syscare_common::util::{
+    ext_cmd::{ExternCommand, ExternCommandArgs},
+    fs,
+    os_str::OsStringExt,
+};
 
-use crate::workdir::RpmBuildRoot;
+const RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
 
-use super::rpm_helper::{PKG_FILE_EXT, RPM_BUILD};
+use super::PKG_FILE_EXT;
+use crate::package::{PackageBuildRoot, PackageBuilder};
 
-pub struct RpmBuilder {
-    build_root: RpmBuildRoot,
+pub struct RpmPackageBuilder {
+    build_root: PackageBuildRoot,
 }
 
-impl RpmBuilder {
-    pub fn new(build_root: RpmBuildRoot) -> Self {
+impl RpmPackageBuilder {
+    pub fn new(build_root: PackageBuildRoot) -> Self {
         Self { build_root }
     }
+}
 
-    pub fn build_prepare<P: AsRef<Path>>(&self, spec_file: P) -> Result<()> {
+impl PackageBuilder for RpmPackageBuilder {
+    fn build_prepare(&self, spec_file: &Path) -> Result<()> {
         Ok(RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
                     .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
                     .arg("-bp")
-                    .arg(spec_file.as_ref()),
+                    .arg(spec_file),
             )?
             .check_exit_code()?)
     }
 
-    pub fn build_source_package<P, Q>(
+    fn build_source_package(
         &self,
         patch_info: &PatchInfo,
-        spec_file: P,
-        output_dir: Q,
-    ) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
+        spec_file: &Path,
+        output_dir: &Path,
+    ) -> Result<()> {
         RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
                     .arg(OsString::from("_topdir ").concat(self.build_root.as_ref()))
                     .arg("-bs")
-                    .arg(spec_file.as_ref()),
+                    .arg(spec_file),
             )?
             .check_exit_code()?;
 
@@ -71,18 +74,14 @@ impl RpmBuilder {
             patch_info.name(),
             PKG_FILE_EXT
         );
-        let dst_pkg_file = output_dir.as_ref().join(dst_pkg_name);
+        let dst_pkg_file = output_dir.join(dst_pkg_name);
 
         fs::copy(src_pkg_file, dst_pkg_file).context("Cannot copy package to output directory")?;
 
         Ok(())
     }
 
-    pub fn build_binary_package<P: AsRef<Path>, Q: AsRef<Path>>(
-        &self,
-        spec_file: P,
-        output_dir: Q,
-    ) -> Result<()> {
+    fn build_binary_package(&self, spec_file: &Path, output_dir: &Path) -> Result<()> {
         RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
@@ -91,11 +90,11 @@ impl RpmBuilder {
                     .arg("--define")
                     .arg("__spec_install_post %{nil}")
                     .arg("-bb")
-                    .arg(spec_file.as_ref()),
+                    .arg(spec_file),
             )?
             .check_exit_code()?;
 
-        fs::copy_dir_contents(&self.build_root.rpms, &output_dir)
+        fs::copy_dir_contents(&self.build_root.rpms, output_dir)
             .context("Cannot copy package to output directory")?;
 
         Ok(())

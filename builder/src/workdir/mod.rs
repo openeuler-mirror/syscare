@@ -6,14 +6,13 @@ use std::{
 
 use anyhow::Result;
 
-mod fs_util;
+use crate::util;
+
 mod package_root;
 mod patch_root;
-mod rpmbuild_root;
 
 pub use package_root::*;
 pub use patch_root::*;
-pub use rpmbuild_root::*;
 
 const PACKAGE_ROOT_NAME: &str = "package";
 const PATCH_ROOT_NAME: &str = "patch";
@@ -43,7 +42,7 @@ impl WorkDir {
     }
 
     pub fn remove(&self) -> Result<()> {
-        fs_util::remove_dir_all(&self.path)
+        util::remove_dir_all(&self.path)
     }
 }
 

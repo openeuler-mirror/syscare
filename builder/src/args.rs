@@ -6,8 +6,7 @@ use lazy_static::lazy_static;
 
 use syscare_common::{os, util::fs};
 
-use super::CLI_NAME;
-use super::CLI_VERSION;
+use crate::{CLI_NAME, CLI_VERSION};
 
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";

@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 
-use super::{fs_util, rpmbuild_root::RpmBuildRoot};
+use crate::{package::PackageBuildRoot, util};
 
 const SOURCE_DIR_NAME: &str = "source";
 const DEBUGINFO_DIR_NAME: &str = "debuginfo";
@@ -17,7 +17,7 @@ pub struct PackageRoot {
     pub path: PathBuf,
     pub source: PathBuf,
     pub debuginfo: PathBuf,
-    pub patch: RpmBuildRoot,
+    pub patch: PackageBuildRoot,
 }
 
 impl PackageRoot {
@@ -25,11 +25,11 @@ impl PackageRoot {
         let path = path.as_ref().to_path_buf();
         let source = path.join(SOURCE_DIR_NAME);
         let debuginfo = path.join(DEBUGINFO_DIR_NAME);
-        let patch = RpmBuildRoot::new(path.join(PATCH_DIR_NAME))?;
+        let patch = PackageBuildRoot::new(path.join(PATCH_DIR_NAME))?;
 
-        fs_util::create_dir_all(&path)?;
-        fs_util::create_dir_all(&source)?;
-        fs_util::create_dir_all(&debuginfo)?;
+        util::create_dir_all(&path)?;
+        util::create_dir_all(&source)?;
+        util::create_dir_all(&debuginfo)?;
 
         Ok(Self {
             path,

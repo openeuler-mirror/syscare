@@ -7,9 +7,9 @@ use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternComm
 use syscare_common::util::fs;
 
 use crate::args::Arguments;
-use crate::package::RpmHelper;
 use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
 use crate::workdir::WorkDir;
+use crate::PKG_IMPL;
 
 use super::kpatch_builder_args::KernelPatchBuilderArguments;
 use super::kpatch_helper::KernelPatchHelper;
@@ -70,58 +70,28 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
         let source_pkg_dir = self.workdir.package.source.as_path();
         let debuginfo_pkg_dir = self.workdir.package.debuginfo.as_path();
 
-        debug!(
-            "Finding package build root from \"{}\"...",
-            source_pkg_dir.display()
-        );
-        let rpmbuild_root = RpmHelper::find_rpmbuild_root(source_pkg_dir).with_context(|| {
-            format!(
-                "Cannot find package build root from \"{}\"",
-                source_pkg_dir.display()
-            )
-        })?;
+        debug!("Finding package build root from...");
+        let pkg_build_root = PKG_IMPL
+            .find_buildroot(source_pkg_dir)
+            .context("Cannot find package build root")?;
+        let source_pkg_build_dir = pkg_build_root.build.as_path();
 
-        let source_pkg_build_dir = rpmbuild_root.build.as_path();
-
-        debug!(
-            "Finding kernel source directory from \"{}\"...",
-            source_pkg_build_dir.display()
-        );
-        let kernel_source_dir = RpmHelper::find_build_source(source_pkg_build_dir, patch_info)
-            .with_context(|| {
-                format!(
-                    "Cannot find kernel source directory from \"{}\"",
-                    source_pkg_build_dir.display()
-                )
-            })?;
+        debug!("Finding kernel source directory...");
+        let kernel_source_dir = PKG_IMPL
+            .find_source_directory(source_pkg_build_dir, "linux-")
+            .context("Cannot find kernel source directory")?;
 
         debug!("Generating kernel default config...");
         KernelPatchHelper::generate_defconfig(&kernel_source_dir)
             .context("Failed to generate default config")?;
 
-        debug!(
-            "Finding kernel config from \"{}\"...",
-            kernel_source_dir.display()
-        );
+        debug!("Finding kernel config...");
         let kernel_config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)
-            .with_context(|| {
-                format!(
-                    "Cannot find kernel config from \"{}\"",
-                    source_pkg_build_dir.display()
-                )
-            })?;
+            .context("Cannot find kernel config")?;
 
-        debug!(
-            "Finding vmlinux from \"{}\"...",
-            debuginfo_pkg_dir.display()
-        );
+        debug!("Finding vmlinux...");
         let vmlinux_file =
-            KernelPatchHelper::find_vmlinux(debuginfo_pkg_dir).with_context(|| {
-                format!(
-                    "Cannot find vmlinux from \"{}\"",
-                    source_pkg_build_dir.display()
-                )
-            })?;
+            KernelPatchHelper::find_vmlinux(&debuginfo_pkg_dir).context("Cannot find vmlinux")?;
 
         let kernel_patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, patch_info.uuid); // Use uuid to avoid patch name collision
         let builder_args = KernelPatchBuilderArguments {

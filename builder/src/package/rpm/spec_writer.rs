@@ -1,16 +1,18 @@
-use std::collections::BTreeSet;
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::{
+    collections::BTreeSet,
+    ffi::{OsStr, OsString},
+    path::{Path, PathBuf},
+};
 
-use syscare_common::util::fs;
-use syscare_common::util::os_str::OsStrExt;
+use anyhow::{Context, Result};
+use syscare_common::util::{fs, os_str::OsStrExt};
 
-pub(super) const SPEC_FILE_EXT: &str = "spec";
-pub(super) const SOURCE_TAG_NAME: &str = "Source";
-pub(super) const TAG_VALUE_NONE: &str = "(none)";
+use crate::package::PackageSpecWriter;
+
+const SOURCE_TAG_NAME: &str = "Source";
 
 #[derive(PartialEq, Eq, PartialOrd, Ord, Debug)]
-pub struct RpmSpecTag {
+struct RpmSpecTag {
     pub name: String,
     pub id: usize,
     pub value: OsString,
@@ -27,9 +29,9 @@ impl std::fmt::Display for RpmSpecTag {
     }
 }
 
-pub struct RpmSpecHelper;
+pub struct RpmSpecWriter;
 
-impl RpmSpecHelper {
+impl RpmSpecWriter {
     fn parse_id_tag<S: AsRef<OsStr>>(line: S, tag_prefix: &str) -> Option<RpmSpecTag> {
         let line_str = line.as_ref().trim();
         if line_str.starts_with('#') || !line_str.starts_with(tag_prefix) {
@@ -54,19 +56,19 @@ impl RpmSpecHelper {
         None
     }
 
-    fn create_new_source_tags<I, S>(start_tag_id: usize, file_list: I) -> Vec<RpmSpecTag>
+    fn create_new_source_tags<I, P>(start_tag_id: usize, file_list: I) -> Vec<RpmSpecTag>
     where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
     {
         let mut source_tag_list = Vec::new();
         let mut tag_id = start_tag_id + 1;
 
-        for file_name in file_list {
+        for file_path in file_list {
             source_tag_list.push(RpmSpecTag {
                 name: SOURCE_TAG_NAME.to_owned(),
                 id: tag_id,
-                value: file_name.as_ref().to_owned(),
+                value: fs::file_name(file_path),
             });
             tag_id += 1;
         }
@@ -75,13 +77,8 @@ impl RpmSpecHelper {
     }
 }
 
-impl RpmSpecHelper {
-    pub fn add_files_to_spec<P, I, S>(spec_file: P, new_file_list: I) -> std::io::Result<()>
-    where
-        P: AsRef<Path>,
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-    {
+impl PackageSpecWriter for RpmSpecWriter {
+    fn add_source_files(&self, spec_file: &Path, file_list: Vec<PathBuf>) -> Result<()> {
         const PKG_SPEC_SECTION_DESC: &str = "%description";
 
         let mut spec_file_content = fs::read_to_string(&spec_file)?
@@ -115,7 +112,7 @@ impl RpmSpecHelper {
             .unwrap_or_default();
 
         // Add 'Source' tag for new files
-        for source_tag in Self::create_new_source_tags(last_tag_id, new_file_list)
+        for source_tag in Self::create_new_source_tags(last_tag_id, file_list)
             .into_iter()
             .rev()
         {
@@ -138,5 +135,6 @@ impl RpmSpecHelper {
                 })
                 .collect::<Vec<_>>(),
         )
+        .context("Failed to write rpm spec file")
     }
 }

@@ -1,9 +1,10 @@
 use std::ops::Deref;
 use std::process::exit;
+use std::sync::Arc;
 
 use anyhow::{bail, Context, Result};
-use log::LevelFilter;
-use log::{debug, error, info, warn};
+use lazy_static::lazy_static;
+use log::{debug, error, info, warn, LevelFilter};
 use once_cell::sync::OnceCell;
 
 use syscare_abi::{PackageInfo, PackageType};
@@ -13,24 +14,30 @@ use syscare_common::{
     util::{fs, serde},
 };
 
+const CLI_NAME: &str = "syscare build";
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 mod args;
 mod logger;
 mod package;
 mod patch;
+mod util;
 mod workdir;
 
 use args::Arguments;
 use logger::Logger;
-use package::{
-    PackageHelper, RpmBuilder, RpmHelper, RpmSpecGenerator, DEBUGINFO_FILE_EXT, PKG_FILE_EXT,
-};
+use package::{PackageBuilderFactory, PackageFormat, PackageImpl, PackageMetadata};
 use patch::{PatchBuilderFactory, PatchHelper, PATCH_FILE_EXT, PATCH_INFO_FILE_NAME};
 use workdir::WorkDir;
 
-const CLI_NAME: &str = "syscare build";
-const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+use crate::package::{PackageSpecBuilderFactory, PackageSpecWriterFactory};
+
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
+
+lazy_static! {
+    static ref PKG_IMPL: Arc<PackageImpl> = Arc::new(PackageImpl::new(PackageFormat::RpmPackage));
+}
 
 pub struct SyscareBuilder {
     args: Arguments,
@@ -40,15 +47,16 @@ pub struct SyscareBuilder {
 impl SyscareBuilder {
     fn check_input_args(&self) -> Result<()> {
         let args = &self.args;
+        let pkg_file_ext = PKG_IMPL.extension();
 
-        let source_rpm = &args.source;
-        if !source_rpm.is_file() || fs::file_ext(source_rpm) != PKG_FILE_EXT {
-            bail!("Path \"{}\" is not a rpm package", source_rpm.display());
+        let source_pkg = &args.source;
+        if !source_pkg.is_file() || fs::file_ext(source_pkg) != pkg_file_ext {
+            bail!("Path \"{}\" is not a rpm package", source_pkg.display());
         }
 
-        for debuginfo_rpm in &args.debuginfo {
-            if !debuginfo_rpm.is_file() || fs::file_ext(debuginfo_rpm) != PKG_FILE_EXT {
-                bail!("Path \"{}\" is not a rpm package", debuginfo_rpm.display());
+        for debuginfo_pkg in &args.debuginfo {
+            if !debuginfo_pkg.is_file() || fs::file_ext(debuginfo_pkg) != pkg_file_ext {
+                bail!("Path \"{}\" is not a rpm package", debuginfo_pkg.display());
             }
         }
 
@@ -80,7 +88,7 @@ impl SyscareBuilder {
     }
 
     fn collect_package_info(&self) -> Result<(PackageInfo, Vec<PackageInfo>)> {
-        let src_pkg_info = PackageHelper::parse_pkg_info(&self.args.source)?;
+        let src_pkg_info = PKG_IMPL.parse_package_info(&self.args.source)?;
         if src_pkg_info.kind != PackageType::SourcePackage {
             bail!(
                 "File \"{}\" is not a source package",
@@ -90,19 +98,19 @@ impl SyscareBuilder {
         info!("------------------------------");
         info!("Source package");
         info!("------------------------------");
-        PackageHelper::print_pkg_info(&src_pkg_info, log::Level::Info);
+        PKG_IMPL.print_pkg_info(&src_pkg_info, log::Level::Info);
         info!("------------------------------");
 
         let mut dbg_pkg_infos = Vec::with_capacity(self.args.debuginfo.len());
         for pkg_path in &self.args.debuginfo {
-            let debug_pkg_info = PackageHelper::parse_pkg_info(pkg_path)?;
+            let debug_pkg_info = PKG_IMPL.parse_package_info(pkg_path)?;
             if debug_pkg_info.kind != PackageType::BinaryPackage {
                 bail!("File \"{}\" is not a debuginfo package", pkg_path.display());
             }
 
             info!("Debuginfo package");
             info!("------------------------------");
-            PackageHelper::print_pkg_info(&debug_pkg_info, log::Level::Info);
+            PKG_IMPL.print_pkg_info(&debug_pkg_info, log::Level::Info);
             info!("------------------------------");
             dbg_pkg_infos.push(debug_pkg_info);
         }
@@ -130,17 +138,19 @@ impl SyscareBuilder {
         let args = &mut self.args;
 
         debug!("- Extracting source package");
-        RpmHelper::extract_package(&args.source, &source_pkg_root)
+        PKG_IMPL
+            .extract_package(&args.source, &source_pkg_root)
             .context("Failed to extrace source package")?;
 
         debug!("- Finding package build root");
-        let rpmbuild_root = RpmHelper::find_rpmbuild_root(&source_pkg_root)
+        let rpmbuild_root = PKG_IMPL
+            .find_buildroot(&source_pkg_root)
             .context("Failed to find package build root")?;
 
         debug!("- Decompressing patch metadata");
         let pkg_source_dir = &rpmbuild_root.sources;
-        if RpmHelper::decompress_medatadata(pkg_source_dir).is_ok() {
-            let pkg_metadata_dir = RpmHelper::metadata_dir(pkg_source_dir);
+        if PackageMetadata::decompress(pkg_source_dir).is_ok() {
+            let pkg_metadata_dir = PackageMetadata::metadata_dir(pkg_source_dir);
             let patch_info_file = pkg_metadata_dir.join(PATCH_INFO_FILE_NAME);
 
             debug!("- Reading patch metadata");
@@ -238,30 +248,30 @@ impl SyscareBuilder {
         debug!("- Extracting debuginfo package(s)");
         let debug_pkg_root = pkg_root.debuginfo.as_path();
         for debuginfo_pkg in &self.args.debuginfo {
-            RpmHelper::extract_package(debuginfo_pkg, debug_pkg_root)
+            PKG_IMPL
+                .extract_package(debuginfo_pkg, debug_pkg_root)
                 .context("Failed to extract debuginfo package")?;
         }
 
         debug!("- Checking debuginfo files");
-        let debuginfo_files = fs::list_files_by_ext(
-            debug_pkg_root,
-            DEBUGINFO_FILE_EXT,
-            fs::TraverseOptions { recursive: true },
-        )
-        .context("Failed to find debuginfo files")?;
-
+        let debuginfo_files = PKG_IMPL
+            .find_debuginfo(debug_pkg_root)
+            .context("Failed to find debuginfo files")?;
         if debuginfo_files.is_empty() {
             bail!("Cannot find any debuginfo file");
         }
 
         debug!("- Preparing to build");
-        let rpmbuild_root = RpmHelper::find_rpmbuild_root(&pkg_root.source)
+        let pkg_build_root = PKG_IMPL
+            .find_buildroot(&pkg_root.source)
             .context("Cannot find package build root")?;
 
-        let pkg_spec_file = RpmHelper::find_spec_file(&rpmbuild_root.specs)
+        let pkg_spec_file = PKG_IMPL
+            .find_spec_file(&pkg_build_root.specs)
             .context("Cannot find package spec file")?;
 
-        RpmBuilder::new(rpmbuild_root).build_prepare(pkg_spec_file)
+        PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root)
+            .build_prepare(&pkg_spec_file)
     }
 
     fn build_patch(&self, patch_info: &mut PatchInfo) -> Result<()> {
@@ -273,7 +283,9 @@ impl SyscareBuilder {
             .context("Failed to parse build arguments")?;
 
         debug!("- Building patch");
-        patch_builder.build_patch(&builder_args)?;
+        patch_builder
+            .build_patch(&builder_args)
+            .with_context(|| format!("{}Builder: Failed to build patch", patch_info.kind))?;
 
         debug!("- Generating patch metadata");
         patch_builder
@@ -291,23 +303,23 @@ impl SyscareBuilder {
     fn build_patch_package(&self, patch_info: &PatchInfo) -> Result<()> {
         debug!("- Preparing build requirements");
         let workdir = self.workdir();
-        let rpmbuild_root = &workdir.package.patch;
-        let pkg_source_dir = &rpmbuild_root.sources;
-        let pkg_spec_dir = &rpmbuild_root.specs;
+        let pkg_build_root = &workdir.package.patch;
+        let pkg_source_dir = &pkg_build_root.sources;
+        let pkg_spec_dir = &pkg_build_root.specs;
         let patch_output_dir = &workdir.patch.output;
-
-        debug!("- Generating spec file");
-        let new_spec_file =
-            RpmSpecGenerator::generate_spec_file(patch_info, pkg_source_dir, pkg_spec_dir)
-                .context("Failed to generate spec file")?;
 
         debug!("- Copying patch outputs");
         fs::copy_dir_contents(patch_output_dir, pkg_source_dir)
             .context("Failed to copy patch outputs")?;
 
+        debug!("- Generating spec file");
+        let new_spec_file = PackageSpecBuilderFactory::get_builder(PKG_IMPL.format())
+            .build(patch_info, pkg_source_dir, pkg_spec_dir)
+            .context("Failed to generate spec file")?;
+
         debug!("- Building package");
-        RpmBuilder::new(rpmbuild_root.to_owned())
-            .build_binary_package(new_spec_file, &self.args.output)
+        PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root.to_owned())
+            .build_binary_package(&new_spec_file, &self.args.output)
     }
 
     fn build_source_package(&self, patch_info: &PatchInfo) -> Result<()> {
@@ -315,15 +327,17 @@ impl SyscareBuilder {
         let workdir = self.workdir();
         let source_pkg_dir = &workdir.package.source;
 
-        let rpmbuild_root = RpmHelper::find_rpmbuild_root(source_pkg_dir)
+        let pkg_build_root = PKG_IMPL
+            .find_buildroot(source_pkg_dir)
             .context("Cannot find package build root")?;
 
-        let pkg_source_dir = &rpmbuild_root.sources;
-        let pkg_spec_file = RpmHelper::find_spec_file(&rpmbuild_root.specs)
+        let pkg_source_dir = &pkg_build_root.sources;
+        let pkg_spec_file = PKG_IMPL
+            .find_spec_file(&pkg_build_root.specs)
             .context("Cannot find package spec file")?;
 
         debug!("- Checking patch metadata");
-        let pkg_metadata_dir = RpmHelper::metadata_dir(pkg_source_dir);
+        let pkg_metadata_dir = PackageMetadata::metadata_dir(pkg_source_dir);
         if !pkg_metadata_dir.exists() {
             fs::create_dir(&pkg_metadata_dir)?;
         }
@@ -345,20 +359,20 @@ impl SyscareBuilder {
             .context("Failed to copy patch metadata")?;
 
         debug!("- Compressing patch metadata");
-        let has_metadata = RpmHelper::has_metadata(pkg_source_dir);
-        RpmHelper::compress_metadata(pkg_source_dir)
-            .context("Failed to compress patch metadata")?;
-
-        if !has_metadata {
+        let metadata_file = PackageMetadata::metadata_file(pkg_source_dir);
+        if !metadata_file.exists() {
             // Lacking of patch metadata means that the package is not patched
             // Thus, we should add a 'Source' tag into spec file
             debug!("- Modifying spec file");
-            RpmHelper::add_metadata_to_spec(&pkg_spec_file)
+            let file_list = vec![metadata_file];
+            PackageSpecWriterFactory::get_writer(PKG_IMPL.format())
+                .add_source_files(&pkg_spec_file, file_list)
                 .context("Failed to modify spec file")?;
         }
+        PackageMetadata::compress(pkg_source_dir).context("Failed to compress patch metadata")?;
 
         debug!("- Building package");
-        RpmBuilder::new(rpmbuild_root).build_source_package(
+        PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root).build_source_package(
             patch_info,
             &pkg_spec_file,
             &self.args.output,
@@ -418,19 +432,16 @@ impl SyscareBuilder {
             .context("Build parameters check failed")?;
 
         info!("Pareparing to build patch");
-        self.build_prepare().context("Failed to prepare build")?;
+        self.build_prepare()?;
 
         info!("Building patch, this may take a while");
-        self.build_patch(&mut patch_info)
-            .context("Failed to build patch")?;
+        self.build_patch(&mut patch_info)?;
 
         info!("Building patch package");
-        self.build_patch_package(&patch_info)
-            .context("Failed to build patch package")?;
+        self.build_patch_package(&patch_info)?;
 
         info!("Building source package");
-        self.build_source_package(&patch_info)
-            .context("Failed to build patch source package")?;
+        self.build_source_package(&patch_info)?;
 
         if !self.args.skip_cleanup {
             info!("Cleaning up");
@@ -439,16 +450,6 @@ impl SyscareBuilder {
 
         info!("Done");
         Ok(())
-    }
-}
-
-impl SyscareBuilder {
-    pub fn name() -> &'static str {
-        CLI_NAME
-    }
-
-    pub fn version() -> &'static str {
-        CLI_VERSION
     }
 }
 

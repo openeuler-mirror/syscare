@@ -14,9 +14,10 @@ use syscare_common::util::{
 };
 
 use crate::args::Arguments;
-use crate::package::RpmHelper;
+use crate::package::ElfRelation;
 use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
 use crate::workdir::WorkDir;
+use crate::PKG_IMPL;
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
 
@@ -117,65 +118,39 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let source_pkg_dir = self.workdir.package.source.as_path();
         let debuginfo_pkg_dir = self.workdir.package.debuginfo.as_path();
 
-        debug!(
-            "Finding package build root from \"{}\"...",
-            source_pkg_dir.display()
-        );
-        let rpmbuild_root = RpmHelper::find_rpmbuild_root(source_pkg_dir).with_context(|| {
-            format!(
-                "Cannot find package build root from \"{}\"",
-                source_pkg_dir.display()
-            )
-        })?;
+        debug!("Finding package build root...");
+        let pkg_build_root = PKG_IMPL
+            .find_buildroot(source_pkg_dir)
+            .context("Cannot find package build root")?;
 
-        let rpm_spec_dir = rpmbuild_root.specs.as_path();
-        let rpm_build_dir = rpmbuild_root.build.as_path();
-        let rpm_buildroot_dir = rpmbuild_root.buildroot.as_path();
+        let pkg_spec_dir = pkg_build_root.specs.as_path();
+        let pkg_build_dir = pkg_build_root.build.as_path();
+        let pkg_buildroot_dir = pkg_build_root.buildroot.as_path();
 
-        debug!(
-            "Finding package spec file from \"{}\"...",
-            rpm_spec_dir.display()
-        );
-        let spec_file = RpmHelper::find_spec_file(rpm_spec_dir).with_context(|| {
-            format!(
-                "Cannot find package spec file from \"{}\"",
-                rpm_spec_dir.display()
-            )
-        })?;
+        debug!("Finding package spec file...");
+        let spec_file = PKG_IMPL
+            .find_spec_file(pkg_spec_dir)
+            .context("Cannot find package spec file")?;
 
-        debug!(
-            "Finding package source directory from \"{}\"...",
-            rpm_build_dir.display()
-        );
-        let source_dir =
-            RpmHelper::find_build_source(rpm_build_dir, patch_info).with_context(|| {
-                format!(
-                    "Cannot find package source directory from \"{}\"",
-                    rpm_build_dir.display()
-                )
-            })?;
+        debug!("Finding package source directory...");
+        let source_dir = PKG_IMPL
+            .find_source_directory(pkg_build_dir, &patch_info.target.name)
+            .context("Cannot find package source directory")?;
 
-        debug!(
-            "Finding package debuginfos from \"{}\"...",
-            debuginfo_pkg_dir.display()
-        );
-        let debuginfos = RpmHelper::find_debuginfo(debuginfo_pkg_dir).with_context(|| {
-            format!(
-                "Cannot find package debuginfos from \"{}\"",
-                debuginfo_pkg_dir.display()
-            )
-        })?;
+        debug!("Finding package debuginfos from...");
+        let debuginfos = PKG_IMPL
+            .find_debuginfo(debuginfo_pkg_dir)
+            .context("Cannot find package debuginfos")?;
 
         let target_pkg = &patch_info.target;
-        let debug_relations =
-            RpmHelper::parse_elf_relations(debuginfos, debuginfo_pkg_dir, target_pkg)
-                .context("Cannot parse elf relations")?;
+        let debug_relations = ElfRelation::parse_from(debuginfos, debuginfo_pkg_dir, target_pkg)
+            .context("Failed to parse elf relations")?;
 
         let patch_build_dir = self.workdir.patch.build.as_path();
         let output_dir = self.workdir.patch.output.as_path();
         let compilers = self.detect_compilers();
 
-        let topdir_macro = self.create_topdir_macro(rpmbuild_root.as_ref());
+        let topdir_macro = self.create_topdir_macro(pkg_build_root.as_ref());
         let build_macros = self.create_build_macros(args);
 
         let build_prep_cmd = OsString::from(RPMBUILD_CMD)
@@ -198,7 +173,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
         let builder_args = UserPatchBuilderArguments {
             work_dir: patch_build_dir.to_path_buf(),
             debug_source: source_dir,
-            elf_dir: rpm_buildroot_dir.to_path_buf(),
+            elf_dir: pkg_buildroot_dir.to_path_buf(),
             elf_relations: debug_relations,
             build_source_cmd: build_original_cmd.append("&&").append(build_prep_cmd),
             build_patch_cmd: build_patched_cmd,

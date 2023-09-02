@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 
-use super::fs_util;
+use crate::util;
 
 const BUILD_DIR_NAME: &str = "BUILD";
 const BUILDROOT_DIR_NAME: &str = "BUILDROOT";
@@ -16,7 +16,7 @@ const SPECS_DIR_NAME: &str = "SPECS";
 const SRPMS_DIR_NAME: &str = "SRPMS";
 
 #[derive(Debug, Clone)]
-pub struct RpmBuildRoot {
+pub struct PackageBuildRoot {
     pub path: PathBuf,
     pub build: PathBuf,
     pub buildroot: PathBuf,
@@ -26,7 +26,7 @@ pub struct RpmBuildRoot {
     pub srpms: PathBuf,
 }
 
-impl RpmBuildRoot {
+impl PackageBuildRoot {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         let build = path.join(BUILD_DIR_NAME);
@@ -36,13 +36,13 @@ impl RpmBuildRoot {
         let specs = path.join(SPECS_DIR_NAME);
         let srpms = path.join(SRPMS_DIR_NAME);
 
-        fs_util::create_dir_all(&path)?;
-        fs_util::create_dir_all(&build)?;
-        fs_util::create_dir_all(&buildroot)?;
-        fs_util::create_dir_all(&rpms)?;
-        fs_util::create_dir_all(&sources)?;
-        fs_util::create_dir_all(&specs)?;
-        fs_util::create_dir_all(&srpms)?;
+        util::create_dir_all(&path)?;
+        util::create_dir_all(&build)?;
+        util::create_dir_all(&buildroot)?;
+        util::create_dir_all(&rpms)?;
+        util::create_dir_all(&sources)?;
+        util::create_dir_all(&specs)?;
+        util::create_dir_all(&srpms)?;
 
         Ok(Self {
             path,
@@ -56,7 +56,7 @@ impl RpmBuildRoot {
     }
 }
 
-impl Deref for RpmBuildRoot {
+impl Deref for PackageBuildRoot {
     type Target = Path;
 
     fn deref(&self) -> &Self::Target {
@@ -64,7 +64,7 @@ impl Deref for RpmBuildRoot {
     }
 }
 
-impl AsRef<OsStr> for RpmBuildRoot {
+impl AsRef<OsStr> for PackageBuildRoot {
     fn as_ref(&self) -> &OsStr {
         self.as_os_str()
     }

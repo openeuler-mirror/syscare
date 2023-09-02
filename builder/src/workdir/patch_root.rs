@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 
-use super::fs_util;
+use super::util;
 
 const BUILD_DIR_NAME: &str = "build";
 const OUTPUT_DIR_NAME: &str = "output";
@@ -24,9 +24,9 @@ impl PatchRoot {
         let build = path.join(BUILD_DIR_NAME);
         let output = path.join(OUTPUT_DIR_NAME);
 
-        fs_util::create_dir_all(&path)?;
-        fs_util::create_dir_all(&build)?;
-        fs_util::create_dir_all(&output)?;
+        util::create_dir_all(&path)?;
+        util::create_dir_all(&build)?;
+        util::create_dir_all(&output)?;
 
         Ok(Self {
             path,
