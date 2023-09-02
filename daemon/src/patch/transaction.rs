@@ -3,6 +3,7 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use log::{debug, info};
 
+use parking_lot::RwLock;
 use syscare_abi::{PatchStateRecord, PatchStatus};
 
 use super::manager::{Patch, PatchManager};
@@ -11,6 +12,7 @@ type TransationRecord = (Arc<Patch>, PatchStatus);
 
 pub struct PatchTransaction<F> {
     name: String,
+    patch_manager: Arc<RwLock<PatchManager>>,
     action: F,
     identifier: String,
     finish_list: Vec<TransationRecord>,
@@ -20,9 +22,15 @@ impl<F> PatchTransaction<F>
 where
     F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
 {
-    pub fn new(name: String, action: F, identifier: String) -> Result<Self> {
+    pub fn new(
+        name: String,
+        patch_manager: Arc<RwLock<PatchManager>>,
+        action: F,
+        identifier: String,
+    ) -> Result<Self> {
         let instance = Self {
             name,
+            patch_manager,
             action,
             identifier,
             finish_list: Vec::new(),
@@ -38,13 +46,14 @@ where
     F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
 {
     fn start(&mut self) -> Result<Vec<PatchStateRecord>> {
-        let manager = PatchManager::get_instance()?;
-        let mut patch_list = manager.write().match_patch(&self.identifier)?;
+        let mut patch_manager = self.patch_manager.write();
+
+        let mut patch_list = patch_manager.match_patch(&self.identifier)?;
         let mut records = Vec::with_capacity(patch_list.len());
 
         while let Some(patch) = patch_list.pop() {
-            let old_status = manager.write().get_patch_status(&patch)?;
-            let new_status = (self.action)(&mut manager.write(), &patch)?;
+            let old_status = patch_manager.get_patch_status(&patch)?;
+            let new_status = (self.action)(&mut patch_manager, &patch)?;
 
             records.push(PatchStateRecord {
                 name: patch.to_string(),
@@ -56,9 +65,9 @@ where
     }
 
     fn rollback(&mut self) -> Result<()> {
-        let manager = PatchManager::get_instance()?;
+        let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            manager.write().do_status_transition(&patch, status)?;
+            patch_manager.do_status_transition(&patch, status)?;
         }
         Ok(())
     }

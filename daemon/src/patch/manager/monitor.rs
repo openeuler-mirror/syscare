@@ -26,8 +26,7 @@ pub struct PatchMonitor {
 }
 
 impl PatchMonitor {
-    pub fn new() -> Result<Self> {
-        let patch_manager = PatchManager::get_instance()?;
+    pub fn new(patch_manager: Arc<RwLock<PatchManager>>) -> Result<Self> {
         let monitor_dir = patch_manager.read().patch_install_dir.clone();
 
         let mut inotify = Inotify::init().context("Failed to initialize inotify")?;

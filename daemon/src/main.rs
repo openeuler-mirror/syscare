@@ -108,10 +108,7 @@ impl Daemon {
     fn initialize_skeletons(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        PatchSkeletonImpl::initialize(&self.args.data_dir)
-            .context("Failed to initialize patch skeleton")?;
-
-        io_handler.extend_with(PatchSkeletonImpl.to_delegate());
+        io_handler.extend_with(PatchSkeletonImpl::new(&self.args.data_dir)?.to_delegate());
         io_handler.extend_with(FastRebootSkeletonImpl.to_delegate());
 
         Ok(io_handler)
