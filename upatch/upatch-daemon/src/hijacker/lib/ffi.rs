@@ -3,7 +3,7 @@ extern "C" {
 }
 
 extern "C" {
-    pub fn upatch_hijacker_cleanup() -> ::std::os::raw::c_int;
+    pub fn upatch_hijacker_cleanup() -> ::std::os::raw::c_void;
 }
 
 extern "C" {

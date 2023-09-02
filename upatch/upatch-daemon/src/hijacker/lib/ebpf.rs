@@ -41,15 +41,16 @@ impl EbpfProgramGuard {
             let mut child = Command::new(EBPF_BIN_PATH)
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped())
-                .spawn()?;
+                .spawn()
+                .with_context(|| format!("Failed to create process \"{}\"", EBPF_BIN_PATH))?;
 
             let mut wait_retry = 0;
             loop {
-                let wait_result = child.try_wait().context("Failed to wait eBPF program")?;
+                let wait_result = child.try_wait().context("Failed to wait process")?;
                 match wait_result {
                     Some(exit_status) => {
                         if exit_status.code().unwrap_or_default() != 0 {
-                            bail!("Hijacker eBPF program exited unexpectedly");
+                            bail!("Process exited unexpectedly");
                         }
                     }
                     None => {

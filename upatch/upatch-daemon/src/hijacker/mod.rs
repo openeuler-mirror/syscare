@@ -6,15 +6,12 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use log::{debug, info};
-use once_cell::sync::OnceCell;
 
 mod config;
 mod lib;
 
 use config::HijackerConfig;
 use lib::HijackLibrary;
-
-static HIJACKER: OnceCell<Hijacker> = OnceCell::new();
 
 pub struct Hijacker {
     lib: HijackLibrary,
@@ -80,26 +77,15 @@ impl Hijacker {
 }
 
 impl Hijacker {
-    pub fn initialize<P: AsRef<Path>>(config_path: P) -> Result<()> {
-        debug!("Initializing hijacker...");
-        HIJACKER
-            .get_or_try_init(move || -> Result<Hijacker> {
-                let lib = HijackLibrary::new()?;
+    pub fn new<P: AsRef<Path>>(config_path: P) -> Result<Self> {
+        let lib = HijackLibrary::new()?;
 
-                debug!("Initializing hijacker configuation...");
-                let elf_map = Self::initialize_config(config_path)
-                    .context("Failed to initialize hijacker configuration")?
-                    .0;
+        debug!("Initializing hijacker configuation...");
+        let elf_map = Self::initialize_config(config_path)
+            .context("Failed to initialize hijacker configuration")?
+            .0;
 
-                info!("Using elf mapping: {:#?}", elf_map);
-                Ok(Self { lib, elf_map })
-            })
-            .context("Failed to initialize hijacker")?;
-
-        Ok(())
-    }
-
-    pub fn get_instance() -> Result<&'static Hijacker> {
-        HIJACKER.get().context("Hijacker is not initialized")
+        info!("Using elf mapping: {:#?}", elf_map);
+        Ok(Self { lib, elf_map })
     }
 }

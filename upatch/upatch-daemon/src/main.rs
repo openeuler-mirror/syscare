@@ -101,8 +101,7 @@ impl Daemon {
     fn initialize_skeleton(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        SkeletonImpl::initialize(&self.args.config_file)?;
-        io_handler.extend_with(SkeletonImpl.to_delegate());
+        io_handler.extend_with(SkeletonImpl::new(&self.args.config_file)?.to_delegate());
 
         Ok(io_handler)
     }

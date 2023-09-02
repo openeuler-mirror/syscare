@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, Result};
 use log::error;
 
 mod cstring;
@@ -55,8 +55,10 @@ impl HijackLibrary {
         Self::call_ffi(unsafe { ffi::upatch_hijacker_init() })
     }
 
-    fn hijacker_destroy() -> Result<()> {
-        Self::call_ffi(unsafe { ffi::upatch_hijacker_cleanup() })
+    fn hijacker_destroy() {
+        unsafe {
+            ffi::upatch_hijacker_cleanup();
+        }
     }
 }
 
@@ -97,8 +99,6 @@ impl HijackLibrary {
 
 impl Drop for HijackLibrary {
     fn drop(&mut self) {
-        if let Err(e) = Self::hijacker_destroy().context("Failed to destroy hijacker library") {
-            error!("{:?}", e)
-        }
+        Self::hijacker_destroy();
     }
 }
