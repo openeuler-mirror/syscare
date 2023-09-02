@@ -37,10 +37,22 @@ const PKG_SCRIPT_INSTALL: &str = r#"install -d "%{buildroot}%{patch_root}"
 for file in $(ls -A "%{_builddir}"); do
     install "%{_builddir}/$file" "%{buildroot}%{patch_root}"
 done"#;
-const PKG_SCRIPT_PREUN: &str =
-    r#"syscare remove '%{patch_uuid}' || echo "Failed to remove patch '%{patch_name}'" >&2"#;
+const PKG_SCRIPT_PREUN: &str = r#"for uuid in %{patch_uuid}; do
+    syscare remove $uuid >&2
+done"#;
 
 impl RpmSpecBuilder {
+    fn parse_patch_uuid(patch_info: &PatchInfo) -> String {
+        let mut result = String::new();
+        for entity in &patch_info.entities {
+            result.push_str(&entity.uuid);
+            result.push(' ');
+        }
+        result = result.trim().to_string();
+
+        result
+    }
+
     fn parse_requires(patch_info: &PatchInfo) -> String {
         match patch_info.target.epoch.as_str() {
             SPEC_TAG_VALUE_NONE => {
@@ -92,7 +104,7 @@ impl RpmSpecBuilder {
         );
         spec.defines.insert(RpmDefine {
             name: PKG_DEFINE_PATCH_UUID.to_owned(),
-            value: patch_info.uuid.clone(),
+            value: Self::parse_patch_uuid(patch_info),
         });
         spec.defines.insert(RpmDefine {
             name: PKG_DEFINE_PATCH_NAME.to_owned(),
