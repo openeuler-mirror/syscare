@@ -13,7 +13,7 @@
 ############################################
 Name:          syscare
 Version:       1.1.0
-Release:       1
+Release:       2
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -90,7 +90,7 @@ fi
 %package kmod
 Summary: Syscare kernel module.
 BuildRequires: make gcc
-BuildRequires: kernel-devel = %{kernel_version}
+BuildRequires: kernel-devel
 Requires: kernel >= %{kernel_version}
 
 ############### Description ################
@@ -175,7 +175,7 @@ fi
 %package build-kmod
 Summary: Kernel module for syscare patch build tools.
 BuildRequires: make gcc
-BuildRequires: kernel-devel = %{kernel_version}
+BuildRequires: kernel-devel
 Requires: kernel >= %{kernel_version}
 Conflicts: %{pkg_build_ebpf}
 
@@ -232,6 +232,10 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Mon Sep 04 2023 renoseven<dev@renoseven.net> - 1.1.0-2
+- Support patch recovery after reboot
+- Fix 'syscare uninitialize failure' issue
+- Fix 'patch package remove failure' issue
 * Mon Aug 28 2023 renoseven<dev@renoseven.net> - 1.1.0-1
 - Support build patch without kernel module
 - Add syscare daemon
