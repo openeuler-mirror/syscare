@@ -1,12 +1,12 @@
 use std::ffi::OsString;
-use std::io::BufRead;
+use std::io::{BufRead, BufReader, Read};
 use std::os::unix::prelude::OsStringExt;
 
-pub struct RawLines<B> {
-    buf: B,
+pub struct RawLines<R> {
+    reader: BufReader<R>,
 }
 
-impl<B: BufRead> Iterator for RawLines<B> {
+impl<R: Read> Iterator for RawLines<R> {
     type Item = std::io::Result<OsString>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -14,7 +14,7 @@ impl<B: BufRead> Iterator for RawLines<B> {
         const CHAR_CR: [u8; 1] = [b'\r'];
 
         let mut buf = Vec::<u8>::new();
-        match self.buf.read_until(CHAR_LF[0], &mut buf) {
+        match self.reader.read_until(CHAR_LF[0], &mut buf) {
             Ok(0) => None,
             Ok(_) => {
                 // Drop "\n" or "\r\n" on the buf tail
@@ -33,8 +33,10 @@ impl<B: BufRead> Iterator for RawLines<B> {
     }
 }
 
-impl<B: BufRead> From<B> for RawLines<B> {
-    fn from(buf: B) -> Self {
-        Self { buf }
+impl<R: Read> From<R> for RawLines<R> {
+    fn from(read: R) -> Self {
+        Self {
+            reader: BufReader::new(read),
+        }
     }
 }
