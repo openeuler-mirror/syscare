@@ -201,7 +201,7 @@ impl<'a> ExternCommand<'a> {
 
     pub fn execv(&self, args: ExternCommandArgs) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
-        command.args(args.into_iter());
+        command.args(args);
 
         self.execute_command(&mut command, Level::Debug)
     }
@@ -218,7 +218,7 @@ impl<'a> ExternCommand<'a> {
         T: Into<Stdio>,
     {
         let mut command = Command::new(self.path);
-        command.args(args.into_iter());
+        command.args(args);
         command.current_dir(current_dir);
         command.stdin(stdio);
 
@@ -232,8 +232,8 @@ impl<'a> ExternCommand<'a> {
         current_dir: P,
     ) -> std::io::Result<ExternCommandExitStatus> {
         let mut command = Command::new(self.path);
-        command.args(args.into_iter());
-        command.envs(envs.into_iter());
+        command.args(args);
+        command.envs(envs);
         command.current_dir(current_dir);
 
         self.execute_command(&mut command, Level::Debug)
