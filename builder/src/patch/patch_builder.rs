@@ -2,7 +2,7 @@ use anyhow::Result;
 
 use syscare_abi::{PatchInfo, PatchType};
 
-use crate::args::Arguments;
+use crate::build_params::BuildParameters;
 use crate::workdir::WorkDir;
 
 use super::kernel_patch::{KernelPatchBuilder, KernelPatchBuilderArguments};
@@ -14,17 +14,13 @@ pub enum PatchBuilderArguments {
 }
 
 pub trait PatchBuilder {
-    fn parse_builder_args(
-        &self,
-        patch_info: &PatchInfo,
-        args: &Arguments,
-    ) -> Result<PatchBuilderArguments>;
+    fn parse_builder_args(&self, build_params: &BuildParameters) -> Result<PatchBuilderArguments>;
     fn build_patch(&self, args: &PatchBuilderArguments) -> Result<()>;
-    fn write_patch_info(
+    fn generate_patch_info(
         &self,
-        patch_info: &mut PatchInfo,
+        build_params: &BuildParameters,
         args: &PatchBuilderArguments,
-    ) -> Result<()>;
+    ) -> Result<Vec<PatchInfo>>;
 }
 
 pub struct PatchBuilderFactory;

@@ -1,19 +1,26 @@
-use std::ffi::OsString;
-
-use anyhow::{Context, Result};
+use anyhow::{bail, Context, Result};
 use log::debug;
-use syscare_abi::PatchInfo;
-use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs};
-use syscare_common::util::fs;
+use uuid::Uuid;
 
-use crate::args::Arguments;
-use crate::patch::{PatchBuilder, PatchBuilderArguments, PatchHelper};
-use crate::workdir::WorkDir;
-use crate::PKG_IMPL;
+use syscare_abi::{PatchEntity, PatchInfo};
+use syscare_common::util::{
+    digest,
+    ext_cmd::{ExternCommand, ExternCommandArgs, ExternCommandEnvs},
+};
 
-use super::kpatch_builder_args::KernelPatchBuilderArguments;
-use super::kpatch_helper::KernelPatchHelper;
-use super::kpatch_helper::{KPATCH_PATCH_PREFIX, KPATCH_PATCH_SUFFIX, VMLINUX_FILE_NAME};
+use crate::{
+    build_params::BuildParameters,
+    patch::kernel_patch::kpatch_helper::VMLINUX_FILE_NAME,
+    patch::{PatchBuilder, PatchBuilderArguments},
+    workdir::WorkDir,
+    PKG_IMPL,
+};
+
+use super::{
+    kpatch_builder_args::KernelPatchBuilderArguments,
+    kpatch_helper::KernelPatchHelper,
+    kpatch_helper::{KPATCH_PATCH_PREFIX, KPATCH_PATCH_SUFFIX},
+};
 
 pub struct KernelPatchBuilder<'a> {
     workdir: &'a WorkDir,
@@ -53,32 +60,29 @@ impl KernelPatchBuilder<'_> {
     fn parse_cmd_envs(&self, args: &KernelPatchBuilderArguments) -> ExternCommandEnvs {
         ExternCommandEnvs::new()
             .env("CACHEDIR", &args.build_root)
-            .env("NO_PROFILING_CALLS", &args.build_root)
-            .env("DISABLE_AFTER_LOAD", &args.build_root)
-            .env("KEEP_JUMP_LABEL", &args.build_root)
+            .env("NO_PROFILING_CALLS", "1")
+            .env("DISABLE_AFTER_LOAD", "1")
+            .env("KEEP_JUMP_LABEL", "1")
     }
 }
 
 impl PatchBuilder for KernelPatchBuilder<'_> {
-    fn parse_builder_args(
-        &self,
-        patch_info: &PatchInfo,
-        args: &Arguments,
-    ) -> Result<PatchBuilderArguments> {
+    fn parse_builder_args(&self, build_params: &BuildParameters) -> Result<PatchBuilderArguments> {
         let patch_build_root = self.workdir.patch.build.as_path();
         let patch_output_dir = self.workdir.patch.output.as_path();
-        let source_pkg_dir = self.workdir.package.source.as_path();
         let debuginfo_pkg_dir = self.workdir.package.debuginfo.as_path();
 
-        debug!("Finding package build root from...");
-        let pkg_build_root = PKG_IMPL
-            .find_buildroot(source_pkg_dir)
-            .context("Cannot find package build root")?;
-        let source_pkg_build_dir = pkg_build_root.build.as_path();
+        let source_pkg = &build_params.patch.target;
 
         debug!("Finding kernel source directory...");
         let kernel_source_dir = PKG_IMPL
-            .find_source_directory(source_pkg_build_dir, "linux-")
+            .find_source_directory(
+                &build_params.source_dir,
+                &format!(
+                    "linux-{}-{}.{}",
+                    source_pkg.version, source_pkg.release, source_pkg.arch
+                ),
+            )
             .context("Cannot find kernel source directory")?;
 
         debug!("Generating kernel default config...");
@@ -91,19 +95,23 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
 
         debug!("Finding vmlinux...");
         let vmlinux_file =
-            KernelPatchHelper::find_vmlinux(&debuginfo_pkg_dir).context("Cannot find vmlinux")?;
+            KernelPatchHelper::find_vmlinux(debuginfo_pkg_dir).context("Cannot find vmlinux")?;
 
-        let kernel_patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, patch_info.uuid); // Use uuid to avoid patch name collision
+        let kernel_patch_uuid = Uuid::new_v4().to_string();
+        let kernel_patch_name = format!("{}-{}", KPATCH_PATCH_PREFIX, Uuid::new_v4()); // Use uuid to avoid patch name collision
+
         let builder_args = KernelPatchBuilderArguments {
             build_root: patch_build_root.to_owned(),
+            patch_uuid: kernel_patch_uuid,
             patch_name: kernel_patch_name,
-            source_dir: kernel_source_dir,
+            source_dir: kernel_source_dir.to_owned(),
             config: kernel_config_file,
             vmlinux: vmlinux_file,
-            jobs: args.jobs,
+            jobs: build_params.jobs,
             output_dir: patch_output_dir.to_owned(),
-            skip_compiler_check: args.skip_compiler_check,
-            patch_list: patch_info.patches.to_owned(),
+            debug: build_params.verbose,
+            skip_compiler_check: build_params.skip_compiler_check,
+            patch_list: build_params.patch.patches.to_owned(),
         };
 
         Ok(PatchBuilderArguments::KernelPatch(builder_args))
@@ -122,40 +130,48 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
         Ok(())
     }
 
-    fn write_patch_info(
+    fn generate_patch_info(
         &self,
-        patch_info: &mut PatchInfo,
+        build_params: &BuildParameters,
         args: &PatchBuilderArguments,
-    ) -> Result<()> {
+    ) -> Result<Vec<PatchInfo>> {
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => {
                 /*
                  * Kernel patch does not use target_elf for patch operation,
                  * so we just add it for display purpose.
                  */
-                let output_dir = kargs.output_dir.as_path();
-                let patch_name = format!(
-                    "{}-{}.{}",
-                    KPATCH_PATCH_PREFIX, patch_info.uuid, KPATCH_PATCH_SUFFIX
-                );
-
-                if let Ok(patch_file) = fs::find_file(
-                    output_dir,
-                    patch_name,
-                    fs::FindOptions {
-                        fuzz: false,
-                        recursive: false,
-                    },
-                ) {
-                    patch_info.entities.push(PatchHelper::parse_patch_entity(
-                        patch_file,
-                        OsString::from(VMLINUX_FILE_NAME),
-                    )?);
+                let target_pkg = build_params.patch.target.to_owned();
+                let patch_file_name = format!("{}.{}", kargs.patch_name, KPATCH_PATCH_SUFFIX);
+                let patch_file = kargs.output_dir.join(&patch_file_name);
+                if !patch_file.is_file() {
+                    bail!("Failed to find patch file");
                 }
+
+                let patch_entity = PatchEntity {
+                    uuid: Uuid::new_v4().to_string(),
+                    patch_name: patch_file_name.into(),
+                    patch_target: VMLINUX_FILE_NAME.into(),
+                    checksum: digest::file(patch_file)
+                        .context("Failed to calulate patch file digest")?,
+                };
+
+                let patch_info = PatchInfo {
+                    uuid: kargs.patch_uuid.to_owned(),
+                    name: build_params.patch.name.to_owned(),
+                    kind: build_params.patch.kind,
+                    version: build_params.patch.version.to_owned(),
+                    release: build_params.patch.release.to_owned(),
+                    arch: build_params.patch.arch.to_owned(),
+                    target: target_pkg,
+                    entities: vec![patch_entity],
+                    description: build_params.patch.description.to_owned(),
+                    patches: build_params.patch.patches.to_owned(),
+                };
+
+                Ok(vec![patch_info])
             }
             _ => unreachable!(),
         }
-
-        Ok(())
     }
 }

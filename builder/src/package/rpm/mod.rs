@@ -3,12 +3,13 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 
 use syscare_abi::{PackageInfo, PackageType};
 use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
     fs,
+    os_str::OsStrExt,
 };
 
 mod pkg_builder;
@@ -21,7 +22,7 @@ pub use pkg_builder::RpmPackageBuilder;
 pub use spec_builder::RpmSpecBuilder;
 pub use spec_writer::RpmSpecWriter;
 
-use super::{Package, PackageBuildRoot, DEBUGINFO_FILE_EXT};
+use super::{ElfRelation, Package, PackageBuildRoot, DEBUGINFO_FILE_EXT};
 
 pub const RPM: ExternCommand = ExternCommand::new("rpm");
 pub const PKG_FILE_EXT: &str = "rpm";
@@ -95,6 +96,52 @@ impl Package for RpmPackage {
         })
     }
 
+    fn query_package_files(&self, pkg_path: &Path) -> Result<Vec<PathBuf>> {
+        let exit_status = RPM.execvp(
+            ExternCommandArgs::new()
+                .arg("--query")
+                .arg("--list")
+                .arg("--package")
+                .arg(pkg_path),
+        )?;
+        exit_status.check_exit_code()?;
+
+        let mut file_list = Vec::new();
+        for file in exit_status.stdout().split('\n') {
+            file_list.push(PathBuf::from(file));
+        }
+
+        Ok(file_list)
+    }
+
+    fn parse_elf_relations(
+        &self,
+        package: &PackageInfo,
+        debuginfo_root: &Path,
+    ) -> Result<Vec<ElfRelation>> {
+        let debuginfo_files = fs::list_files_by_ext(
+            debuginfo_root,
+            DEBUGINFO_FILE_EXT,
+            fs::TraverseOptions { recursive: true },
+        )?;
+        if debuginfo_files.is_empty() {
+            bail!("Cannot find any debuginfo file");
+        }
+
+        let mut elf_relations = Vec::new();
+        for debuginfo in &debuginfo_files {
+            let elf_relation = ElfRelation::parse_from(debuginfo_root, package, debuginfo)
+                .with_context(|| {
+                    format!(
+                        "Failed to parse elf relation for file \"{}\"",
+                        debuginfo.display()
+                    )
+                })?;
+            elf_relations.push(elf_relation);
+        }
+        Ok(elf_relations)
+    }
+
     fn extract_package(&self, pkg_path: &Path, output_dir: &Path) -> Result<()> {
         RPM.execvp(
             ExternCommandArgs::new()
@@ -118,7 +165,7 @@ impl Package for RpmPackage {
         Ok(())
     }
 
-    fn find_buildroot(&self, directory: &Path) -> Result<PackageBuildRoot> {
+    fn find_build_root(&self, directory: &Path) -> Result<PackageBuildRoot> {
         let build_root = fs::find_dir(
             directory,
             PKG_BUILD_ROOT,
@@ -144,7 +191,7 @@ impl Package for RpmPackage {
 
     fn find_source_directory(&self, directory: &Path, package_name: &str) -> Result<PathBuf> {
         let build_source = fs::find_dir(
-            &directory,
+            directory,
             package_name,
             fs::FindOptions {
                 fuzz: true,
@@ -153,7 +200,7 @@ impl Package for RpmPackage {
         )
         .or_else(|_| {
             fs::find_dir(
-                &directory,
+                directory,
                 "",
                 fs::FindOptions {
                     fuzz: true,
@@ -163,14 +210,5 @@ impl Package for RpmPackage {
         })?;
 
         Ok(build_source)
-    }
-
-    fn find_debuginfo(&self, directory: &Path) -> Result<Vec<PathBuf>> {
-        let debuginfo_files = fs::list_files_by_ext(
-            &directory,
-            DEBUGINFO_FILE_EXT,
-            fs::TraverseOptions { recursive: true },
-        )?;
-        Ok(debuginfo_files)
     }
 }

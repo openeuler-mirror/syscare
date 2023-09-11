@@ -1,29 +1,32 @@
 use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
-use syscare_abi::PatchInfo;
+
 use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
     fs,
     os_str::OsStringExt,
 };
 
+use super::PKG_FILE_EXT;
+use crate::{
+    build_params::BuildParameters,
+    package::{PackageBuildRoot, PackageBuilder},
+};
+
 const RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
 
-use super::PKG_FILE_EXT;
-use crate::package::{PackageBuildRoot, PackageBuilder};
-
-pub struct RpmPackageBuilder {
-    build_root: PackageBuildRoot,
+pub struct RpmPackageBuilder<'a> {
+    build_root: &'a PackageBuildRoot,
 }
 
-impl RpmPackageBuilder {
-    pub fn new(build_root: PackageBuildRoot) -> Self {
+impl<'a> RpmPackageBuilder<'a> {
+    pub fn new(build_root: &'a PackageBuildRoot) -> Self {
         Self { build_root }
     }
 }
 
-impl PackageBuilder for RpmPackageBuilder {
+impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_prepare(&self, spec_file: &Path) -> Result<()> {
         Ok(RPM_BUILD
             .execvp(
@@ -38,7 +41,7 @@ impl PackageBuilder for RpmPackageBuilder {
 
     fn build_source_package(
         &self,
-        patch_info: &PatchInfo,
+        build_params: &BuildParameters,
         spec_file: &Path,
         output_dir: &Path,
     ) -> Result<()> {
@@ -69,9 +72,11 @@ impl PackageBuilder for RpmPackageBuilder {
         })?;
 
         let dst_pkg_name = format!(
-            "{}-{}.src.{}",
-            patch_info.target.short_name(),
-            patch_info.name(),
+            "{}-{}-{}-{}.src.{}",
+            build_params.patch.target.short_name(),
+            build_params.patch.name,
+            build_params.patch.version,
+            build_params.patch.release,
             PKG_FILE_EXT
         );
         let dst_pkg_file = output_dir.join(dst_pkg_name);

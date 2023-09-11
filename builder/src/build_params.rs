@@ -1,40 +1,37 @@
-use syscare_abi::{PackageInfo, PatchFile, PatchType};
+use std::path::PathBuf;
+
+use syscare_abi::{PackageInfo, PatchInfo};
+
+use crate::package::{ElfRelation, PackageBuildRoot};
 
 pub struct BuildParameters {
-    pub source_pkg: PackageInfo,
+    pub patch: PatchInfo,
+    pub build_root: PackageBuildRoot,
+    pub source_dir: PathBuf,
+    pub spec_file: PathBuf,
     pub debuginfo_pkgs: Vec<PackageInfo>,
-    pub patch_uuid: String,
-    pub patch_name: String,
-    pub patch_version: String,
-    pub patch_release: u32,
-    pub patch_arch: String,
-    pub patch_type: PatchType,
-    pub patch_description: String,
-    pub patch_files: Vec<PatchFile>,
+    pub elf_relations: Vec<ElfRelation>,
+    pub jobs: usize,
+    pub skip_compiler_check: bool,
+    pub skip_cleanup: bool,
+    pub verbose: bool,
 }
 
 impl std::fmt::Display for BuildParameters {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(f, "------------------------------")?;
-        writeln!(f, "Source package")?;
+        writeln!(f, "Build Parameters")?;
         writeln!(f, "------------------------------")?;
-        writeln!(f, "{}", self.source_pkg)?;
-        writeln!(f, "------------------------------")?;
-        for debuginfo_pkg in &self.debuginfo_pkgs {
-            writeln!(f, "Debuginfo package")?;
-            writeln!(f, "------------------------------")?;
-            writeln!(f, "{}", debuginfo_pkg)?;
-            writeln!(f, "------------------------------")?;
-        }
-        writeln!(f, "Syscare Patch")?;
-        writeln!(f, "------------------------------")?;
-        writeln!(f, "uuid:        {}", self.patch_uuid)?;
-        writeln!(f, "name:        {}", self.patch_name)?;
-        writeln!(f, "version:     {}", self.patch_version)?;
-        writeln!(f, "release:     {}", self.patch_release)?;
-        writeln!(f, "arch:        {}", self.patch_arch)?;
-        writeln!(f, "type:        {}", self.patch_type)?;
-        writeln!(f, "description: {}", self.patch_description)?;
+        writeln!(f, "patch_name:          {}", self.patch.name)?;
+        writeln!(f, "patch_version:       {}", self.patch.version)?;
+        writeln!(f, "patch_release:       {}", self.patch.release)?;
+        writeln!(f, "build_root:          {}", self.build_root.display())?;
+        writeln!(f, "source_dir:          {}", self.source_dir.display())?;
+        writeln!(f, "spec_file:           {}", self.spec_file.display())?;
+        writeln!(f, "jobs:                {}", self.jobs)?;
+        writeln!(f, "skip_compiler_check: {}", self.skip_compiler_check)?;
+        writeln!(f, "skip_cleanup:        {}", self.skip_cleanup)?;
+        writeln!(f, "verbose:             {}", self.verbose)?;
         write!(f, "------------------------------")?;
 
         Ok(())

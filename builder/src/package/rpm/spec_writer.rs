@@ -81,7 +81,7 @@ impl PackageSpecWriter for RpmSpecWriter {
     fn add_source_files(&self, spec_file: &Path, file_list: Vec<PathBuf>) -> Result<()> {
         const PKG_SPEC_SECTION_DESC: &str = "%description";
 
-        let mut spec_file_content = fs::read_to_string(&spec_file)?
+        let mut spec_file_content = fs::read_to_string(spec_file)?
             .split('\n')
             .map(String::from)
             .collect::<Vec<_>>();
