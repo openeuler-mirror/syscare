@@ -6,7 +6,7 @@ use std::os::unix::prelude::{OsStrExt, OsStringExt};
 use std::process::{Command, Stdio};
 use std::thread::JoinHandle;
 
-use log::{debug, trace};
+use log::trace;
 
 use super::raw_line::RawLines;
 
@@ -135,7 +135,7 @@ impl ExternCommand<'_> {
 
     #[inline(always)]
     fn execute_command(&self, mut command: Command) -> std::io::Result<ExternCommandExitStatus> {
-        debug!("Executing {:?}", command);
+        trace!("Executing {:?}", command);
 
         let mut child = command
             .stdout(Stdio::piped())
