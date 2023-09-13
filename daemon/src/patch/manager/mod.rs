@@ -304,7 +304,9 @@ impl PatchManager {
                 "Restore patch \"{}\" status to \"{}\"",
                 patch, target_status
             );
-            self.do_status_transition(&patch, target_status)?;
+            if let Err(e) = self.do_status_transition(&patch, target_status) {
+                error!("{}", e);
+            }
         }
         info!("All patch status were restored");
 
