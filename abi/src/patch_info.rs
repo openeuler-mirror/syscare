@@ -52,3 +52,47 @@ impl PatchInfo {
         format!("{}-{}-{}", self.name, self.version, self.release)
     }
 }
+
+impl std::fmt::Display for PatchInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        const LIST_DISPLAY_LIMIT: usize = 9;
+
+        writeln!(f, "------------------------------")?;
+        writeln!(f, "Syscare Patch")?;
+        writeln!(f, "------------------------------")?;
+        if !self.uuid.is_empty() {
+            writeln!(f, "uuid:        {}", self.uuid)?;
+        }
+        writeln!(f, "name:        {}", self.name)?;
+        writeln!(f, "version:     {}", self.version)?;
+        writeln!(f, "release:     {}", self.release)?;
+        writeln!(f, "arch:        {}", self.arch)?;
+        writeln!(f, "type:        {}", self.kind)?;
+        writeln!(f, "target:      {}", self.target.short_name())?;
+        writeln!(f, "license:     {}", self.target.license)?;
+        writeln!(f, "description: {}", self.description)?;
+        if !self.entities.is_empty() {
+            writeln!(f, "entities:")?;
+            for (entity_count, entity) in self.entities.iter().enumerate() {
+                if entity_count >= LIST_DISPLAY_LIMIT {
+                    writeln!(f, "* ......")?;
+                    break;
+                }
+                writeln!(f, "* {}", entity.patch_name.to_string_lossy())?;
+            }
+        }
+        if !self.patches.is_empty() {
+            writeln!(f, "patches:")?;
+            for (patch_count, patch_file) in self.patches.iter().enumerate() {
+                if patch_count >= LIST_DISPLAY_LIMIT {
+                    writeln!(f, "* ......")?;
+                    break;
+                }
+                writeln!(f, "* {}", patch_file.name.to_string_lossy())?;
+            }
+        }
+        write!(f, "------------------------------")?;
+
+        Ok(())
+    }
+}

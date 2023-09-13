@@ -42,3 +42,24 @@ impl PackageInfo {
             && (self.source_pkg == pkg_info.source_pkg)
     }
 }
+
+impl std::fmt::Display for PackageInfo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "------------------------------")?;
+        match self.kind {
+            PackageType::SourcePackage => writeln!(f, "Source Package")?,
+            PackageType::BinaryPackage => writeln!(f, "Debuginfo Package")?,
+        }
+        writeln!(f, "------------------------------")?;
+        writeln!(f, "name:    {}", self.name)?;
+        writeln!(f, "type:    {}", self.kind)?;
+        writeln!(f, "arch:    {}", self.arch)?;
+        writeln!(f, "epoch:   {}", self.epoch)?;
+        writeln!(f, "version: {}", self.version)?;
+        writeln!(f, "release: {}", self.release)?;
+        writeln!(f, "license: {}", self.license)?;
+        write!(f, "------------------------------")?;
+
+        Ok(())
+    }
+}
