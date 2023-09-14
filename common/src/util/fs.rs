@@ -204,11 +204,6 @@ pub fn normalize<P: AsRef<Path>>(path: P) -> std::io::Result<PathBuf> {
             }
             _ => {
                 new_path.push(component);
-                if new_path.is_symlink() {
-                    if let Ok(canonicalized_path) = self::canonicalize(new_path.as_path()) {
-                        new_path = canonicalized_path;
-                    }
-                }
             }
         }
     }

@@ -1,6 +1,6 @@
 use anyhow::Result;
 
-use crate::{args::CliCommand, rpc::RebootProxy};
+use crate::{args::SubCommand, rpc::RebootProxy};
 
 use super::CommandExecutor;
 
@@ -15,9 +15,9 @@ impl RebootCommandExecutor {
 }
 
 impl CommandExecutor for RebootCommandExecutor {
-    fn invoke(&self, command: &CliCommand) -> Result<()> {
+    fn invoke(&self, command: &SubCommand) -> Result<()> {
         self.check_root_permission()?;
-        if let CliCommand::Reboot { target, force } = command {
+        if let SubCommand::Reboot { target, force } = command {
             self.proxy.fast_reboot(target.to_owned(), *force)?;
         }
         Ok(())

@@ -4,7 +4,7 @@ use log::info;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 use syscare_common::util::fs;
 
-use crate::{args::CliCommand, rpc::PatchProxy};
+use crate::{args::SubCommand, rpc::PatchProxy};
 
 use super::CommandExecutor;
 
@@ -82,49 +82,49 @@ impl PatchCommandExecutor {
 }
 
 impl CommandExecutor for PatchCommandExecutor {
-    fn invoke(&self, command: &CliCommand) -> Result<()> {
+    fn invoke(&self, command: &SubCommand) -> Result<()> {
         self.check_root_permission()?;
         match command {
-            CliCommand::Info { identifier } => {
+            SubCommand::Info { identifier } => {
                 let patch_info = self.proxy.get_patch_info(identifier)?;
                 Self::show_patch_info(patch_info);
             }
-            CliCommand::Target { identifier } => {
+            SubCommand::Target { identifier } => {
                 let target_list = self.proxy.get_patch_target(identifier)?;
                 Self::show_patch_target(target_list);
             }
-            CliCommand::Status { identifier } => {
+            SubCommand::Status { identifier } => {
                 let result_list = self.proxy.get_patch_status(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::List => {
+            SubCommand::List => {
                 let patch_list = self.proxy.get_patch_list()?;
                 Self::show_patch_list(patch_list);
             }
-            CliCommand::Apply { identifier } => {
+            SubCommand::Apply { identifier } => {
                 let result_list = self.proxy.apply_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::Remove { identifier } => {
+            SubCommand::Remove { identifier } => {
                 let result_list = self.proxy.remove_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::Active { identifier } => {
+            SubCommand::Active { identifier } => {
                 let result_list = self.proxy.active_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::Deactive { identifier } => {
+            SubCommand::Deactive { identifier } => {
                 let result_list = self.proxy.deactive_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::Accept { identifier } => {
+            SubCommand::Accept { identifier } => {
                 let result_list = self.proxy.accept_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
-            CliCommand::Save => {
+            SubCommand::Save => {
                 self.proxy.save_patch_status()?;
             }
-            CliCommand::Restore { accepted } => {
+            SubCommand::Restore { accepted } => {
                 let accepted_only = *accepted;
                 self.proxy.restore_patch_status(accepted_only)?;
             }

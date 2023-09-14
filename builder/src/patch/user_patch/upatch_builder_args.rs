@@ -6,7 +6,7 @@ use syscare_abi::PatchFile;
 #[derive(Debug)]
 pub struct UserPatchBuilderArguments {
     pub work_dir: PathBuf,
-    pub debug_source: PathBuf,
+    pub source_dir: PathBuf,
     pub elf_dir: PathBuf,
     pub debug_relations: Vec<(PathBuf, PathBuf)>,
     pub build_source_cmd: OsString,

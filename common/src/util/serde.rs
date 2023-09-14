@@ -2,6 +2,7 @@ use std::path::Path;
 
 use log::debug;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use serde_cbor::{de, ser};
 
 use super::{digest, fs};
 
@@ -29,7 +30,10 @@ impl PackedData {
         })
     }
 
-    fn unpack<'a, T: Deserialize<'a>, S: AsRef<str>>(&'a self, magic: S) -> std::io::Result<T> {
+    fn unpack<'a, T: for<'de> Deserialize<'de>, S: AsRef<str>>(
+        &'a self,
+        magic: S,
+    ) -> std::io::Result<T> {
         if self.magic != magic.as_ref() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
@@ -44,21 +48,21 @@ impl PackedData {
             ));
         }
 
-        serde_cbor::from_slice(&self.payload).map_err(|e| {
+        de::from_slice(&self.payload).map_err(|e| {
             debug!("Unpacking data failed, {}", e.to_string());
             std::io::Error::new(std::io::ErrorKind::Other, "Unpacking data failed")
         })
     }
 
     fn read_from<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
-        serde_cbor::from_reader::<Self, _>(fs::open_file(path)?).map_err(|e| {
+        de::from_reader::<Self, _>(fs::open_file(path)?).map_err(|e| {
             debug!("Deserialize packed data failed, {}", e);
             std::io::Error::new(std::io::ErrorKind::Other, "Invalid data format")
         })
     }
 
     fn write_to<P: AsRef<Path>>(&self, path: P) -> std::io::Result<()> {
-        serde_cbor::to_writer(fs::create_file(path)?, &self).map_err(|e| {
+        ser::to_writer(&mut fs::create_file(path)?, &self).map_err(|e| {
             debug!("Serialize packed data failed, {}", e);
             std::io::Error::new(std::io::ErrorKind::Other, "Write data failed")
         })

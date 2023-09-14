@@ -56,7 +56,7 @@ impl Project {
                     )))
                 }
             };
-            let args_list = ExternCommandArgs::new().args(["-N", "-p1"]);
+            let args_list = ExternCommandArgs::new().args(&["-N", "-p1"]);
             if let Err(e) = self.patch(file, args_list, level) {
                 return Err(Error::Project(format!(
                     "patch file {:?} {}",
@@ -81,7 +81,7 @@ impl Project {
                     )))
                 }
             };
-            let args_list = ExternCommandArgs::new().args(["-N", "-p1", "-R"]);
+            let args_list = ExternCommandArgs::new().args(&["-N", "-p1", "-R"]);
             if let Err(e) = self.patch(file, args_list, level) {
                 return Err(Error::Project(format!(
                     "unpatch file {:?} {}",

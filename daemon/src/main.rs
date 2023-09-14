@@ -1,7 +1,7 @@
 use std::{
     fs,
     path::Path,
-    process::exit,
+    process,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc,
@@ -32,46 +32,32 @@ use rpc::{
     skeleton_impl::{FastRebootSkeletonImpl, PatchSkeletonImpl},
 };
 
-const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_UMASK: u32 = 0o027;
 const DAEMON_SLEEP_TIME: u64 = 100;
 
 struct Daemon {
-    uid: u32,
     args: Arguments,
     term_flag: Arc<AtomicBool>,
 }
 
 impl Daemon {
-    fn new() -> Self {
-        Self {
-            uid: os::user::id(),
-            args: Arguments::new(),
-            term_flag: Arc::new(AtomicBool::new(false)),
-        }
-    }
-
-    fn check_root_permission(&self) -> Result<()> {
+    fn new() -> Result<Self> {
         const ROOT_UID: u32 = 0;
 
+        os::umask::set_umask(DAEMON_UMASK);
+
+        let instance = Self {
+            args: Arguments::new()?,
+            term_flag: Arc::new(AtomicBool::new(false)),
+        };
+
         ensure!(
-            self.uid == ROOT_UID,
+            os::user::id() == ROOT_UID,
             "This command has to be run with superuser privileges (under the root user on most systems)."
         );
 
-        Ok(())
-    }
-
-    fn initialize_logger(&self) -> Result<()> {
-        let max_level = self.args.log_level;
-        let stdout_level = match self.args.daemon {
-            true => LevelFilter::Off,
-            false => max_level,
-        };
-        Logger::initialize(&self.args.log_dir, max_level, stdout_level)?;
-
-        Ok(())
+        Ok(instance)
     }
 
     fn prepare_directory<P: AsRef<Path>>(&self, path: P) -> Result<()> {
@@ -88,6 +74,17 @@ impl Daemon {
         self.prepare_directory(&self.args.work_dir)?;
         self.prepare_directory(&self.args.data_dir)?;
         self.prepare_directory(&self.args.log_dir)?;
+
+        Ok(())
+    }
+
+    fn initialize_logger(&self) -> Result<()> {
+        let max_level = self.args.log_level;
+        let stdout_level = match self.args.daemon {
+            true => LevelFilter::Off,
+            false => max_level,
+        };
+        Logger::initialize(&self.args.log_dir, max_level, stdout_level)?;
 
         Ok(())
     }
@@ -137,35 +134,36 @@ impl Daemon {
         Ok(server)
     }
 
-    fn start_and_run(self) -> Result<()> {
-        self.check_root_permission()?;
-        self.initialize_logger()?;
+    fn start_and_run() -> Result<()> {
+        let instance = Self::new()?;
 
         info!("============================");
         info!("Syscare Daemon - v{}", DAEMON_VERSION);
         info!("============================");
         info!("Preparing environment...");
-        self.prepare_environment()?;
+        instance.prepare_environment()?;
+        instance.initialize_logger()?;
 
-        info!("Start with {:#?}", self.args);
-        self.daemonize()?;
+        info!("Start with {:#?}", instance.args);
+        instance.daemonize()?;
 
         info!("Initializing signal handler...");
-        self.initialize_signal_handler()
+        instance
+            .initialize_signal_handler()
             .context("Failed to initialize signal handler")?;
 
         info!("Initializing skeletons...");
-        let io_handler = self
+        let io_handler = instance
             .initialize_skeletons()
             .context("Failed to initialize skeleton")?;
 
         info!("Starting remote procedure call server...");
-        let server = self
+        let server = instance
             .start_rpc_server(io_handler)
             .context("Failed to create remote procedure call server")?;
 
         info!("Daemon is running...");
-        while !self.term_flag.load(Ordering::Relaxed) {
+        while !instance.term_flag.load(Ordering::Relaxed) {
             std::thread::sleep(Duration::from_millis(DAEMON_SLEEP_TIME));
         }
 
@@ -177,7 +175,7 @@ impl Daemon {
 }
 
 pub fn main() {
-    let exit_code = match Daemon::new().start_and_run() {
+    let exit_code = match Daemon::start_and_run() {
         Ok(_) => {
             info!("Daemon exited");
             0
@@ -195,5 +193,5 @@ pub fn main() {
             -1
         }
     };
-    exit(exit_code);
+    process::exit(exit_code);
 }

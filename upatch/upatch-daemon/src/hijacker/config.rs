@@ -46,13 +46,14 @@ impl HijackerConfig {
 
 impl Default for HijackerConfig {
     fn default() -> Self {
-        Self(HashMap::from([
-            (PathBuf::from(CC_BINARY), PathBuf::from(CC_HIJACKER)),
-            (PathBuf::from(CXX_BINARY), PathBuf::from(CXX_HIJACKER)),
-            (PathBuf::from(GCC_BINARY), PathBuf::from(GCC_HIJACKER)),
-            (PathBuf::from(GXX_BINARY), PathBuf::from(GXX_HIJACKER)),
-            (PathBuf::from(AS_BINARY), PathBuf::from(AS_HIJACKER)),
-        ]))
+        let mut map = HashMap::new();
+        map.insert(PathBuf::from(CC_BINARY), PathBuf::from(CC_HIJACKER));
+        map.insert(PathBuf::from(CXX_BINARY), PathBuf::from(CXX_HIJACKER));
+        map.insert(PathBuf::from(GCC_BINARY), PathBuf::from(GCC_HIJACKER));
+        map.insert(PathBuf::from(GXX_BINARY), PathBuf::from(GXX_HIJACKER));
+        map.insert(PathBuf::from(AS_BINARY), PathBuf::from(AS_HIJACKER));
+
+        Self(map)
     }
 }
 

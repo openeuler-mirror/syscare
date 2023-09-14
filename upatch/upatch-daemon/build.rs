@@ -13,6 +13,6 @@ fn main() {
     }
     cc::Build::new()
         .file(Path::new(UPATCH_LIB).join("upatch.c"))
-        .includes([UPATCH_COMMON, UPATCH_LIB])
+        .includes(&[UPATCH_COMMON, UPATCH_LIB])
         .compile("libupatch.a");
 }

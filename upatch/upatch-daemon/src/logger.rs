@@ -9,6 +9,8 @@ use flexi_logger::{
 use lazy_static::lazy_static;
 use log::{LevelFilter, Record};
 use once_cell::sync::OnceCell;
+use time::{format_description::FormatItem, macros::format_description};
+
 use syscare_common::os;
 
 const MAIN_THREAD_NAME: &str = "main";
@@ -39,14 +41,20 @@ impl Logger {
         now: &mut DeferredNow,
         record: &Record,
     ) -> Result<(), std::io::Error> {
+        const LOG_FORMAT: &[FormatItem<'static>] = format_description!(
+            "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6]"
+        );
+
         write!(
             w,
             "[{}] [{}] [{}] {}",
-            now.format("%Y-%m-%d %H:%M:%S%.6f"),
+            now.format(LOG_FORMAT),
             record.level(),
             Self::thread_name(&std::thread::current()),
             &record.args()
-        )
+        )?;
+
+        Ok(())
     }
 
     fn stdout_duplicate(stdout_level: LevelFilter) -> Duplicate {

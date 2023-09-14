@@ -3,7 +3,7 @@ use anyhow::{anyhow, Context, Result};
 use std::process::{exit, Command};
 
 use super::CommandExecutor;
-use crate::args::CliCommand;
+use crate::args::SubCommand;
 
 const SYSCARE_BUILD_NAME: &str = "syscare-build";
 const SYSCARE_BUILD_PATH: &str = "/usr/libexec/syscare/syscare-build";
@@ -22,8 +22,8 @@ impl BuildCommandExecutor {
 }
 
 impl CommandExecutor for BuildCommandExecutor {
-    fn invoke(&self, command: &CliCommand) -> Result<()> {
-        if let CliCommand::Build { args } = command {
+    fn invoke(&self, command: &SubCommand) -> Result<()> {
+        if let SubCommand::Build { args } = command {
             let exit_code = Self::exec_patch_build_cmd(args)
                 .map_err(|e| match e.kind() {
                     std::io::ErrorKind::NotFound => {

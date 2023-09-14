@@ -46,14 +46,7 @@ impl Logger {
         log_level: LevelFilter,
         file_path: P,
     ) -> std::io::Result<()> {
-        let log_writter = LineWriter::new(
-            File::options()
-                .create(true)
-                .append(true)
-                .read(false)
-                .write(true)
-                .open(file_path)?,
-        );
+        let log_writter = LineWriter::new(File::create(file_path)?);
         self.file_level = log_level;
         self.file_writer = Some(Mutex::new(log_writter));
 
