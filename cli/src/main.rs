@@ -1,8 +1,7 @@
 use std::{process::exit, rc::Rc};
 
 use anyhow::Result;
-use clap::Parser;
-use log::{debug, error};
+use log::{debug, error, LevelFilter};
 
 mod args;
 mod executor;
@@ -19,8 +18,6 @@ use flock::ExclusiveFileLockGuard;
 use logger::Logger;
 use rpc::{PatchProxy, RebootProxy, RpcRemote};
 
-const CLI_NAME: &str = env!("CARGO_PKG_NAME");
-const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_LOCK_FILE_PATH: &str = "/var/run/syscare.lock";
 
 struct SyscareCLI {
@@ -28,24 +25,21 @@ struct SyscareCLI {
 }
 
 impl SyscareCLI {
-    fn new() -> Self {
-        Self {
-            args: Arguments::parse(),
-        }
-    }
-
-    fn start_and_run(self) -> Result<()> {
-        Logger::initialize(match self.args.verbose {
-            true => log::LevelFilter::Debug,
-            false => log::LevelFilter::Info,
+    fn start_and_run() -> Result<()> {
+        let instance = Self {
+            args: Arguments::new()?,
+        };
+        Logger::initialize(match instance.args.verbose {
+            true => LevelFilter::Debug,
+            false => LevelFilter::Info,
         })?;
-        debug!("Start with {:#?}", self.args);
+        debug!("Start with {:#?}", instance.args);
 
         debug!("Acquiring exclusive file lock...");
         let _guard = ExclusiveFileLockGuard::new(CLI_LOCK_FILE_PATH)?;
 
         debug!("Initializing remote procedure call client...");
-        let remote = Rc::new(RpcRemote::new(&self.args.socket_file));
+        let remote = Rc::new(RpcRemote::new(&instance.args.socket_file));
 
         debug!("Initializing remote procedure calls...");
         let patch_proxy = PatchProxy::new(remote.clone());
@@ -58,7 +52,7 @@ impl SyscareCLI {
             Box::new(RebootCommandExecutor::new(reboot_proxy)) as Box<dyn CommandExecutor>,
         ];
 
-        let command = self.args.command;
+        let command = instance.args.command;
         debug!("Invoking command: {:#?}", command);
         for executor in &executors {
             executor.invoke(&command)?;
@@ -70,7 +64,7 @@ impl SyscareCLI {
 }
 
 fn main() {
-    let exit_code = match SyscareCLI::new().start_and_run() {
+    let exit_code = match SyscareCLI::start_and_run() {
         Ok(_) => 0,
         Err(e) => {
             match Logger::is_inited() {

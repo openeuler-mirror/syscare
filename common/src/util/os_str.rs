@@ -4,6 +4,8 @@ use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
 
 use super::raw_line::RawLines;
 
+const REPLACEMENT_CHARACTER: char = '\u{FFFD}';
+
 /* UTF-8 */
 mod utf8 {
     pub const CHAR_MAX_WIDTH: usize = std::mem::size_of::<char>();
@@ -88,7 +90,7 @@ impl Iterator for CharByteIndices<'_> {
         let char_buf = &data[..char_len];
 
         match String::from_utf8_lossy(char_buf).chars().next() {
-            Some(c) if c != char::REPLACEMENT_CHARACTER => {
+            Some(c) if c != REPLACEMENT_CHARACTER => {
                 let result = Some(CharByteIndex::Char(self.front_idx, c));
                 self.front_idx += char_len;
                 result
@@ -129,7 +131,7 @@ impl DoubleEndedIterator for CharByteIndices<'_> {
         let char_buf = &data[char_idx..];
 
         match String::from_utf8_lossy(char_buf).chars().next() {
-            Some(c) if c != char::REPLACEMENT_CHARACTER => {
+            Some(c) if c != REPLACEMENT_CHARACTER => {
                 self.back_idx -= char_len;
                 Some(CharByteIndex::Char(self.back_idx, c))
             }

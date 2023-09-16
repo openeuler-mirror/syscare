@@ -1,5 +1,7 @@
-use jsonrpc::{serde::Serialize, serde_json::value::RawValue};
 use std::ops::Deref;
+
+use jsonrpc::serde_json::value::RawValue;
+use serde::Serialize;
 
 #[derive(Debug, Default)]
 pub struct RpcArguments {

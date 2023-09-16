@@ -1,8 +1,9 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
-use jsonrpc::{serde::Deserialize, simple_uds::UdsTransport, Client, Error};
+use jsonrpc::{simple_uds::UdsTransport, Client, Error};
 use log::debug;
+use serde::Deserialize;
 
 use super::args::RpcArguments;
 

@@ -39,8 +39,7 @@ impl<'a> UserPatchBuilder<'a> {
 
         // Get compiler path and filter invalid one
         let compiler_set = COMPILER_NAMES
-            .map(OsString::from)
-            .into_iter()
+            .iter()
             .filter_map(|compiler_name| which(compiler_name).ok())
             .collect::<HashSet<_>>();
 
@@ -72,17 +71,17 @@ impl<'a> UserPatchBuilder<'a> {
 
     fn build_cmd_args(&self, uargs: &UserPatchBuilderArguments) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
-            .arg("--work-dir")
+            .arg("--work_dir")
             .arg(&uargs.work_dir)
-            .arg("--debug-source")
-            .arg(&uargs.debug_source)
-            .arg("--elf-dir")
+            .arg("--source_dir")
+            .arg(&uargs.source_dir)
+            .arg("--elf_dir")
             .arg(&uargs.elf_dir)
-            .arg("--build-source-cmd")
+            .arg("--build_source_cmd")
             .arg(&uargs.build_source_cmd)
-            .arg("--build-patch-cmd")
+            .arg("--build_patch_cmd")
             .arg(&uargs.build_patch_cmd)
-            .arg("--output-dir")
+            .arg("--output_dir")
             .arg(&uargs.output_dir);
 
         for compiler in &uargs.compiler_list {
@@ -91,9 +90,9 @@ impl<'a> UserPatchBuilder<'a> {
 
         for (elf, debuginfo) in &uargs.debug_relations {
             cmd_args = cmd_args
-                .arg("--elf-path")
+                .arg("--elf_path")
                 .arg(elf)
-                .arg("--debug-info")
+                .arg("--debuginfo")
                 .arg(debuginfo)
         }
 
@@ -103,6 +102,7 @@ impl<'a> UserPatchBuilder<'a> {
         if uargs.verbose {
             cmd_args = cmd_args.arg("--verbose");
         }
+        cmd_args = cmd_args.arg("--patch");
         cmd_args = cmd_args.args(uargs.patch_list.iter().map(|patch| &patch.path));
 
         cmd_args
@@ -206,7 +206,7 @@ impl PatchBuilder for UserPatchBuilder<'_> {
 
         let builder_args = UserPatchBuilderArguments {
             work_dir: patch_build_dir.to_path_buf(),
-            debug_source: build_params.source_dir.to_owned(),
+            source_dir: build_params.source_dir.to_owned(),
             elf_dir: pkg_buildroot.buildroot.to_path_buf(),
             debug_relations: elf_relations,
             build_source_cmd: build_original_cmd.append("&&").append(build_prep_cmd),

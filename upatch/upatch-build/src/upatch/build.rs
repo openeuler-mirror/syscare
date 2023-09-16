@@ -35,9 +35,9 @@ pub struct UpatchBuild {
 }
 
 impl UpatchBuild {
-    pub fn new() -> Self {
-        Self {
-            args: Arguments::new(),
+    fn new() -> Result<Self> {
+        Ok(Self {
+            args: Arguments::new()?,
             work_dir: WorkDir::new(),
             compiler: Compiler::new(),
             tool: Tool::new(),
@@ -46,82 +46,81 @@ impl UpatchBuild {
             patch_obj: HashMap::new(),
             source_link_messages: LinkMessages::new(),
             patch_link_messages: LinkMessages::new(),
-        }
+        })
     }
 
-    pub fn run(&mut self) -> Result<()> {
-        self.args.check()?;
+    pub fn run() -> Result<()> {
+        let mut upatch = Self::new()?;
 
-        self.work_dir
-            .create_dir(self.args.work_dir.as_ref().unwrap())?;
-        self.args
-            .output_dir
-            .get_or_insert(self.work_dir.cache_dir().to_path_buf());
-        self.init_logger()?;
-        self.stop_hacker();
+        upatch.work_dir.create_dir(&upatch.args.work_dir)?;
+        upatch.init_logger()?;
+        upatch.stop_hacker();
 
         // find upatch-diff
-        self.tool.check()?;
+        upatch.tool.check()?;
 
         // check patches
         info!("Testing patch file(s)");
-        let project = Project::new(&self.args.debug_source);
-        project.patch_all(&self.args.patches, Level::Debug)?;
-        project.unpatch_all(&self.args.patches, Level::Debug)?;
+        let project = Project::new(&upatch.args.source_dir);
+        project.patch_all(&upatch.args.patches, Level::Debug)?;
+        project.unpatch_all(&upatch.args.patches, Level::Debug)?;
 
         // check compiler
-        self.compiler
-            .analyze(self.args.compiler.as_ref().unwrap())?;
-        if !self.args.skip_compiler_check {
-            self.compiler
-                .check_version(self.work_dir.cache_dir(), &self.args.debug_infoes)?;
+        upatch.compiler.analyze(&upatch.args.compiler)?;
+        if !upatch.args.skip_compiler_check {
+            upatch
+                .compiler
+                .check_version(upatch.work_dir.cache_dir(), &upatch.args.debuginfo)?;
         }
 
         // hack compiler
         info!("Hacking compiler");
-        let compiler_hacker = CompilerHackGuard::new(self.compiler.clone())?;
-
-        let project_name = self.args.debug_source.file_name().unwrap();
+        let compiler_hacker = CompilerHackGuard::new(upatch.compiler.clone())?;
+        let project_name = upatch.args.source_dir.file_name().unwrap();
 
         // build source
         info!("Building original {:?}", project_name);
         project.build(
-            self.work_dir.source_dir(),
-            self.args.build_source_cmd.clone(),
+            upatch.work_dir.source_dir(),
+            upatch.args.build_source_cmd.clone(),
         )?;
 
-        for i in 0..self.args.debug_infoes.len() {
-            self.args.elf_pathes[i] =
-                self.get_binary_elf(&self.args.debug_infoes[i], &self.args.elf_pathes[i])?;
+        for i in 0..upatch.args.debuginfo.len() {
+            upatch.args.elf_path[i] =
+                upatch.get_binary_elf(&upatch.args.debuginfo[i], &upatch.args.elf_path[i])?;
         }
 
         // collect source link message and object message
-        self.source_link_messages =
-            LinkMessages::from(&self.args.elf_pathes, self.work_dir.source_dir())?;
-        self.source_obj =
-            self.correlate_obj(&self.args.debug_source, self.work_dir.source_dir())?;
-        if self.source_obj.is_empty() {
+        upatch.source_link_messages =
+            LinkMessages::from(&upatch.args.elf_path, upatch.work_dir.source_dir())?;
+        upatch.source_obj =
+            upatch.correlate_obj(&upatch.args.source_dir, upatch.work_dir.source_dir())?;
+        if upatch.source_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                self.work_dir.source_dir()
+                upatch.work_dir.source_dir()
             )));
         }
 
         // patch
-        project.patch_all(&self.args.patches, Level::Info)?;
+        project.patch_all(&upatch.args.patches, Level::Info)?;
 
         // build patched
         info!("Building patched {:?}", project_name);
-        project.build(self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
+        project.build(
+            upatch.work_dir.patch_dir(),
+            upatch.args.build_patch_cmd.clone(),
+        )?;
 
         // collect patched link message and object message
-        self.patch_link_messages =
-            LinkMessages::from(&self.args.elf_pathes, self.work_dir.patch_dir())?;
-        self.patch_obj = self.correlate_obj(&self.args.debug_source, self.work_dir.patch_dir())?;
-        if self.patch_obj.is_empty() {
+        upatch.patch_link_messages =
+            LinkMessages::from(&upatch.args.elf_path, upatch.work_dir.patch_dir())?;
+        upatch.patch_obj =
+            upatch.correlate_obj(&upatch.args.source_dir, upatch.work_dir.patch_dir())?;
+        if upatch.patch_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                self.work_dir.patch_dir()
+                upatch.work_dir.patch_dir()
             )));
         }
 
@@ -131,7 +130,7 @@ impl UpatchBuild {
 
         // detecting changed objects
         info!("Detecting changed objects");
-        self.build_patches()?;
+        upatch.build_patches()?;
         Ok(())
     }
 }
@@ -241,14 +240,13 @@ impl UpatchBuild {
     {
         let diff_dir = diff_dir.as_ref();
         let binary = binary.as_ref().to_path_buf();
+        let output_dir = self.args.output_dir.as_path();
 
-        let mut binding = self.args.name.clone();
-        let output_file = self
-            .args
-            .output_dir
-            .as_ref()
-            .unwrap()
-            .join(binding.concat(&binary));
+        let mut patch_name = self.args.name.clone();
+        let output_file = match patch_name.is_empty() {
+            true => output_dir.join(&binary),
+            false => output_dir.join(patch_name.concat("-").concat(&binary)),
+        };
 
         let mut link_args = list_all_files_ext(diff_dir, "o", false)?;
         match link_args.len() {
@@ -277,50 +275,47 @@ impl UpatchBuild {
 
     fn build_patches(&self) -> Result<()> {
         let mut upatch_num = 0;
-        for i in 0..self.args.debug_infoes.len() {
+        for i in 0..self.args.debuginfo.len() {
             debug!(
                 "\n\nbuild upatches: debuginfo: {:?}(elf_path: {:?})",
-                &self.args.debug_infoes[i], &self.args.elf_pathes[i]
+                &self.args.debuginfo[i], &self.args.elf_path[i]
             );
-            let patch_objects = match self
-                .patch_link_messages
-                .get_objects(&self.args.elf_pathes[i])
-            {
+            let patch_objects = match self.patch_link_messages.get_objects(&self.args.elf_path[i]) {
                 Some(objects) => objects,
                 None => {
                     info!(
                         "read {:?}'s patch link_message failed: None",
-                        &self.args.elf_pathes[i]
+                        &self.args.elf_path[i]
                     );
                     continue;
                 }
             };
             let source_objects = match self
                 .source_link_messages
-                .get_objects(&self.args.elf_pathes[i])
+                .get_objects(&self.args.elf_path[i])
             {
                 Some(objects) => objects,
                 None => {
                     return Err(Error::Build(format!(
                         "read {:?}'s source link_message failed: None",
-                        &self.args.elf_pathes[i]
+                        &self.args.elf_path[i]
                     )))
                 }
             };
 
-            let binary_name = file_name(&self.args.elf_pathes[i])?;
+            let binary_name = file_name(&self.args.elf_path[i])?;
             let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
             fs::create_dir(&diff_dir)?;
 
             let new_debug_info = self
                 .work_dir
                 .debuginfo_dir()
-                .join(file_name(&self.args.debug_infoes[i])?);
+                .join(file_name(&self.args.debuginfo[i])?);
             debug!(
                 "copy {:?} to {:?}!",
-                &self.args.debug_infoes[i], &new_debug_info
+                &self.args.debuginfo[i], &new_debug_info
             );
-            fs::copy(&self.args.debug_infoes[i], &new_debug_info)?;
+            fs::copy(&self.args.debuginfo[i], &new_debug_info)?;
             fs::set_permissions(&new_debug_info, fs::Permissions::from_mode(0o644))?;
             resolve::resolve_dynamic(&new_debug_info)?;
 
@@ -375,7 +370,7 @@ impl UpatchBuild {
     }
 
     fn stop_hacker(&self) {
-        let mut signals = Signals::new([SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
+        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
         thread::spawn(move || {
             for _ in signals.forever() {
                 panic!("receive signal");
@@ -388,11 +383,5 @@ impl UpatchBuild {
                 None => error!("panic occurred"),
             };
         }));
-    }
-}
-
-impl Default for UpatchBuild {
-    fn default() -> Self {
-        Self::new()
     }
 }

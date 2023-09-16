@@ -1,4 +1,4 @@
-mod arg;
+mod args;
 mod build;
 mod compiler;
 mod error;
@@ -9,7 +9,7 @@ mod resolve;
 mod tools;
 mod workdir;
 
-pub use arg::*;
+pub use args::*;
 pub use build::*;
 pub use compiler::*;
 pub use error::*;

@@ -1,4 +1,6 @@
-use jsonrpc::{serde::Serialize, serde_json::value::RawValue};
+use jsonrpc::serde_json::value::RawValue;
+use serde::Serialize;
+
 use std::ops::Deref;
 
 #[derive(Debug, Default)]

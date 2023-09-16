@@ -7,8 +7,7 @@ mod tool;
 mod upatch;
 
 fn main() {
-    let mut upatch = upatch::UpatchBuild::new();
-    std::process::exit(match upatch.run() {
+    std::process::exit(match upatch::UpatchBuild::run() {
         Ok(_) => {
             println!("SUCCESS!");
             0
@@ -16,7 +15,7 @@ fn main() {
         Err(e) => {
             match log::Logger::is_inited() {
                 true => log::error!("{}", e),
-                false => eprintln!("ERROR: {}", e),
+                false => eprintln!("Error: {}", e),
             };
             e.code()
         }

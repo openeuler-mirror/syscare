@@ -118,7 +118,7 @@ impl Compiler {
 
         for compiler in &self.compiler {
             let args_list = ExternCommandArgs::new()
-                .args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c"])
+                .args(&["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c"])
                 .arg(&test_path)
                 .arg("-o")
                 .arg(&test_obj);
@@ -173,7 +173,7 @@ impl Compiler {
         Q: AsRef<Path>,
     {
         let args_list = ExternCommandArgs::new()
-            .args(["-r", "-o"])
+            .args(&["-r", "-o"])
             .arg(output_file.as_ref())
             .args(link_list);
         let output = ExternCommand::new(&self.linker[0]).execv(args_list)?;

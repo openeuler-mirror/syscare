@@ -7,16 +7,16 @@ use super::fs;
 
 pub fn bytes<S: AsRef<[u8]>>(bytes: S) -> String {
     let mut hasher = Sha256::new();
-    hasher.update(bytes);
+    hasher.input(bytes);
 
-    format!("{:#x}", hasher.finalize())
+    format!("{:#x}", hasher.result())
 }
 
 pub fn file<P: AsRef<Path>>(file: P) -> std::io::Result<String> {
     let mut hasher = Sha256::new();
-    hasher.update(fs::read(file)?);
+    hasher.input(fs::read(file)?);
 
-    Ok(format!("{:#x}", hasher.finalize()))
+    Ok(format!("{:#x}", hasher.result()))
 }
 
 pub fn file_list<I, P>(file_list: I) -> std::io::Result<String>
@@ -26,10 +26,10 @@ where
 {
     let mut hasher = Sha256::new();
     for file in file_list {
-        hasher.update(fs::read(file)?);
+        hasher.input(fs::read(file)?);
     }
 
-    Ok(format!("{:#x}", hasher.finalize()))
+    Ok(format!("{:#x}", hasher.result()))
 }
 
 pub fn dir<P: AsRef<Path>>(directory: P) -> std::io::Result<String> {

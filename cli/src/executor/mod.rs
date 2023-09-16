@@ -1,14 +1,14 @@
 use anyhow::{ensure, Result};
 use syscare_common::os;
 
-use super::args::CliCommand;
+use super::args::SubCommand;
 
 pub mod build;
 pub mod patch;
 pub mod reboot;
 
 pub trait CommandExecutor {
-    fn invoke(&self, command: &CliCommand) -> Result<()>;
+    fn invoke(&self, command: &SubCommand) -> Result<()>;
 
     fn check_root_permission(&self) -> Result<()> {
         const ROOT_UID: u32 = 0;

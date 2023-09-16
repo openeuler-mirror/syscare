@@ -1,9 +1,9 @@
+use std::path::PathBuf;
 use std::{ops::Deref, process::exit, sync::Arc};
 
 use anyhow::{bail, Context, Result};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
-use once_cell::sync::OnceCell;
 
 use syscare_abi::{PackageType, PatchInfo, PatchType};
 use syscare_common::{os, util::fs};
@@ -26,8 +26,6 @@ use workdir::WorkDir;
 use crate::package::{PackageSpecBuilderFactory, PackageSpecWriterFactory};
 use crate::patch::PatchBuilderArguments;
 
-const CLI_NAME: &str = "syscare build";
-const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
@@ -37,53 +35,13 @@ lazy_static! {
 
 pub struct SyscareBuilder {
     args: Arguments,
-    workdir: OnceCell<WorkDir>,
+    workdir: WorkDir,
 }
 
 impl SyscareBuilder {
-    fn check_input_args(&self) -> Result<()> {
-        let args = &self.args;
-        let pkg_file_ext = PKG_IMPL.extension();
-
-        let source_pkg = &args.source;
-        if !source_pkg.is_file() || fs::file_ext(source_pkg) != pkg_file_ext {
-            bail!("Path \"{}\" is not a rpm package", source_pkg.display());
-        }
-
-        for debuginfo_pkg in &args.debuginfo {
-            if !debuginfo_pkg.is_file() || fs::file_ext(debuginfo_pkg) != pkg_file_ext {
-                bail!("Path \"{}\" is not a rpm package", debuginfo_pkg.display());
-            }
-        }
-
-        for patch_file in &args.patches {
-            if !patch_file.is_file() || fs::file_ext(patch_file) != PATCH_FILE_EXT {
-                bail!("Path \"{}\" is not a patch file", patch_file.display());
-            }
-        }
-
-        let workdir = &args.workdir;
-        if !workdir.exists() {
-            fs::create_dir_all(workdir)?;
-        }
-        if !workdir.is_dir() {
-            bail!("Path \"{}\" is not a directory", workdir.display());
-        }
-
-        let output = &args.output;
-        if !output.exists() {
-            fs::create_dir_all(output)?;
-        }
-        if !output.is_dir() {
-            bail!("Path \"{}\" is not a directory", output.display());
-        }
-
-        Ok(())
-    }
-
     fn collect_build_params(&self) -> Result<BuildParameters> {
         let args = &self.args;
-        let pkg_root = &self.workdir().package;
+        let pkg_root = &self.workdir.package;
         let source_pkg_root = &pkg_root.source;
         let debuginfo_pkg_root = &pkg_root.debuginfo;
 
@@ -231,7 +189,7 @@ impl SyscareBuilder {
     fn build_patch(&self, build_params: &BuildParameters) -> Result<Vec<PatchInfo>> {
         debug!("- Preparing build requirements");
         let patch_type = build_params.patch.kind;
-        let patch_builder = PatchBuilderFactory::get_builder(patch_type, self.workdir());
+        let patch_builder = PatchBuilderFactory::get_builder(patch_type, &self.workdir);
         let builder_args: PatchBuilderArguments = patch_builder
             .parse_builder_args(build_params)
             .context("Failed to parse build arguments")?;
@@ -250,7 +208,7 @@ impl SyscareBuilder {
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> Result<()> {
-        let workdir = self.workdir();
+        let workdir = &self.workdir;
         let pkg_build_root = &workdir.package.patch;
         let pkg_source_dir = &pkg_build_root.sources;
         let pkg_spec_dir = &pkg_build_root.specs;
@@ -322,66 +280,100 @@ impl SyscareBuilder {
     }
 
     fn clean_up(&mut self) {
-        self.workdir().remove().ok();
+        self.workdir.remove().ok();
     }
 }
 
 impl SyscareBuilder {
-    fn initialize(&mut self) -> Result<()> {
-        os::umask::set_umask(CLI_UMASK);
-        self.check_input_args()?;
+    fn new() -> Result<Self> {
+        let args = Arguments::new()?;
+        Self::check_input_args(&args)?;
 
-        let temp_dir = self
-            .args
-            .workdir
-            .join(format!("syscare-build.{}", os::process::id()));
-        self.workdir
-            .get_or_try_init(|| WorkDir::new(temp_dir))
-            .context("Failed to create working directory")?;
+        os::umask::set_umask(CLI_UMASK);
+        let workdir = WorkDir::new(
+            args.workdir
+                .join(format!("syscare-build.{}", os::process::id())),
+        )?;
 
         Logger::initialize(
-            self.workdir().deref(),
+            workdir.deref(),
             LevelFilter::Trace,
-            match &self.args.verbose {
+            match &args.verbose {
                 false => LevelFilter::Info,
                 true => LevelFilter::Debug,
             },
         )?;
 
+        Ok(SyscareBuilder { args, workdir })
+    }
+
+    fn check_input_args(args: &Arguments) -> Result<()> {
+        let pkg_file_ext = PKG_IMPL.extension();
+
+        let source_pkg = &args.source;
+        if !source_pkg.is_file() || fs::file_ext(source_pkg) != pkg_file_ext {
+            bail!("Path \"{}\" is not a rpm package", source_pkg.display());
+        }
+
+        for debuginfo_pkg in &args.debuginfo {
+            if !debuginfo_pkg.is_file() || fs::file_ext(debuginfo_pkg) != pkg_file_ext {
+                bail!("Path \"{}\" is not a rpm package", debuginfo_pkg.display());
+            }
+        }
+
+        for patch_file in &args.patches {
+            if !patch_file.is_file() || fs::file_ext(patch_file) != PATCH_FILE_EXT {
+                bail!("Path \"{}\" is not a patch file", patch_file.display());
+            }
+        }
+
+        let workdir = &args.workdir;
+        if !workdir.exists() {
+            fs::create_dir_all(workdir)?;
+        }
+        if !workdir.is_dir() {
+            bail!("Path \"{}\" is not a directory", workdir.display());
+        }
+
+        let output = &args.output;
+        if !output.exists() {
+            fs::create_dir_all(output)?;
+        }
+        if !output.is_dir() {
+            bail!("Path \"{}\" is not a directory", output.display());
+        }
+
         Ok(())
     }
 
-    fn workdir(&self) -> &WorkDir {
-        self.workdir.wait()
-    }
-
-    fn start_and_run(&mut self) -> Result<()> {
-        self.initialize()?;
+    fn start_and_run(log_file: &mut PathBuf) -> Result<()> {
+        let mut instance = Self::new()?;
+        *log_file = instance.workdir.log_file.clone();
 
         info!("==============================");
         info!("{}", CLI_ABOUT);
         info!("==============================");
         info!("Collecting build parameters");
-        let build_params = self.collect_build_params()?;
+        let build_params = instance.collect_build_params()?;
 
         info!("Checking build parameters");
-        self.check_build_params(&build_params)?;
+        instance.check_build_params(&build_params)?;
 
         info!("Building patch, this may take a while");
-        let patch_infos = self.build_patch(&build_params)?;
+        let patch_infos = instance.build_patch(&build_params)?;
 
         info!("Building patch package(s)");
         for patch_info in patch_infos {
             info!("{}", patch_info);
-            self.build_patch_package(&patch_info)?;
+            instance.build_patch_package(&patch_info)?;
         }
 
         info!("Building source package");
-        self.build_source_package(&build_params)?;
+        instance.build_source_package(&build_params)?;
 
-        if !self.args.skip_cleanup {
+        if !instance.args.skip_cleanup {
             info!("Cleaning up");
-            self.clean_up();
+            instance.clean_up();
         }
 
         info!("Done");
@@ -390,11 +382,8 @@ impl SyscareBuilder {
 }
 
 fn main() {
-    let mut cli = SyscareBuilder {
-        args: Arguments::new(),
-        workdir: OnceCell::new(),
-    };
-    let exit_code = match cli.start_and_run() {
+    let mut log_file = PathBuf::new();
+    let exit_code = match SyscareBuilder::start_and_run(&mut log_file) {
         Ok(_) => 0,
         Err(e) => {
             match Logger::is_inited() {
@@ -405,7 +394,7 @@ fn main() {
                     error!("Error: {:?}", e);
                     eprintln!(
                         "For more information, please check \"{}\"",
-                        cli.workdir.wait().log_file.display()
+                        log_file.display()
                     );
                 }
             }
