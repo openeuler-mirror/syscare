@@ -246,6 +246,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "ctrlc"
+version = "3.1.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "531ca85436bc182c0b20b5bd3dd93ad47bdc4a6b6b5168a7d48f64cf0f9abdd0"
+dependencies = [
+ "nix",
+ "winapi 0.3.9",
+]
+
+[[package]]
 name = "daemonize"
 version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -641,6 +651,15 @@ dependencies = [
 
 [[package]]
 name = "memoffset"
+version = "0.6.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5aa361d4faea93603064a027415f07bd8e1d5c88c9fbf68bf56a285428fd79ce"
+dependencies = [
+ "autocfg",
+]
+
+[[package]]
+name = "memoffset"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d61c719bcfbcf5d62b3a09efa6088de8c54bc0bfcd3ea7ae39fcc186108b8de1"
@@ -729,6 +748,19 @@ dependencies = [
  "cfg-if 0.1.10",
  "libc",
  "winapi 0.3.9",
+]
+
+[[package]]
+name = "nix"
+version = "0.22.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e4916f159ed8e5de0082076562152a76b7a1f64a01fd9d1e0fea002c37624faf"
+dependencies = [
+ "bitflags",
+ "cc",
+ "cfg-if 1.0.0",
+ "libc",
+ "memoffset 0.6.5",
 ]
 
 [[package]]
@@ -1173,6 +1205,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
+ "ctrlc",
  "flexi_logger",
  "lazy_static",
  "log",
@@ -1545,6 +1578,7 @@ version = "1.1.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ctrlc",
  "function_name",
  "gimli",
  "jsonrpc",
@@ -1555,7 +1589,6 @@ dependencies = [
  "memoffset 0.8.0",
  "object",
  "serde",
- "signal-hook",
  "syscare-common",
  "typed-arena",
  "which",

@@ -1,10 +1,11 @@
 use std::path::PathBuf;
 use std::{ops::Deref, process::exit, sync::Arc};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use lazy_static::lazy_static;
 use log::{debug, error, info, warn, LevelFilter};
 
+use parking_lot::Mutex;
 use syscare_abi::{PackageType, PatchInfo, PatchType};
 use syscare_common::{os, util::fs};
 
@@ -346,44 +347,64 @@ impl SyscareBuilder {
         Ok(())
     }
 
-    fn start_and_run(log_file: &mut PathBuf) -> Result<()> {
-        let mut instance = Self::new()?;
-        *log_file = instance.workdir.log_file.clone();
+    fn build_main(mut self, log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
+        *log_file.lock() = self.workdir.log_file.clone();
 
         info!("==============================");
         info!("{}", CLI_ABOUT);
         info!("==============================");
         info!("Collecting build parameters");
-        let build_params = instance.collect_build_params()?;
+        let build_params = self.collect_build_params()?;
 
         info!("Checking build parameters");
-        instance.check_build_params(&build_params)?;
+        self.check_build_params(&build_params)?;
 
         info!("Building patch, this may take a while");
-        let patch_infos = instance.build_patch(&build_params)?;
+        let patch_infos = self.build_patch(&build_params)?;
 
         info!("Building patch package(s)");
         for patch_info in patch_infos {
             info!("{}", patch_info);
-            instance.build_patch_package(&patch_info)?;
+            self.build_patch_package(&patch_info)?;
         }
 
         info!("Building source package");
-        instance.build_source_package(&build_params)?;
+        self.build_source_package(&build_params)?;
 
-        if !instance.args.skip_cleanup {
+        if !self.args.skip_cleanup {
             info!("Cleaning up");
-            instance.clean_up();
+            self.clean_up();
         }
 
         info!("Done");
         Ok(())
     }
+
+    fn setup_signal_handlers() -> Result<()> {
+        ctrlc::set_handler(|| {
+            error!("Received termination signal");
+        })
+        .context("Failed to setup signal handler")?;
+
+        Ok(())
+    }
+
+    fn start_and_run(log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
+        Self::setup_signal_handlers()?;
+
+        let build_thread =
+            std::thread::spawn(move || -> Result<()> { Self::new()?.build_main(log_file) });
+
+        match build_thread.join() {
+            Ok(build_result) => build_result,
+            Err(_) => Err(anyhow!("Failed to join build thread")),
+        }
+    }
 }
 
 fn main() {
-    let mut log_file = PathBuf::new();
-    let exit_code = match SyscareBuilder::start_and_run(&mut log_file) {
+    let log_file = Arc::new(Mutex::new(PathBuf::new()));
+    let exit_code = match SyscareBuilder::start_and_run(log_file.clone()) {
         Ok(_) => 0,
         Err(e) => {
             match Logger::is_inited() {
@@ -394,7 +415,7 @@ fn main() {
                     error!("Error: {:?}", e);
                     eprintln!(
                         "For more information, please check \"{}\"",
-                        log_file.display()
+                        log_file.lock().display()
                     );
                 }
             }

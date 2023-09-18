@@ -2,9 +2,6 @@ use std::collections::{HashMap, HashSet};
 use std::fs::{self, OpenOptions};
 use std::os::unix::prelude::PermissionsExt;
 use std::path::{Path, PathBuf};
-use std::thread;
-
-use signal_hook::{consts::*, iterator::Signals};
 
 use crate::dwarf::Dwarf;
 use crate::elf::check_elf;
@@ -49,78 +46,76 @@ impl UpatchBuild {
         })
     }
 
-    pub fn run() -> Result<()> {
-        let mut upatch = Self::new()?;
+    fn setup_signal_handlers() -> Result<()> {
+        ctrlc::set_handler(|| {
+            error!("Received termination signal");
+        })
+        .map_err(|e| Error::Mod(e.to_string()))
+    }
 
-        upatch.work_dir.create_dir(&upatch.args.work_dir)?;
-        upatch.init_logger()?;
-        upatch.stop_hacker();
+    fn build_main(mut self) -> Result<()> {
+        self.work_dir.create_dir(&self.args.work_dir)?;
+        self.init_logger()?;
 
         // find upatch-diff
-        upatch.tool.check()?;
+        self.tool.check()?;
 
         // check patches
         info!("Testing patch file(s)");
-        let project = Project::new(&upatch.args.source_dir);
-        project.patch_all(&upatch.args.patches, Level::Debug)?;
-        project.unpatch_all(&upatch.args.patches, Level::Debug)?;
+        let project = Project::new(&self.args.source_dir);
+        project.patch_all(&self.args.patches, Level::Debug)?;
+        project.unpatch_all(&self.args.patches, Level::Debug)?;
 
         // check compiler
-        upatch.compiler.analyze(&upatch.args.compiler)?;
-        if !upatch.args.skip_compiler_check {
-            upatch
-                .compiler
-                .check_version(upatch.work_dir.cache_dir(), &upatch.args.debuginfo)?;
+        self.compiler.analyze(&self.args.compiler)?;
+        if !self.args.skip_compiler_check {
+            self.compiler
+                .check_version(self.work_dir.cache_dir(), &self.args.debuginfo)?;
         }
 
         // hack compiler
         info!("Hacking compiler");
-        let compiler_hacker = CompilerHackGuard::new(upatch.compiler.clone())?;
-        let project_name = upatch.args.source_dir.file_name().unwrap();
+        let compiler_hacker = CompilerHackGuard::new(self.compiler.clone())?;
+        let project_name = self.args.source_dir.file_name().unwrap();
 
         // build source
         info!("Building original {:?}", project_name);
         project.build(
-            upatch.work_dir.source_dir(),
-            upatch.args.build_source_cmd.clone(),
+            self.work_dir.source_dir(),
+            self.args.build_source_cmd.clone(),
         )?;
 
-        for i in 0..upatch.args.debuginfo.len() {
-            upatch.args.elf_path[i] =
-                upatch.get_binary_elf(&upatch.args.debuginfo[i], &upatch.args.elf_path[i])?;
+        for i in 0..self.args.debuginfo.len() {
+            self.args.elf_path[i] =
+                self.get_binary_elf(&self.args.debuginfo[i], &self.args.elf_path[i])?;
         }
 
         // collect source link message and object message
-        upatch.source_link_messages =
-            LinkMessages::from(&upatch.args.elf_path, upatch.work_dir.source_dir())?;
-        upatch.source_obj =
-            upatch.correlate_obj(&upatch.args.source_dir, upatch.work_dir.source_dir())?;
-        if upatch.source_obj.is_empty() {
+        self.source_link_messages =
+            LinkMessages::from(&self.args.elf_path, self.work_dir.source_dir())?;
+        self.source_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.source_dir())?;
+        if self.source_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                upatch.work_dir.source_dir()
+                self.work_dir.source_dir()
             )));
         }
 
         // patch
-        project.patch_all(&upatch.args.patches, Level::Info)?;
+        project.patch_all(&self.args.patches, Level::Info)?;
 
         // build patched
         info!("Building patched {:?}", project_name);
-        project.build(
-            upatch.work_dir.patch_dir(),
-            upatch.args.build_patch_cmd.clone(),
-        )?;
+        project.build(self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
 
         // collect patched link message and object message
-        upatch.patch_link_messages =
-            LinkMessages::from(&upatch.args.elf_path, upatch.work_dir.patch_dir())?;
-        upatch.patch_obj =
-            upatch.correlate_obj(&upatch.args.source_dir, upatch.work_dir.patch_dir())?;
-        if upatch.patch_obj.is_empty() {
+        self.patch_link_messages =
+            LinkMessages::from(&self.args.elf_path, self.work_dir.patch_dir())?;
+        self.patch_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.patch_dir())?;
+        if self.patch_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                upatch.work_dir.patch_dir()
+                self.work_dir.patch_dir()
             )));
         }
 
@@ -130,8 +125,21 @@ impl UpatchBuild {
 
         // detecting changed objects
         info!("Detecting changed objects");
-        upatch.build_patches()?;
+        self.build_patches()?;
+
+        info!("Done");
         Ok(())
+    }
+
+    pub fn start_and_run() -> Result<()> {
+        Self::setup_signal_handlers()?;
+
+        let build_thread = std::thread::spawn(|| -> Result<()> { Self::new()?.build_main() });
+
+        match build_thread.join() {
+            Ok(build_result) => build_result,
+            Err(_) => Err(Error::Mod("Failed to join build thread".to_string())),
+        }
     }
 }
 
@@ -367,21 +375,5 @@ impl UpatchBuild {
         }
         let file = OpenOptions::new().read(true).open(path)?;
         check_elf(&file)
-    }
-
-    fn stop_hacker(&self) {
-        let mut signals = Signals::new(&[SIGINT, SIGTERM, SIGQUIT]).expect("signal_hook error");
-        thread::spawn(move || {
-            for _ in signals.forever() {
-                panic!("receive signal");
-            }
-        });
-
-        std::panic::set_hook(Box::new(|e| {
-            match e.payload().downcast_ref::<&str>() {
-                Some(s) => error!("panic occurred: {:?}", s),
-                None => error!("panic occurred"),
-            };
-        }));
     }
 }

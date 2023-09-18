@@ -1,3 +1,5 @@
+use std::process;
+
 mod cmd;
 mod dwarf;
 mod elf;
@@ -6,8 +8,10 @@ mod rpc;
 mod tool;
 mod upatch;
 
+use upatch::UpatchBuild;
+
 fn main() {
-    std::process::exit(match upatch::UpatchBuild::run() {
+    let exit_code = match UpatchBuild::start_and_run() {
         Ok(_) => {
             println!("SUCCESS!");
             0
@@ -19,5 +23,6 @@ fn main() {
             };
             e.code()
         }
-    });
+    };
+    process::exit(exit_code);
 }
