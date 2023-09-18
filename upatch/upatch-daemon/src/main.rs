@@ -29,7 +29,7 @@ use logger::Logger;
 use rpc::{Skeleton, SkeletonImpl};
 
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
-const DAEMON_UMASK: u32 = 0o000;
+const DAEMON_UMASK: u32 = 0o027;
 const DAEMON_PARK_TIMEOUT: u64 = 100;
 
 struct Daemon {
