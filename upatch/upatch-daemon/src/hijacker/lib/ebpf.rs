@@ -1,4 +1,5 @@
 use std::{
+    fs,
     path::Path,
     process::{Child, Command, Stdio},
     time::Duration,
@@ -23,10 +24,9 @@ impl EbpfProgramGuard {
         let mut instance = Self {
             process: OnceCell::new(),
         };
-        if !Self::exists() {
-            info!("Starting eBPF program...");
-            instance.start().context("Failed to start eBPF program")?;
-        }
+
+        info!("Starting eBPF program...");
+        instance.start().context("Failed to start eBPF program")?;
 
         Ok(instance)
     }
@@ -40,6 +40,8 @@ impl EbpfProgramGuard {
 
     fn start(&mut self) -> Result<()> {
         self.process.get_or_try_init(|| {
+            fs::remove_file(EBPF_SOCKET_PATH).ok();
+
             Command::new(EBPF_BIN_PATH)
                 .stdout(Stdio::null())
                 .stderr(Stdio::piped())
@@ -76,7 +78,8 @@ impl EbpfProgramGuard {
 
     fn stop(&mut self) -> Result<()> {
         if let Some(mut child) = self.process.take() {
-            child.kill()?
+            child.kill()?;
+            fs::remove_file(EBPF_SOCKET_PATH).ok();
         }
 
         Ok(())
