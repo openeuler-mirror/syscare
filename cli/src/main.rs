@@ -18,7 +18,7 @@ use flock::ExclusiveFileLockGuard;
 use logger::Logger;
 use rpc::{PatchProxy, RebootProxy, RpcRemote};
 
-const CLI_LOCK_FILE_PATH: &str = "/var/run/syscare.lock";
+const CLI_LOCK_FILE_PATH: &str = "/tmp/syscare.lock";
 
 struct SyscareCLI {
     args: Arguments,
