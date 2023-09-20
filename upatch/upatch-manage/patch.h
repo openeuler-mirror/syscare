@@ -11,6 +11,7 @@
 #define _UPATCH_PATCH_H
 
 #include <linux/elf.h>
+#include <linux/mutex.h>
 
 #include <asm/module.h>
 

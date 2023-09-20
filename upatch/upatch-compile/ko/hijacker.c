@@ -132,7 +132,7 @@ static int __kprobes hijack_execve_pre(struct kprobe *p, struct pt_regs *ctx)
         goto out;
 
     caller_ino = current->mm->exe_file->f_inode->i_ino;
-    filename = (void *)regs_get_kernel_argument(ctx, 1);
+    filename = (void *)pt_regs_read_reg(ctx, 1);
     if (strlen(filename->name) + 1 > UPATCH_ENTRY_MAX_LEN)
         goto out;
 
@@ -184,6 +184,11 @@ static int __init upatch_hijacker_init(void)
     if (ret == -ENOENT) {
         /* If not found, try another name */
         hijacker_kprobe.symbol_name = "do_execveat_common";
+        ret = register_kprobe(&hijacker_kprobe);
+    }
+    if (ret == -ENOENT) {
+        /* If not found, try another name */
+        hijacker_kprobe.symbol_name = "do_execveat";
         ret = register_kprobe(&hijacker_kprobe);
     }
 

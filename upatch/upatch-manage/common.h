@@ -14,6 +14,7 @@
 #include <linux/slab.h>
 #include <linux/elf.h>
 #include <linux/mm.h>
+#include <linux/uaccess.h>
 
 /* Common used tool functions */
 int copy_para_from_user(unsigned long, char *, size_t);

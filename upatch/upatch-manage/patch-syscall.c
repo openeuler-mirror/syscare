@@ -9,6 +9,7 @@
 
 #include <linux/linkage.h>
 #include <linux/mman.h>
+#include <linux/uaccess.h>
 
 #include "arch/patch-syscall.h"
 #include "patch-syscall.h"

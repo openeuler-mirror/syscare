@@ -11,6 +11,7 @@
 
 #include "arch/patch-load.h"
 #include "arch/arm64/insn.h"
+#include <linux/uaccess.h>
 
 /*
  * ldr x16, #24
