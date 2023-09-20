@@ -13,13 +13,13 @@
 ############################################
 Name:          syscare
 Version:       1.1.0
-Release:       2
+Release:       3
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
 BuildRequires: cmake >= 3.14 make
-BuildRequires: rust >= 1.60 cargo >= 1.60
+BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
 Requires:      %{pkg_kmod} >= %{build_version}
 Requires:      coreutils systemd
@@ -232,10 +232,9 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
-* Mon Sep 04 2023 renoseven<dev@renoseven.net> - 1.1.0-2
-- Support patch recovery after reboot
-- Fix 'syscare uninitialize failure' issue
-- Fix 'patch package remove failure' issue
+* Wed Sep 20 2023 renoseven<dev@renoseven.net> - 1.1.0-3
+- Fix various issue
+- Support MSRV 1.51
 * Mon Aug 28 2023 renoseven<dev@renoseven.net> - 1.1.0-1
 - Support build patch without kernel module
 - Add syscare daemon
