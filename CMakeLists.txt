@@ -24,6 +24,15 @@ if(GIT_FOUND)
 else()
     set(SYSCARE_VERSION "${BUILD_VERSION}")
 endif()
+
+if(NOT DEFINED _WITHOUT_EBPF)
+    set(_WITHOUT_EBPF 0)
+endif()
+
+if(NOT DEFINED _WITHOUT_KO)
+    set(_WITHOUT_KO 0)
+endif()
+
 set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_PREFIX}/bin")
 set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_PREFIX}/libexec/syscare")
 set(SYSCARE_SERVICE_DIR "${CMAKE_INSTALL_PREFIX}/lib/systemd/system")
@@ -32,6 +41,8 @@ message("-- Syscare verion: ${SYSCARE_VERSION}")
 message("-- Syscare binary  directory: ${SYSCARE_BINARY_DIR}")
 message("-- Syscare libexec directory: ${SYSCARE_LIBEXEC_DIR}")
 message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
+message("-- Build without ko: ${_WITHOUT_KO}")
+message("-- Build without ebpf: ${_WITHOUT_EBPF}")
 
 # Build upatch
 add_subdirectory(upatch)
