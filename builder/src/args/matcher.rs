@@ -36,7 +36,7 @@ impl ArgMatcher {
             (@arg skip_compiler_check: --skip_compiler_check "Skip compiler version check (not recommended)")
             (@arg skip_cleanup: --skip_cleanup "Skip post-build cleanup")
             (@arg verbose: -v --verbose "Provide more detailed info")
-            (@arg patches: -p --patch +required +takes_value value_name("PATCH_FILES") "Patch file(s)")
+            (@arg patches: -p --patch +required +takes_value +multiple value_name("PATCH_FILES") "Patch file(s)")
         ).get_matches()
     }
 }
