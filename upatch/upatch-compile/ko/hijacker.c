@@ -4,6 +4,7 @@
 #include <linux/binfmts.h>
 #include <linux/kprobes.h>
 #include <linux/miscdevice.h>
+#include <linux/version.h>
 
 #include "upatch-entry.h"
 #include "upatch-ioctl.h"
@@ -131,8 +132,16 @@ static int __kprobes hijack_execve_pre(struct kprobe *p, struct pt_regs *ctx)
     if (!entries_enabled())
         goto out;
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5,0,0)
+    /* for do_execve, filename is the first argument */
     caller_ino = current->mm->exe_file->f_inode->i_ino;
-    filename = (void *)pt_regs_read_reg(ctx, 1);
+    filename = (void *)pt_regs_read_reg(ctx, 0);
+#else
+    /* for do_execveat_common, filename is the second argument */
+    caller_ino = current->mm->exe_file->f_inode->i_ino;
+    filename = (void *)regs_get_kernel_argument(ctx, 1);
+#endif
+
     if (strlen(filename->name) + 1 > UPATCH_ENTRY_MAX_LEN)
         goto out;
 
@@ -179,6 +188,10 @@ static int __init upatch_hijacker_init(void)
         goto out;
     }
 
+#if LINUX_VERSION_CODE <= KERNEL_VERSION(5,0,0)
+    hijacker_kprobe.symbol_name = "do_execve";
+    ret = register_kprobe(&hijacker_kprobe);
+#else
     hijacker_kprobe.symbol_name = "do_execveat_common.isra.0";
     ret = register_kprobe(&hijacker_kprobe);
     if (ret == -ENOENT) {
@@ -186,11 +199,7 @@ static int __init upatch_hijacker_init(void)
         hijacker_kprobe.symbol_name = "do_execveat_common";
         ret = register_kprobe(&hijacker_kprobe);
     }
-    if (ret == -ENOENT) {
-        /* If not found, try another name */
-        hijacker_kprobe.symbol_name = "do_execveat";
-        ret = register_kprobe(&hijacker_kprobe);
-    }
+#endif
 
     if (ret < 0) {
         pr_err("register kprobe for execve failed - %d \n", ret);
@@ -215,4 +224,4 @@ module_exit(upatch_hijacker_exit);
 MODULE_AUTHOR("Longjun Luo (luolongjuna@gmail.com)");
 MODULE_DESCRIPTION("kernel module for upatch-hijacker (live-patch in userspace)");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0");  
+MODULE_VERSION("1.0");
