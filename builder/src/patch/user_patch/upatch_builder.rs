@@ -97,7 +97,7 @@ impl<'a> UserPatchBuilder<'a> {
         }
 
         if uargs.skip_compiler_check {
-            cmd_args = cmd_args.arg("--skip-compiler-check");
+            cmd_args = cmd_args.arg("--skip_compiler_check");
         }
         if uargs.verbose {
             cmd_args = cmd_args.arg("--verbose");
