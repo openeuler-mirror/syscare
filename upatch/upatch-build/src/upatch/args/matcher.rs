@@ -24,6 +24,7 @@ impl ArgMatcher {
             (@arg elf_path: --elf_path +required +multiple +takes_value value_name("ELF_PATCH") "Specify elf's relative path relate to 'elf_dir' or absolute patch list")
             (@arg compiler: -c --compiler +multiple +takes_value value_name("COMPILER") default_value(DEFAULT_COMPILERS) "Specify compiler(s)")
             (@arg output_dir: -o --output_dir +takes_value value_name("OUTPUT_DIR") default_value(DEFAULT_OUTPUT_DIR) +hide_default_value "Specify output directory [default: <WORK_DIR>]")
+            (@arg skip_compiler_check: --skip_compiler_check "Skip compiler version check (not recommended)")
             (@arg verbose: -v --verbose "Provide more detailed info")
             (@arg patches: -p --patch +required +multiple +takes_value value_name("PATCHES") "Patch file(s)")
         ).get_matches()
