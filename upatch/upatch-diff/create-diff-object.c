@@ -263,7 +263,7 @@ static void bundle_symbols(struct upatch_elf *uelf)
         if (is_bundleable(sym)) {
             if (sym->sym.st_value != 0 &&
                 is_gcc6_localentry_bundled_sym(uelf, sym)) {
-                ERROR("symbol %s at offset %lu within section %s, expected 0.",
+                ERROR("Symbol '%s' at offset %lu within section '%s', expected 0.",
                     sym->name, sym->sym.st_value, sym->sec->name);
             }
             sym->sec->sym = sym;
@@ -290,21 +290,22 @@ static void detect_child_functions(struct upatch_elf *uelf)
         if (sym->type != STT_FUNC)
             continue;
 
-        /* search twice and check if found. */
         childstr = strstr(sym->name, ".cold");
         if (!childstr)
-            childstr = strstr(sym->name, ".cold");
+            childstr = strstr(sym->name, ".part");
 
         if (!childstr)
             continue;
 
-        pname =strndup(sym->name, childstr - sym->name);
+        pname = strndup(sym->name, childstr - sym->name);
+        log_normal("symbol '%s', pname: '%s'\n", sym->name, pname);
         if (!pname)
             ERROR("detect_child_functions strndup failed.");
 
         sym->parent = find_symbol_by_name(&uelf->symbols, pname);
         if (sym->parent)
             list_add_tail(&sym->subfunction_node, &sym->parent->children);
+
         free(pname);
     }
 }
@@ -362,8 +363,8 @@ static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
             }
         }
 
-        if (found == NOT_FOUND){
-            log_debug("can't find %s - in running_sym \n", running_sym->name);
+        if (found == NOT_FOUND) {
+            log_warn("Cannot find symbol '%s' in running binary\n", running_sym->name);
             return NOT_FOUND;
         }
     }
@@ -395,7 +396,7 @@ static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
         }
 
         if (found == NOT_FOUND){
-            log_debug("can't find %s - in sym \n", sym->name);
+            log_warn("Cannot find symbol '%s' in object\n", sym->name);
             return NOT_FOUND;
         }
     }
@@ -425,14 +426,14 @@ static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
             break;
         } else {
             if (lookup_running_file_sym)
-                ERROR("found duplicate matches for %s local symbols in running elf.", file_sym->name);
+                ERROR("Found duplicate local symbols in '%s'", file_sym->name);
 
             lookup_running_file_sym = running_sym;
         }
     }
 
     if (!lookup_running_file_sym)
-        ERROR("could't find matching %s local symbols in running elf.", file_sym->name);
+        ERROR("Cannot find a local symbol in '%s'", file_sym->name);
 
     list_for_each_entry_continue(file_sym, sym_list, list) {
         if (file_sym->type == STT_FILE)
@@ -473,9 +474,9 @@ static void mark_grouped_sections(struct upatch_elf *uelf)
 		while (data < end) {
 			sec = find_section_by_index(&uelf->sections, *data);
 			if (!sec)
-				ERROR("group section not found");
+				ERROR("Group section not found");
 			sec->grouped = 1;
-			log_debug("marking section %s (%d) as grouped\n",
+			log_debug("Marking section '%s' (%d) as grouped\n",
 			          sec->name, sec->index);
 			data++;
 		}
@@ -504,18 +505,18 @@ static void replace_section_syms(struct upatch_elf *uelf)
             if (!rela->sym || !rela->sym->sec || rela->sym->type != STT_SECTION)
                 continue;
 
-            log_debug("found replace symbol for section %s \n", rela->sym->name);
+            log_debug("Found replace symbol for section '%s' \n", rela->sym->name);
 
             /*
              * for section symbol, rela->sym->sec is the section itself.
              * rela->sym->sec->sym is the bundleable symbol which is a function or object.
              */
             if (rela->sym->sec->sym) {
-                log_debug("act: replace it with %s <- %s \n", rela->sym->sec->sym->name, rela->sym->sec->name);
+                log_debug("Act: Replace it with '%s' <- '%s' \n", rela->sym->sec->sym->name, rela->sym->sec->name);
                 rela->sym = rela->sym->sec->sym;
 
                 if (rela->sym->sym.st_value != 0)
-                    ERROR("symbol offset is not zero.");
+                    ERROR("Symbol offset is not zero.");
 
                 continue;
             }
@@ -537,16 +538,16 @@ static void replace_section_syms(struct upatch_elf *uelf)
                     (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 || rela->type == R_AARCH64_ABS64) &&
                     rela->addend == (long)sym->sec->sh.sh_size &&
                     end == (long)sym->sec->sh.sh_size)
-                    ERROR("relocation refer end of data sections.");
+                    ERROR("Relocation refer end of data sections.");
                 else if (target_off == start && target_off == end){
                     if(is_mapping_symbol(uelf, sym))
                         continue;
-                    log_debug("find relocation reference for empty symbol.\n");
+                    log_debug("Find relocation reference for empty symbol.\n");
                 }
                 else if (target_off < start || target_off >= end)
                     continue;
 
-                log_debug("%s: replacing %s+%ld reference with %s+%ld\n",
+                log_debug("'%s': Replacing '%s+%ld' reference with '%s+%ld'\n",
                     relasec->name, rela->sym->name, rela->addend,
                     sym->name, rela->addend - start);
                 found = true;
@@ -590,7 +591,7 @@ static void replace_section_syms(struct upatch_elf *uelf)
             if (!found && !is_string_literal_section(rela->sym->sec) &&
                 strncmp(rela->sym->name, ".rodata", strlen(".rodata")) &&
                 strncmp(rela->sym->name, ".data", strlen(".data"))) {
-                ERROR("%s+0x%x: can't find replacement symbol for %s+%ld reference.",
+                ERROR("%s+0x%x: Cannot find replacement symbol for '%s+%ld' reference.",
                 relasec->base->name, rela->offset, rela->sym->name, rela->addend);
             }
         }
@@ -605,7 +606,7 @@ static void mark_ignored_sections(struct upatch_elf *uelf)
     list_for_each_entry(sec, &uelf->sections, list) {
         if (!strncmp(sec->name, ".discard", strlen(".discard")) ||
             !strncmp(sec->name, ".rela.discard", strlen(".rela.discard"))) {
-                log_debug("found discard section %s\n", sec->name);
+                log_debug("Found discard section '%s'\n", sec->name);
                 sec->ignore = 1;
             }
     }
@@ -731,7 +732,7 @@ static int include_changed_functions(struct upatch_elf *uelf)
         if (sym->status == CHANGED &&
             sym->type == STT_SECTION &&
             sym->sec && is_except_section(sym->sec)) {
-            log_warn("found changed exeception section %s \n", sym->sec->name);
+            log_warn("Exeception section '%s' is changed\n", sym->sec->name);
             changed_nr++;
             include_symbol(sym);
         }
@@ -806,30 +807,30 @@ static void verify_patchability(struct upatch_elf *uelf)
 
     list_for_each_entry(sec, &uelf->sections, list) {
         if (sec->status == CHANGED && !sec->include) {
-            log_normal("changed section %s not selected for inclusion\n", sec->name);
+            log_normal("Section '%s' is changed, but it is not selected for inclusion\n", sec->name);
             errs++;
         }
 
         if (sec->status != SAME && sec->grouped) {
-            log_normal("changed section %s is part of a section group\n", sec->name);
+            log_normal("Section '%s' is changed, but it is a part of a section group\n", sec->name);
             errs++;
         }
 
         if (sec->sh.sh_type == SHT_GROUP && sec->status == NEW) {
-            log_normal("new/changed group sections are not supported\n");
+            log_normal("Section '%s' is new, but type 'SHT_GROUP' is not supported\n", sec->name);
             errs++;
         }
 
         if (sec->include && sec->status != NEW &&
             (!strncmp(sec->name, ".data", 5) || !strncmp(sec->name, ".bss", 4)) &&
             (strcmp(sec->name, ".data.unlikely") && strcmp(sec->name, ".data.once"))) {
-            log_normal("data section %s selected for inclusion\n", sec->name);
+            log_normal("Data section '%s' is selected for inclusion\n", sec->name);
             errs++;
         }
     }
 
     if (errs)
-        DIFF_FATAL("%d unsupported section changes", errs);
+        DIFF_FATAL("%d, Unsupported section changes", errs);
 }
 
 static void migrate_included_elements(struct upatch_elf *uelf_patched, struct upatch_elf *uelf_out)
@@ -948,7 +949,7 @@ int main(int argc, char*argv[])
     include_special_local_section(&uelf_patched);
 
     if (!num_changed && !new_globals_exist) {
-        log_normal("no changed functions were found\n");
+        log_normal("Cannot find any changed functions\n");
         return 0;
     }
 
@@ -1000,6 +1001,6 @@ int main(int argc, char*argv[])
     upatch_elf_teardown(&uelf_out);
     upatch_elf_free(&uelf_out);
 
-    log_normal("upatch-build executes successful.\n");
+    log_normal("Done\n");
     return 0;
 }
