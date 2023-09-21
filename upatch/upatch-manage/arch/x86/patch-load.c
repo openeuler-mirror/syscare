@@ -198,7 +198,7 @@ int apply_relocate_add(struct upatch_load_info *info, Elf64_Shdr *sechdrs,
                 goto overflow;
             /* G + GOT + A*/
             val = sym->st_value + rel[i].r_addend;
-            fallthrough;
+            /* fallthrough */
         case R_X86_64_PC32:
         case R_X86_64_PLT32:
             if (*(u32 *)loc != 0)

@@ -520,6 +520,7 @@ static int uprobe_patch_handler(struct uprobe_consumer *self, struct pt_regs *re
     case UPATCH_STATE_ACTIVED:
         if (upatch_mod->real_state < UPATCH_STATE_ACTIVED)
             need_active = true;
+            /* fallthrough */
     case UPATCH_STATE_RESOLVED:
     case UPATCH_STATE_ATTACHED:
         if (upatch_mod->real_state < UPATCH_STATE_RESOLVED)
