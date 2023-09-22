@@ -2,6 +2,7 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
 
+use lazy_static::lazy_static;
 use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
     fs,
@@ -14,7 +15,9 @@ use crate::{
     package::{PackageBuildRoot, PackageBuilder},
 };
 
-const RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
+lazy_static! {
+    static ref RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
+}
 
 pub struct RpmPackageBuilder<'a> {
     build_root: &'a PackageBuildRoot,
@@ -28,7 +31,7 @@ impl<'a> RpmPackageBuilder<'a> {
 
 impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_prepare(&self, spec_file: &Path) -> Result<()> {
-        Ok(RPM_BUILD
+        RPM_BUILD
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
@@ -36,7 +39,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
                     .arg("-bp")
                     .arg(spec_file),
             )?
-            .check_exit_code()?)
+            .check_exit_code()
     }
 
     fn build_source_package(

@@ -1,19 +1,25 @@
 use std::ffi::{OsStr, OsString};
 use std::path::Path;
 
-use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-use crate::util::os_str::OsStringExt;
+use anyhow::Result;
+use lazy_static::lazy_static;
+
+lazy_static! {
+    static ref KEXEC: ExternCommand = ExternCommand::new("kexec");
+    static ref SYSTEMCTL: ExternCommand = ExternCommand::new("systemcl");
+}
 
 use super::platform;
-
-const KEXEC: ExternCommand = ExternCommand::new("kexec");
-const SYSTEMCTL: ExternCommand = ExternCommand::new("systemctl");
+use crate::util::{
+    ext_cmd::{ExternCommand, ExternCommandArgs},
+    os_str::OsStringExt,
+};
 
 pub fn version() -> &'static OsStr {
     platform::release()
 }
 
-pub fn load<P, Q>(kernel: P, initramfs: Q) -> std::io::Result<()>
+pub fn load<P, Q>(kernel: P, initramfs: Q) -> Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
@@ -28,12 +34,14 @@ where
     exit_status.check_exit_code()
 }
 
-pub fn systemd_exec() -> std::io::Result<()> {
-    let exit_status = SYSTEMCTL.execvp(ExternCommandArgs::new().arg("kexec"))?;
-    exit_status.check_exit_code()
+pub fn systemd_exec() -> Result<()> {
+    SYSTEMCTL
+        .execvp(ExternCommandArgs::new().arg("kexec"))?
+        .check_exit_code()
 }
 
-pub fn direct_exec() -> std::io::Result<()> {
-    let exit_status = KEXEC.execvp(ExternCommandArgs::new().arg("--exec"))?;
-    exit_status.check_exit_code()
+pub fn direct_exec() -> Result<()> {
+    KEXEC
+        .execvp(ExternCommandArgs::new().arg("--exec"))?
+        .check_exit_code()
 }

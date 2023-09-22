@@ -1,6 +1,7 @@
 use std::{ffi::OsString, os::unix::prelude::OsStrExt, path::Path};
 
 use anyhow::{anyhow, bail, Context, Result};
+use lazy_static::lazy_static;
 use log::debug;
 
 use syscare_abi::PatchStatus;
@@ -16,8 +17,10 @@ use syscare_common::{
 
 use super::{KernelPatchExt, Patch, PatchDriver};
 
-const INSMOD: ExternCommand = ExternCommand::new("insmod");
-const RMMOD: ExternCommand = ExternCommand::new("rmmod");
+lazy_static! {
+    static ref INSMOD: ExternCommand = ExternCommand::new("insmod");
+    static ref RMMOD: ExternCommand = ExternCommand::new("rmmod");
+}
 
 const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
 const KPATCH_STATUS_DISABLED: &str = "0";

@@ -2,9 +2,12 @@ use std::{ffi::OsStr, path::Path};
 
 use anyhow::Result;
 
+use lazy_static::lazy_static;
 use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
 
-const TAR: ExternCommand = ExternCommand::new("tar");
+lazy_static! {
+    static ref TAR: ExternCommand = ExternCommand::new("tar");
+}
 
 pub struct TarPackage;
 

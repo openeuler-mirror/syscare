@@ -5,6 +5,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
+use lazy_static::lazy_static;
 use uuid::Uuid;
 use which::which;
 
@@ -24,6 +25,11 @@ use crate::{
 };
 
 use super::upatch_builder_args::UserPatchBuilderArguments;
+
+lazy_static! {
+    static ref UPATCH_BUILD: ExternCommand =
+        ExternCommand::new("/usr/libexec/syscare/upatch-build");
+}
 
 pub struct UserPatchBuilder<'a> {
     workdir: &'a WorkDir,
@@ -222,8 +228,6 @@ impl PatchBuilder for UserPatchBuilder<'_> {
     }
 
     fn build_patch(&self, args: &PatchBuilderArguments) -> Result<()> {
-        const UPATCH_BUILD: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-build");
-
         match args {
             PatchBuilderArguments::UserPatch(uargs) => UPATCH_BUILD
                 .execve(self.build_cmd_args(uargs), self.build_cmd_envs())?

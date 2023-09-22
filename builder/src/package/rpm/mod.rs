@@ -5,6 +5,7 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 
+use lazy_static::lazy_static;
 use syscare_abi::{PackageInfo, PackageType};
 use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
@@ -24,7 +25,9 @@ pub use spec_writer::RpmSpecWriter;
 
 use super::{ElfRelation, Package, PackageBuildRoot, DEBUGINFO_FILE_EXT};
 
-pub const RPM: ExternCommand = ExternCommand::new("rpm");
+lazy_static! {
+    pub static ref RPM: ExternCommand = ExternCommand::new("rpm");
+}
 pub const PKG_FILE_EXT: &str = "rpm";
 pub const SPEC_FILE_EXT: &str = "spec";
 pub const SPEC_TAG_VALUE_NONE: &str = "(none)";

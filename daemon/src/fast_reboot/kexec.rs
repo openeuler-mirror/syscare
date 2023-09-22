@@ -3,13 +3,16 @@ use std::path::Path;
 
 use anyhow::{ensure, Result};
 
+use lazy_static::lazy_static;
 use syscare_common::util::{
     ext_cmd::{ExternCommand, ExternCommandArgs},
     os_str::OsStringExt,
 };
 
-const KEXEC: ExternCommand = ExternCommand::new("kexec");
-const SYSTEMCTL: ExternCommand = ExternCommand::new("systemctl");
+lazy_static! {
+    static ref KEXEC: ExternCommand = ExternCommand::new("kexec");
+    static ref SYSTEMCTL: ExternCommand = ExternCommand::new("systemctl");
+}
 
 pub fn load<P, Q>(kernel: P, initramfs: Q) -> Result<()>
 where

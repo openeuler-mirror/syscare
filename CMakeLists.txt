@@ -50,7 +50,11 @@ add_subdirectory(upatch)
 # Build syscare
 add_custom_target(syscare ALL
     COMMENT "Compiling syscare..."
-    COMMAND UPATCH_VERSION=${SYSCARE_VERSION}; SYSCARE_VERSION=${SYSCARE_VERSION}; cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
+    COMMAND ${CMAKE_COMMAND} -E env
+        "SYSCARE_VERSION=${SYSCARE_VERSION}"
+        "UPATCH_VERSION=${SYSCARE_VERSION}"
+        "RUSTFLAGS=--cfg unsound_local_offset"
+        cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 

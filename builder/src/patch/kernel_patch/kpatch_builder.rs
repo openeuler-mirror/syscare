@@ -1,4 +1,5 @@
 use anyhow::{bail, Context, Result};
+use lazy_static::lazy_static;
 use log::debug;
 use uuid::Uuid;
 
@@ -21,6 +22,10 @@ use super::{
     kpatch_helper::KernelPatchHelper,
     kpatch_helper::{KPATCH_PATCH_PREFIX, KPATCH_PATCH_SUFFIX},
 };
+
+lazy_static! {
+    static ref KPATCH_BUILD: ExternCommand = ExternCommand::new("kpatch-build");
+}
 
 pub struct KernelPatchBuilder<'a> {
     workdir: &'a WorkDir,
@@ -118,8 +123,6 @@ impl PatchBuilder for KernelPatchBuilder<'_> {
     }
 
     fn build_patch(&self, args: &PatchBuilderArguments) -> Result<()> {
-        const KPATCH_BUILD: ExternCommand = ExternCommand::new("kpatch-build");
-
         match args {
             PatchBuilderArguments::KernelPatch(kargs) => KPATCH_BUILD
                 .execve(self.parse_cmd_args(kargs), self.parse_cmd_envs(kargs))?
