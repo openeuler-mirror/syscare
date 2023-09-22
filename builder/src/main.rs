@@ -67,7 +67,7 @@ impl SyscareBuilder {
         }
 
         debug!("- Collecting patch files");
-        let patch_files = PatchHelper::collect_patch_files(&self.args.patches)?;
+        let patch_files = PatchHelper::collect_patch_files(&self.args.patch)?;
         let mut patch_info = PatchInfo {
             uuid: String::default(),
             name: args.patch_name.to_owned(),
@@ -322,7 +322,7 @@ impl SyscareBuilder {
             }
         }
 
-        for patch_file in &args.patches {
+        for patch_file in &args.patch {
             if !patch_file.is_file() || fs::file_ext(patch_file) != PATCH_FILE_EXT {
                 bail!("Path \"{}\" is not a patch file", patch_file.display());
             }

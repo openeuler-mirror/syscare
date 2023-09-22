@@ -52,7 +52,7 @@ pub struct Arguments {
     pub verbose: bool,
 
     /// Patch file(s)
-    pub patches: Vec<PathBuf>,
+    pub patch: Vec<PathBuf>,
 }
 
 impl Parser<'_> for Arguments {
@@ -76,10 +76,10 @@ impl Parser<'_> for Arguments {
             },
             elf_path: ArgParserImpl::parse_args(matches, "elf_path")?,
             compiler: ArgParserImpl::parse_args(matches, "compiler")?,
+            patch: ArgParserImpl::parse_args(matches, "patch")?,
             output_dir: ArgParserImpl::parse_arg(matches, "output_dir")?,
             skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
             verbose: ArgParserImpl::is_present(matches, "verbose"),
-            patches: ArgParserImpl::parse_args(matches, "patches")?,
         })
     }
 }
@@ -118,7 +118,7 @@ impl Arguments {
             *debuginfo = real_arg(&debuginfo)?;
         }
 
-        for patch in &mut self.patches {
+        for patch in &mut self.patch {
             if !patch.is_file() {
                 bail!("Patch \"{}\" should be a file", patch.display());
             }

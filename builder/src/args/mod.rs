@@ -34,6 +34,9 @@ pub struct Arguments {
     /// Debuginfo package(s)
     pub debuginfo: Vec<PathBuf>,
 
+    /// Patch file(s)
+    pub patch: Vec<PathBuf>,
+
     /// Working directory
     pub workdir: PathBuf,
 
@@ -51,9 +54,6 @@ pub struct Arguments {
 
     /// Provide more detailed info
     pub verbose: bool,
-
-    /// Patch file(s)
-    pub patches: Vec<PathBuf>,
 }
 
 impl Parser<'_> for Arguments {
@@ -69,13 +69,13 @@ impl Parser<'_> for Arguments {
             patch_description: ArgParserImpl::parse_arg(matches, "patch_description")?,
             source: ArgParserImpl::parse_arg(matches, "source")?,
             debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
+            patch: ArgParserImpl::parse_args(matches, "patch")?,
             workdir: ArgParserImpl::parse_arg(matches, "workdir")?,
             output: ArgParserImpl::parse_arg(matches, "output")?,
             jobs: ArgParserImpl::parse_arg(matches, "jobs")?,
             skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
             skip_cleanup: ArgParserImpl::is_present(matches, "skip_cleanup"),
             verbose: ArgParserImpl::is_present(matches, "verbose"),
-            patches: ArgParserImpl::parse_args(matches, "patches")?,
         })
     }
 }
@@ -95,7 +95,7 @@ impl Arguments {
         }
         self.workdir = fs::normalize(&self.workdir)?;
         self.output = fs::normalize(&self.output)?;
-        for patches in &mut self.patches {
+        for patches in &mut self.patch {
             *patches = fs::normalize(&patches)?;
         }
         Ok(self)

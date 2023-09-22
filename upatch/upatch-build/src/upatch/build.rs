@@ -63,8 +63,8 @@ impl UpatchBuild {
         // check patches
         info!("Testing patch file(s)");
         let project = Project::new(&self.args.source_dir);
-        project.patch_all(&self.args.patches, Level::Debug)?;
-        project.unpatch_all(&self.args.patches, Level::Debug)?;
+        project.patch_all(&self.args.patch, Level::Debug)?;
+        project.unpatch_all(&self.args.patch, Level::Debug)?;
 
         // check compiler
         self.compiler.analyze(&self.args.compiler)?;
@@ -102,7 +102,7 @@ impl UpatchBuild {
         }
 
         // patch
-        project.patch_all(&self.args.patches, Level::Info)?;
+        project.patch_all(&self.args.patch, Level::Info)?;
 
         // build patched
         info!("Building patched {:?}", project_name);

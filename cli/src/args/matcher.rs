@@ -19,8 +19,8 @@ impl ArgMatcher {
             (settings: &[
                 AppSettings::SubcommandRequiredElseHelp,
             ])
-            (@arg socket_file: -s --socket_file value_name("SOCKET_FILE") +takes_value default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
-            (@arg verbose: -v --verbose "Provide more detailed info")
+            (@arg socket_file: short("s") long("socket-file") value_name("SOCKET_FILE") +takes_value default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
+            (@arg verbose: short("v") long("verbose") "Provide more detailed info")
             (@subcommand build =>
                 (about: "Build a patch")
                 (settings: &[
@@ -69,12 +69,12 @@ impl ArgMatcher {
             )
             (@subcommand restore =>
                 (about: "Restore all patch status")
-                (@arg accepted: --accepted "Accepted patch only")
+                (@arg accepted: long("accepted") "Accepted patch only")
             )
             (@subcommand reboot =>
                 (about: "Reboot the system")
-                (@arg target: -t --target value_name("TARGET") "Target kernel name")
-                (@arg force: -f --force "Skip all checks, force reboot")
+                (@arg target: short("t") long("target") value_name("TARGET") "Target kernel name")
+                (@arg force: short("f") long("force") "Skip all checks, force reboot")
             )
         ).get_matches()
     }
