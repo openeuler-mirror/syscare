@@ -156,7 +156,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
     fn get_patch_status(&self, mut identifier: String) -> RpcResult<Vec<PatchStateRecord>> {
         Self::normalize_identifier(&mut identifier);
         RpcFunction::call(move || -> Result<Vec<PatchStateRecord>> {
-            let patch_list = self.patch_manager.read().get_patch_list();
+            let patch_list = self.patch_manager.read().match_patch(&identifier)?;
 
             let mut result = Vec::new();
             for patch in patch_list {
