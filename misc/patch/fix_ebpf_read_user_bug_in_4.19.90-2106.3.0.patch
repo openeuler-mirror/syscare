@@ -1,0 +1,26 @@
+From 9174b3e44de4eff44dd0cb835c8aa0eebd6b091e Mon Sep 17 00:00:00 2001
+From: liqiang <liqiang64@huawei.com>
+Date: Thu, 5 Oct 2023 16:34:49 +0800
+Subject: [PATCH] fix __get_user can't access user pointer
+
+Signed-off-by: liqiang <liqiang64@huawei.com>
+---
+ mm/maccess.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/mm/maccess.c b/mm/maccess.c
+index 3538158..9059ff8 100644
+--- a/mm/maccess.c
++++ b/mm/maccess.c
+@@ -166,7 +166,7 @@ long strncpy_from_unsafe(char *dst, const void *unsafe_addr, long count)
+ 	if (unlikely(count <= 0))
+ 		return 0;
+ 
+-	set_fs(KERNEL_DS);
++	set_fs(USER_DS);
+ 	pagefault_disable();
+ 
+ 	do {
+-- 
+2.27.0
+
