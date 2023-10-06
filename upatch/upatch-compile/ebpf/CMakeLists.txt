@@ -33,10 +33,19 @@ elseif(${CMAKE_SYSTEM_PROCESSOR} MATCHES "loongarch64")
     set(ARCH "loongarch")
 endif()
 
+execute_process(COMMAND uname -r OUTPUT_VARIABLE _KERNEL_VERSION)
+string(STRIP ${_KERNEL_VERSION} _KERNEL_VERSION)
+string(REGEX MATCH "^4\\.19" MATCHED ${_KERNEL_VERSION})
+if(MATCHED STREQUAL "4.19")
+	set(BTF_PATH "/boot/vmlinux-${_KERNEL_VERSION}")
+else()
+	set(BTF_PATH "/sys/kernel/btf/vmlinux")
+endif()
+
 function(generate_bpf_skel bpf_source bpf_headers bpf_object skel_output)
     add_custom_command(OUTPUT ${bpf_headers}
         COMMAND ${BPFTOOL_PATH} btf dump file
-            /sys/kernel/btf/vmlinux format c > ${bpf_headers}
+			${BTF_PATH} format c > ${bpf_headers}
     )
     add_custom_command(OUTPUT ${bpf_object}
         COMMAND ${CLANG_PATH} -g -O2 -target bpf -D__TARGET_ARCH_${ARCH}
@@ -67,7 +76,11 @@ generate_bpf_skel(
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
 add_executable(${UPATCH_HIJACKER_EBPF_EXE} ${UPATCH_HIJACKER_EBPF}.c ${_skel_output})
-target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE libbpf.a elf ZLIB::ZLIB)
+if(BTF_PATH STREQUAL "/sys/kernel/btf/vmlinux")
+	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE libbpf.a elf ZLIB::ZLIB)
+else()
+	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../lib/${ARCH}/libbpf.a elf ZLIB::ZLIB)
+endif()
 
 install(
     TARGETS

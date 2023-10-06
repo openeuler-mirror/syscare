@@ -14,8 +14,6 @@
 
 char LICENSE[] SEC("license") = "Dual BSD/GPL";
 
-volatile unsigned int hijacker_total_ref = 0;
-
 struct {
 	__uint(type, BPF_MAP_TYPE_HASH);
 	__uint(max_entries, UPATCH_MAX_HIJACK_ENTRY);
@@ -45,15 +43,12 @@ int tp_sys_enter_execve(struct sys_execve_enter_ctx *ctx)
 	struct upatch_entry_des *entry_des = NULL;
 	struct task_struct *tsk = NULL;
 
-	if (hijacker_total_ref == 0)
-		goto out;
-
 	tsk = (struct task_struct *)bpf_get_current_task();
 	caller_ino = BPF_CORE_READ(tsk, mm, exe_file, f_inode, i_ino);
 
 	/* make sure the size of filename > 2 */
 	__builtin_memset(&entry.name, '\x00', UPATCH_ENTRY_MAX_LEN);
-	ret = bpf_probe_read_user_str(&entry.name, UPATCH_ENTRY_MAX_LEN, ctx->filename);
+	ret = bpf_probe_read_str(&entry.name, UPATCH_ENTRY_MAX_LEN, ctx->filename);
 	if (ret < 0 || entry.name[1] == '\x00') {
 		bpf_printk("read filename failed or filename too short - %d \n", ret);
 		goto out;

@@ -214,18 +214,13 @@ int upatch_register_entry(unsigned long prey_ino, const char *prey_name,
 	if (ret)
 		return ret;
 
-	skel->bss->hijacker_total_ref ++;
 	return 0;
 }
 
 int upatch_unregister_entry(const char *prey_name, const char *hijacker_name)
 {
-	if (skel->bss->hijacker_total_ref == 0)
-		return -EPERM;
-
 	entry_put(prey_name);
 	entry_put(hijacker_name);
-	skel->bss->hijacker_total_ref --;
 	return 0;
 }
 
