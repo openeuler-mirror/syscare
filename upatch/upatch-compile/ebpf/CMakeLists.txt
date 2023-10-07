@@ -37,9 +37,14 @@ execute_process(COMMAND uname -r OUTPUT_VARIABLE _KERNEL_VERSION)
 string(STRIP ${_KERNEL_VERSION} _KERNEL_VERSION)
 string(REGEX MATCH "^4\\.19" MATCHED ${_KERNEL_VERSION})
 if(MATCHED STREQUAL "4.19")
-	set(BTF_PATH "/boot/vmlinux-${_KERNEL_VERSION}")
+    set(BTF_PATH "/boot/vmlinux-${_KERNEL_VERSION}")
+    if(NOT EXISTS ${BTF_PATH})
+        configure_file(${CMAKE_CURRENT_SOURCE_DIR}/../../../lib/${ARCH}/vmlinux
+            ${BTF_PATH}
+            COPYONLY)
+    endif()
 else()
-	set(BTF_PATH "/sys/kernel/btf/vmlinux")
+    set(BTF_PATH "/sys/kernel/btf/vmlinux")
 endif()
 
 function(generate_bpf_skel bpf_source bpf_headers bpf_object skel_output)
