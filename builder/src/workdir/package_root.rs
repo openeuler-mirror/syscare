@@ -10,14 +10,14 @@ use crate::{package::PackageBuildRoot, util};
 
 const SOURCE_DIR_NAME: &str = "source";
 const DEBUGINFO_DIR_NAME: &str = "debuginfo";
-const PATCH_DIR_NAME: &str = "patch";
+const BUILD_ROOT_DIR_NAME: &str = "patch";
 
 #[derive(Debug, Clone)]
 pub struct PackageRoot {
     pub path: PathBuf,
     pub source: PathBuf,
     pub debuginfo: PathBuf,
-    pub patch: PackageBuildRoot,
+    pub build_root: PackageBuildRoot,
 }
 
 impl PackageRoot {
@@ -25,7 +25,7 @@ impl PackageRoot {
         let path = path.as_ref().to_path_buf();
         let source = path.join(SOURCE_DIR_NAME);
         let debuginfo = path.join(DEBUGINFO_DIR_NAME);
-        let patch = PackageBuildRoot::new(path.join(PATCH_DIR_NAME))?;
+        let build_root = PackageBuildRoot::new(path.join(BUILD_ROOT_DIR_NAME))?;
 
         util::create_dir_all(&path)?;
         util::create_dir_all(&source)?;
@@ -35,7 +35,7 @@ impl PackageRoot {
             path,
             source,
             debuginfo,
-            patch,
+            build_root,
         })
     }
 }

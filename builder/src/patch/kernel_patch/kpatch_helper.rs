@@ -8,8 +8,7 @@ use syscare_common::util::{
 };
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
-pub const KPATCH_PATCH_PREFIX: &str = "syscare";
-pub const KPATCH_PATCH_SUFFIX: &str = "ko";
+pub const KPATCH_SUFFIX: &str = "ko";
 
 lazy_static! {
     static ref MAKE: ExternCommand = ExternCommand::new("make");
@@ -51,6 +50,14 @@ impl KernelPatchHelper {
                 fuzz: false,
                 recursive: true,
             },
+        )
+    }
+
+    pub fn find_kernel_modules<P: AsRef<Path>>(directory: P) -> std::io::Result<Vec<PathBuf>> {
+        fs::list_files_by_ext(
+            directory,
+            KPATCH_SUFFIX,
+            fs::TraverseOptions { recursive: true },
         )
     }
 }

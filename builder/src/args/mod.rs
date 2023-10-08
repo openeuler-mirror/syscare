@@ -29,7 +29,7 @@ pub struct Arguments {
     pub patch_description: String,
 
     /// Source package
-    pub source: PathBuf,
+    pub source: Vec<PathBuf>,
 
     /// Debuginfo package(s)
     pub debuginfo: Vec<PathBuf>,
@@ -67,7 +67,7 @@ impl Parser<'_> for Arguments {
             patch_version: ArgParserImpl::parse_arg(matches, "patch_version")?,
             patch_release: ArgParserImpl::parse_arg(matches, "patch_release")?,
             patch_description: ArgParserImpl::parse_arg(matches, "patch_description")?,
-            source: ArgParserImpl::parse_arg(matches, "source")?,
+            source: ArgParserImpl::parse_args(matches, "source")?,
             debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
             patch: ArgParserImpl::parse_args(matches, "patch")?,
             workdir: ArgParserImpl::parse_arg(matches, "workdir")?,
@@ -89,7 +89,9 @@ impl Arguments {
     }
 
     fn normalize_pathes(mut self) -> Result<Self> {
-        self.source = fs::normalize(self.source)?;
+        for source in &mut self.source {
+            *source = fs::normalize(&source)?;
+        }
         for debuginfo in &mut self.debuginfo {
             *debuginfo = fs::normalize(&debuginfo)?;
         }

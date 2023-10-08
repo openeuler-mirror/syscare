@@ -89,14 +89,18 @@ impl KernelPatchDriver {
 
 impl PatchDriver for KernelPatchDriver {
     fn check(&self, patch: &Patch) -> Result<()> {
+        const KERNEL_NAME_PREFIX: &str = "kernel-";
+
         let kernel_version = os::kernel::version();
-        let current_kernel = OsString::from("kernel-").concat(kernel_version);
+        let current_kernel = OsString::from(KERNEL_NAME_PREFIX).concat(kernel_version);
 
         let patch_target = patch.target_pkg_name.clone();
         debug!("Patch target:   \"{}\"", patch_target);
         debug!("Current kernel: \"{}\"", current_kernel.to_string_lossy());
 
-        if patch_target.as_bytes() != current_kernel.as_bytes() {
+        if patch_target.starts_with(KERNEL_NAME_PREFIX)
+            && (patch_target.as_bytes() != current_kernel.as_bytes())
+        {
             bail!(
                 "Kpatch: Current kernel \"{}\" is incompatible with patch target \"{}\"",
                 kernel_version.to_string_lossy(),

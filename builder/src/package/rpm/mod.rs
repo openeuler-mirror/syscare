@@ -3,7 +3,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{bail, Result};
 
 use lazy_static::lazy_static;
 use syscare_abi::{PackageInfo, PackageType};
@@ -133,14 +133,10 @@ impl Package for RpmPackage {
 
         let mut elf_relations = Vec::new();
         for debuginfo in &debuginfo_files {
-            let elf_relation = ElfRelation::parse_from(debuginfo_root, package, debuginfo)
-                .with_context(|| {
-                    format!(
-                        "Failed to parse elf relation for file \"{}\"",
-                        debuginfo.display()
-                    )
-                })?;
-            elf_relations.push(elf_relation);
+            // Skip elf relation error check may cause unknown error
+            if let Ok(elf_relation) = ElfRelation::parse_from(debuginfo_root, package, debuginfo) {
+                elf_relations.push(elf_relation);
+            }
         }
         Ok(elf_relations)
     }
@@ -180,10 +176,11 @@ impl Package for RpmPackage {
         PackageBuildRoot::new(build_root)
     }
 
-    fn find_spec_file(&self, directory: &Path) -> Result<PathBuf> {
-        let spec_file = fs::find_file_by_ext(
+    fn find_spec_file(&self, directory: &Path, package_name: &str) -> Result<PathBuf> {
+        let file_name = format!("{}.{}", package_name, SPEC_FILE_EXT);
+        let spec_file = fs::find_file(
             directory,
-            SPEC_FILE_EXT,
+            file_name,
             fs::FindOptions {
                 fuzz: false,
                 recursive: false,

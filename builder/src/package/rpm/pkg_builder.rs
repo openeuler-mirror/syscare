@@ -76,15 +76,16 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
 
         let dst_pkg_name = format!(
             "{}-{}-{}-{}.src.{}",
-            build_params.patch.target.short_name(),
-            build_params.patch.name,
-            build_params.patch.version,
-            build_params.patch.release,
+            build_params.build_entry.target_pkg.short_name(),
+            build_params.patch_name,
+            build_params.patch_version,
+            build_params.patch_release,
             PKG_FILE_EXT
         );
         let dst_pkg_file = output_dir.join(dst_pkg_name);
 
-        fs::copy(src_pkg_file, dst_pkg_file).context("Cannot copy package to output directory")?;
+        fs::copy(src_pkg_file, dst_pkg_file)
+            .context("Failed to copy package to output directory")?;
 
         Ok(())
     }
@@ -94,16 +95,19 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
-                    .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+                    .arg(OsString::from("_topdir").append(&self.build_root))
                     .arg("--define")
-                    .arg("__spec_install_post %{nil}")
+                    .arg("debug_package %{nil}")
+                    .arg("--define")
+                    .arg("__spec_install_post %{__arch_install_post}")
+                    .arg("--nocheck")
                     .arg("-bb")
                     .arg(spec_file),
             )?
             .check_exit_code()?;
 
         fs::copy_dir_contents(&self.build_root.rpms, output_dir)
-            .context("Cannot copy package to output directory")?;
+            .context("Failed to copy package to output directory")?;
 
         Ok(())
     }

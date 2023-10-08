@@ -34,8 +34,8 @@ trait Package {
     ) -> Result<Vec<ElfRelation>>;
     fn extract_package(&self, pkg_path: &Path, output_dir: &Path) -> Result<()>;
     fn find_build_root(&self, directory: &Path) -> Result<PackageBuildRoot>;
-    fn find_spec_file(&self, directory: &Path) -> Result<PathBuf>;
-    fn find_source_directory(&self, directory: &Path, package_name: &str) -> Result<PathBuf>;
+    fn find_spec_file(&self, directory: &Path, pkg_name: &str) -> Result<PathBuf>;
+    fn find_source_directory(&self, directory: &Path, pkg_name: &str) -> Result<PathBuf>;
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -96,16 +96,16 @@ impl PackageImpl {
         self.inner.find_build_root(directory.as_ref())
     }
 
-    pub fn find_spec_file<P: AsRef<Path>>(&self, directory: P) -> Result<PathBuf> {
-        self.inner.find_spec_file(directory.as_ref())
+    pub fn find_spec_file<P: AsRef<Path>>(&self, directory: P, pkg_name: &str) -> Result<PathBuf> {
+        self.inner.find_spec_file(directory.as_ref(), pkg_name)
     }
 
     pub fn find_source_directory<P: AsRef<Path>>(
         &self,
         directory: P,
-        package_name: &str,
+        pkg_name: &str,
     ) -> Result<PathBuf> {
         self.inner
-            .find_source_directory(directory.as_ref(), package_name)
+            .find_source_directory(directory.as_ref(), pkg_name)
     }
 }

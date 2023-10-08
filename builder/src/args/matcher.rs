@@ -28,7 +28,7 @@ impl ArgMatcher {
             (@arg patch_version: long("patch-version") +takes_value value_name("PATCH_VERSION") default_value(DEFAULT_PATCH_VERSION) "Patch version")
             (@arg patch_release: long("patch-release") +takes_value value_name("PATCH_RELEASE") default_value(DEFAULT_PATCH_RELEASE) "Patch release")
             (@arg patch_description: long("patch-description") +takes_value value_name("PATCH_DESCRIPTION") default_value(DEFAULT_PATCH_DESCRIPTION) "Patch description")
-            (@arg source: short("s") long("source") +required +takes_value value_name("SOURCE") "Source package")
+            (@arg source: short("s") long("source") +required +takes_value +multiple value_name("SOURCE") "Source package")
             (@arg debuginfo: short("d") long("debuginfo") +required +takes_value +multiple value_name("DEBUGINFO") "Debuginfo package(s)")
             (@arg patch: short("p") long("patch") +required +takes_value +multiple value_name("PATCH") "Patch file(s)")
             (@arg workdir: long("workdir") +takes_value value_name("WORKDIR") default_value(DEFAULT_WORK_DIR) "Working directory")
