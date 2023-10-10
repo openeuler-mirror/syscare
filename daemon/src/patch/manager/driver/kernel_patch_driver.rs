@@ -48,7 +48,7 @@ impl KernelPatchDriver {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let sys_file = patch_ext.sys_file.as_path();
 
-        debug!("Reading file \"{}\"", sys_file.display());
+        debug!("Reading \"{}\"", sys_file.display());
         let status = match fs::read_to_string(sys_file) {
             Ok(str) => {
                 let status = str.trim();

@@ -1,12 +1,11 @@
-use std::{path::Path, sync::Arc};
+use std::sync::Arc;
 
 use anyhow::{Context, Result};
 
-use log::{debug, error};
 use parking_lot::RwLock;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
-use crate::patch::{Patch, PatchManager, PatchMonitor, PatchTransaction};
+use crate::patch::{Patch, PatchManager, PatchTransaction};
 
 use super::{
     function::{RpcFunction, RpcResult},
@@ -15,24 +14,11 @@ use super::{
 
 pub struct PatchSkeletonImpl {
     patch_manager: Arc<RwLock<PatchManager>>,
-    _patch_monitor: PatchMonitor,
 }
 
 impl PatchSkeletonImpl {
-    pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
-        debug!("Initializing patch manager...");
-        let patch_manager = Arc::new(RwLock::new(
-            PatchManager::new(patch_root).context("Failed to initialize patch manager")?,
-        ));
-
-        debug!("Initializing patch monitor...");
-        let _patch_monitor = PatchMonitor::new(patch_manager.clone())
-            .context("Failed to initialize patch monitor")?;
-
-        Ok(Self {
-            patch_manager,
-            _patch_monitor,
-        })
+    pub fn new(patch_manager: Arc<RwLock<PatchManager>>) -> Self {
+        Self { patch_manager }
     }
 }
 
@@ -202,13 +188,5 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 .restore_patch_status(accepted_only)
                 .context("Failed to restore patch status")
         })
-    }
-}
-
-impl Drop for PatchSkeletonImpl {
-    fn drop(&mut self) {
-        if let Err(e) = self.save_patch_status() {
-            error!("{:?}", e)
-        }
     }
 }

@@ -24,7 +24,7 @@ use driver::{KernelPatchDriver, PatchDriver, UserPatchDriver};
 pub use entity::Patch;
 pub use monitor::PatchMonitor;
 
-pub const PATCH_INFO_FILE_NAME: &str = "patch_info";
+const PATCH_INFO_FILE_NAME: &str = "patch_info";
 const PATCH_INSTALL_DIR: &str = "patches";
 const PATCH_STATUS_FILE_NAME: &str = "patch_status";
 
@@ -129,13 +129,19 @@ impl PatchManager {
             entry_map,
         };
 
-        instance
-            .restore_patch_status(PATCH_INIT_RESTORE_ACCEPTED_ONLY)
-            .context("Failed to restore patch status")?;
+        instance.restore_patch_status(PATCH_INIT_RESTORE_ACCEPTED_ONLY)?;
 
         Ok(instance)
     }
 
+    fn finallize(&mut self) {
+        if let Err(e) = self.save_patch_status() {
+            error!("{:?}", e)
+        }
+    }
+}
+
+impl PatchManager {
     pub fn match_patch(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         debug!("Matching patch by \"{}\"...", identifier);
         let match_result = match self.find_patch_by_uuid(identifier) {
@@ -172,18 +178,6 @@ impl PatchManager {
         }
 
         Ok(status)
-    }
-
-    pub fn set_patch_status(&mut self, patch: &Patch, value: PatchStatus) -> Result<()> {
-        if value == PatchStatus::Unknown {
-            bail!("Cannot set patch {} status to {}", patch, value);
-        }
-        self.entry_map
-            .get_mut(&patch.uuid)
-            .with_context(|| format!("Cannot find patch \"{}\"", patch))?
-            .status = value;
-
-        Ok(())
     }
 
     pub fn apply_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
@@ -247,29 +241,28 @@ impl PatchManager {
         serde::serialize(&status_map, &self.patch_status_file)
             .context("Failed to write patch status file")?;
 
+        fs::sync();
         info!("All patch status were saved");
         Ok(())
     }
 
     pub fn restore_patch_status(&mut self, accepted_only: bool) -> Result<()> {
+        info!("Restoring all patch status...");
+
         debug!("Reading patch status...");
-        let status_map =
-            match serde::deserialize::<HashMap<String, PatchStatus>, _>(&self.patch_status_file) {
-                Ok(map) => map,
-                Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {
-                    warn!("Cannot find patch status file");
-                    return Ok(());
-                }
-                Err(_) => {
-                    bail!("Failed to read patch status");
-                }
-            };
+        let status_file = &self.patch_status_file;
+        let status_map: HashMap<String, PatchStatus> = match status_file.exists() {
+            true => serde::deserialize(status_file).context("Failed to read patch status")?,
+            false => {
+                warn!("Cannot find patch status file");
+                return Ok(());
+            }
+        };
 
         /*
          * To ensure that we won't load multiple patches for same target at the same time,
          * we take a sort operation of the status to make sure do REMOVE operation at first
          */
-        info!("Restoring all patch status...");
         let mut restore_list = status_map
             .into_iter()
             .filter_map(|(uuid, status)| match self.find_patch_by_uuid(&uuid) {
@@ -450,6 +443,18 @@ impl PatchManager {
         }
         Ok(match_result)
     }
+
+    fn set_patch_status(&mut self, patch: &Patch, value: PatchStatus) -> Result<()> {
+        if value == PatchStatus::Unknown {
+            bail!("Cannot set patch {} status to {}", patch, value);
+        }
+        self.entry_map
+            .get_mut(&patch.uuid)
+            .with_context(|| format!("Cannot find patch \"{}\"", patch))?
+            .status = value;
+
+        Ok(())
+    }
 }
 
 impl PatchManager {
@@ -508,5 +513,11 @@ impl PatchManager {
 
     fn do_patch_decline(&mut self, patch: &Patch) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Actived)
+    }
+}
+
+impl Drop for PatchManager {
+    fn drop(&mut self) {
+        self.finallize()
     }
 }

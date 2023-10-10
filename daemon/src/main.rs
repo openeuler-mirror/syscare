@@ -14,6 +14,7 @@ use daemonize::Daemonize;
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
 use log::{error, info, LevelFilter};
+use parking_lot::RwLock;
 use signal_hook::consts::TERM_SIGNALS;
 
 use syscare_common::os;
@@ -31,6 +32,8 @@ use rpc::{
     skeleton::{FastRebootSkeleton, PatchSkeleton},
     skeleton_impl::{FastRebootSkeletonImpl, PatchSkeletonImpl},
 };
+
+use crate::patch::{PatchManager, PatchMonitor};
 
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_UMASK: u32 = 0o027;
@@ -102,10 +105,10 @@ impl Daemon {
             .context("Daemonize failed")
     }
 
-    fn initialize_skeletons(&self) -> Result<IoHandler> {
+    fn initialize_skeletons(&self, patch_manager: Arc<RwLock<PatchManager>>) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        io_handler.extend_with(PatchSkeletonImpl::new(&self.args.data_dir)?.to_delegate());
+        io_handler.extend_with(PatchSkeletonImpl::new(patch_manager).to_delegate());
         io_handler.extend_with(FastRebootSkeletonImpl.to_delegate());
 
         Ok(io_handler)
@@ -152,9 +155,19 @@ impl Daemon {
             .initialize_signal_handler()
             .context("Failed to initialize signal handler")?;
 
+        info!("Initializing patch manager...");
+        let patch_manager = Arc::new(RwLock::new(
+            PatchManager::new(&instance.args.data_dir)
+                .context("Failed to initialize patch manager")?,
+        ));
+
+        info!("Initializing patch monitor...");
+        let _patch_monitor = PatchMonitor::new(patch_manager.clone())
+            .context("Failed to initialize patch monitor")?;
+
         info!("Initializing skeletons...");
         let io_handler = instance
-            .initialize_skeletons()
+            .initialize_skeletons(patch_manager)
             .context("Failed to initialize skeleton")?;
 
         info!("Starting remote procedure call server...");
@@ -186,7 +199,7 @@ pub fn main() {
                     eprintln!("Error: {:?}", e)
                 }
                 true => {
-                    error!("{:#}", e);
+                    error!("{:?}", e);
                     error!("Daemon exited unsuccessfully");
                 }
             }
