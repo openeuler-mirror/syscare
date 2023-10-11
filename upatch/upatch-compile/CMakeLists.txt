@@ -2,13 +2,8 @@
 
 add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
 
-if(NOT ${_WITHOUT_KO})
-    add_subdirectory(ko)
-endif()
-
-if(NOT ${_WITHOUT_EBPF})
-    add_subdirectory(ebpf)
-endif()
+add_subdirectory(ko)
+add_subdirectory(ebpf)
 
 add_executable(compiler-hijacker gnu-compiler-hijacker.c)
 add_executable(as-hijacker gnu-as-hijacker.c)

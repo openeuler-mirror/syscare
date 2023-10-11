@@ -5,11 +5,13 @@ find_package(Git QUIET)
 
 project(syscare)
 
-add_compile_options(-g -Wall -O2)
-
 # Variables
 if(NOT DEFINED BUILD_VERSION)
     set(BUILD_VERSION "dev")
+endif()
+
+if(NOT DEFINED _BUILD_UPATCH)
+    set(_BUILD_UPATCH 1)
 endif()
 
 if(GIT_FOUND)
@@ -20,17 +22,12 @@ if(GIT_FOUND)
         ERROR_QUIET
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
+endif()
+
+if(DEFINED GIT_VERSION)
     set(SYSCARE_VERSION "${BUILD_VERSION}-${GIT_VERSION}")
 else()
     set(SYSCARE_VERSION "${BUILD_VERSION}")
-endif()
-
-if(NOT DEFINED _WITHOUT_EBPF)
-    set(_WITHOUT_EBPF 0)
-endif()
-
-if(NOT DEFINED _WITHOUT_KO)
-    set(_WITHOUT_KO 0)
 endif()
 
 set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_PREFIX}/bin")
@@ -41,11 +38,6 @@ message("-- Syscare verion: ${SYSCARE_VERSION}")
 message("-- Syscare binary  directory: ${SYSCARE_BINARY_DIR}")
 message("-- Syscare libexec directory: ${SYSCARE_LIBEXEC_DIR}")
 message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
-message("-- Build without ko: ${_WITHOUT_KO}")
-message("-- Build without ebpf: ${_WITHOUT_EBPF}")
-
-# Build upatch
-add_subdirectory(upatch)
 
 # Build syscare
 add_custom_target(syscare ALL
@@ -58,12 +50,16 @@ add_custom_target(syscare ALL
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
+# Build upatch
+if(${_BUILD_UPATCH})
+    add_subdirectory(upatch)
+endif()
+
 # Install binaries
 install(
     PROGRAMS
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscared
-        ${CMAKE_CURRENT_BINARY_DIR}/release/upatchd
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ
@@ -74,7 +70,6 @@ install(
 
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/release/upatch-build
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscare-build
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
@@ -87,7 +82,7 @@ install(
 # Install service
 install(
     FILES
-        ${PROJECT_SOURCE_DIR}/misc/syscare.service
+        ${CMAKE_CURRENT_LIST_DIR}/misc/syscare.service
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ

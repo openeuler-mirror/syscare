@@ -1,10 +1,7 @@
 [workspace]
 members = [
-    "abi",
-    "common",
-    "builder",
-    "cli",
-    "daemon",
+    "upatch-build",
+    "upatch-daemon",
 ]
 
 [profile.release]
@@ -12,4 +9,5 @@ opt-level = 's'
 debug = false
 rpath = false
 debug-assertions = false
+incremental = false
 overflow-checks = false
