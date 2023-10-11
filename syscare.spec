@@ -13,7 +13,7 @@
 ############################################
 Name:          syscare
 Version:       1.1.0
-Release:       5
+Release:       6
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -39,7 +39,12 @@ The host can fix the system problem without rebooting.
 mkdir -p build
 cd build
 
-cmake -DCMAKE_INSTALL_PREFIX=/usr -DBUILD_VERSION=%{build_version} -DKERNEL_VERSION=%{kernel_name} ..
+cmake \
+    -DCMAKE_INSTALL_PREFIX=/usr \
+    -DBUILD_VERSION=%{build_version} \
+    -DKERNEL_VERSION=%{kernel_name} \
+    ..
+
 make
 
 ################# Install ##################
@@ -61,9 +66,9 @@ systemctl start syscare
 
 ############### PreUninstall ###############
 %preun
+systemctl daemon-reload
 systemctl stop syscare
 systemctl disable syscare
-systemctl daemon-reload
 
 ############## PostUninstall ###############
 %postun
@@ -80,8 +85,8 @@ fi
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
 %attr(644,root,root) /usr/lib/systemd/system/syscare.service
-%attr(755,root,root) /usr/bin/syscare
 %attr(755,root,root) /usr/bin/syscared
+%attr(755,root,root) /usr/bin/syscare
 %attr(755,root,root) /usr/libexec/syscare/upatch-tool
 
 ############################################
@@ -100,6 +105,7 @@ Syscare dependency - kernel module.
 ############### PostInstall ################
 %post kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --add-module --no-initramfs
+depmod
 
 ############### PreUninstall ###############
 %preun kmod
@@ -108,6 +114,7 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules 
 ############## PostUninstall ###############
 %postun kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --remove-module --no-initramfs
+depmod
 
 ################## Files ###################
 %files kmod
@@ -135,14 +142,14 @@ Syscare patch building toolset.
 %post build
 mkdir -p /etc/syscare
 systemctl daemon-reload
-systemctl enable syscare-upatch
-systemctl start syscare-upatch
+systemctl enable upatch
+systemctl start upatch
 
 ############### PreUninstall ###############
 %preun build
-systemctl stop syscare-upatch
-systemctl disable syscare-upatch
 systemctl daemon-reload
+systemctl stop upatch
+systemctl disable upatch
 
 ############## PostUninstall ###############
 %postun build
@@ -158,7 +165,7 @@ fi
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare-upatch.service
+%attr(644,root,root) /usr/lib/systemd/system/upatch.service
 %attr(755,root,root) /usr/bin/upatchd
 %attr(755,root,root) /usr/libexec/syscare/syscare-build
 %attr(755,root,root) /usr/libexec/syscare/upatch-build
@@ -186,6 +193,7 @@ Syscare build dependency - kernel module.
 ############### PostInstall ################
 %post build-kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
+depmod
 
 ############### PreUninstall ###############
 %preun build-kmod
@@ -194,6 +202,7 @@ echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak
 ############## PostUninstall ###############
 %postun build-kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
+depmod
 
 ################## Files ###################
 %files build-kmod
@@ -232,6 +241,9 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Wed Oct 11 2023 renoseven<dev@renoseven.net> - 1.1.0-6
+- Support build patch for kernel moudules
+- Fix various issue
 * Fri Sep 22 2023 renoseven<dev@renoseven.net> - 1.1.0-5
 - Fix various issue
 * Thu Sep 21 2023 renoseven<dev@renoseven.net> - 1.1.0-4
