@@ -1,15 +1,15 @@
 use std::ffi::OsString;
 
 use anyhow::{anyhow, bail, Result};
-
 use lazy_static::lazy_static;
+
 use syscare_abi::PatchStatus;
 use syscare_common::util::{
     digest,
     ext_cmd::{ExternCommand, ExternCommandArgs},
 };
 
-use super::{Patch, PatchDriver, UserPatchExt};
+use super::{Patch, PatchDriver, UPatchDriverKmodGuard, UserPatchExt};
 
 lazy_static! {
     static ref UPATCH_TOOL: ExternCommand = ExternCommand::new("/usr/libexec/syscare/upatch-tool");
@@ -36,7 +36,17 @@ impl std::fmt::Display for UserPatchAction {
     }
 }
 
-pub struct UserPatchDriver;
+pub struct UserPatchDriver {
+    _guard: UPatchDriverKmodGuard,
+}
+
+impl UserPatchDriver {
+    pub fn new() -> Result<Self> {
+        Ok(Self {
+            _guard: UPatchDriverKmodGuard::new()?,
+        })
+    }
+}
 
 impl UserPatchDriver {
     fn do_action(patch: &Patch, action: UserPatchAction) -> Result<OsString> {

@@ -5,10 +5,18 @@ use anyhow::Result;
 use syscare_abi::{PatchInfo, PatchType, PATCH_INFO_MAGIC};
 use syscare_common::util::serde;
 
-mod ext;
-pub use ext::*;
+mod kernel_patch_ext;
+mod user_patch_ext;
+pub use kernel_patch_ext::*;
+pub use user_patch_ext::*;
 
 use super::PATCH_INFO_FILE_NAME;
+
+#[derive(Debug)]
+pub enum PatchInfoExt {
+    UserPatch(UserPatchExt),
+    KernelPatch(KernelPatchExt),
+}
 
 /// Patch management target abstraction
 #[derive(Debug)]

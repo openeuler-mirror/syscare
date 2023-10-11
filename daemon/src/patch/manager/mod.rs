@@ -14,12 +14,10 @@ use log::{debug, error, info, trace, warn};
 use syscare_abi::{PatchStatus, PatchType};
 use syscare_common::util::{fs, serde};
 
-mod dependency;
 mod driver;
 mod entity;
 mod monitor;
 
-use dependency::PatchManagerDependency;
 use driver::{KernelPatchDriver, PatchDriver, UserPatchDriver};
 pub use entity::Patch;
 pub use monitor::PatchMonitor;
@@ -35,22 +33,12 @@ const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
 const PATCH_REMOVE: TransitionAction = &PatchManager::driver_remove_patch;
 const PATCH_ACTIVE: TransitionAction = &PatchManager::driver_active_patch;
 const PATCH_DEACTIVE: TransitionAction = &PatchManager::driver_deactive_patch;
-const PATCH_ACCEPT: TransitionAction = &PatchManager::do_patch_accept;
-const PATCH_DECLINE: TransitionAction = &PatchManager::do_patch_decline;
+const PATCH_ACCEPT: TransitionAction = &PatchManager::driver_accept_patch;
+const PATCH_DECLINE: TransitionAction = &PatchManager::driver_decline_patch;
 
 const PATCH_INIT_RESTORE_ACCEPTED_ONLY: bool = true;
 
 lazy_static! {
-    static ref DRIVER_MAP: IndexMap<PatchType, Box<dyn PatchDriver>> = IndexMap::from([
-        (
-            PatchType::KernelPatch,
-            Box::new(KernelPatchDriver) as Box<dyn PatchDriver>
-        ),
-        (
-            PatchType::UserPatch,
-            Box::new(UserPatchDriver) as Box<dyn PatchDriver>
-        ),
-    ]);
     static ref TRANSITION_MAP: IndexMap<Transition, Vec<TransitionAction>> = IndexMap::from([
         (
             (PatchStatus::NotApplied, PatchStatus::Deactived),
@@ -109,26 +97,25 @@ struct PatchEntry {
 }
 
 pub struct PatchManager {
-    _dependency: PatchManagerDependency,
     patch_install_dir: PathBuf,
     patch_status_file: PathBuf,
     entry_map: IndexMap<String, PatchEntry>,
+    driver_map: IndexMap<PatchType, Box<dyn PatchDriver>>,
 }
 
 impl PatchManager {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
-        let _dependency = PatchManagerDependency::new()?;
         let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
         let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
+        let driver_map = Self::create_driver_map();
         let entry_map = Self::scan_patches(&patch_install_dir)?;
 
         let mut instance = Self {
-            _dependency,
             patch_install_dir,
             patch_status_file,
+            driver_map,
             entry_map,
         };
-
         instance.restore_patch_status(PATCH_INIT_RESTORE_ACCEPTED_ONLY)?;
 
         Ok(instance)
@@ -458,15 +445,41 @@ impl PatchManager {
 }
 
 impl PatchManager {
-    fn call_driver<T, U>(&self, patch: &Patch, driver_action: T) -> Result<U>
+    fn create_driver_map() -> IndexMap<PatchType, Box<dyn PatchDriver>> {
+        let mut driver_map = IndexMap::new();
+
+        debug!("Initializing kernel patch driver...");
+        driver_map.insert(
+            PatchType::KernelPatch,
+            Box::new(KernelPatchDriver) as Box<dyn PatchDriver>,
+        );
+
+        debug!("Initializing user patch driver...");
+        match UserPatchDriver::new().context("Failed to initialize user patch driver") {
+            Ok(upatch_driver) => {
+                driver_map.insert(
+                    PatchType::UserPatch,
+                    Box::new(upatch_driver) as Box<dyn PatchDriver>,
+                );
+            }
+            Err(e) => {
+                error!("{:?}", e);
+            }
+        }
+
+        driver_map
+    }
+
+    fn call_driver<'a, T, U>(&'a self, patch: &Patch, driver_action: T) -> Result<U>
     where
-        T: FnOnce(&'static dyn PatchDriver, &Patch) -> Result<U>,
+        T: FnOnce(&'a dyn PatchDriver, &Patch) -> Result<U>,
     {
         let patch_type = patch.kind();
-        let driver = DRIVER_MAP
+        let driver = self
+            .driver_map
             .get(&patch_type)
             .map(Box::deref)
-            .with_context(|| format!("Failed to get driver of {}", patch_type))?;
+            .with_context(|| format!("Driver: Failed to get {} driver", patch_type))?;
 
         driver_action(driver, patch)
     }
@@ -507,11 +520,11 @@ impl PatchManager {
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn do_patch_accept(&mut self, patch: &Patch) -> Result<()> {
+    fn driver_accept_patch(&mut self, patch: &Patch) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Accepted)
     }
 
-    fn do_patch_decline(&mut self, patch: &Patch) -> Result<()> {
+    fn driver_decline_patch(&mut self, patch: &Patch) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 }

@@ -6,7 +6,7 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use log::{error, info};
+use log::{debug, error};
 
 const KMOD_NAME: &str = "upatch";
 const KMOD_SYS_PATH: &str = "/sys/module/upatch";
@@ -19,22 +19,22 @@ enum ModuleOperation {
 }
 
 /// An RAII guard of the `upatch` kernel module.
-pub struct KernelModuleGuard;
+pub struct UPatchDriverKmodGuard;
 
-impl KernelModuleGuard {
+impl UPatchDriverKmodGuard {
     pub fn new() -> Result<Self> {
-        if !Self::exists() {
-            info!("Loading kernel module...");
-            Self::load().context("Failed to load kernel module")?;
+        if !Self::module_exists() {
+            debug!("Loading upatch kernel module...");
+            Self::load().context("Failed to load upatch kernel module")?;
         }
 
         Ok(Self)
     }
 }
 
-impl KernelModuleGuard {
+impl UPatchDriverKmodGuard {
     #[inline]
-    fn exists() -> bool {
+    fn module_exists() -> bool {
         Path::new(KMOD_SYS_PATH).exists()
     }
 
@@ -69,10 +69,10 @@ impl KernelModuleGuard {
     }
 }
 
-impl Drop for KernelModuleGuard {
+impl Drop for UPatchDriverKmodGuard {
     fn drop(&mut self) {
-        if Self::exists() {
-            info!("Unloading kernel module...");
+        if Self::module_exists() {
+            debug!("Unloading unload kernel module...");
             if let Err(e) = Self::unload().context("Failed to unload kernel module") {
                 error!("{:?}", e);
             }
@@ -82,5 +82,5 @@ impl Drop for KernelModuleGuard {
 
 #[test]
 fn test() -> Result<()> {
-    KernelModuleGuard::new().map(|_| ())
+    UPatchDriverKmodGuard::new().map(|_| ())
 }
