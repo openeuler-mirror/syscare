@@ -1,12 +1,14 @@
 use anyhow::Result;
-use log::info;
+use log::{debug, info};
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 use syscare_common::util::fs;
 
-use crate::{args::SubCommand, rpc::PatchProxy};
+use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::PatchProxy};
 
 use super::CommandExecutor;
+
+const PATCH_OP_LOCK_PATH: &str = "/tmp/syscare_patch_op.lock";
 
 pub struct PatchCommandExecutor {
     proxy: PatchProxy,
@@ -102,29 +104,50 @@ impl CommandExecutor for PatchCommandExecutor {
                 Self::show_patch_list(patch_list);
             }
             SubCommand::Apply { identifier } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let result_list = self.proxy.apply_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Remove { identifier } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let result_list = self.proxy.remove_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Active { identifier } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let result_list = self.proxy.active_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Deactive { identifier } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let result_list = self.proxy.deactive_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Accept { identifier } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let result_list = self.proxy.accept_patch(identifier)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Save => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 self.proxy.save_patch_status()?;
             }
             SubCommand::Restore { accepted } => {
+                debug!("Acquiring exclusive file lock...");
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
                 let accepted_only = *accepted;
                 self.proxy.restore_patch_status(accepted_only)?;
             }

@@ -14,11 +14,8 @@ use executor::{
     build::BuildCommandExecutor, patch::PatchCommandExecutor, reboot::RebootCommandExecutor,
     CommandExecutor,
 };
-use flock::ExclusiveFileLockGuard;
 use logger::Logger;
 use rpc::{PatchProxy, RebootProxy, RpcRemote};
-
-const CLI_LOCK_FILE_PATH: &str = "/tmp/syscare.lock";
 
 struct SyscareCLI {
     args: Arguments,
@@ -34,9 +31,6 @@ impl SyscareCLI {
             false => LevelFilter::Info,
         })?;
         debug!("Start with {:#?}", instance.args);
-
-        debug!("Acquiring exclusive file lock...");
-        let _guard = ExclusiveFileLockGuard::new(CLI_LOCK_FILE_PATH)?;
 
         debug!("Initializing remote procedure call client...");
         let remote = Rc::new(RpcRemote::new(&instance.args.socket_file));
