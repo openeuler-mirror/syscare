@@ -2,13 +2,11 @@ use anyhow::Result;
 
 use syscare_abi::PatchStatus;
 
-mod kpatch_driver;
-mod upatch_driver;
-mod upatch_driver_guard;
+mod kpatch;
+mod upatch;
 
-pub use kpatch_driver::*;
-pub use upatch_driver::*;
-use upatch_driver_guard::*;
+pub use kpatch::*;
+pub use upatch::*;
 
 use super::entity::*;
 
