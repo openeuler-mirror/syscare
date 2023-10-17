@@ -1,28 +1,35 @@
 # SPDX-License-Identifier: GPL-2.0
 
-set(UPATCH_KMOD "upatch.ko")
+set(UPATCH_MANAGE "upatch-manage")
 
-if (DEFINED KERNEL_VERSION)
-    set(KERNEL_BUILD /lib/modules/${KERNEL_VERSION}/build)
-    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION} kernel=${KERNEL_BUILD})
-else()
-    set(UPATCH_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION})
-endif()
+EXECUTE_PROCESS(COMMAND uname -m
+                OUTPUT_VARIABLE ARCH
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
 
-add_custom_target(upatch-kmod ALL
-    COMMENT           "Compiling upatch-kmod..."
-    BYPRODUCTS        ${UPATCH_KMOD}
-    COMMAND           ${UPATCH_KMOD_CMD}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+set(ARCH_PATH arch/${ARCH})
+
+include_directories(
+    arch/${ARCH}/
+    ./
 )
 
+file(GLOB HOST_SRC_FILES
+    arch/${ARCH}/*.c
+    *.c
+)
+
+add_compile_options(-g -Wall)
+add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
+add_executable(${UPATCH_MANAGE} ${HOST_SRC_FILES})
+target_link_libraries(${UPATCH_MANAGE} elf)
+
 install(
-    FILES
-        ${UPATCH_KMOD}
+    TARGETS
+        ${UPATCH_MANAGE}
     PERMISSIONS
-        OWNER_WRITE OWNER_READ
-        GROUP_READ
-        WORLD_READ
+        OWNER_EXECUTE OWNER_WRITE OWNER_READ
+        GROUP_EXECUTE GROUP_READ
+        WORLD_READ WORLD_EXECUTE
     DESTINATION
         ${SYSCARE_LIBEXEC_DIR}
 )

@@ -85,15 +85,17 @@ struct list_head* patch_symbols_resolve(const char *target_elf, const char *patc
 	if (min_addr == -1) {
 		goto out;
 	}
-	log_normal("upatch-resolve: elf base addr is 0x%lx\n", min_addr);
 
 	num = upatch_shdr->sh_size / sizeof(*upatch_funcs);
 
+	log_normal("upatch-resolve: sh_size %lu, sizeof %lu \n", upatch_shdr->sh_size, sizeof(*upatch_funcs));
+	log_normal("upatch-resolve: elf base addr is 0x%lx, num is \n", min_addr, num);
 
 	for (int i = 0; i < num; i++) {
 		patch_symbols_t *sym = malloc(sizeof(patch_symbols_t));
 		sprintf(sym->name, "sym_%d", i);
 		sym->offset = upatch_funcs[i].old_addr - min_addr;;
+		log_normal("+upatch-resolve: sym->offset addr is 0x%lx\n", sym->offset);
 		list_add_symbol(head, sym);
 	}
 

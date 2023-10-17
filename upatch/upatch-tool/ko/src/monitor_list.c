@@ -80,11 +80,12 @@ monitor_list_entry_t* find_monitor_list(monitor_list_t *list, pid_t monitor_pid)
 	monitor_list_entry_t *tmp = NULL;
 
 	if (!list) {
+		pr_err("monitor_list is null\n");
 		goto err_out;
 	}
 
 	list_for_each_entry(tmp, &list->list_head, list_node) {
-		if (tmp->monitor_pid == monitor_pid) {
+		if (tmp) {//(tmp->monitor_pid == monitor_pid) {
 			entry = tmp;
 			break;
 		}

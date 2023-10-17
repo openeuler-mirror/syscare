@@ -10,14 +10,15 @@
 #include "list.h"
 #include "log.h"
 
-static const char *UPATCH_DEV = "/dev/upatch-manager";
+static const char *UPATCH_DEV = "/dev/upatch_manager";
 
 elf_request_t* build_elf_request(const char *elf_path, const char *patch_path, loff_t offset, pid_t monitor_pid)
 {
-	char buf[PATH_MAX];
+	char e_buf[PATH_MAX];
+	char p_buf[PATH_MAX];
 
-	char *e_path = realpath(elf_path, buf);
-	char *p_path = realpath(patch_path, buf);
+	char *e_path = realpath(elf_path, e_buf);
+	char *p_path = realpath(patch_path, p_buf);
 
 	elf_request_t *req = calloc(sizeof(elf_request_t), 1);
 	if (!req) {

@@ -8,8 +8,8 @@ use std::{
 use anyhow::{bail, Context, Result};
 use log::{debug, error};
 
-const KMOD_NAME: &str = "upatch";
-const KMOD_SYS_PATH: &str = "/sys/module/upatch";
+const KMOD_NAME: &str = "upatch_manager";
+const KMOD_SYS_PATH: &str = "/sys/module/upatch_manager";
 const CMD_MODPROBE: &str = "modprobe";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
