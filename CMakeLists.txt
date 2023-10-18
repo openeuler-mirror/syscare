@@ -47,6 +47,7 @@ add_custom_target(syscare ALL
         "UPATCH_VERSION=${SYSCARE_VERSION}"
         "RUSTFLAGS=--cfg unsound_local_offset"
         cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS upatch-tool-lib
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
