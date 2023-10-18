@@ -111,8 +111,8 @@ int handle_deregister_elf(void __user *params, monitor_list_t *mlist)
 
 	ret = upatch_uprobe_deregister(mlist, inode, req->offset, req->monitor_pid);
 	if (ret) {
-		//pr_err("upatch-manager: failed to deregister elf \"%s\", ret=%d\n",
-				//req->elf_path, ret);
+		pr_err("upatch-manager: failed to deregister elf \"%s\", ret=%d\n",
+				req->elf_path, ret);
 	}
 
 err_out:
@@ -146,7 +146,7 @@ long handle_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 		ret = upatch_monitor_register(monitor_list, current->pid);
 		break;
 	case UPATCH_DEREGISTER_MONITOR:
-		//upatch_monitor_deregister((void __user *)arg, monitor_list);
+		upatch_monitor_deregister((void __user *)arg, monitor_list);
 		break;
 	default:
 		ret = -EINVAL;

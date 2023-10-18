@@ -38,6 +38,7 @@ void free_monitor_list(monitor_list_t *list)
 
 	mutex_lock(&list->list_mutex);
 	list_for_each_entry_safe(entry, tmp, &list->list_head, list_node) {
+		list_del(&entry->list_node);
 		free_monitor_list_entry(entry);
 	}
 	mutex_unlock(&list->list_mutex);
@@ -70,7 +71,6 @@ void free_monitor_list_entry(monitor_list_entry_t *entry)
 
 	free_pid_list(entry->pid_list);
 	free_uprobe_list(entry->uprobe_list);
-
 	kfree(entry);
 }
 
@@ -112,8 +112,7 @@ int insert_monitor_list(monitor_list_t *list, pid_t monitor_pid)
 	if (entry) {
 		pr_err("upatch-manager: monitor is already exist, monitor_pid=%d\n",
 				entry->monitor_pid);
-		ret = -EEXIST;
-		goto err_out;
+		goto add;
 	}
 
 	entry = alloc_monitor_list_entry(monitor_pid);
@@ -123,6 +122,7 @@ int insert_monitor_list(monitor_list_t *list, pid_t monitor_pid)
 		goto err_out;
 	}
 
+add:
 	list_add(&entry->list_node, &list->list_head);
 
 err_out:

@@ -73,6 +73,7 @@ void free_uprobe_list(uprobe_list_t *list)
 	mutex_lock(&list->list_mutex);
 
 	list_for_each_entry_safe(entry, tmp, &list->list_head, list_node) {
+		list_del(&entry->list_node);
 		__upatch_uprobe_deregister(entry->inode, entry->offset);
 		free_uprobe_list_entry(entry);
 	}

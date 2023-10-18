@@ -64,6 +64,7 @@ void free_pid_list(pid_list_t *list)
     mutex_lock(&list->list_mutex);
 
     list_for_each_entry_safe(entry, tmp, &list->list_head, list_node) {
+	list_del(&entry->list_node);
         free_pid_list_entry(entry);
     }
 

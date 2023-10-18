@@ -94,13 +94,6 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 		goto out;
 	}
 
-	monitor_pid = getpid();
-	ret = ioctl(upatch_fd, UPATCH_DEREGISTER_MONITOR, &monitor_pid);
-	if (ret < 0) {
-		log_warn("upatch-ioctl: register monitor ioctl failed\n");
-		goto err;
-	}
-
 	list_for_each_entry(sym, symbol_list, self) {
 		// register_elf
 		req = build_elf_request(target_path, patch_path, sym->offset, monitor_pid);
@@ -118,6 +111,14 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 		free(req);
 		req = NULL;
 	}
+
+	monitor_pid = getpid();
+	ret = ioctl(upatch_fd, UPATCH_DEREGISTER_MONITOR, &monitor_pid);
+	if (ret < 0) {
+		log_warn("upatch-ioctl: register monitor ioctl failed\n");
+		goto err;
+	}
+
 err:
 	close(upatch_fd);
 out:
