@@ -71,11 +71,6 @@ impl ArgMatcher {
                 (about: "Restore all patch status")
                 (@arg accepted: long("accepted") "Accepted patch only")
             )
-            (@subcommand reboot =>
-                (about: "Reboot the system")
-                (@arg target: short("t") long("target") value_name("TARGET") "Target kernel name")
-                (@arg force: short("f") long("force") "Skip all checks, force reboot")
-            )
         ).get_matches()
     }
 }

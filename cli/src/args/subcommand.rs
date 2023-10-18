@@ -61,10 +61,6 @@ impl Parser<'_> for SubCommand {
             ("restore", Some(cmd_matches)) => Self::Restore {
                 accepted: ArgParserImpl::is_present(cmd_matches, "accepted"),
             },
-            ("reboot", Some(cmd_matches)) => Self::Reboot {
-                target: ArgParserImpl::parse_arg(cmd_matches, "target").ok(),
-                force: ArgParserImpl::is_present(cmd_matches, "force"),
-            },
             (cmd_name, _) => bail!("Subcommand \"{}\" is invalid", cmd_name),
         };
 
