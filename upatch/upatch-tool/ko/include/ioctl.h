@@ -15,7 +15,7 @@
 typedef struct elf_request {
     char elf_path[PATH_MAX];
     loff_t offset;
-    pid_t monitor_pid;
+    pid_t monitor_pid;// unactive pid
     char patch_path[PATH_MAX];
 } elf_request_t;
 
@@ -26,6 +26,8 @@ typedef struct elf_request {
 #define UPATCH_GET_PID			_IOW(UPATCH_IOCTL_MAGIC, 0x9, struct upatch_pid *)
 #define UPATCH_REGISTER_MONITOR		_IO(UPATCH_IOCTL_MAGIC, 0x10)
 #define UPATCH_DEREGISTER_MONITOR	_IO(UPATCH_IOCTL_MAGIC, 0x11)
+#define UPATCH_ACTIVE_PATCH		_IOW(UPATCH_IOCTL_MAGIC, 0x12, const elf_request_t *)
+#define UPATCH_REMOVE_PATCH		_IOW(UPATCH_IOCTL_MAGIC, 0x13, const elf_request_t *)
 
 long handle_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
 

@@ -200,10 +200,15 @@ out:
 	return ret;
 }
 
+FILE *upatch_manage_log_fd = NULL;
 int main(int argc, char *argv[])
 {
 	struct arguments arguments;
 
+	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
+
+	if (upatch_manage_log_fd < 0)
+		return -1;
 	memset(&arguments, 0, sizeof(arguments));
 	argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 	if (arguments.verbose)
@@ -224,4 +229,5 @@ int main(int argc, char *argv[])
 	default:
 		ERROR("unknown command");
 	}
+	fclose(upatch_manage_log_fd);
 }

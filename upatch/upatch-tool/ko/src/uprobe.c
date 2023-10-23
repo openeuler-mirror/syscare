@@ -63,12 +63,12 @@ static int active_patch(uprobe_list_entry_t *entry, char *pid)
 	int ret;
 	char *binary = entry->binary_path;
 	char *patch = entry->patch_path;
-	char *cmd_path = "/usr/local/libexec/syscare/upatch-manage";
-	char *cmd_envp[] = {"HOME=/", "PATH=/usr/local/libexec/syscare", NULL};
-	char *cmd_argv[] = {cmd_path, "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
+	char *cmd_path = "/usr/libexec/syscare/upatch-manage";
+	char *cmd_envp[] = {"HOME=/", "PATH=/usr/libexec/syscare", NULL};
+	char *cmd_argv[] = {cmd_path, "patch", "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
 
 	ret = call_usermodehelper(cmd_path, cmd_argv, cmd_envp, UMH_WAIT_EXEC);
-	pr_info("upatch-manager: run %s with UMH_WAIT_EXEC ret %d\n", cmd_path, ret);
+	pr_info("upatch-manager: %s(%s) patch %s with UMH_WAIT_EXEC ret %d\n", binary, pid, patch, ret);
 
 	return ret;
 }
@@ -87,6 +87,7 @@ static int active_patches(uprobe_list_t *list, struct inode *inode, pid_t pid)
 
 	list_for_each_entry(entry, &list->list_head, list_node) {
 		if (entry->inode == inode) {
+			entry->pid = pid;
 			if (active_patch(entry, pid_str) < 0)
 				goto err_out;
 		}
@@ -191,6 +192,46 @@ err:
 	return ret;
 }
 
+static int unactive_patch(uprobe_list_entry_t *entry, char *pid)
+{
+	int ret;
+	char *binary = entry->binary_path;
+	char *patch = entry->patch_path;
+	char *cmd_path = "/usr/libexec/syscare/upatch-manage";
+	char *cmd_envp[] = {"HOME=/", "PATH=/usr/libexec/syscare", NULL};
+	char *cmd_argv[] = {cmd_path, "unpatch", "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
+
+	ret = call_usermodehelper(cmd_path, cmd_argv, cmd_envp, UMH_WAIT_EXEC);
+	pr_info("upatch-manager: process %s(%s) unpatch %s with UMH_WAIT_EXEC ret %d\n", binary, pid, patch, ret);
+
+	return ret;
+}
+
+static int unactive_patches(uprobe_list_t *list, elf_request_t *req)
+{
+	uprobe_list_entry_t *entry = NULL;
+	char pid_str[128] = {0};
+
+	if (!list) {
+		goto err_out;
+	}
+
+	memset(pid_str, 0, sizeof(pid_str));
+
+	list_for_each_entry(entry, &list->list_head, list_node) {
+		if (!strncmp(req->elf_path, entry->binary_path, strlen(entry->binary_path)) &&
+			!strncmp(req->patch_path, entry->patch_path, strlen(entry->patch_path))) {
+			snprintf(pid_str, sizeof(pid_str), "%d", entry->pid);
+			if (unactive_patch(entry, pid_str) < 0)
+				goto err_out;
+			break;
+		}
+	}
+	return 0;
+err_out:
+	return -1;
+}
+
 int __upatch_uprobe_deregister(struct inode *inode, loff_t offset)
 {
 	int ret = 0;
@@ -209,10 +250,11 @@ int __upatch_uprobe_deregister(struct inode *inode, loff_t offset)
 err_out:
 	return ret;
 }
-int upatch_uprobe_deregister(monitor_list_t *mlist, struct inode *inode, loff_t offset, pid_t mpid)
+int upatch_uprobe_deregister(monitor_list_t *mlist, struct inode *inode, loff_t offset, pid_t mpid, elf_request_t *req)
 {
 	int ret = -EFAULT;
 	monitor_list_entry_t *entry = NULL;
+	uprobe_list_entry_t *uentry = NULL;
 
 	if (!mlist)
 		goto err;
@@ -222,12 +264,23 @@ int upatch_uprobe_deregister(monitor_list_t *mlist, struct inode *inode, loff_t 
 		goto err;
 	}
 	if (!entry->uprobe_list) {
-		entry->uprobe_list = alloc_uprobe_list();
-		if (!entry->uprobe_list)
-			goto err;
+		return 0;
+	}
+	ret = __upatch_uprobe_deregister(inode, offset);
+	if (ret < 0) {
+		goto err;
+	}
+
+	//get pid
+	list_for_each_entry(uentry, &entry->uprobe_list->list_head, list_node) {
+		if (strncmp(uentry->binary_path, req->elf_path, strlen(req->elf_path)) ||
+			strncmp(uentry->patch_path, req->patch_path, strlen(req->patch_path)))
+			continue;
+		req->monitor_pid = uentry->pid;
+		pr_info("upatch-manager: get upatch process pid %d\n", req->monitor_pid);
+		break;
 	}
 	remove_uprobe_list(entry->uprobe_list, inode, offset);
-	ret = __upatch_uprobe_deregister(inode, offset);
 err:
 	return ret;
 }

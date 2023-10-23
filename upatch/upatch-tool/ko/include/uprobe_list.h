@@ -26,6 +26,7 @@ typedef struct uprobe_list_entry {
     loff_t offset;
     char binary_path[PATH_MAX];
     char patch_path[PATH_MAX];
+    pid_t pid;
 } uprobe_list_entry_t;
 
 uprobe_list_t* alloc_uprobe_list(void);

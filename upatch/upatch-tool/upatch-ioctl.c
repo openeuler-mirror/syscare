@@ -108,9 +108,24 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 			log_warn("upatch-ioctl: deregister elf ioctl failed\n");
 			goto err;
 		}
+		monitor_pid = req->monitor_pid;
 		free(req);
 		req = NULL;
 	}
+
+	req = build_elf_request(target_path, patch_path, 0, monitor_pid);
+	if (!req) {
+		log_warn("upatch-ioctl:build request failed\n");
+		goto err;
+	}
+	ret = ioctl(upatch_fd, UPATCH_REMOVE_PATCH, req);
+	if (ret < 0) {
+		free(req);
+		log_warn("upatch-ioctl: remove patch ioctl failed\n");
+		goto err;
+	}
+	free(req);
+	req = NULL;
 
 	monitor_pid = getpid();
 	ret = ioctl(upatch_fd, UPATCH_DEREGISTER_MONITOR, &monitor_pid);
