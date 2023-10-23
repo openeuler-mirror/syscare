@@ -304,7 +304,7 @@ struct list_head *meta_get_elf_symbols(const char *elf_path)
 				meta_put_symbols(syms);
 				return NULL;
 			}
-			log_debug(" ++add sym:%s offset:%s to result.\n", sym->name, sym->offset);
+			log_debug(" ++add sym:%s offset:%lu to result.\n", sym->name, sym->offset);
 		}
 	}
 	return syms;
