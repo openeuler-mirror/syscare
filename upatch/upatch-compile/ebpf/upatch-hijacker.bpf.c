@@ -48,7 +48,7 @@ int tp_sys_enter_execve(struct sys_execve_enter_ctx *ctx)
 
 	/* make sure the size of filename > 2 */
 	__builtin_memset(&entry.name, '\x00', UPATCH_ENTRY_MAX_LEN);
-	ret = bpf_probe_read_str(&entry.name, UPATCH_ENTRY_MAX_LEN, ctx->filename);
+	ret = bpf_probe_read_user_str(&entry.name, UPATCH_ENTRY_MAX_LEN, ctx->filename);
 	if (ret < 0 || entry.name[1] == '\x00') {
 		bpf_printk("read filename failed or filename too short - %d \n", ret);
 		goto out;
