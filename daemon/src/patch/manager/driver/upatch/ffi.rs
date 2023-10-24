@@ -1,8 +1,8 @@
-use std::ffi::{c_char, c_int, CString};
-use std::os::unix::prelude::OsStrExt;
-use std::path::Path;
+use std::{ffi::CString, os::unix::prelude::OsStrExt, path::Path};
 
 use anyhow::{Context, Result};
+use libc::{c_char, c_int, size_t};
+
 use syscare_abi::PatchStatus;
 
 pub trait ToCString {
@@ -42,8 +42,13 @@ impl From<UpatchStatus> for PatchStatus {
     }
 }
 
-#[link(name="upatch-tool-lib", kind="static")]
 extern "C" {
+    pub fn upatch_check(
+        target_elf: *const c_char,
+        patch_file: *const c_char,
+        err_msg: *mut c_char,
+        max_len: size_t,
+    ) -> c_int;
     pub fn upatch_load(
         uuid: *const c_char,
         target_elf: *const c_char,

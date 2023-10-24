@@ -4,6 +4,9 @@ use super::function::{rpc, RpcResult};
 
 #[rpc(server)]
 pub trait PatchSkeleton {
+    #[rpc(name = "check_patch")]
+    fn check_patch(&self, identifier: String) -> RpcResult<()>;
+
     #[rpc(name = "apply_patch")]
     fn apply_patch(&self, identifier: String) -> RpcResult<Vec<PatchStateRecord>>;
 

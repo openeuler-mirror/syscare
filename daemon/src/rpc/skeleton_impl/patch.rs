@@ -61,6 +61,18 @@ impl PatchSkeletonImpl {
 }
 
 impl PatchSkeleton for PatchSkeletonImpl {
+    fn check_patch(&self, mut identifier: String) -> RpcResult<()> {
+        Self::normalize_identifier(&mut identifier);
+        RpcFunction::call(move || -> Result<()> {
+            let mut patch_manager = self.patch_manager.write();
+            for patch in patch_manager.match_patch(&identifier)? {
+                patch_manager.check_patch(&patch)?;
+            }
+
+            Ok(())
+        })
+    }
+
     fn apply_patch(&self, mut identifier: String) -> RpcResult<Vec<PatchStateRecord>> {
         Self::normalize_identifier(&mut identifier);
         RpcFunction::call(move || -> Result<Vec<PatchStateRecord>> {

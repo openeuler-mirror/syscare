@@ -263,12 +263,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "dunce"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e86b07356baf1cc7058c95807ffba0bebe0c8cadd0df4c40b292c86194eabb37"
-
-[[package]]
 name = "either"
 version = "1.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1152,9 +1146,9 @@ name = "syscared"
 version = "1.1.0"
 dependencies = [
  "anyhow",
+ "cc",
  "clap",
  "daemonize",
- "dunce",
  "flexi_logger",
  "indexmap",
  "inotify",
@@ -1162,6 +1156,7 @@ dependencies = [
  "jsonrpc-derive",
  "jsonrpc-ipc-server",
  "lazy_static",
+ "libc",
  "log",
  "once_cell",
  "parking_lot 0.10.2",

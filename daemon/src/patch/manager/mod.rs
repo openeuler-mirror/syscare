@@ -29,6 +29,7 @@ const PATCH_STATUS_FILE_NAME: &str = "patch_status";
 type Transition = (PatchStatus, PatchStatus);
 type TransitionAction = &'static (dyn Fn(&mut PatchManager, &Patch) -> Result<()> + Sync);
 
+const PATCH_CHECK: TransitionAction = &PatchManager::driver_check_patch;
 const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
 const PATCH_REMOVE: TransitionAction = &PatchManager::driver_remove_patch;
 const PATCH_ACTIVE: TransitionAction = &PatchManager::driver_active_patch;
@@ -42,15 +43,15 @@ lazy_static! {
     static ref TRANSITION_MAP: IndexMap<Transition, Vec<TransitionAction>> = IndexMap::from([
         (
             (PatchStatus::NotApplied, PatchStatus::Deactived),
-            vec![PATCH_APPLY]
+            vec![PATCH_CHECK, PATCH_APPLY]
         ),
         (
             (PatchStatus::NotApplied, PatchStatus::Actived),
-            vec![PATCH_APPLY, PATCH_ACTIVE]
+            vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE]
         ),
         (
             (PatchStatus::NotApplied, PatchStatus::Accepted),
-            vec![PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT]
+            vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT]
         ),
         (
             (PatchStatus::Deactived, PatchStatus::NotApplied),
@@ -165,6 +166,11 @@ impl PatchManager {
         }
 
         Ok(status)
+    }
+
+    pub fn check_patch(&mut self, patch: &Patch) -> Result<()> {
+        info!("Check patch \"{}\"", patch);
+        self.driver_check_patch(patch)
     }
 
     pub fn apply_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
@@ -489,10 +495,12 @@ impl PatchManager {
             .with_context(|| format!("Driver: Failed to get patch \"{}\" status", patch))
     }
 
-    fn driver_apply_patch(&mut self, patch: &Patch) -> Result<()> {
+    fn driver_check_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::check)
-            .with_context(|| format!("Driver: Patch \"{}\" check failed", patch))?;
+            .with_context(|| format!("Driver: Patch \"{}\" check failed", patch))
+    }
 
+    fn driver_apply_patch(&mut self, patch: &Patch) -> Result<()> {
         self.call_driver(patch, PatchDriver::apply)
             .with_context(|| format!("Driver: Failed to apply patch \"{}\"", patch))?;
 
