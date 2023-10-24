@@ -95,7 +95,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
             .execvp(
                 ExternCommandArgs::new()
                     .arg("--define")
-                    .arg(OsString::from("_topdir").append(&self.build_root))
+                    .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
                     .arg("--define")
                     .arg("debug_package %{nil}")
                     .arg("--define")
