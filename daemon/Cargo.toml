@@ -27,3 +27,6 @@ inotify            = { version = "0.8" }
 jsonrpc-core       = { version = "15.1" }
 jsonrpc-derive     = { version = "15.1" }
 jsonrpc-ipc-server = { version = "15.1" }
+
+[build-dependencies]
+dunce = "0.1.1"

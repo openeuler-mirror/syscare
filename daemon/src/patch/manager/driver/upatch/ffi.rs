@@ -42,14 +42,15 @@ impl From<UpatchStatus> for PatchStatus {
     }
 }
 
+#[link(name="upatch-tool-lib", kind="static")]
 extern "C" {
-    pub fn patch_load(
+    pub fn upatch_load(
         uuid: *const c_char,
         target_elf: *const c_char,
         patch_file: *const c_char,
     ) -> c_int;
-    pub fn patch_remove(uuid: *const c_char) -> c_int;
-    pub fn patch_active(uuid: *const c_char) -> c_int;
-    pub fn patch_deactive(uuid: *const c_char) -> c_int;
-    pub fn read_patch_status(uuid: *const c_char) -> UpatchStatus;
+    pub fn upatch_remove(uuid: *const c_char) -> c_int;
+    pub fn upatch_active(uuid: *const c_char) -> c_int;
+    pub fn upatch_deactive(uuid: *const c_char) -> c_int;
+    pub fn upatch_status(uuid: *const c_char) -> UpatchStatus;
 }

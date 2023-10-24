@@ -42,7 +42,7 @@ impl PatchDriver for UserPatchDriver {
     fn status(&self, patch: &Patch) -> Result<PatchStatus> {
         let uuid = patch.uuid.as_str().to_cstring()?;
         unsafe {
-            let status = ffi::read_patch_status(uuid.as_ptr());
+            let status = ffi::upatch_status(uuid.as_ptr());
             Ok(status.into())
         }
     }
@@ -55,7 +55,7 @@ impl PatchDriver for UserPatchDriver {
         let target_elf = patch_ext.target_elf.as_path().to_cstring()?;
 
         unsafe {
-            let ret_val = ffi::patch_load(
+            let ret_val = ffi::upatch_load(
                 patch_uuid.as_ptr(),
                 target_elf.as_ptr(),
                 patch_file.as_ptr(),
@@ -68,7 +68,7 @@ impl PatchDriver for UserPatchDriver {
     fn remove(&self, patch: &Patch) -> Result<()> {
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
         unsafe {
-            let ret_val = ffi::patch_remove(patch_uuid.as_ptr());
+            let ret_val = ffi::upatch_remove(patch_uuid.as_ptr());
             ensure!(ret_val == 0, std::io::Error::from_raw_os_error(ret_val));
         }
         Ok(())
@@ -77,7 +77,7 @@ impl PatchDriver for UserPatchDriver {
     fn active(&self, patch: &Patch) -> Result<()> {
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
         unsafe {
-            let ret_val = ffi::patch_active(patch_uuid.as_ptr());
+            let ret_val = ffi::upatch_active(patch_uuid.as_ptr());
             ensure!(ret_val == 0, std::io::Error::from_raw_os_error(ret_val));
         }
         Ok(())
@@ -86,7 +86,7 @@ impl PatchDriver for UserPatchDriver {
     fn deactive(&self, patch: &Patch) -> Result<()> {
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
         unsafe {
-            let ret_val = ffi::patch_deactive(patch_uuid.as_ptr());
+            let ret_val = ffi::upatch_deactive(patch_uuid.as_ptr());
             ensure!(ret_val == 0, std::io::Error::from_raw_os_error(ret_val));
         }
         Ok(())

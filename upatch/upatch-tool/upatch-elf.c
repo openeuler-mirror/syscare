@@ -51,11 +51,11 @@ static int open_elf(struct elf_info *einfo, const char *name)
 	// TODO: check ELF
 	fd = open(name, O_RDONLY);
 	if (fd == -1)
-		ERROR("open %s failed with errno %d \n", name, errno);
+		log_warn("open %s failed with errno %d \n", name, errno);
 
 	ret = stat(name, &st);
 	if (ret)
-		ERROR("get %s stat failed with errno %d \n", name, errno);
+		log_warn("get %s stat failed with errno %d \n", name, errno);
 
 	ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
 	if (ret)
@@ -80,11 +80,11 @@ static int open_elf(struct elf_info *einfo, const char *name)
 
 	if (einfo->num_build_id == 0) {
 		ret = -EINVAL;
-		log_error("no %s found \n", BUILD_ID_NAME);
+		log_warn("no %s found \n", BUILD_ID_NAME);
 		goto out;
 	}
 
-	log_error("no %ld found \n", einfo->inode);
+	log_warn("no %ld found \n", einfo->inode);
 
 	ret = 0;
 out:
