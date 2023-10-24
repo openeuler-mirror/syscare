@@ -8,10 +8,11 @@ if (DEFINED KERNEL_VERSION)
 else()
     set(UPATCH_TOOL_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION})
 endif()
-
+set(UPATHCH_TOOL_KMOD_CLEAN_CMD make clean)
 add_custom_target(upatch-tool-kmod ALL
     COMMENT           "Compiling upatch-tool-kmod..."
     BYPRODUCTS        ${UPATCH_TOOL_KMOD}
+    COMMAND           ${UPATHCH_TOOL_KMOD_CLEAN_CMD}
     COMMAND           ${UPATCH_TOOL_KMOD_CMD}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
