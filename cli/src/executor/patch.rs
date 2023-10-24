@@ -103,6 +103,9 @@ impl CommandExecutor for PatchCommandExecutor {
                 let patch_list = self.proxy.get_patch_list()?;
                 Self::show_patch_list(patch_list);
             }
+            SubCommand::Check { identifier } => {
+                self.proxy.check_patch(identifier)?;
+            }
             SubCommand::Apply { identifier } => {
                 debug!("Acquiring exclusive file lock...");
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;

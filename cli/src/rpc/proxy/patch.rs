@@ -17,6 +17,12 @@ impl PatchProxy {
     }
 
     #[named]
+    pub fn check_patch(&self, identifier: &str) -> Result<()> {
+        self.remote
+            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    }
+
+    #[named]
     pub fn apply_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
         self.remote
             .call_with_args(function_name!(), RpcArguments::new().arg(identifier))

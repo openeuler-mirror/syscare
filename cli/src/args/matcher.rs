@@ -44,6 +44,10 @@ impl ArgMatcher {
             (@subcommand list =>
                 (about: "List all patches")
             )
+            (@subcommand check =>
+                (about: "Check a patch")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+            )
             (@subcommand apply =>
                 (about: "Apply a patch")
                 (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
