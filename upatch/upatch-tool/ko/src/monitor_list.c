@@ -110,22 +110,19 @@ int insert_monitor_list(monitor_list_t *list, pid_t monitor_pid)
 
 	entry = find_monitor_list(list, monitor_pid);
 	if (entry) {
-		pr_err("upatch-manager: monitor is already exist, monitor_pid=%d\n",
-				entry->monitor_pid);
-		goto add;
+		goto out;
 	}
 
 	entry = alloc_monitor_list_entry(monitor_pid);
 	if (!entry) {
 		pr_err("upatch-manager: failed to allocate monitor list entry\n");
 		ret = -ENOMEM;
-		goto err_out;
+		goto out;
 	}
 
-add:
 	list_add(&entry->list_node, &list->list_head);
 
-err_out:
+out:
 	mutex_unlock(&list->list_mutex);
 	return ret;
 }
