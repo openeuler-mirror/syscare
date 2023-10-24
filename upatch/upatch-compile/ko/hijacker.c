@@ -131,6 +131,8 @@ static int __kprobes hijack_execve_pre(struct kprobe *p, struct pt_regs *ctx)
 
     if (!entries_enabled())
         goto out;
+    if (!current->mm)
+        goto out;
 
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(5,0,0)
     /* for do_execve, filename is the first argument */
