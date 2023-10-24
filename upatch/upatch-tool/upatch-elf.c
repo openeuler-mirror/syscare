@@ -22,7 +22,7 @@
 static int read_from_offset(int fd, void **buf, int len, off_t offset)
 {
 	int ret = -1;
-	size_t size;
+	int size;
 
 	*buf = malloc(len);
 	if (*buf == NULL) {
@@ -79,7 +79,7 @@ static int open_elf(struct elf_info *einfo, const char *name)
 	}
 
 	if (einfo->num_build_id == 0) {
-		ret = -EINVAL;
+		ret = EINVAL;
 		log_warn("no %s found \n", BUILD_ID_NAME);
 		goto out;
 	}

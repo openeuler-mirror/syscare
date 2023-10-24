@@ -1,4 +1,3 @@
-#include "upatch-ioctl.h"
 
 #include <stdlib.h>
 #include <unistd.h>
@@ -9,6 +8,8 @@
 
 #include "list.h"
 #include "log.h"
+#include "upatch-meta.h"
+#include "upatch-ioctl.h"
 
 static const char *UPATCH_DEV = "/dev/upatch_manager";
 

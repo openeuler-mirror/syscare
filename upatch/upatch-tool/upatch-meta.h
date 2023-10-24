@@ -23,6 +23,12 @@ typedef struct _patch_symbols {
 	loff_t offset;
 } patch_symbols_t;
 
+typedef struct _symbol_collision {
+	struct list_head self;
+
+	char uuid[UPATCH_UUID_LEN];
+} symbol_collision;
+
 // use by create and get
 typedef struct _patch_entity {
 	char target_path[PATH_MAX];
@@ -54,6 +60,9 @@ patch_status_e meta_get_patch_status(const char *uuid);
 
 // 设置补丁状态
 int meta_set_patch_status(const char *uuid, patch_status_e status);
+
+struct list_head *meta_get_symbol_collision(const char *elf_path, struct list_head *symbols);
+void meta_put_symbol_collision(struct list_head *lst);
 
 int meta_patch_init();
 void meta_patch_fini();

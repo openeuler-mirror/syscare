@@ -45,7 +45,9 @@ int handle_get_pid(void __user *params, monitor_list_t *mlist)
                 goto out;
 	}
 
-	copy_to_user(params, (void *)&pentry->pid, sizeof(pentry->pid));
+	if (copy_to_user(params, (void *)&pentry->pid, sizeof(pentry->pid)))
+		return -EFAULT;
+
 	remove_pid_list_entry(entry->pid_list, pentry);
 out:
 	return 0;
@@ -114,7 +116,8 @@ int handle_deregister_elf(void __user *params, monitor_list_t *mlist)
 		pr_err("upatch-manager: failed to deregister elf \"%s\", ret=%d\n",
 				req->elf_path, ret);
 	}
-	copy_to_user(params, (void *)req, sizeof(*req));
+	if (copy_to_user(params, (void *)req, sizeof(*req)))
+		return -EFAULT;
 
 err_out:
 	if (inode) {
@@ -133,12 +136,12 @@ int handle_active_patch(void __user *params, monitor_list_t *mlist)
 
 static int unactive_patch(char *binary, char *patch, char *pid)
 {
-	int ret;
-	char *cmd_path = "/usr/libexec/syscare/upatch-manage";
-	char *cmd_envp[] = {"HOME=/", "PATH=/usr/libexec/syscare:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin", NULL};
-	char *cmd_argv[] = {cmd_path, "unpatch", "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
+	int ret = 0;
+	//char *cmd_path = "/usr/libexec/syscare/upatch-manage";
+	//char *cmd_envp[] = {"HOME=/", "PATH=/usr/libexec/syscare:/root/.cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/root/bin", NULL};
+	//char *cmd_argv[] = {cmd_path, "unpatch", "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
 
-	ret = call_usermodehelper(cmd_path, cmd_argv, cmd_envp, UMH_WAIT_EXEC);
+	//ret = call_usermodehelper(cmd_path, cmd_argv, cmd_envp, UMH_WAIT_EXEC);
 	pr_info("upatch-manager: %s(%s) unpatch %s with UMH_WAIT_EXEC ret %d\n", binary, pid, patch, ret);
 
 	return ret;
@@ -158,7 +161,7 @@ int handle_remove_patch(void __user *params, monitor_list_t *mlist)
 	pr_info("upatch-manager: process %s remove patch \"%s\"\n", req->elf_path, req->patch_path);
 	memset(pid, 0, sizeof(pid));
 	sprintf(pid, "%d", req->monitor_pid);
-	//ret = unactive_patch(req->elf_path, req->patch_path, pid);
+	ret = unactive_patch(req->elf_path, req->patch_path, pid);
 	return ret;
 }
 

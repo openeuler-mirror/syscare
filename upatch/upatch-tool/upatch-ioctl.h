@@ -27,10 +27,6 @@ struct upatch_pid {
 #define UPATCH_ACTIVE_PATCH		_IOW(UPATCH_IOCTL_MAGIC, 0x12, const elf_request_t *)
 #define UPATCH_REMOVE_PATCH		_IOW(UPATCH_IOCTL_MAGIC, 0x13, const elf_request_t *)
 
-
-
-long handle_ioctl(struct file *filp, unsigned int cmd, unsigned long arg);
-
 int patch_ioctl_apply(const char *target_path, const char *patch_path,
     struct list_head *symbol_list);
 

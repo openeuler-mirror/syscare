@@ -43,7 +43,7 @@ static int list_add_symbol(struct list_head *head, patch_symbols_t *sym)
 {
 	patch_symbols_t *newsym = (patch_symbols_t *)malloc(sizeof(patch_symbols_t));
 	if (newsym == NULL)
-		return -ENOMEM;
+		return ENOMEM;
 
 	memset(newsym, 0, sizeof(patch_symbols_t));
 	strncpy(newsym->name, sym->name, sizeof(newsym->name));
@@ -57,7 +57,6 @@ struct list_head* patch_symbols_resolve(const char *target_elf, const char *patc
 	struct upatch_elf uelf;
 	struct running_elf relf;
 	GElf_Shdr *upatch_shdr = NULL;
-	loff_t upatch_func_offset;
 	struct upatch_patch_func *upatch_funcs = NULL;
 	GElf_Off min_addr; // binary base
 	int num;
@@ -82,20 +81,20 @@ struct list_head* patch_symbols_resolve(const char *target_elf, const char *patc
 	upatch_shdr = &uelf.info.shdrs[uelf.index.upatch_funcs];
 	upatch_funcs = uelf.info.patch_buff + upatch_shdr->sh_offset;
 	min_addr = calculate_load_address(uelf.relf, false);
-	if (min_addr == -1) {
+	if (min_addr == (GElf_Off)-1) {
 		goto out;
 	}
 
 	num = upatch_shdr->sh_size / sizeof(*upatch_funcs);
 
-	log_normal("upatch-resolve: sh_size %lu, sizeof %lu \n", upatch_shdr->sh_size, sizeof(*upatch_funcs));
-	log_normal("upatch-resolve: elf base addr is 0x%lx, num is \n", min_addr, num);
+	log_debug("upatch-resolve: sh_size %lu, sizeof %lu \n", upatch_shdr->sh_size, sizeof(*upatch_funcs));
+	log_debug("upatch-resolve: elf base addr is 0x%lx, num is %d\n", min_addr, num);
 
 	for (int i = 0; i < num; i++) {
 		patch_symbols_t *sym = malloc(sizeof(patch_symbols_t));
 		sprintf(sym->name, "sym_%d", i);
 		sym->offset = upatch_funcs[i].old_addr - min_addr;;
-		log_normal("+upatch-resolve: sym->offset addr is 0x%lx\n", sym->offset);
+		log_debug("+upatch-resolve: sym->offset addr is 0x%lx\n", sym->offset);
 		list_add_symbol(head, sym);
 	}
 

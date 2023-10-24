@@ -55,11 +55,6 @@ enum exit_status {
 #define log_warn(format, ...) log(WARN, "%s: " format, logprefix, ##__VA_ARGS__)
 #define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
 
-//#define log(level, format, ...)                        \
-//	({                                             \
-//		if (loglevel <= (level))               \
-//			printf(format, ##__VA_ARGS__); \
-//	})
 #define log(level, format, ...)                        \
 	({                                             \
 		if (loglevel <= (level))               \

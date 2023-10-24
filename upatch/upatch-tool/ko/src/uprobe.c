@@ -51,8 +51,10 @@ void upatch_monitor_deregister(void __user *param, monitor_list_t *mlist)
 {
 	pid_t pid;
 
-	copy_from_user((void *)&pid, param, sizeof(pid));
 	if (!mlist)
+		return;
+
+	if (copy_from_user((void *)&pid, param, sizeof(pid)))
 		return;
 	pr_info("upatch-manager: deregister monitor %d\n", pid);
 	remove_monitor_list(mlist, pid);
@@ -190,46 +192,6 @@ int upatch_uprobe_register(monitor_list_t *mlist, struct inode *inode, loff_t of
 	ret = __upatch_uprobe_register(inode, offset);
 err:
 	return ret;
-}
-
-static int unactive_patch(uprobe_list_entry_t *entry, char *pid)
-{
-	int ret;
-	char *binary = entry->binary_path;
-	char *patch = entry->patch_path;
-	char *cmd_path = "/usr/libexec/syscare/upatch-manage";
-	char *cmd_envp[] = {"HOME=/", "PATH=/usr/libexec/syscare", NULL};
-	char *cmd_argv[] = {cmd_path, "unpatch", "--pid", pid, "--upatch", patch, "--binary", binary, "-v", NULL};
-
-	ret = call_usermodehelper(cmd_path, cmd_argv, cmd_envp, UMH_WAIT_EXEC);
-	pr_info("upatch-manager: process %s(%s) unpatch %s with UMH_WAIT_EXEC ret %d\n", binary, pid, patch, ret);
-
-	return ret;
-}
-
-static int unactive_patches(uprobe_list_t *list, elf_request_t *req)
-{
-	uprobe_list_entry_t *entry = NULL;
-	char pid_str[128] = {0};
-
-	if (!list) {
-		goto err_out;
-	}
-
-	memset(pid_str, 0, sizeof(pid_str));
-
-	list_for_each_entry(entry, &list->list_head, list_node) {
-		if (!strncmp(req->elf_path, entry->binary_path, strlen(entry->binary_path)) &&
-			!strncmp(req->patch_path, entry->patch_path, strlen(entry->patch_path))) {
-			snprintf(pid_str, sizeof(pid_str), "%d", entry->pid);
-			if (unactive_patch(entry, pid_str) < 0)
-				goto err_out;
-			break;
-		}
-	}
-	return 0;
-err_out:
-	return -1;
 }
 
 int __upatch_uprobe_deregister(struct inode *inode, loff_t offset)

@@ -20,7 +20,13 @@
 			   |__...						  |__...
 */
 
-typedef patch_symbols_t upatch_meta_symbol;
+struct upatch_meta_symbol {
+	struct list_head self;
+
+	char name[UPATCH_SYMBOL_NAME_MAX];
+	loff_t offset;
+	struct list_head cover; // to record symbol cover list
+};
 
 struct upatch_meta_patch {
 	struct list_head self;
@@ -83,72 +89,74 @@ static struct upatch_meta_elf *find_elf_by_path(const char *path)
 	return NULL;
 }
 
-static int list_add_symbol(struct list_head *head, patch_symbols_t *sym)
+static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sym, struct list_head *patch_list)
 {
-	upatch_meta_symbol *newsym = (upatch_meta_symbol *)malloc(sizeof(upatch_meta_symbol));
+	struct upatch_meta_symbol *newsym = (struct upatch_meta_symbol *)malloc(sizeof(struct upatch_meta_symbol));
 	if (newsym == NULL)
-		return -ENOMEM;
-	memset(newsym, 0, sizeof(upatch_meta_symbol));
+		return ENOMEM;
+	memset(newsym, 0, sizeof(struct upatch_meta_symbol));
 	strncpy(newsym->name, sym->name, sizeof(newsym->name));
 	newsym->offset = sym->offset;
 	INIT_LIST_HEAD(&newsym->self);
+	INIT_LIST_HEAD(&newsym->cover);
 	list_add(&newsym->self, head);
 	return 0;
 }
 
 static void list_remove_all_symbols(struct list_head *head)
 {
-	upatch_meta_symbol *sym, *symsafe;
+	struct upatch_meta_symbol *sym, *symsafe;
 	list_for_each_entry_safe(sym, symsafe, head, self) {
 		list_del(&sym->self);
+		list_del(&sym->cover);
 		free(sym);
 	}
 
 	return;
 }
 
-static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_head *syms)
+static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_head *syms, struct list_head *patch_list)
 {
 	patch_symbols_t *sym;
 
 	if (syms == NULL || list_empty(syms)) {
 		log_warn("patch:%s symbols list is empty or NULL:%s, add patch failed.",
 				patch->name, (syms == NULL) ? "NULL" : "valid");
-		return -ENOENT;
+		return ENOENT;
 	}
 	list_for_each_entry(sym, syms, self) {
-		if (list_add_symbol(&patch->syms, sym) != 0) {
+		if (list_add_symbol(&patch->syms, (struct upatch_meta_symbol *)sym, patch_list) != 0) {
 			list_remove_all_symbols(&patch->syms);
-			log_warn("malloc new symbol failed, name:%s offset:%d\n", sym->name, sym->offset);
-			return -ENOMEM;
+			log_warn("malloc new symbol failed, name:%s offset:%ld\n", sym->name, sym->offset);
+			return ENOMEM;
 		}
-		log_debug("+add sym:%s offset:%d to patch:%s\n", sym->name, sym->offset, patch->name);
+		log_debug("+add sym:%s offset:%ld to patch:%s\n", sym->name, sym->offset, patch->name);
 	}
 	log_debug("successed to add symbols to patch:%s uuid:%s\n", patch->name, patch->uuid);
 	return 0;
 }
 
-static int create_new_patch(const char *uuid, patch_entity_t *entity, struct list_head *elf_lst)
+static int create_new_patch(const char *uuid, patch_entity_t *entity, struct list_head *patch_list)
 {
 	struct upatch_meta_patch *patch = (struct upatch_meta_patch *)malloc(sizeof(struct upatch_meta_patch));
 	if (patch == NULL) {
 		log_warn("create new patch malloc failed, uuid:%s path:%s.\n",
 				uuid, entity->patch_path);
-		return -ENOMEM;
+		return ENOMEM;
 	}
 	memset(patch, 0, sizeof(struct upatch_meta_patch));
 	INIT_LIST_HEAD(&patch->self);
 	INIT_LIST_HEAD(&patch->syms);
-	if (patch_add_all_symbols(patch, entity->symbols) != 0) {
+	if (patch_add_all_symbols(patch, entity->symbols, patch_list) != 0) {
 		log_warn("create new patch failed, add symbols error.\n");
 		free(patch);
-		return -ENOMEM;
+		return ENOMEM;
 	}
 	patch->status = entity->status;
 	strncpy(patch->name, entity->patch_path, sizeof(patch->name));
 	strncpy(patch->uuid, uuid, sizeof(patch->uuid));
 	// add to elf list
-	list_add(&patch->self, elf_lst);
+	list_add(&patch->self, patch_list);
 	return 0;
 }
 
@@ -159,7 +167,7 @@ static int create_new_elf(const char *uuid, patch_entity_t *entity, struct list_
 	if (elf == NULL) {
 		log_warn("create new elf malloc failed, uuid:%s elf path:%s patch path:%s, status:%u.\n",
 				uuid, entity->target_path, entity->patch_path, entity->status);
-		return -ENOMEM;
+		return ENOMEM;
 	}
 	memset(elf, 0, sizeof(struct upatch_meta_elf));
 	INIT_LIST_HEAD(&elf->self);
@@ -176,6 +184,73 @@ static int create_new_elf(const char *uuid, patch_entity_t *entity, struct list_
 	return 0;
 }
 
+static int symbol_collision_add(struct list_head *head, struct upatch_meta_patch *patch)
+{
+	symbol_collision *sym_col = (symbol_collision *)malloc(sizeof(symbol_collision));
+	if (sym_col == NULL) {
+		log_warn("symbol collision add malloc failed.\n");
+		return 1;
+	}
+	memset(sym_col, 0, sizeof(symbol_collision));
+	INIT_LIST_HEAD(&sym_col->self);
+	list_add(head, &sym_col->self);
+	memcpy(sym_col->uuid, patch->uuid, sizeof(sym_col->uuid));
+	return 0;
+}
+
+static struct list_head *symbol_get_collision_list(struct upatch_meta_elf *elf, struct list_head *syms)
+{
+	struct list_head *ret = NULL;
+	struct upatch_meta_patch *patch;
+	int finded_in_patch = 0;
+
+	list_for_each_entry(patch, &elf->patchs, self) {
+		struct upatch_meta_symbol *sym;
+		finded_in_patch = 0;
+		list_for_each_entry(sym, &patch->syms, self) {
+			struct upatch_meta_symbol *add_sym;
+			list_for_each_entry(add_sym, syms, self) {
+				if (add_sym->offset == sym->offset && patch->status == UPATCH_PATCH_STATUS_ACTIVED) {
+					if (ret == NULL) {
+						ret = (struct list_head *)malloc(sizeof(struct list_head));
+						if (ret == NULL) {
+							log_warn("malloc failed\n");
+							return NULL;
+						}
+						INIT_LIST_HEAD(ret);
+					}
+					symbol_collision_add(ret, patch);
+					finded_in_patch = 1;
+					log_warn("find conflict patch in elf:%s.\n"
+							"   => exist sym:%s offset:%ld.\n"
+							"   => new sym:%s offset:%ld\n"
+							"   => exist patch status:%u path:%s uuid:%s.\n",
+							elf->path, sym->name, sym->offset, add_sym->name, add_sym->offset, patch->status,
+							patch->name, patch->uuid);
+					break;
+				}
+			}
+			// in patch loop
+			if (finded_in_patch == 1)
+				break;
+		}
+	}
+	return ret;
+}
+
+#define FREE_WHOLE_LIST(sym, symsafe, lst, node) \
+	do {\
+		if (lst == NULL)\
+			break;\
+		list_for_each_entry_safe(sym, symsafe, lst, node) {\
+			list_del(&sym->node);\
+			free(sym);\
+		}\
+		free(lst);\
+	} while (0);
+
+
+// ===================================PUBLIC API=======================================
 // 创建补丁管理结构
 int meta_create_patch(const char *uuid, patch_entity_t *entity)
 {
@@ -186,11 +261,11 @@ int meta_create_patch(const char *uuid, patch_entity_t *entity)
 		log_warn("meta creat patch uuid:%s or entity:%s invalid\n",
 			(uuid == NULL) ? "NULL" : uuid,
 			(entity == NULL) ? "NULL" : "VALID");
-		return -EINVAL;
+		return EINVAL;
 	}
 	if ((patch = find_patch_by_uuid(uuid)) != NULL) {
-		log_warn("meta create patch failed, uuid:%s exist, patch:%s status:%s !\n", patch->name, uuid);
-		return -EEXIST;
+		log_warn("meta create patch failed, uuid:%s exist, patch:%s status:%u!\n", uuid, patch->name, patch->status);
+		return EEXIST;
 	}
 	elf = find_elf_by_path(entity->target_path);
 	// finded elf
@@ -222,6 +297,7 @@ void meta_remove_patch(const char *uuid)
 			continue;
 		// 摘除patch
 		list_del(&patch->self);
+		list_remove_all_symbols(&patch->syms);
 		free(patch);
 		// elf->patchs 非空
 		if (!list_empty(&elf->patchs))
@@ -244,7 +320,7 @@ int meta_get_patch_entity(const char *uuid, patch_entity_t *entity)
 		log_warn("meta get patch entity uuid:%s or entity:%s invalid\n",
 				(uuid == NULL) ? "NULL" : uuid,
 				(entity == NULL) ? "NULL" : "VALID");
-		return -EINVAL;
+		return EINVAL;
 	}
 	list_for_each_entry(elf, &meta_head, self) {
 		struct upatch_meta_patch *patch = find_patch_in_elf(elf, uuid);
@@ -258,22 +334,17 @@ int meta_get_patch_entity(const char *uuid, patch_entity_t *entity)
 		return 0;
 	}
 	log_warn("uuid:%s cant find patch.\n", uuid);
-	return -ENOENT;
+	return ENOENT;
 }
 
 // 释放patch_symbols_t **类型返回内存
 void meta_put_symbols(struct list_head *symbols)
 {
-	upatch_meta_symbol *sym, *symsafe;
-	list_for_each_entry_safe(sym, symsafe, symbols, self) {
-		list_del(&sym->self);
-		free(sym);
-	}
-	free(symbols);
+	struct upatch_meta_symbol *sym, *symsafe;
+	FREE_WHOLE_LIST(sym, symsafe, symbols, self);
 	return;
 }
 
-#define LIST_HEAD_INIT_P(p) {p, p}
 // 查找elf函数列表
 struct list_head *meta_get_elf_symbols(const char *elf_path)
 {
@@ -296,11 +367,11 @@ struct list_head *meta_get_elf_symbols(const char *elf_path)
 		return NULL;
 	}
 	list_for_each_entry(patch, &elf->patchs, self) {
-		upatch_meta_symbol *sym;
+		struct upatch_meta_symbol *sym;
 		log_debug("Find patch:%s uuid:%s to add symbol.\n", patch->name, patch->uuid);
 		list_for_each_entry(sym, &patch->syms, self) {
-			if (list_add_symbol(syms, sym) != 0) {
-				log_warn("add sym:%s offset:%u to result failed!\n", sym->name, sym->offset);
+			if (list_add_symbol(syms, sym, NULL) != 0) {
+				log_warn("add sym:%s offset:%ld to result failed!\n", sym->name, sym->offset);
 				meta_put_symbols(syms);
 				return NULL;
 			}
@@ -314,7 +385,7 @@ struct list_head *meta_get_elf_symbols(const char *elf_path)
 struct list_head *meta_get_patch_symbols(const char *uuid)
 {
 	struct list_head *syms;
-	upatch_meta_symbol *sym;
+	struct upatch_meta_symbol *sym;
 	struct upatch_meta_patch *patch;
 	if (uuid == NULL) {
 		log_warn("get patch symbols uuid is invalid.\n");
@@ -333,8 +404,8 @@ struct list_head *meta_get_patch_symbols(const char *uuid)
 		return NULL;
 	}
 	list_for_each_entry(sym, &patch->syms, self) {
-		if (list_add_symbol(syms, sym) != 0) {
-			log_warn("add sym:%s offset:%u to result failed!\n", sym->name, sym->offset);
+		if (list_add_symbol(syms, sym, NULL) != 0) {
+			log_warn("add sym:%s offset:%ld to result failed!\n", sym->name, sym->offset);
 			meta_put_symbols(syms);
 			return NULL;
 		}
@@ -364,12 +435,12 @@ int meta_set_patch_status(const char *uuid, patch_status_e status)
 	struct upatch_meta_patch *patch;
 	if (uuid == NULL || status >= UPATCH_PATCH_STATUS_INV) {
 		log_warn("meta set patch status uuid:%s or status:%u invalid\n", (uuid == NULL) ? "NULL" : uuid, status);
-		return -EINVAL;
+		return EINVAL;
 	}
 	patch = find_patch_by_uuid(uuid);
 	if (patch == NULL) {
 		log_warn("can't find patch uuid:%s failed to set status:%u\n", uuid, status);
-		return -ENOENT;
+		return ENOENT;
 	}
 	log_debug("meta hit patch status:%u set to %u\n", patch->status, status);
 	patch->status = status;
@@ -377,18 +448,36 @@ int meta_set_patch_status(const char *uuid, patch_status_e status)
 	return 0;
 }
 
+struct list_head *meta_get_symbol_collision(const char *elf_path, struct list_head *symbols)
+{
+	struct upatch_meta_elf *elf = find_elf_by_path(elf_path);
+	if (!elf)
+		return NULL;
+
+	return symbol_get_collision_list(elf, symbols);
+}
+
+void meta_put_symbol_collision(struct list_head *lst)
+{
+	symbol_collision *sym, *symsafe;
+	FREE_WHOLE_LIST(sym, symsafe, lst, self);
+	return;
+}
+
+
+
 int meta_print_all()
 {
 	struct upatch_meta_elf *elf;
 	struct upatch_meta_patch *patch;
-	upatch_meta_symbol *sym;
+	struct upatch_meta_symbol *sym;
 	log_debug("List all patch info:");
 	list_for_each_entry(elf, &meta_head, self) {
 		log_debug(" + elf:%s", elf->path);
 		list_for_each_entry(patch, &elf->patchs, self) {
 			log_debug("   + patch:%s uuid:%s", patch->name, patch->uuid);
 			list_for_each_entry(sym, &patch->syms, self) {
-				log_debug("     + symbol:%s offset:%u", sym->name, sym->offset);
+				log_debug("     + symbol:%s offset:%ld", sym->name, sym->offset);
 			}
 		}
 	}
