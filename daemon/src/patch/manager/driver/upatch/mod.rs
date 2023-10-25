@@ -2,7 +2,7 @@ use std::{ffi::OsString, os::unix::prelude::OsStringExt};
 
 use anyhow::{anyhow, bail, ensure, Error, Result};
 
-use libc::{c_char, EACCES, EEXIST, ENOENT};
+use libc::{c_char, EEXIST, ENOENT, EPERM};
 use syscare_abi::PatchStatus;
 use syscare_common::util::digest;
 
@@ -56,9 +56,7 @@ impl PatchDriver for UserPatchDriver {
 
         ensure!(
             ret_val == 0,
-            OsString::from_vec(msg_buf)
-                .to_string_lossy()
-                .to_string()
+            OsString::from_vec(msg_buf).to_string_lossy().to_string()
         );
 
         Ok(())
@@ -88,7 +86,7 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EACCES => bail!("Patch status is invalid"),
+            EPERM => bail!("Patch status is invalid"),
             ENOENT => bail!("Patch symbol is empty"),
             EEXIST => bail!("Patch is already exist"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
@@ -101,7 +99,7 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EACCES => bail!("Patch status is invalid"),
+            EPERM => bail!("Patch status is invalid"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
         }
     }
@@ -112,7 +110,7 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EACCES => bail!("Patch status is invalid"),
+            EPERM => bail!("Patch status is invalid"),
             ENOENT => bail!("Cannot find patch entity"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
         }
@@ -124,7 +122,7 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EACCES => bail!("Patch status is invalid"),
+            EPERM => bail!("Patch status is invalid"),
             ENOENT => bail!("Cannot find patch entity"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
         }

@@ -53,7 +53,7 @@ int upatch_load(const char *uuid, const char *target, const char *patch)
     // Fails if patch is already exist
     if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_NOT_APPLIED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
-        return EACCES;
+        return EPERM;
     }
 
     // Resolve patch symbols
@@ -113,7 +113,7 @@ int upatch_remove(const char *uuid)
     // Fails if patch is not in 'DEACTIVED' state
     if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_DEACTIVED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
-        return EACCES;
+        return EPERM;
     }
 
     meta_remove_patch(uuid);
@@ -136,7 +136,7 @@ int upatch_active(const char *uuid)
     // Fails if patch is not in 'DEACTIVED' state
     if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_DEACTIVED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
-        return EACCES;
+        return EPERM;
     }
 
     // Find patch entity
@@ -193,7 +193,7 @@ int upatch_deactive(const char *uuid)
 
     // Fails if patch is not in 'ACTIVED' state
     if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_ACTIVED) {
-        return EACCES;
+        return EPERM;
     }
 
     // Find patch entity
