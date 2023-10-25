@@ -5,7 +5,7 @@ use anyhow::{Context, Result};
 use parking_lot::RwLock;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
-use crate::patch::{Patch, PatchManager, PatchTransaction};
+use crate::patch::{Patch, PatchManager, PatchOpFlag, PatchTransaction};
 
 use super::{
     function::{RpcFunction, RpcResult},
@@ -66,20 +66,24 @@ impl PatchSkeleton for PatchSkeletonImpl {
         RpcFunction::call(move || -> Result<()> {
             let mut patch_manager = self.patch_manager.write();
             for patch in patch_manager.match_patch(&identifier)? {
-                patch_manager.check_patch(&patch)?;
+                patch_manager.check_patch(&patch, PatchOpFlag::Normal)?;
             }
 
             Ok(())
         })
     }
 
-    fn apply_patch(&self, mut identifier: String) -> RpcResult<Vec<PatchStateRecord>> {
+    fn apply_patch(&self, mut identifier: String, force: bool) -> RpcResult<Vec<PatchStateRecord>> {
         Self::normalize_identifier(&mut identifier);
         RpcFunction::call(move || -> Result<Vec<PatchStateRecord>> {
             PatchTransaction::new(
                 format!("Apply patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::apply_patch,
+                match force {
+                    false => PatchOpFlag::Normal,
+                    true => PatchOpFlag::SkipCheck,
+                },
                 identifier,
             )?
             .invoke()
@@ -93,6 +97,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Remove patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::remove_patch,
+                PatchOpFlag::Normal,
                 identifier,
             )?
             .invoke()
@@ -106,6 +111,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Active patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::active_patch,
+                PatchOpFlag::Normal,
                 identifier,
             )?
             .invoke()
@@ -119,6 +125,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Deactive patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::deactive_patch,
+                PatchOpFlag::Normal,
                 identifier,
             )?
             .invoke()
@@ -132,6 +139,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Accept patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::accept_patch,
+                PatchOpFlag::Normal,
                 identifier,
             )?
             .invoke()

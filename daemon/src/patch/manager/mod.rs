@@ -19,6 +19,8 @@ mod entity;
 mod monitor;
 
 use driver::{KernelPatchDriver, PatchDriver, UserPatchDriver};
+
+pub use driver::PatchOpFlag;
 pub use entity::Patch;
 pub use monitor::PatchMonitor;
 
@@ -27,7 +29,8 @@ const PATCH_INSTALL_DIR: &str = "patches";
 const PATCH_STATUS_FILE_NAME: &str = "patch_status";
 
 type Transition = (PatchStatus, PatchStatus);
-type TransitionAction = &'static (dyn Fn(&mut PatchManager, &Patch) -> Result<()> + Sync);
+type TransitionAction =
+    &'static (dyn Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<()> + Sync);
 
 const PATCH_CHECK: TransitionAction = &PatchManager::driver_check_patch;
 const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
@@ -160,7 +163,7 @@ impl PatchManager {
             .status;
 
         if status == PatchStatus::Unknown {
-            status = self.driver_get_patch_status(patch)?;
+            status = self.driver_get_patch_status(patch, PatchOpFlag::Normal)?;
             self.set_patch_status(patch, status)
                 .with_context(|| format!("Failed to set patch \"{}\" status", patch))?;
         }
@@ -168,22 +171,22 @@ impl PatchManager {
         Ok(status)
     }
 
-    pub fn check_patch(&mut self, patch: &Patch) -> Result<()> {
+    pub fn check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         info!("Check patch \"{}\"", patch);
-        self.driver_check_patch(patch)
+        self.driver_check_patch(patch, flag)
     }
 
-    pub fn apply_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Apply patch \"{}\"", patch);
-        self.do_status_transition(patch, PatchStatus::Actived)
+        self.do_status_transition(patch, PatchStatus::Actived, flag)
     }
 
-    pub fn remove_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn remove_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Remove patch \"{}\"", patch);
-        self.do_status_transition(patch, PatchStatus::NotApplied)
+        self.do_status_transition(patch, PatchStatus::NotApplied, flag)
     }
 
-    pub fn active_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Active patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Actived;
@@ -191,10 +194,10 @@ impl PatchManager {
         if current_status == PatchStatus::NotApplied {
             bail!("Patch \"{}\" is not applied", patch);
         }
-        self.do_status_transition(patch, target_status)
+        self.do_status_transition(patch, target_status, flag)
     }
 
-    pub fn deactive_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Deactive patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Deactived;
@@ -202,10 +205,10 @@ impl PatchManager {
         if current_status == PatchStatus::NotApplied {
             bail!("Patch \"{}\" is not applied", patch);
         }
-        self.do_status_transition(patch, target_status)
+        self.do_status_transition(patch, target_status, flag)
     }
 
-    pub fn accept_patch(&mut self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn accept_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Accept patch \"{}\"", patch);
         let current_status = self.get_patch_status(patch)?;
         let target_status = PatchStatus::Accepted;
@@ -213,7 +216,7 @@ impl PatchManager {
         if current_status != PatchStatus::Actived {
             bail!("Patch \"{}\" is not actived", patch);
         }
-        self.do_status_transition(patch, target_status)
+        self.do_status_transition(patch, target_status, flag)
     }
 
     pub fn save_patch_status(&mut self) -> Result<()> {
@@ -290,7 +293,7 @@ impl PatchManager {
                 "Restore patch \"{}\" status to \"{}\"",
                 patch, target_status
             );
-            if let Err(e) = self.do_status_transition(&patch, target_status) {
+            if let Err(e) = self.do_status_transition(&patch, target_status, PatchOpFlag::Normal) {
                 error!("{}", e);
             }
         }
@@ -332,6 +335,7 @@ impl PatchManager {
         &mut self,
         patch: &Patch,
         status: PatchStatus,
+        flag: PatchOpFlag,
     ) -> Result<PatchStatus> {
         let current_status = self.get_patch_status(patch)?;
         let target_status = status;
@@ -343,14 +347,17 @@ impl PatchManager {
             return Ok(target_status);
         }
 
-        match TRANSITION_MAP.get(&(current_status, target_status)) {
+        match TRANSITION_MAP
+            .get(&(current_status, target_status))
+            .cloned()
+        {
             Some(action_list) => {
                 debug!(
                     "Patch \"{}\": Switching status from \"{}\" to \"{}\"",
                     patch, current_status, status
                 );
                 for action in action_list {
-                    action(self, patch)?;
+                    action(self, patch, flag)?;
                 }
             }
             None => {
@@ -476,9 +483,14 @@ impl PatchManager {
         driver_map
     }
 
-    fn call_driver<'a, T, U>(&'a self, patch: &Patch, driver_action: T) -> Result<U>
+    fn call_driver<'a, T, U>(
+        &'a self,
+        patch: &Patch,
+        driver_action: T,
+        flag: PatchOpFlag,
+    ) -> Result<U>
     where
-        T: FnOnce(&'a dyn PatchDriver, &Patch) -> Result<U>,
+        T: FnOnce(&'a dyn PatchDriver, &Patch, PatchOpFlag) -> Result<U>,
     {
         let patch_type = patch.kind();
         let driver = self
@@ -487,52 +499,52 @@ impl PatchManager {
             .map(Box::deref)
             .with_context(|| format!("Driver: Failed to get {} driver", patch_type))?;
 
-        driver_action(driver, patch)
+        driver_action(driver, patch, flag)
     }
 
-    fn driver_get_patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
-        self.call_driver(patch, PatchDriver::status)
+    fn driver_get_patch_status(&self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
+        self.call_driver(patch, PatchDriver::status, flag)
             .with_context(|| format!("Driver: Failed to get patch \"{}\" status", patch))
     }
 
-    fn driver_check_patch(&mut self, patch: &Patch) -> Result<()> {
-        self.call_driver(patch, PatchDriver::check)
+    fn driver_check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::check, flag)
             .with_context(|| format!("Driver: Patch \"{}\" check failed", patch))
     }
 
-    fn driver_apply_patch(&mut self, patch: &Patch) -> Result<()> {
-        self.call_driver(patch, PatchDriver::apply)
+    fn driver_apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::apply, flag)
             .with_context(|| format!("Driver: Failed to apply patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn driver_remove_patch(&mut self, patch: &Patch) -> Result<()> {
-        self.call_driver(patch, PatchDriver::remove)
+    fn driver_remove_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::remove, flag)
             .with_context(|| format!("Driver: Failed to remove patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::NotApplied)
     }
 
-    fn driver_active_patch(&mut self, patch: &Patch) -> Result<()> {
-        self.call_driver(patch, PatchDriver::active)
+    fn driver_active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::active, flag)
             .with_context(|| format!("Driver: Failed to active patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 
-    fn driver_deactive_patch(&mut self, patch: &Patch) -> Result<()> {
-        self.call_driver(patch, PatchDriver::deactive)
+    fn driver_deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::deactive, flag)
             .with_context(|| format!("Driver: Failed to deactive patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn driver_accept_patch(&mut self, patch: &Patch) -> Result<()> {
+    fn driver_accept_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Accepted)
     }
 
-    fn driver_decline_patch(&mut self, patch: &Patch) -> Result<()> {
+    fn driver_decline_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 }

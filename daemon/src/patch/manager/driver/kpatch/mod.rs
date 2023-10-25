@@ -1,8 +1,8 @@
 use std::{ffi::OsString, os::unix::prelude::OsStrExt, path::Path};
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{anyhow, bail, ensure, Context, Result};
 use lazy_static::lazy_static;
-use log::debug;
+use log::{debug, warn};
 
 use syscare_abi::PatchStatus;
 use syscare_common::{
@@ -15,7 +15,7 @@ use syscare_common::{
     },
 };
 
-use super::{KernelPatchExt, Patch, PatchDriver};
+use super::{KernelPatchExt, Patch, PatchDriver, PatchOpFlag};
 
 lazy_static! {
     static ref INSMOD: ExternCommand = ExternCommand::new("insmod");
@@ -88,8 +88,13 @@ impl KernelPatchDriver {
 }
 
 impl PatchDriver for KernelPatchDriver {
-    fn check(&self, patch: &Patch) -> Result<()> {
+    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         const KERNEL_NAME_PREFIX: &str = "kernel-";
+
+        if flag == PatchOpFlag::SkipCheck {
+            warn!("Skipped patch \"{}\" check", patch);
+            return Ok(());
+        }
 
         let kernel_version = os::kernel::version();
         let current_kernel = OsString::from(KERNEL_NAME_PREFIX).concat(kernel_version);
@@ -111,21 +116,20 @@ impl PatchDriver for KernelPatchDriver {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let patch_file = patch_ext.patch_file.as_path();
         let real_checksum = digest::file(patch_file)?;
-        if !patch.checksum.eq(&real_checksum) {
-            bail!(
-                "Kpatch: Patch file \"{}\" checksum failed",
-                patch_file.display()
-            );
-        }
+        ensure!(
+            patch.checksum.eq(&real_checksum),
+            "Kpatch: Patch file \"{}\" checksum failed",
+            patch_file.display()
+        );
 
         Ok(())
     }
 
-    fn status(&self, patch: &Patch) -> Result<PatchStatus> {
+    fn status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
         Self::get_patch_status(patch)
     }
 
-    fn apply(&self, patch: &Patch) -> Result<()> {
+    fn apply(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let patch_file = patch_ext.patch_file.as_path();
 
@@ -143,7 +147,7 @@ impl PatchDriver for KernelPatchDriver {
         Ok(())
     }
 
-    fn remove(&self, patch: &Patch) -> Result<()> {
+    fn remove(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let patch_file = patch_ext.patch_file.as_path();
 
@@ -158,11 +162,11 @@ impl PatchDriver for KernelPatchDriver {
         Ok(())
     }
 
-    fn active(&self, patch: &Patch) -> Result<()> {
+    fn active(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         Self::set_patch_status(patch, PatchStatus::Actived)
     }
 
-    fn deactive(&self, patch: &Patch) -> Result<()> {
+    fn deactive(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         Self::set_patch_status(patch, PatchStatus::Deactived)
     }
 }

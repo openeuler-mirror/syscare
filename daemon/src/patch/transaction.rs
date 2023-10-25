@@ -6,7 +6,7 @@ use log::{debug, info};
 use parking_lot::RwLock;
 use syscare_abi::{PatchStateRecord, PatchStatus};
 
-use super::manager::{Patch, PatchManager};
+use super::manager::{Patch, PatchManager, PatchOpFlag};
 
 type TransationRecord = (Arc<Patch>, PatchStatus);
 
@@ -15,17 +15,19 @@ pub struct PatchTransaction<F> {
     patch_manager: Arc<RwLock<PatchManager>>,
     action: F,
     identifier: String,
+    flag: PatchOpFlag,
     finish_list: Vec<TransationRecord>,
 }
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     pub fn new(
         name: String,
         patch_manager: Arc<RwLock<PatchManager>>,
         action: F,
+        flag: PatchOpFlag,
         identifier: String,
     ) -> Result<Self> {
         let instance = Self {
@@ -33,6 +35,7 @@ where
             patch_manager,
             action,
             identifier,
+            flag,
             finish_list: Vec::new(),
         };
 
@@ -43,7 +46,7 @@ where
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, &Patch) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     fn start(&mut self) -> Result<Vec<PatchStateRecord>> {
         let mut patch_manager = self.patch_manager.write();
@@ -53,7 +56,7 @@ where
 
         while let Some(patch) = patch_list.pop() {
             let old_status = patch_manager.get_patch_status(&patch)?;
-            let new_status = (self.action)(&mut patch_manager, &patch)?;
+            let new_status = (self.action)(&mut patch_manager, &patch, self.flag)?;
 
             records.push(PatchStateRecord {
                 name: patch.to_string(),
@@ -67,7 +70,7 @@ where
     fn rollback(&mut self) -> Result<()> {
         let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            patch_manager.do_status_transition(&patch, status)?;
+            patch_manager.do_status_transition(&patch, status, PatchOpFlag::SkipCheck)?;
         }
         Ok(())
     }

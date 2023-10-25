@@ -8,7 +8,7 @@ pub trait PatchSkeleton {
     fn check_patch(&self, identifier: String) -> RpcResult<()>;
 
     #[rpc(name = "apply_patch")]
-    fn apply_patch(&self, identifier: String) -> RpcResult<Vec<PatchStateRecord>>;
+    fn apply_patch(&self, identifier: String, force: bool) -> RpcResult<Vec<PatchStateRecord>>;
 
     #[rpc(name = "remove_patch")]
     fn remove_patch(&self, identifier: String) -> RpcResult<Vec<PatchStateRecord>>;

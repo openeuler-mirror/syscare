@@ -42,7 +42,7 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, 
     return EEXIST;
 }
 
-int upatch_load(const char *uuid, const char *target, const char *patch)
+int upatch_load(const char *uuid, const char *target, const char *patch, bool force)
 {
     // Pointer check
     if (uuid == NULL || target == NULL || patch == NULL) {
@@ -64,12 +64,14 @@ int upatch_load(const char *uuid, const char *target, const char *patch)
     }
 
     // Check patch symbol collision
-    struct list_head *collision_syms = meta_get_symbol_collision(target, patch_syms);
-    if (collision_syms != NULL) {
-        log_warn("{%s}: Patch symbol conflicted\n", uuid);
-        patch_symbols_free(patch_syms);
-        meta_put_symbol_collision(collision_syms);
-        return EEXIST;
+    if (!force) {
+        struct list_head *collision_syms = meta_get_symbol_collision(target, patch_syms);
+        if (collision_syms != NULL) {
+            log_warn("{%s}: Patch symbol conflicted\n", uuid);
+            patch_symbols_free(patch_syms);
+            meta_put_symbol_collision(collision_syms);
+            return EEXIST;
+        }
     }
 
     // Alloc memory for patch
