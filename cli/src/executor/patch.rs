@@ -86,6 +86,7 @@ impl PatchCommandExecutor {
 impl CommandExecutor for PatchCommandExecutor {
     fn invoke(&self, command: &SubCommand) -> Result<()> {
         self.check_root_permission()?;
+
         match command {
             SubCommand::Info { identifier } => {
                 let patch_info = self.proxy.get_patch_info(identifier)?;
@@ -106,11 +107,11 @@ impl CommandExecutor for PatchCommandExecutor {
             SubCommand::Check { identifier } => {
                 self.proxy.check_patch(identifier)?;
             }
-            SubCommand::Apply { identifier } => {
+            SubCommand::Apply { identifier, force } => {
                 debug!("Acquiring exclusive file lock...");
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.apply_patch(identifier)?;
+                let result_list = self.proxy.apply_patch(identifier, *force)?;
                 Self::show_patch_state(result_list);
             }
             SubCommand::Remove { identifier } => {

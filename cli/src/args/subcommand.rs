@@ -11,7 +11,7 @@ pub enum SubCommand {
     Status { identifier: String },
     List,
     Check { identifier: String },
-    Apply { identifier: String },
+    Apply { identifier: String, force: bool },
     Remove { identifier: String },
     Active { identifier: String },
     Deactive { identifier: String },
@@ -48,6 +48,7 @@ impl Parser<'_> for SubCommand {
             },
             ("apply", Some(cmd_matches)) => Self::Apply {
                 identifier: ArgParserImpl::parse_arg(cmd_matches, "identifier")?,
+                force: ArgParserImpl::is_present(cmd_matches, "force"),
             },
             ("remove", Some(cmd_matches)) => Self::Remove {
                 identifier: ArgParserImpl::parse_arg(cmd_matches, "identifier")?,
