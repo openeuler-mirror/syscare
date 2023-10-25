@@ -17,6 +17,7 @@
 #include "ioctl.h"
 #include "uprobe.h"
 #include "utils.h"
+#include "uprobe_list.h"
 
 static const struct file_operations module_fops = {
 	.owner		    = THIS_MODULE,
@@ -40,17 +41,13 @@ static int __init upatch_manager_init(void)
 				UPATCH_MODULE_NAME, ret);
 	}
 
-	ret = monitor_list_init();
-	if (ret) {
-		pr_err("upatch-manager: failed to init monitor list, ret=%d\n", ret);
-	}
 	pr_info("%s v%s loaded\n", UPATCH_MODULE_NAME, UPATCH_MODULE_VERSION);
 	return ret;
 }
 
 static void __exit upatch_manager_exit(void)
 {
-	monitor_list_destroy();
+	free_uprobe_list(uprobe_list);
 	misc_deregister(&module_dev);
 
 	pr_info("%s v%s removed\n", UPATCH_MODULE_NAME, UPATCH_MODULE_VERSION);

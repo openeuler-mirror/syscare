@@ -5,7 +5,7 @@ EXTRA_CFLAGS += -I$(PWD)/include
 
 obj-m += upatch_manager.o
 upatch_manager-objs := src/module.o src/ioctl.o src/uprobe.o src/utils.o
-upatch_manager-objs += src/monitor_list.o src/uprobe_list.o src/pid_list.o
+upatch_manager-objs += src/uprobe_list.o
 
 all:
 	make -C $(kernel) M=$(shell pwd) modules

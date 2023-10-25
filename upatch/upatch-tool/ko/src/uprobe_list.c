@@ -17,6 +17,7 @@
 #include "uprobe.h"
 #include "uprobe_list.h"
 
+uprobe_list_t *uprobe_list;
 static inline uprobe_list_entry_t* alloc_uprobe_list_entry(struct inode *inode, loff_t offset, char *binary_path, char *patch_path)
 {
 	uprobe_list_entry_t *entry = NULL;
@@ -139,13 +140,13 @@ err_out:
 	return ret;
 }
 
-void remove_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset)
+int remove_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset)
 {
 	uprobe_list_entry_t *entry = NULL;
 
 	if (!list) {
 		pr_err("upatch-manager: uprobe list is NULL\n");
-		return;
+		return -EFAULT;
 	}
 
 	mutex_lock(&list->list_mutex);
@@ -154,12 +155,12 @@ void remove_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset)
 	if (!entry) {
 		pr_err("upatch-manager: uprobe is not exist, inode=%ld, offset=0x%llx\n",
 				inode->i_ino, offset);
-		goto err_out;
+		return -EFAULT;
 	}
 
 	list_del(&entry->list_node);
 	free_uprobe_list_entry(entry);
 
-err_out:
 	mutex_unlock(&list->list_mutex);
+	return 0;
 }

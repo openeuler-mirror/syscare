@@ -26,6 +26,7 @@ elf_request_t* build_elf_request(const char *elf_path, const char *patch_path, l
 		return NULL;
 	}
 
+	memset((void *)req, 0, sizeof(*req));
 	memcpy(req->elf_path, e_path, strlen(e_path));
 	memcpy(req->patch_path, p_path, strlen(p_path));
 	req->offset = offset;
@@ -39,7 +40,6 @@ int patch_ioctl_apply(const char *target_path, const char *patch_path,
 {
 	// TODO: Call ioctl to request kernel driver to load patch
 	// ioctl -> ko -> register uprobe -> uprobe handler -> execute upatch-manage
-	pid_t monitor_pid = 0;
 	elf_request_t *req = NULL;
 	int ret = -1;
 	patch_symbols_t *sym;
@@ -50,15 +50,9 @@ int patch_ioctl_apply(const char *target_path, const char *patch_path,
 		goto out;
 	}
 
-	ret = ioctl(upatch_fd, UPATCH_REGISTER_MONITOR, NULL);
-	if (ret < 0) {
-		log_warn("upatch-ioctl: register monitor ioctl failed\n");
-		goto err;
-	}
-
 	list_for_each_entry(sym, symbol_list, self) {
 		// register_elf
-		req = build_elf_request(target_path, patch_path, sym->offset, monitor_pid);
+		req = build_elf_request(target_path, patch_path, sym->offset, 0);
 		if (!req) {
 			log_warn("upatch-ioctl:build request failed\n");
 			goto err;
@@ -84,7 +78,7 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 {
 	// TODO: Call ioctl to request kernel driver to remove patch
 	// ioctl -> ko -> remove uprobe -> execute upatch-manage
-	pid_t monitor_pid = 0;
+	pid_t target_pid = 0;
 	elf_request_t *req = NULL;
 	int ret = -1;
 	patch_symbols_t *sym;
@@ -97,24 +91,24 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 
 	list_for_each_entry(sym, symbol_list, self) {
 		// register_elf
-		req = build_elf_request(target_path, patch_path, sym->offset, monitor_pid);
+		req = build_elf_request(target_path, patch_path, sym->offset, 0);
 		if (!req) {
 			log_warn("upatch-ioctl:build request failed\n");
 			goto err;
 		}
 
-		ret = ioctl(upatch_fd, UPATCH_DEREGISTER_ELF, req);
+		ret = ioctl(upatch_fd, UPATCH_DEREGISTER_ELF, req, 0);
 		if (ret < 0) {
 			free(req);
 			log_warn("upatch-ioctl: deregister elf ioctl failed\n");
 			goto err;
 		}
-		monitor_pid = req->monitor_pid;
+		target_pid = req->monitor_pid;
 		free(req);
 		req = NULL;
 	}
 
-	req = build_elf_request(target_path, patch_path, 0, monitor_pid);
+	req = build_elf_request(target_path, patch_path, 0, target_pid);
 	if (!req) {
 		log_warn("upatch-ioctl:build request failed\n");
 		goto err;
@@ -127,13 +121,6 @@ int patch_ioctl_remove(const char *target_path, const char *patch_path,
 	}
 	free(req);
 	req = NULL;
-
-	monitor_pid = getpid();
-	ret = ioctl(upatch_fd, UPATCH_DEREGISTER_MONITOR, &monitor_pid);
-	if (ret < 0) {
-		log_warn("upatch-ioctl: register monitor ioctl failed\n");
-		goto err;
-	}
 
 err:
 	close(upatch_fd);

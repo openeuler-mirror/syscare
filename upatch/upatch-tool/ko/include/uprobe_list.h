@@ -29,11 +29,13 @@ typedef struct uprobe_list_entry {
     pid_t pid;
 } uprobe_list_entry_t;
 
+extern uprobe_list_t *uprobe_list;
+
 uprobe_list_t* alloc_uprobe_list(void);
 void free_uprobe_list(uprobe_list_t *list);
 
 uprobe_list_entry_t* find_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset);
 int insert_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset, char *binary_path, char *patch_path);
-void remove_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset);
+int remove_uprobe_list(uprobe_list_t *list, struct inode *inode, loff_t offset);
 
 #endif
