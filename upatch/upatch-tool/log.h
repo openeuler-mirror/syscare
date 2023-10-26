@@ -5,7 +5,7 @@
 
 #define log(level, format, ...) \
 ({ \
-	printf(""format"\n", ##__VA_ARGS__); \
+	printf("func:%s line:%d "format"\n", __func__, __LINE__, ##__VA_ARGS__); \
 })
 
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)

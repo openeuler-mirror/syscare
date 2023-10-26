@@ -3,12 +3,14 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <limits.h>
 #include <errno.h>
 #include <string.h>
 
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <sys/wait.h>
 
 #include "log.h"
 #include "list.h"
@@ -99,7 +101,6 @@ int upatch_load(const char *uuid, const char *target, const char *patch, bool fo
     free(patch_entity);
     meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_DEACTIVED);
 
-    log_normal("Patch {%s} status changed to %d", uuid, UPATCH_PATCH_STATUS_DEACTIVED);
     return ret;
 }
 
@@ -113,19 +114,30 @@ int upatch_remove(const char *uuid)
     }
 
     // Fails if patch is not in 'DEACTIVED' state
-    if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_DEACTIVED) {
+    patch_status_e cur_status = meta_get_patch_status(uuid);
+    if (cur_status != UPATCH_PATCH_STATUS_DEACTIVED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
         return EPERM;
     }
 
-    meta_remove_patch(uuid);
-    meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_NOT_APPLIED);
+    // Set up patch status at first to check possible errors
+    int ret = meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_NOT_APPLIED);
+    if (ret != 0) {
+        meta_set_patch_status(uuid, cur_status);
+        return ret;
+    }
 
-    log_normal("Patch {%s} status changed to %d", uuid, UPATCH_PATCH_STATUS_DEACTIVED);
+    ret = meta_remove_patch(uuid);
+    if (ret != 0) {
+        log_warn("{%s}: Failed to remove patch\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
+        return ret;
+    }
+
     return 0;
 }
 
-int upatch_active(const char *uuid)
+int upatch_active(const char *uuid, const pid_t *pid_list, size_t list_len)
 {
     int ret = 0;
 
@@ -136,22 +148,31 @@ int upatch_active(const char *uuid)
     log_normal("Activing patch {%s}\n", uuid);
 
     // Fails if patch is not in 'DEACTIVED' state
-    if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_DEACTIVED) {
+    patch_status_e cur_status = meta_get_patch_status(uuid);
+    if (cur_status != UPATCH_PATCH_STATUS_DEACTIVED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
         return EPERM;
+    }
+
+    // Set up patch status at first to check possible errors
+    ret = meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_ACTIVED);
+    if (ret != 0) {
+        meta_set_patch_status(uuid, cur_status);
+        return ret;
     }
 
     // Find patch entity
     patch_entity_t *patch_entity = calloc(1, sizeof(patch_entity_t));
     if (patch_entity == NULL) {
         log_warn("{%s}: Failed to alloc memory\n", uuid);
-
+        meta_set_patch_status(uuid, cur_status);
         return ENOMEM;
     }
 
     ret = meta_get_patch_entity(uuid, patch_entity);
     if (ret != 0) {
         log_warn("{%s}: Cannot find patch entity\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
         free(patch_entity);
         return ENOENT;
     }
@@ -159,30 +180,64 @@ int upatch_active(const char *uuid)
     // Find symbols in the patch
     if ((patch_entity->symbols == NULL) || list_empty(patch_entity->symbols)) {
         log_warn("{%s}: Patch symbol is empty\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
         free(patch_entity);
         return ENOENT;
     }
 
-    // Apply a patch
-    ret = patch_ioctl_apply(
-        patch_entity->target_path,
-        patch_entity->patch_path,
-        patch_entity->symbols
-    );
-    if (ret != 0) {
-        log_warn("{%s}: ioctl failed\n", uuid);
-        free(patch_entity);
-        return ret;
+    // Apply patch
+    for (size_t i = 0; i < list_len; i++) {
+        char pid[16];
+        char *pid_str = (char *) &pid;
+        sprintf(pid_str, "%d", *(pid_list + i));
+
+        char *patch_file = patch_entity->patch_path;
+        char *target_elf = patch_entity->target_path;
+        log_normal("{%s}: Apply patch \"%s\" for \"%s\" (%s)", uuid, patch_file, target_elf, pid_str);
+
+        char *argv[] = {
+            "/usr/libexec/syscare/upatch-manage",
+            "patch",
+            "--pid", (char *) &pid,
+            "--binary",
+            target_elf,
+            "--upatch",
+            patch_file,
+            "-v",
+            NULL
+        };
+
+        pid_t child_pid = fork();
+        if (child_pid == 0) {
+            ret = execve("/usr/libexec/syscare/upatch-manage", argv, NULL);
+            if (ret != 0) {
+                log_warn("{%s}: upatch-manage start failed\n", uuid);
+                meta_set_patch_status(uuid, cur_status);
+                free(patch_entity);
+                return ret;
+            }
+        } else if (child_pid > 0) {
+            int status = 0;
+            waitpid(child_pid, &status, 0);
+            if (status != 0) {
+                log_warn("{%s}: upatch-manage return failed\n", uuid);
+                meta_set_patch_status(uuid, cur_status);
+                free(patch_entity);
+                return EFAULT;
+            }
+        } else {
+            log_warn("{%s}: upatch-manage fork failed\n", uuid);
+            meta_set_patch_status(uuid, cur_status);
+            free(patch_entity);
+            return child_pid;
+        }
     }
 
-    meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_ACTIVED);
     free(patch_entity);
-
-    log_normal("Patch {%s} status changed to %d", uuid, UPATCH_PATCH_STATUS_ACTIVED);
     return 0;
 }
 
-int upatch_deactive(const char *uuid)
+int upatch_deactive(const char *uuid, const pid_t *pid_list, size_t list_len)
 {
     int ret = 0;
 
@@ -193,21 +248,33 @@ int upatch_deactive(const char *uuid)
         return EINVAL;
     }
 
-    // Fails if patch is not in 'ACTIVED' state
-    if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_ACTIVED) {
+    // Fails if patch is not in 'DEACTIVED' state
+    patch_status_e cur_status = meta_get_patch_status(uuid);
+    if (cur_status != UPATCH_PATCH_STATUS_ACTIVED) {
+        log_warn("{%s}: Patch status is invalid\n", uuid);
         return EPERM;
+    }
+
+    // Set up patch status at first to check possible errors
+    ret = meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_DEACTIVED);
+    if (ret != 0) {
+        // Rollback status
+        meta_set_patch_status(uuid, cur_status);
+        return ret;
     }
 
     // Find patch entity
     patch_entity_t *patch_entity = calloc(1, sizeof(patch_entity_t));
     if (patch_entity == NULL) {
         log_warn("{%s}: Failed to alloc memory\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
         return ENOENT;
     }
 
     ret = meta_get_patch_entity(uuid, patch_entity);
     if (ret != 0) {
         log_warn("{%s}: Cannot find patch entity\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
         free(patch_entity);
         return ENOENT;
     }
@@ -215,26 +282,60 @@ int upatch_deactive(const char *uuid)
     // Find symbols in the patch
     if (list_empty(patch_entity->symbols)) {
         log_warn("{%s}: Patch symbol is empty\n", uuid);
+        meta_set_patch_status(uuid, cur_status);
         free(patch_entity);
         return ENOENT;
     }
 
-    // Remove a patch
-    ret = patch_ioctl_remove(
-        patch_entity->target_path,
-        patch_entity->patch_path,
-        patch_entity->symbols
-    );
-    if (ret != 0) {
-        log_warn("{%s}: ioctl failed\n", uuid);
-        free(patch_entity);
-        return ret;
+    // Remove patch
+    for (size_t i = 0; i < list_len; i++) {
+        char pid[16];
+        char *pid_str = (char *) &pid;
+        sprintf(pid_str, "%d", *(pid_list + i));
+
+        char *patch_file = patch_entity->patch_path;
+        char *target_elf = patch_entity->target_path;
+        log_normal("{%s}: Remove patch \"%s\" for \"%s\" (%s)", uuid, patch_file, target_elf, pid_str);
+
+        char *argv[] = {
+            "/usr/libexec/syscare/upatch-manage",
+            "unpatch",
+            "--pid", (char *) &pid,
+            "--binary",
+            target_elf,
+            "--upatch",
+            patch_file,
+            "-v",
+            NULL
+        };
+
+        pid_t child_pid = fork();
+        if (child_pid == 0) {
+            ret = execve("/usr/libexec/syscare/upatch-manage", argv, NULL);
+            if (ret != 0) {
+                log_warn("{%s}: upatch-manage start failed\n", uuid);
+                meta_set_patch_status(uuid, cur_status);
+                free(patch_entity);
+                return ret;
+            }
+        } else if (child_pid > 0) {
+            int status = 0;
+            waitpid(child_pid, &status, 0);
+            if (status != 0) {
+                log_warn("{%s}: upatch-manage return failed\n", uuid);
+                meta_set_patch_status(uuid, cur_status);
+                free(patch_entity);
+                return EFAULT;
+            }
+        } else {
+            log_warn("{%s}: upatch-manage fork failed\n", uuid);
+            meta_set_patch_status(uuid, cur_status);
+            free(patch_entity);
+            return child_pid;
+        }
     }
 
-    meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_DEACTIVED);
     free(patch_entity);
-
-    log_normal("Patch {%s} status changed to %d", uuid, UPATCH_PATCH_STATUS_ACTIVED);
     return 0;
 }
 

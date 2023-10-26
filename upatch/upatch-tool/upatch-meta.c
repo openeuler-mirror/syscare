@@ -26,6 +26,8 @@ struct upatch_meta_symbol {
 	char name[UPATCH_SYMBOL_NAME_MAX];
 	loff_t offset;
 	struct list_head cover; // to record symbol cover list
+	void *cover_head;
+	void *patch;
 };
 
 struct upatch_meta_patch {
@@ -79,6 +81,21 @@ static struct upatch_meta_patch *find_patch_by_uuid(const char *uuid)
 	return NULL;
 }
 
+// get elf who has patch of *uuid
+static struct upatch_meta_elf *find_elf_by_uuid(const char *uuid)
+{
+	struct upatch_meta_elf *elf;
+	list_for_each_entry(elf, &meta_head, self) {
+		struct upatch_meta_patch *patch;
+		list_for_each_entry(patch, &elf->patchs, self) {
+			if (strcmp(patch->uuid, uuid) == 0)
+				return elf;
+		}
+	}
+	return NULL;
+}
+
+
 static struct upatch_meta_elf *find_elf_by_path(const char *path)
 {
 	struct upatch_meta_elf *elf;
@@ -89,7 +106,91 @@ static struct upatch_meta_elf *find_elf_by_path(const char *path)
 	return NULL;
 }
 
-static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sym, struct list_head *patch_list)
+static struct upatch_meta_patch *find_patch_by_symbol(struct upatch_meta_symbol *cover_sym)
+{
+	return cover_sym->patch;
+}
+
+static int symbol_add_cover(struct upatch_meta_symbol *finded, struct upatch_meta_symbol *newsym)
+{
+	struct list_head *cover_head;
+	if (list_empty(&finded->cover)) {
+		cover_head = (struct list_head *)malloc(sizeof(struct list_head));
+		if (cover_head == NULL) {
+			log_warn("malloc failed when add cover\n");
+			return ENOMEM;
+		}
+		INIT_LIST_HEAD(cover_head);
+		// list add is add as first node every time,
+		// so cover list is from newer to older
+		list_add(&finded->cover, cover_head);
+		list_add(&newsym->cover, cover_head);
+		finded->cover_head = cover_head;
+		newsym->cover_head = cover_head;
+		return 0;
+	}
+
+	cover_head = finded->cover_head;
+	list_add(&newsym->cover, cover_head);
+	newsym->cover_head = cover_head;
+	return 0;
+}
+
+static void symbol_delete_from_cover(struct upatch_meta_symbol *symbol)
+{
+	struct list_head *head = symbol->cover_head;
+	if (symbol->cover.next == LIST_POISON1)
+		return;
+	list_del(&symbol->cover);
+	if (head != NULL && head != &symbol->cover && list_empty(head)) {
+		free(head);
+	}
+	return;
+}
+
+static int symbol_active_in_cover(struct list_head *patch_list, struct upatch_meta_symbol *symbol)
+{
+	struct upatch_meta_patch *patch;
+	list_for_each_entry(patch, patch_list, self) {
+		struct upatch_meta_symbol *sym;
+		if (patch->status != UPATCH_PATCH_STATUS_ACTIVED)
+			continue;
+		list_for_each_entry(sym, &patch->syms, self) {
+			if (sym->offset == symbol->offset) {
+				// find cover
+				return symbol_add_cover(sym, symbol);
+			}
+		}
+	}
+	// no cover
+	return 0;
+}
+
+static int patch_active_in_cover(struct list_head *patch_list, struct upatch_meta_patch *patch)
+{
+	int ret;
+	struct upatch_meta_symbol *sym;
+	list_for_each_entry(sym, &patch->syms, self) {
+		if ((ret = symbol_active_in_cover(patch_list, sym)) != 0) {
+			log_warn("symbol offset:%ld active in cover failed!\n", sym->offset);
+			return ret;
+		}
+	}
+	return 0;
+}
+
+// 此处认为已经check过，不再进行cover check，直接从cover栈移除
+static int patch_deactive_in_cover(struct upatch_meta_patch *patch)
+{
+	struct upatch_meta_symbol *sym;
+	list_for_each_entry(sym, &patch->syms, self) {
+		symbol_delete_from_cover(sym);
+	}
+	return 0;
+}
+
+
+static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sym)
 {
 	struct upatch_meta_symbol *newsym = (struct upatch_meta_symbol *)malloc(sizeof(struct upatch_meta_symbol));
 	if (newsym == NULL)
@@ -100,22 +201,42 @@ static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sy
 	INIT_LIST_HEAD(&newsym->self);
 	INIT_LIST_HEAD(&newsym->cover);
 	list_add(&newsym->self, head);
+	// 如果有symbol覆盖，在此解决建链
 	return 0;
 }
 
+static int list_add_symbol_for_patch(struct upatch_meta_patch *patch, struct list_head *head, struct upatch_meta_symbol *sym)
+{
+	struct upatch_meta_symbol *newsym = (struct upatch_meta_symbol *)malloc(sizeof(struct upatch_meta_symbol));
+	if (newsym == NULL)
+		return ENOMEM;
+	memset(newsym, 0, sizeof(struct upatch_meta_symbol));
+	strncpy(newsym->name, sym->name, sizeof(newsym->name));
+	newsym->offset = sym->offset;
+	INIT_LIST_HEAD(&newsym->self);
+	INIT_LIST_HEAD(&newsym->cover);
+	newsym->patch = patch;
+	list_add(&newsym->self, head);
+	// 如果有symbol覆盖，在此解决建链
+	return 0;
+}
+
+
+// 作为create补丁出错时的处理，不需要考虑cover的处理，因为
+// 新增补丁如果要回滚，它肯定是cover栈顶
 static void list_remove_all_symbols(struct list_head *head)
 {
 	struct upatch_meta_symbol *sym, *symsafe;
 	list_for_each_entry_safe(sym, symsafe, head, self) {
 		list_del(&sym->self);
-		list_del(&sym->cover);
+		symbol_delete_from_cover(sym);
 		free(sym);
 	}
 
 	return;
 }
 
-static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_head *syms, struct list_head *patch_list)
+static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_head *syms)
 {
 	patch_symbols_t *sym;
 
@@ -125,7 +246,7 @@ static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_he
 		return ENOENT;
 	}
 	list_for_each_entry(sym, syms, self) {
-		if (list_add_symbol(&patch->syms, (struct upatch_meta_symbol *)sym, patch_list) != 0) {
+		if (list_add_symbol_for_patch(patch, &patch->syms, (struct upatch_meta_symbol *)sym) != 0) {
 			list_remove_all_symbols(&patch->syms);
 			log_warn("malloc new symbol failed, name:%s offset:%ld\n", sym->name, sym->offset);
 			return ENOMEM;
@@ -136,8 +257,29 @@ static int patch_add_all_symbols(struct upatch_meta_patch *patch, struct list_he
 	return 0;
 }
 
+static int patch_check_symbol_cover(struct upatch_meta_patch *patch)
+{
+	struct upatch_meta_symbol *sym;
+	list_for_each_entry(sym, &patch->syms, self) {
+		if (list_empty(&sym->cover) || sym->cover.next == LIST_POISON1)
+			continue;
+
+		struct list_head *cover_head = sym->cover_head;
+		if (cover_head->next != &sym->cover) {
+			//log_warn("cover head:%lx next:%lx symcover:%lx", cover_head, cover_head->next, &sym->cover);
+			// 任意一个symbol有cover列表，且不在栈顶则无法移除此补丁
+			return EFAULT;
+		}
+	}
+	return 0;
+}
+
 static int create_new_patch(const char *uuid, patch_entity_t *entity, struct list_head *patch_list)
 {
+	if (entity->status == UPATCH_PATCH_STATUS_ACTIVED) {
+		log_warn("new patch:%s status is ACTIVED is not allowed!\n", uuid);
+		return EFAULT;
+	}
 	struct upatch_meta_patch *patch = (struct upatch_meta_patch *)malloc(sizeof(struct upatch_meta_patch));
 	if (patch == NULL) {
 		log_warn("create new patch malloc failed, uuid:%s path:%s.\n",
@@ -147,7 +289,7 @@ static int create_new_patch(const char *uuid, patch_entity_t *entity, struct lis
 	memset(patch, 0, sizeof(struct upatch_meta_patch));
 	INIT_LIST_HEAD(&patch->self);
 	INIT_LIST_HEAD(&patch->syms);
-	if (patch_add_all_symbols(patch, entity->symbols, patch_list) != 0) {
+	if (patch_add_all_symbols(patch, entity->symbols) != 0) {
 		log_warn("create new patch failed, add symbols error.\n");
 		free(patch);
 		return ENOMEM;
@@ -189,7 +331,7 @@ static int symbol_collision_add(struct list_head *head, struct upatch_meta_patch
 	symbol_collision *sym_col = (symbol_collision *)malloc(sizeof(symbol_collision));
 	if (sym_col == NULL) {
 		log_warn("symbol collision add malloc failed.\n");
-		return 1;
+		return ENOMEM;
 	}
 	memset(sym_col, 0, sizeof(symbol_collision));
 	INIT_LIST_HEAD(&sym_col->self);
@@ -288,14 +430,18 @@ int meta_create_patch(const char *uuid, patch_entity_t *entity)
 }
 
 // 删除补丁管理结构
-void meta_remove_patch(const char *uuid)
+int meta_remove_patch(const char *uuid)
 {
 	struct upatch_meta_elf *elf, *elfsafe;
 	list_for_each_entry_safe(elf, elfsafe, &meta_head, self) {
 		struct upatch_meta_patch *patch = find_patch_in_elf(elf, uuid);
 		if (patch == NULL)
 			continue;
-		// 摘除patch
+		// 摘除patch前先检查补丁覆盖情况是否符合
+		if (patch_check_symbol_cover(patch) != 0) {
+			log_warn("Can't remove patch because of symbol cover.\n");
+			return EFAULT;
+		}
 		list_del(&patch->self);
 		list_remove_all_symbols(&patch->syms);
 		free(patch);
@@ -309,7 +455,7 @@ void meta_remove_patch(const char *uuid)
 		free(elf);
 		break;
 	}
-	return;
+	return 0;
 }
 
 // 查找patch
@@ -370,7 +516,7 @@ struct list_head *meta_get_elf_symbols(const char *elf_path)
 		struct upatch_meta_symbol *sym;
 		log_debug("Find patch:%s uuid:%s to add symbol.\n", patch->name, patch->uuid);
 		list_for_each_entry(sym, &patch->syms, self) {
-			if (list_add_symbol(syms, sym, NULL) != 0) {
+			if (list_add_symbol(syms, sym) != 0) {
 				log_warn("add sym:%s offset:%ld to result failed!\n", sym->name, sym->offset);
 				meta_put_symbols(syms);
 				return NULL;
@@ -404,7 +550,7 @@ struct list_head *meta_get_patch_symbols(const char *uuid)
 		return NULL;
 	}
 	list_for_each_entry(sym, &patch->syms, self) {
-		if (list_add_symbol(syms, sym, NULL) != 0) {
+		if (list_add_symbol(syms, sym) != 0) {
 			log_warn("add sym:%s offset:%ld to result failed!\n", sym->name, sym->offset);
 			meta_put_symbols(syms);
 			return NULL;
@@ -429,6 +575,37 @@ patch_status_e meta_get_patch_status(const char *uuid)
 	return patch->status;
 }
 
+static int patch_cover_status_machine(const char *uuid, struct upatch_meta_patch *patch, patch_status_e status)
+{
+	struct upatch_meta_elf *elf = find_elf_by_uuid(uuid);
+	if (elf == NULL) {
+		log_warn("get elf by uuid:%s failed when set patch status:%u\n", uuid, status);
+		return EFAULT;
+	}
+
+	if (patch->status != status && status == UPATCH_PATCH_STATUS_ACTIVED) {
+		if (patch_active_in_cover(&elf->patchs, patch) != 0) {
+			log_warn("symbol resolve cover failed.\n");
+			return EFAULT;
+		}
+		return 0;
+	}
+	if (patch->status == UPATCH_PATCH_STATUS_ACTIVED && status != patch->status) {
+		struct list_head *check = meta_patch_deactive_check(uuid);
+		if (check != NULL) {
+			log_warn("cover check failed!");
+			meta_put_symbol_collision(check);
+			return EFAULT;
+		}
+		if (patch_deactive_in_cover(patch) != 0) {
+			log_warn("patch:%s deactive in cover failed.!\n", uuid);
+			return EFAULT;
+		}
+		return 0;
+	}
+	return 0;
+}
+
 // 设置补丁状态
 int meta_set_patch_status(const char *uuid, patch_status_e status)
 {
@@ -442,6 +619,11 @@ int meta_set_patch_status(const char *uuid, patch_status_e status)
 		log_warn("can't find patch uuid:%s failed to set status:%u\n", uuid, status);
 		return ENOENT;
 	}
+	if (patch_cover_status_machine(uuid, patch, status) != 0) {
+		log_warn("set patch:%s status:%u failed.\n", uuid, status);
+		return EFAULT;
+	}
+
 	log_debug("meta hit patch status:%u set to %u\n", patch->status, status);
 	patch->status = status;
 
@@ -464,7 +646,43 @@ void meta_put_symbol_collision(struct list_head *lst)
 	return;
 }
 
+struct list_head *meta_patch_deactive_check(const char *uuid)
+{
+	struct list_head *res = NULL;
+	struct upatch_meta_symbol *sym;
+	struct upatch_meta_patch *patch = find_patch_by_uuid(uuid);
+	if (patch == NULL) {
+		log_warn("can't find patch by uuid:%s\n", uuid);
+		return NULL;
+	}
+	if (patch->status != UPATCH_PATCH_STATUS_ACTIVED) {
+		log_warn("uuid:%s patch status is:%u no need to check.\n", uuid, patch->status);
+		return NULL;
+	}
+	list_for_each_entry(sym, &patch->syms, self) {
+		if (list_empty(&sym->cover) || sym->cover.next == LIST_POISON1)
+			continue;
+		struct list_head *cover_head = sym->cover_head;
+		if (cover_head->next == &sym->cover)
+			continue;
+		if (res == NULL) {
+			res = (struct list_head *)malloc(sizeof(struct list_head));
+			if (res == NULL) {
+				log_warn("malloc failed when deactive check.\n");
+				return NULL;
+			}
+		}
 
+		struct upatch_meta_symbol *cover_sym;
+		list_for_each_entry(cover_sym, cover_head, cover) {
+			if (&cover_sym->cover == &sym->cover)
+				break;
+			struct upatch_meta_patch *patch_cover = find_patch_by_symbol(cover_sym);
+			symbol_collision_add(res, patch_cover);
+		}
+	}
+	return res;
+}
 
 int meta_print_all()
 {
@@ -475,9 +693,10 @@ int meta_print_all()
 	list_for_each_entry(elf, &meta_head, self) {
 		log_debug(" + elf:%s", elf->path);
 		list_for_each_entry(patch, &elf->patchs, self) {
-			log_debug("   + patch:%s uuid:%s", patch->name, patch->uuid);
+			log_debug("   + patch:%s uuid:%s status:%u", patch->name, patch->uuid, patch->status);
 			list_for_each_entry(sym, &patch->syms, self) {
-				log_debug("     + symbol:%s offset:%ld", sym->name, sym->offset);
+				log_debug("     + symbol name:%s offset:%ld cover:%lx prev:%lx", sym->name, sym->offset,
+						(unsigned long)&sym->cover, (unsigned long)sym->cover.prev);
 			}
 		}
 	}

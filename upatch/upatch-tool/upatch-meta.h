@@ -41,7 +41,7 @@ typedef struct _patch_entity {
 int meta_create_patch(const char *uuid, patch_entity_t *entity);
 
 // 删除补丁管理结构
-void meta_remove_patch(const char *uuid);
+int meta_remove_patch(const char *uuid);
 
 // 查找patch
 int meta_get_patch_entity(const char *uuid, patch_entity_t *entity);
@@ -63,6 +63,7 @@ int meta_set_patch_status(const char *uuid, patch_status_e status);
 
 struct list_head *meta_get_symbol_collision(const char *elf_path, struct list_head *symbols);
 void meta_put_symbol_collision(struct list_head *lst);
+struct list_head *meta_patch_deactive_check(const char *uuid);
 
 int meta_patch_init();
 void meta_patch_fini();
