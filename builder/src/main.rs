@@ -296,7 +296,12 @@ impl SyscareBuilder {
 
         debug!("- Generating spec file");
         let new_spec_file = PackageSpecBuilderFactory::get_builder(PKG_IMPL.format())
-            .build(patch_info, pkg_source_dir, pkg_spec_dir)
+            .build(
+                patch_info,
+                &self.args.patch_requires,
+                pkg_source_dir,
+                pkg_spec_dir,
+            )
             .context("Failed to generate spec file")?;
 
         debug!("- Building package");

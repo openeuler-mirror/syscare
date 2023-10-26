@@ -9,6 +9,7 @@ pub trait PackageSpecBuilder {
     fn build(
         &self,
         patch_info: &PatchInfo,
+        patch_requires: &[String],
         source_dir: &Path,
         output_dir: &Path,
     ) -> Result<PathBuf>;

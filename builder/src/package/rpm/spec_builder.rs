@@ -81,7 +81,11 @@ impl RpmSpecBuilder {
         )
     }
 
-    fn create_pkg_spec<I, P>(patch_info: &PatchInfo, pkg_file_list: I) -> RpmSpecFile
+    fn create_pkg_spec<I, P>(
+        patch_info: &PatchInfo,
+        patch_requires: &[String],
+        pkg_file_list: I,
+    ) -> RpmSpecFile
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
@@ -117,6 +121,9 @@ impl RpmSpecBuilder {
         spec.group = Some(PKG_GROUP.to_owned());
         spec.requires.insert(Self::parse_requires(patch_info));
         spec.requires.insert(PKG_REQUIRE.to_string());
+        for require in patch_requires {
+            spec.requires.insert(require.to_string());
+        }
         spec.prep = PKG_SCRIPT_PREP.to_owned();
         spec.install = PKG_SCRIPT_INSTALL.to_owned();
         spec.preun = Some(PKG_SCRIPT_PREUN.to_owned());
@@ -155,11 +162,13 @@ impl PackageSpecBuilder for RpmSpecBuilder {
     fn build(
         &self,
         patch_info: &PatchInfo,
+        patch_requires: &[String],
         source_dir: &Path,
         output_dir: &Path,
     ) -> Result<PathBuf> {
         let pkg_spec_file = Self::create_pkg_spec(
             patch_info,
+            patch_requires,
             fs::list_files(source_dir, fs::TraverseOptions { recursive: true })
                 .context("Failed to list packge files")?,
         );

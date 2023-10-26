@@ -28,6 +28,9 @@ pub struct Arguments {
     /// Patch description
     pub patch_description: String,
 
+    /// Patch requires
+    pub patch_requires: Vec<String>,
+
     /// Source package
     pub source: Vec<PathBuf>,
 
@@ -67,6 +70,7 @@ impl Parser<'_> for Arguments {
             patch_version: ArgParserImpl::parse_arg(matches, "patch_version")?,
             patch_release: ArgParserImpl::parse_arg(matches, "patch_release")?,
             patch_description: ArgParserImpl::parse_arg(matches, "patch_description")?,
+            patch_requires: ArgParserImpl::parse_args(matches, "patch_requires")?,
             source: ArgParserImpl::parse_args(matches, "source")?,
             debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
             patch: ArgParserImpl::parse_args(matches, "patch")?,
