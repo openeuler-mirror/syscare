@@ -31,6 +31,9 @@ impl ArgParser<'_, String> for ArgParserImpl {
     }
 
     fn parse_args(matches: &ArgMatches<'_>, arg_name: &str) -> Result<Vec<String>> {
+        if !matches.is_present(arg_name) {
+            return Ok(vec![]);
+        }
         matches
             .values_of_lossy(arg_name)
             .with_context(|| format!("Argument \"{}\" is not present", arg_name))

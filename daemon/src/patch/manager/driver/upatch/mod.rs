@@ -1,23 +1,19 @@
-use std::{
-    ffi::OsString,
-    os::unix::prelude::OsStringExt,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, os::unix::prelude::OsStringExt};
 
 use anyhow::{anyhow, bail, ensure, Error, Result};
 
 use libc::{c_char, EEXIST, EFAULT, ENOENT, EPERM};
 use log::warn;
 use syscare_abi::PatchStatus;
-use syscare_common::util::{
-    digest,
-    fs::{self, TraverseOptions},
-};
+use syscare_common::util::digest;
+
+use self::helper::UPatchDriverHelper;
 
 use super::{Patch, PatchDriver, PatchOpFlag, UserPatchExt};
 
 mod ffi;
 mod guard;
+mod helper;
 
 use ffi::ToCString;
 pub use guard::*;
@@ -31,28 +27,6 @@ impl UserPatchDriver {
         Ok(Self {
             _guard: UPatchDriverKmodGuard::new()?,
         })
-    }
-}
-
-impl UserPatchDriver {
-    fn find_pid_by_elf_file(&self, target_elf: &Path) -> Result<Vec<i32>> {
-        let pid_list = fs::list_dirs("/proc", TraverseOptions { recursive: false })?
-            .into_iter()
-            .filter_map(|dir_path| {
-                fs::file_name(dir_path)
-                    .to_string_lossy()
-                    .as_ref()
-                    .parse::<i32>()
-                    .ok()
-            })
-            .filter(|pid| {
-                fs::read_link(PathBuf::from(format!("/proc/{}/exe", pid)))
-                    .map(|exe_path| exe_path == target_elf)
-                    .unwrap_or(false)
-            })
-            .collect::<Vec<_>>();
-
-        Ok(pid_list)
     }
 }
 
@@ -144,7 +118,7 @@ impl PatchDriver for UserPatchDriver {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
 
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
-        let pid_list = self.find_pid_by_elf_file(&patch_ext.target_elf)?;
+        let pid_list = UPatchDriverHelper::find_target_elf_pid(&patch_ext.target_elf)?;
         let ret_val =
             unsafe { ffi::upatch_active(patch_uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
 
@@ -160,7 +134,7 @@ impl PatchDriver for UserPatchDriver {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
 
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
-        let pid_list = self.find_pid_by_elf_file(&patch_ext.target_elf)?;
+        let pid_list = UPatchDriverHelper::find_target_elf_pid(&patch_ext.target_elf)?;
         let ret_val =
             unsafe { ffi::upatch_deactive(patch_uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
 
