@@ -14,9 +14,9 @@
 #include "upatch-process.h"
 #include "list.h"
 
-int process_patch(int, struct upatch_elf *, struct running_elf *);
+int process_patch(int, struct upatch_elf *, struct running_elf *, const char *uuid);
 
-int process_unpatch(int);
+int process_unpatch(int, const char *uuid);
 
 int process_info(int);
 

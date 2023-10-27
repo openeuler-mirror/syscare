@@ -385,7 +385,7 @@ out:
 	return ret;
 }
 
-static int complete_info(struct upatch_elf *uelf, struct object_file *obj)
+static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const char *uuid)
 {
 	int ret = 0, i;
 	struct upatch_info *uinfo =
@@ -402,6 +402,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj)
 	uinfo->changed_func_num =
 		uelf->info.shdrs[uelf->index.upatch_funcs].sh_size /
 		sizeof(struct upatch_patch_func);
+	memcpy(uinfo->id, uuid, strlen(uuid));
 
 	log_debug("change insn:\n");
 	for (i = 0; i < uinfo->changed_func_num; ++i) {
@@ -577,7 +578,7 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 }
 
 static int upatch_apply_patches(struct upatch_process *proc,
-				struct upatch_elf *uelf)
+				struct upatch_elf *uelf, const char *uuid)
 {
 	int ret = 0;
 	struct object_file *obj = NULL;
@@ -644,7 +645,7 @@ static int upatch_apply_patches(struct upatch_process *proc,
 		goto free;
 
 	/* upatch upatch info */
-	ret = complete_info(uelf, obj);
+	ret = complete_info(uelf, obj, uuid);
 	if (ret)
 		goto free;
 
@@ -666,7 +667,7 @@ out:
 	return ret;
 }
 
-int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf)
+int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, const char *uuid)
 {
 	int ret;
 	bool is_calc_time = false;
@@ -711,7 +712,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf)
 
 	// TODO: 栈解析
 	// 应用
-	ret = upatch_apply_patches(&proc, uelf);
+	ret = upatch_apply_patches(&proc, uelf, uuid);
 	if (ret < 0)
 		goto out_free;
 
@@ -730,15 +731,35 @@ out:
 	return ret;
 }
 
-static int upatch_unapply_patches(struct upatch_process *proc)
+static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 {
 	int ret = 0;
 	struct object_file *obj = NULL;
 	struct object_patch *patch = NULL;
 	bool found = false;
 
+	// Traverse all mapped memory and find all upatch memory
 	list_for_each_entry(obj, &proc->objs, list) {
-		if (obj->is_patch) {
+		if (!obj->is_patch) {
+			continue;
+		}
+		// For eatch patch, check it's id and do remove
+		list_for_each_entry(patch, &obj->applied_patch, list) {
+			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) != 0) {
+				continue;
+			}
+
+			ret = unapply_patch(obj, patch->funcs, patch->uinfo->changed_func_num);
+			if (ret) {
+				goto out;
+			}
+
+			log_debug("munmap upatch layout core:\n");
+			__upatch_memfree(obj,
+				(void *)patch->uinfo->start,
+				patch->uinfo->end - patch->uinfo->start
+			);
+
 			found = true;
 			break;
 		}
@@ -750,31 +771,11 @@ static int upatch_unapply_patches(struct upatch_process *proc)
 		goto out;
 	}
 
-	found = false;
-	list_for_each_entry(patch, &obj->applied_patch, list) {
-		// TODO: check upatch_info id
-		found = true;
-		break;
-	}
-
-	if (!found) {
-		ret = -1;
-		log_debug("can't found patch info memory\n");
-		goto out;
-	}
-
-	ret = unapply_patch(obj, patch->funcs, patch->uinfo->changed_func_num);
-	if (ret)
-		goto out;
-
-	log_debug("munmap upatch layout core:\n");
-	__upatch_memfree(obj, (void *)patch->uinfo->start,
-			 patch->uinfo->end - patch->uinfo->start);
 out:
 	return ret;
 }
 
-int process_unpatch(int pid)
+int process_unpatch(int pid, const char *uuid)
 {
 	int ret;
 	bool is_calc_time = false;
@@ -820,7 +821,7 @@ int process_unpatch(int pid)
 		goto out_free;
 
 	// 应用
-	ret = upatch_unapply_patches(&proc);
+	ret = upatch_unapply_patches(&proc, uuid);
 	if (ret < 0)
 		goto out_free;
 

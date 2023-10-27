@@ -198,7 +198,8 @@ int upatch_active(const char *uuid, const pid_t *pid_list, size_t list_len)
         char *argv[] = {
             "/usr/libexec/syscare/upatch-manage",
             "patch",
-            "--pid", (char *) &pid,
+            "--uuid",(char *) uuid,
+            "--pid", pid_str,
             "--binary",
             target_elf,
             "--upatch",
@@ -300,7 +301,8 @@ int upatch_deactive(const char *uuid, const pid_t *pid_list, size_t list_len)
         char *argv[] = {
             "/usr/libexec/syscare/upatch-manage",
             "unpatch",
-            "--pid", (char *) &pid,
+            "--uuid",(char *) uuid,
+            "--pid", pid_str,
             "--binary",
             target_elf,
             "--upatch",

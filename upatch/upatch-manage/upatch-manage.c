@@ -36,11 +36,13 @@ struct arguments {
 	int pid;
 	char *upatch;
 	char *binary;
+	char *uuid;
 	bool verbose;
 };
 
 static struct argp_option options[] = {
 	{ "verbose", 'v', NULL, 0, "Show verbose output" },
+	{ "uuid", 'U', "uuid", 0, "the uuid of the upatch" },
 	{ "pid", 'p', "pid", 0, "the pid of the user-space process" },
 	{ "upatch", 'u', "upatch", 0, "the upatch file" },
 	{ "binary", 'b', "binary", 0, "the binary file" },
@@ -53,7 +55,7 @@ static struct argp_option options[] = {
 static char program_doc[] = "Operate a upatch file on the user-space process";
 
 static char args_doc[] =
-	"<cmd> --pid <Pid> --upatch <Upatch path> --binary <Binary path>";
+	"<cmd> --pid <Pid> --upatch <Upatch path> --binary <Binary path> --uuid <Uuid>";
 
 const char *argp_program_version = "UPATCH_VERSION";
 
@@ -70,7 +72,7 @@ static error_t check_opt(struct argp_state *state)
 	case UNPATCH:
 	case INFO:
 		if (!arguments->pid || arguments->upatch == NULL ||
-		    arguments->binary == NULL) {
+		    arguments->binary == NULL || arguments->uuid == NULL) {
 			argp_usage(state);
 			return ARGP_ERR_UNKNOWN;
 		}
@@ -96,6 +98,9 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 		break;
 	case 'b':
 		arguments->binary = arg;
+		break;
+	case 'U':
+		arguments->uuid = arg;
 		break;
 	case ARGP_KEY_ARG:
 		if (state->arg_num >= 1)
@@ -124,9 +129,10 @@ static void show_program_info(struct arguments *arguments)
 	log_debug("pid: %d\n", arguments->pid);
 	log_debug("upatch object: %s\n", arguments->upatch);
 	log_debug("binary object: %s\n", arguments->binary);
+	log_debug("uuid object: %s\n", arguments->uuid);
 }
 
-int patch_upatch(const char *binary_path, const char *upatch_path, int pid)
+int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
 {
 	int ret;
 	struct upatch_elf uelf;
@@ -152,7 +158,7 @@ int patch_upatch(const char *binary_path, const char *upatch_path, int pid)
 	//     goto out;
 	// }
 
-	ret = process_patch(pid, &uelf, &relf);
+	ret = process_patch(pid, &uelf, &relf, uuid);
 	if (ret) {
 		log_error("process patch failed %d \n", ret);
 		goto out;
@@ -168,11 +174,11 @@ out:
 	return ret;
 }
 
-int unpatch_upatch(const char *binary_path, const char *upatch_path, int pid)
+int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
 {
 	int ret = 0;
 
-	ret = process_unpatch(pid);
+	ret = process_unpatch(pid, uuid);
 	if (ret) {
 		log_error("process patch failed %d \n", ret);
 		goto out;
@@ -218,10 +224,10 @@ int main(int argc, char *argv[])
 	show_program_info(&arguments);
 	switch (arguments.cmd) {
 	case PATCH:
-		return patch_upatch(arguments.binary, arguments.upatch,
+		return patch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
 				    arguments.pid);
 	case UNPATCH:
-		return unpatch_upatch(arguments.binary, arguments.upatch,
+		return unpatch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
 				      arguments.pid);
 	case INFO:
 		return info_upatch(arguments.binary, arguments.upatch,
