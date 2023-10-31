@@ -64,15 +64,16 @@ impl SyscareBuilder {
             if pkg_info.kind != PackageType::BinaryPackage {
                 bail!("File \"{}\" is not a debuginfo package", pkg_path.display());
             }
-            if !pkg_list
-                .iter()
-                .any(|src_pkg| src_pkg.is_source_of(&pkg_info))
-            {
-                bail!(
-                    "File \"{}\" cannot match to any source package",
-                    pkg_path.display()
-                );
-            }
+            // TODO: check package source
+            // if !pkg_list
+            //     .iter()
+            //     .any(|src_pkg| src_pkg.is_source_of(&pkg_info))
+            // {
+            //     bail!(
+            //         "File \"{}\" cannot match to any source package",
+            //         pkg_path.display()
+            //     );
+            // }
         }
 
         Ok(pkg_list)
