@@ -26,7 +26,7 @@ pub struct PatchEntity {
     pub checksum: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PatchFile {
     pub name: OsString,
     pub path: PathBuf,

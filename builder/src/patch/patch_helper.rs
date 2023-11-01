@@ -33,7 +33,7 @@ impl PatchHelper {
                 digest: file_digest,
             });
         }
-
+        patch_list.sort();
         Ok(patch_list)
     }
 }
