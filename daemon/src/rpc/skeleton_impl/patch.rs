@@ -29,7 +29,7 @@ impl PatchSkeletonImpl {
         }
     }
 
-    fn parse_state_record(&self, patch: &Patch) -> Result<PatchStateRecord> {
+    fn parse_state_record(&self, patch: Arc<Patch>) -> Result<PatchStateRecord> {
         let patch_name = patch.to_string();
         let patch_status = self
             .patch_manager
@@ -43,7 +43,7 @@ impl PatchSkeletonImpl {
         })
     }
 
-    fn parse_list_record(&self, patch: &Patch) -> Result<PatchListRecord> {
+    fn parse_list_record(&self, patch: Arc<Patch>) -> Result<PatchListRecord> {
         let patch_uuid = patch.uuid.to_owned();
         let patch_name = patch.to_string();
         let patch_status = self
@@ -66,7 +66,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
         RpcFunction::call(move || -> Result<()> {
             let mut patch_manager = self.patch_manager.write();
             for patch in patch_manager.match_patch(&identifier)? {
-                patch_manager.check_patch(&patch, PatchOpFlag::Normal)?;
+                patch_manager.check_patch(patch, PatchOpFlag::Normal)?;
             }
 
             Ok(())
@@ -152,7 +152,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
 
             let mut result = Vec::new();
             for patch in patch_list {
-                result.push(self.parse_list_record(&patch)?);
+                result.push(self.parse_list_record(patch)?);
             }
 
             Ok(result)
@@ -166,7 +166,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
 
             let mut result = Vec::new();
             for patch in patch_list {
-                result.push(self.parse_state_record(&patch)?);
+                result.push(self.parse_state_record(patch)?);
             }
             Ok(result)
         })

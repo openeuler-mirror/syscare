@@ -667,7 +667,22 @@ out:
 	return ret;
 }
 
-int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, const char *uuid)
+int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
+{
+	struct object_file *obj;
+	struct object_patch *patch;
+	list_for_each_entry(obj, &proc->objs, list) {
+		if (!obj->is_patch)
+			continue;
+		list_for_each_entry(patch, &obj->applied_patch, list) {
+			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0)
+				return -EEXIST;
+			}
+	}
+	return 0;
+}
+
+int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, const char *uuid, const char *binary_path)
 {
 	int ret;
 	bool is_calc_time = false;
@@ -701,6 +716,17 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	ret = upatch_process_map_object_files(&proc, NULL);
 	if (ret < 0)
 		goto out_free;
+	ret = upatch_process_uuid_exist(&proc, uuid);
+	if (ret != 0) {
+		goto out_free;
+	}
+	ret = binary_init(relf, binary_path);
+    if (ret) {
+        log_error("binary_init failed %d \n", ret);
+        goto out_free;
+    }
+
+    uelf->relf = relf;
 
 	is_calc_time = true;
 	gettimeofday(&start_tv, NULL);

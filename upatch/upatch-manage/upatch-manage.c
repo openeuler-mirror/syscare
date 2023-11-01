@@ -144,21 +144,21 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
 		goto out;
 	}
 
-	ret = binary_init(&relf, binary_path);
+	/*ret = binary_init(&relf, binary_path);
 	if (ret) {
 		log_error("binary_init failed %d \n", ret);
 		goto out;
 	}
 
 	uelf.relf = &relf;
-
+*/
 	// ret = check_build_id(&uelf.info, &relf.info);
 	// if (ret) {
 	//     log_error("check build id failed %d \n", ret);
 	//     goto out;
 	// }
 
-	ret = process_patch(pid, &uelf, &relf, uuid);
+	ret = process_patch(pid, &uelf, &relf, uuid, binary_path);
 	if (ret) {
 		log_error("process patch failed %d \n", ret);
 		goto out;
@@ -210,7 +210,7 @@ FILE *upatch_manage_log_fd = NULL;
 int main(int argc, char *argv[])
 {
 	struct arguments arguments;
-
+	int ret;
 	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
 
 	if (upatch_manage_log_fd < 0)
@@ -224,16 +224,22 @@ int main(int argc, char *argv[])
 	show_program_info(&arguments);
 	switch (arguments.cmd) {
 	case PATCH:
-		return patch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
+		ret = patch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
 				    arguments.pid);
+		break;
 	case UNPATCH:
-		return unpatch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
+		ret = unpatch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
 				      arguments.pid);
+		break;
 	case INFO:
-		return info_upatch(arguments.binary, arguments.upatch,
+		ret = info_upatch(arguments.binary, arguments.upatch,
 				   arguments.pid);
+		break;
 	default:
 		ERROR("unknown command");
+		ret = EINVAL;
+		break;
 	}
 	fclose(upatch_manage_log_fd);
+	return abs(ret);
 }

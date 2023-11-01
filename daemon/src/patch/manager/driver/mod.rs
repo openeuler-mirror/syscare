@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use anyhow::Result;
 
 use syscare_abi::PatchStatus;
@@ -20,24 +22,24 @@ pub enum PatchOpFlag {
 pub trait PatchDriver: Send + Sync {
     /// Perform file intergrity & consistency check. </br>
     /// Should be used befor patch application.
-    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()>;
+    fn check(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()>;
 
     /// Fetch and return the patch status.
-    fn status(&self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus>;
+    fn status(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus>;
 
     /// Apply a patch. </br>
     /// After this action, the patch status would be changed to 'DEACTIVED'.
-    fn apply(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()>;
+    fn apply(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()>;
 
     /// Remove a patch. </br>
     /// After this action, the patch status would be changed to 'NOT-APPLIED'.
-    fn remove(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()>;
+    fn remove(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()>;
 
     /// Active a patch. </br>
     /// After this action, the patch status would be changed to 'ACTIVED'.
-    fn active(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()>;
+    fn active(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()>;
 
     /// Deactive a patch. </br>
     /// After this action, the patch status would be changed to 'DEACTIVED'.
-    fn deactive(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()>;
+    fn deactive(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()>;
 }
