@@ -57,7 +57,7 @@ int main(int argc, char *argv[], char *envp[])
     /* ATTENTION: consider @FILE. */
     object_path = __argv[old_index + 1]; // if not found, old_index + 1 = new_index
     if (!object_path)
-        return -EINVAL;
+        goto out;
     /* no handle for the case like: as -v --64 -o /dev/null /dev/null */
     else if (!strcmp(object_path, "/dev/null"))
         goto out;
@@ -74,6 +74,5 @@ int main(int argc, char *argv[], char *envp[])
 out:
     new_index = readlink("/proc/self/exe", (char *)&original_path, PATH_MAX);
     original_path[new_index] = '\0';
-    printf("[hacked] original path is %s \n", (char *)&original_path);
     return execve((const char *)&original_path, (void *)__argv, envp);
 }
