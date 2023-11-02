@@ -137,6 +137,8 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
 	int ret;
 	struct upatch_elf uelf;
 	struct running_elf relf;
+	memset(&uelf, 0, sizeof(struct upatch_elf));
+	memset(&relf, 0, sizeof(struct running_elf));
 
 	ret = upatch_init(&uelf, upatch_path);
 	if (ret) {
