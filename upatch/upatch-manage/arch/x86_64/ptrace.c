@@ -141,5 +141,5 @@ unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
 	*(unsigned int *)(jmp_insn + 1) =
 		(unsigned int)(new_addr - old_addr - 5);
 
-	return *(unsigned int *)jmp_insn;
+	return *(unsigned long *)jmp_insn;
 }
