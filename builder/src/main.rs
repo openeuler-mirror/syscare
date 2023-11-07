@@ -46,6 +46,9 @@ impl SyscareBuilder {
 
         for pkg_path in self.args.source.clone() {
             let mut pkg_info = PKG_IMPL.parse_package_info(&pkg_path)?;
+            info!("------------------------------");
+            info!("Source Package");
+            info!("------------------------------");
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::SourcePackage {
@@ -59,6 +62,9 @@ impl SyscareBuilder {
 
         for pkg_path in self.args.debuginfo.clone() {
             let pkg_info = PKG_IMPL.parse_package_info(&pkg_path)?;
+            info!("------------------------------");
+            info!("Debuginfo Package");
+            info!("------------------------------");
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::BinaryPackage {
@@ -75,6 +81,7 @@ impl SyscareBuilder {
             //     );
             // }
         }
+        info!("------------------------------");
 
         Ok(pkg_list)
     }
@@ -460,9 +467,13 @@ impl SyscareBuilder {
             "Cannot find any patch metadata"
         );
 
-        for patch_info in patch_info_list {
+        for patch_info in &patch_info_list {
+            info!("------------------------------");
+            info!("Syscare Patch");
+            info!("------------------------------");
             info!("{}", patch_info);
-            self.build_patch_package(&patch_info)?;
+            info!("------------------------------");
+            self.build_patch_package(patch_info)?;
         }
 
         info!("Building source package");

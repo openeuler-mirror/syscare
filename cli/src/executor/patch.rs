@@ -1,8 +1,7 @@
-use anyhow::Result;
-use log::{debug, info};
+use anyhow::{anyhow, ensure, Error, Result};
+use log::info;
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
-use syscare_common::util::fs;
 
 use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::PatchProxy};
 
@@ -21,60 +20,49 @@ impl PatchCommandExecutor {
 }
 
 impl PatchCommandExecutor {
-    fn show_patch_info(patch_info: PatchInfo) {
-        const PATCH_FLAG_NONE: &str = "(none)";
+    fn build_error_msg(error_list: impl IntoIterator<Item = Error>) -> Error {
+        let mut err_msg = String::new();
 
-        let patch_elfs = match patch_info.entities.is_empty() {
-            true => PATCH_FLAG_NONE.to_owned(),
-            false => patch_info
-                .entities
-                .iter()
-                .map(|entity| {
-                    format!(
-                        "{}, ",
-                        fs::file_name(&entity.patch_target).to_string_lossy()
-                    )
-                })
-                .collect::<String>()
-                .trim_end_matches(", ")
-                .to_string(),
-        };
-
-        info!("uuid:        {}", patch_info.uuid);
-        info!("name:        {}", patch_info.name);
-        info!("version:     {}", patch_info.version);
-        info!("release:     {}", patch_info.release);
-        info!("arch:        {}", patch_info.arch);
-        info!("type:        {}", patch_info.kind);
-        info!("target:      {}", patch_info.target.short_name());
-        info!("target_elf:  {}", patch_elfs);
-        info!("license:     {}", patch_info.target.license);
-        info!("description: {}", patch_info.description);
-        info!("patch:");
-        for patch_file in patch_info.patches {
-            info!("{}", patch_file.name.to_string_lossy())
+        for (idx, e) in error_list.into_iter().enumerate() {
+            err_msg.push_str(&format!("{}. {}", idx, e));
+            err_msg.push('\n');
+            err_msg.push('\n');
         }
+        err_msg.pop();
+        err_msg.pop();
+
+        anyhow!(err_msg).context("Operation failed")
     }
 
-    fn show_patch_target(package: PackageInfo) {
-        info!("name:    {}", package.name);
-        info!("type:    {}", package.kind);
-        info!("arch:    {}", package.arch);
-        info!("epoch:   {}", package.epoch);
-        info!("version: {}", package.version);
-        info!("release: {}", package.release);
-        info!("license: {}", package.license);
+    fn show_patch_info(patch_list: impl IntoIterator<Item = (String, PatchInfo)>) {
+        for (identifier, patch) in patch_list {
+            info!("-------------------------------------------");
+            info!("Patch: {}", identifier);
+            info!("-------------------------------------------");
+            info!("{}", patch);
+        }
+        info!("-------------------------------------------");
     }
 
-    fn show_patch_state(list: impl IntoIterator<Item = PatchStateRecord>) {
-        for record in list {
+    fn show_patch_target(pkg_list: impl IntoIterator<Item = (String, PackageInfo)>) {
+        for (identifier, package) in pkg_list {
+            info!("-------------------------------------------");
+            info!("Patch: {}", identifier);
+            info!("-------------------------------------------");
+            info!("{}", package);
+        }
+        info!("-------------------------------------------");
+    }
+
+    fn show_patch_status(status_list: impl IntoIterator<Item = PatchStateRecord>) {
+        for record in status_list {
             info!("{}: {}", record.name, record.status)
         }
     }
 
-    fn show_patch_list(list: impl IntoIterator<Item = PatchListRecord>) {
+    fn show_patch_list(patch_list: impl IntoIterator<Item = PatchListRecord>) {
         info!("{:<40} {:<60} {:<12}", "Uuid", "Name", "Status");
-        for record in list {
+        for record in patch_list {
             info!(
                 "{:<40} {:<60} {:<12}",
                 record.uuid, record.name, record.status
@@ -88,72 +76,147 @@ impl CommandExecutor for PatchCommandExecutor {
         self.check_root_permission()?;
 
         match command {
-            SubCommand::Info { identifier } => {
-                let patch_info = self.proxy.get_patch_info(identifier)?;
-                Self::show_patch_info(patch_info);
+            SubCommand::Info { identifiers } => {
+                let mut patch_list = vec![];
+                let mut error_list = vec![];
+
+                for identifier in identifiers {
+                    match self.proxy.get_patch_info(identifier) {
+                        Ok(patch) => patch_list.push((identifier.to_owned(), patch)),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_info(patch_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Target { identifier } => {
-                let target_list = self.proxy.get_patch_target(identifier)?;
-                Self::show_patch_target(target_list);
+            SubCommand::Target { identifiers } => {
+                let mut pkg_list = vec![];
+                let mut error_list = vec![];
+
+                for identifier in identifiers {
+                    match self.proxy.get_patch_target(identifier) {
+                        Ok(pkg) => pkg_list.push((identifier.to_owned(), pkg)),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_target(pkg_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Status { identifier } => {
-                let result_list = self.proxy.get_patch_status(identifier)?;
-                Self::show_patch_state(result_list);
+            SubCommand::Status { identifiers } => {
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+
+                for identifier in identifiers {
+                    match self.proxy.get_patch_status(identifier) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::List => {
-                let patch_list = self.proxy.get_patch_list()?;
-                Self::show_patch_list(patch_list);
+                Self::show_patch_list(self.proxy.get_patch_list()?);
             }
-            SubCommand::Check { identifier } => {
-                self.proxy.check_patch(identifier)?;
-            }
-            SubCommand::Apply { identifier, force } => {
-                debug!("Acquiring exclusive file lock...");
+            SubCommand::Check { identifiers } => {
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.apply_patch(identifier, *force)?;
-                Self::show_patch_state(result_list);
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    if let Err(e) = self.proxy.check_patch(identifier) {
+                        error_list.push(e);
+                    }
+                }
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Remove { identifier } => {
-                debug!("Acquiring exclusive file lock...");
+            SubCommand::Apply { identifiers, force } => {
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.remove_patch(identifier)?;
-                Self::show_patch_state(result_list);
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    match self.proxy.apply_patch(identifier, *force) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Active { identifier } => {
-                debug!("Acquiring exclusive file lock...");
+            SubCommand::Remove { identifiers } => {
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.active_patch(identifier)?;
-                Self::show_patch_state(result_list);
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    match self.proxy.remove_patch(identifier) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Deactive { identifier } => {
-                debug!("Acquiring exclusive file lock...");
+            SubCommand::Active { identifiers } => {
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.deactive_patch(identifier)?;
-                Self::show_patch_state(result_list);
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    match self.proxy.active_patch(identifier) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
-            SubCommand::Accept { identifier } => {
-                debug!("Acquiring exclusive file lock...");
+            SubCommand::Deactive { identifiers } => {
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let result_list = self.proxy.accept_patch(identifier)?;
-                Self::show_patch_state(result_list);
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    match self.proxy.deactive_patch(identifier) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+            }
+            SubCommand::Accept { identifiers } => {
+                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+
+                let mut status_list = vec![];
+                let mut error_list = vec![];
+                for identifier in identifiers {
+                    match self.proxy.accept_patch(identifier) {
+                        Ok(new_status) => status_list.extend(new_status),
+                        Err(e) => error_list.push(e),
+                    }
+                }
+                Self::show_patch_status(status_list);
+
+                ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Save => {
-                debug!("Acquiring exclusive file lock...");
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
                 self.proxy.save_patch_status()?;
             }
             SubCommand::Restore { accepted } => {
-                debug!("Acquiring exclusive file lock...");
                 let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
 
-                let accepted_only = *accepted;
-                self.proxy.restore_patch_status(accepted_only)?;
+                self.proxy.restore_patch_status(*accepted)?;
             }
             _ => {}
         };

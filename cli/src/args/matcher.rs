@@ -31,43 +31,43 @@ impl ArgMatcher {
             )
             (@subcommand info =>
                 (about: "Show patch info")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand target =>
                 (about: "Show patch target")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand status =>
                 (about: "Show patch status")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand list =>
                 (about: "List all patches")
             )
             (@subcommand check =>
                 (about: "Check a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand apply =>
                 (about: "Apply a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
                 (@arg force: short("f") long("force") "Force to apply a patch")
             )
             (@subcommand remove =>
                 (about: "Remove a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand active =>
                 (about: "Active a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand deactive =>
                 (about: "Deactive a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand accept =>
                 (about: "Accept a patch")
-                (@arg identifier: value_name("IDENTIFIER") +takes_value +required "Patch identifier")
+                (@arg identifier: value_name("IDENTIFIER") +takes_value +multiple +required "Patch identifier")
             )
             (@subcommand save =>
                 (about: "Save all patch status")

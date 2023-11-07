@@ -1,6 +1,7 @@
 use std::{fs::File, path::Path};
 
 use anyhow::{Context, Result};
+use log::debug;
 
 mod ffi {
     use std::{fs::File, os::unix::io::AsRawFd};
@@ -40,10 +41,12 @@ impl ExclusiveFileLockGuard {
     }
 
     fn acquire(&self) -> Result<()> {
+        debug!("Acquiring exclusive file lock...");
         ffi::flock_exclusive(&self.file).context("Failed to acquire exclusive file lock")
     }
 
     fn release(&self) -> Result<()> {
+        debug!("Releasing exclusive file lock...");
         ffi::flock_unlock(&self.file).context("Failed to release exclusive file lock")
     }
 }
