@@ -119,6 +119,8 @@ int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
 
 unsigned long object_find_patch_region(struct object_file *, size_t,
 				       struct vm_hole **);
+unsigned long object_find_patch_region_nolimit(struct object_file *, size_t,
+				       struct vm_hole **);
 
 void upatch_process_memfree(struct upatch_process *);
 

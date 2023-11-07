@@ -776,6 +776,41 @@ unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
 
 	return region_start;
 }
+unsigned long object_find_patch_region_nolimit(struct object_file *obj, size_t memsize,
+				       struct vm_hole **hole)
+{
+	struct list_head *head = &obj->proc->vmaholes;
+	struct vm_hole *left_hole = obj->previous_hole;
+	struct vm_hole *right_hole = next_hole(left_hole, head);
+	unsigned long region_start = 0;
+
+	log_debug("Looking for patch region for '%s'...\n", obj->name);
+
+	while (right_hole != NULL) {
+		if (hole_size(right_hole) > memsize) {
+			*hole = right_hole;
+			goto found;
+		} else
+			right_hole = next_hole(right_hole, head);
+
+	while (left_hole != NULL)
+		if (hole_size(left_hole) > memsize) {
+			*hole = left_hole;
+			goto found;
+		} else
+			left_hole = prev_hole(left_hole, head);
+	}
+
+	log_error("can't find suitable region for patch on '%s'\n",
+			obj->name);
+	return -1UL;
+found:
+	region_start = ((*hole)->start >> PAGE_SHIFT) << PAGE_SHIFT;
+	log_debug("Found patch region for '%s' at %lx\n", obj->name,
+		  region_start);
+
+	return region_start;
+}
 
 static void upatch_object_memfree(struct object_file *obj)
 {

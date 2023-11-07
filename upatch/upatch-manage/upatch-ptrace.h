@@ -57,7 +57,8 @@ int upatch_execute_remote(struct upatch_ptrace_ctx *, const unsigned char *,
 			  size_t, struct user_regs_struct *);
 
 size_t get_origin_insn_len();
-
+size_t get_upatch_insn_len();
+size_t get_upatch_addr_len();
 unsigned long get_new_insn(struct object_file *, unsigned long, unsigned long);
 
 #endif

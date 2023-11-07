@@ -5,7 +5,7 @@
 #include "insn.h"
 #include "upatch-ptrace.h"
 
-#define ORIGIN_INSN_LEN 4
+#define ORIGIN_INSN_LEN 16
 
 int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 			       unsigned long arg1, unsigned long arg2,
@@ -146,7 +146,28 @@ size_t get_origin_insn_len()
 {
 	return ORIGIN_INSN_LEN;
 }
+#define UPATCH_INSN_LEN 8
+#define UPATCH_ADDR_LEN 8
+size_t get_upatch_insn_len()
+{
+	return UPATCH_INSN_LEN;
+}
 
+size_t get_upatch_addr_len()
+{
+	return UPATCH_ADDR_LEN;
+}
+
+// for long jumper
+unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
+                           unsigned long new_addr)
+{
+	unsigned int insn0 = 0x58000051; // ldr x17, #8
+	unsigned int insn4 = 0xd61f0220; // ldr x17, [x16]
+	return (unsigned long)(insn0 | ((unsigned long)insn4 << 32));
+}
+
+#if 0
 unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
 			   unsigned long new_addr)
 {
@@ -158,3 +179,4 @@ unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
 
 	return *(unsigned int *)b_insn;
 }
+#endif

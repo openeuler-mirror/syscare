@@ -32,7 +32,7 @@
 struct upatch_info_func {
 	unsigned long old_addr;
 	unsigned long new_addr;
-	unsigned long old_insn;
+	unsigned long old_insn[3];
 	unsigned long new_insn;
 };
 

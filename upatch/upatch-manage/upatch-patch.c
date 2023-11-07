@@ -270,7 +270,7 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 	unsigned long addr;
 	struct vm_hole *hole = NULL;
 
-	addr = object_find_patch_region(obj, sz, &hole);
+	addr = object_find_patch_region_nolimit(obj, sz, &hole);
 	if (!addr)
 		return NULL;
 
@@ -429,7 +429,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 						     upatch_func->new_addr);
 
 		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", upatch_func->old_addr,
-			  upatch_func->old_insn, upatch_func->new_insn);
+			  upatch_func->old_insn[0], upatch_func->new_insn);
 	}
 
 out:
@@ -445,7 +445,7 @@ static int unapply_patch(struct object_file *obj,
 	log_debug("change insn:\n");
 	for (i = 0; i < changed_func_num; ++i) {
 		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
-			  funcs[i].new_insn, funcs[i].old_insn);
+			  funcs[i].new_insn, funcs[i].old_insn[0]);
 
 		ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
 					       (unsigned long)funcs[i].old_addr,
@@ -475,10 +475,11 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 			sizeof(struct upatch_info) +
 			i * sizeof(struct upatch_info_func);
 
+		// write jumper insn to first 8bytes
 		ret = upatch_process_mem_write(
 			obj->proc, &upatch_func->new_insn,
 			(unsigned long)upatch_func->old_addr,
-			get_origin_insn_len());
+			get_upatch_insn_len());
 		if (ret) {
 			log_error(
 				"can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
@@ -486,6 +487,19 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 				ret);
 			goto out;
 		}
+		// write 64bit new addr to second 8bytes
+		ret = upatch_process_mem_write(
+			obj->proc, &upatch_func->new_addr,
+			(unsigned long)upatch_func->old_addr + get_upatch_insn_len(),
+			get_upatch_addr_len());
+		if (ret) {
+                        log_error(
+                                "can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
+                                upatch_func->old_addr + get_upatch_insn_len(),
+				upatch_func->new_addr,
+                                ret);
+                        goto out;
+                }
 	}
 
 out:
