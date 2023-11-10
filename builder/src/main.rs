@@ -440,6 +440,10 @@ impl SyscareBuilder {
             bail!("Path \"{}\" is not a directory", output.display());
         }
 
+        if args.jobs == 0 {
+            bail!("Parallel build job number cannot be zero");
+        }
+
         Ok(())
     }
 

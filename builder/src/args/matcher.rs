@@ -34,7 +34,7 @@ impl ArgMatcher {
             (@arg patch: short("p") long("patch") +required +takes_value +multiple value_name("PATCH") "Patch file(s)")
             (@arg workdir: long("workdir") +takes_value value_name("WORKDIR") default_value(DEFAULT_WORK_DIR) "Working directory")
             (@arg output: short("o") long("output") +takes_value value_name("OUTPUT") default_value(DEFAULT_OUTPUT_DIR) "Output directory")
-            (@arg jobs: short("j") long("jobs") +takes_value value_name("JOBS") default_value(&DEFAULT_BUILD_JOBS) "Parllel build jobs")
+            (@arg jobs: short("j") long("jobs") +takes_value value_name("JOBS") default_value(&DEFAULT_BUILD_JOBS) "Parallel build jobs")
             (@arg skip_compiler_check: long("skip-compiler-check") "Skip compiler version check (not recommended)")
             (@arg skip_cleanup: long("skip-cleanup") "Skip post-build cleanup")
             (@arg verbose: short("v") long("verbose") "Provide more detailed info")
