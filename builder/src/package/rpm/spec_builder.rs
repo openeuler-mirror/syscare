@@ -39,6 +39,9 @@ for file in $(ls -A "%{_builddir}"); do
 done"#;
 const PKG_SCRIPT_PREUN: &str = r#"for uuid in %{patch_uuid}; do
     syscare remove $uuid >&2
+    if [ $? -ne 0 ]; then
+        exit 1
+    fi
 done"#;
 
 impl RpmSpecBuilder {
