@@ -16,7 +16,7 @@
 #include "upatch-resolve.h"
 
 static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym patch_sym)
+    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -39,7 +39,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
              * some rela don't have the symbol index, use the symbol's value and
              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
              */
-            if (rela_dyn[i].r_addend != patch_sym.st_value) {
+            if (rela_dyn[i].r_addend != patch_sym->st_value) {
                 continue;
             }
         }
@@ -71,7 +71,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
 }
 
 static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym patch_sym)
+    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -99,7 +99,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
              * some rela don't have the symbol index, use the symbol's value and
              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
              */
-            if (rela_plt[i].r_addend != patch_sym.st_value) {
+            if (rela_plt[i].r_addend != patch_sym->st_value) {
                 continue;
             }
         } else {
@@ -129,7 +129,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
 }
 
 static unsigned long resolve_dynsym(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym patch_sym)
+    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -160,7 +160,7 @@ static unsigned long resolve_dynsym(struct upatch_elf *uelf,
         unsigned long sym_addr = relf->load_bias + dynsym[i].st_value;
         elf_addr = insert_got_table(uelf, obj, 0, sym_addr);
 
-        log_debug("resolved %s from .dynsym at 0x%lx \n", name, elf_addr);
+        log_debug("resolved %s from .dynsym at 0x%lx\n", name, elf_addr);
         break;
     }
 
@@ -168,7 +168,7 @@ static unsigned long resolve_dynsym(struct upatch_elf *uelf,
 }
 
 static unsigned long resolve_sym(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym patch_sym)
+    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -198,9 +198,29 @@ static unsigned long resolve_sym(struct upatch_elf *uelf,
 
         elf_addr = relf->load_bias + sym[i].st_value;
 
-        log_debug("resolved %s from .sym at 0x%lx \n", name, elf_addr);
+        log_debug("resolved %s from .sym at 0x%lx\n", name, elf_addr);
         break;
     }
+
+    return elf_addr;
+}
+
+static unsigned long resolve_patch_sym(struct upatch_elf *uelf,
+    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
+{
+    unsigned long elf_addr = 0;
+    struct running_elf *relf = uelf->relf;
+
+    if (!relf) {
+        return 0;
+    }
+
+    if (!patch_sym->st_value) {
+        return 0;
+    }
+
+    elf_addr = relf->load_bias + patch_sym->st_value;
+    log_debug("resolved %s from patch .sym at 0x%lx\n", name, elf_addr);
 
     return elf_addr;
 }
@@ -225,21 +245,26 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
      */
 
 	/* resolve from got */
-    elf_addr = resolve_rela_dyn(uelf, obj, name, patch_sym);
+    elf_addr = resolve_rela_dyn(uelf, obj, name, &patch_sym);
 
 	/* resolve from plt */
     if (!elf_addr) {
-        elf_addr = resolve_rela_plt(uelf, obj, name, patch_sym);
+        elf_addr = resolve_rela_plt(uelf, obj, name, &patch_sym);
     }
 
 	/* resolve from dynsym */
     if (!elf_addr) {
-        elf_addr = resolve_dynsym(uelf, obj, name, patch_sym);
+        elf_addr = resolve_dynsym(uelf, obj, name, &patch_sym);
     }
 
 	/* resolve from sym */
     if (!elf_addr) {
-        elf_addr = resolve_sym(uelf, obj, name, patch_sym);
+        elf_addr = resolve_sym(uelf, obj, name, &patch_sym);
+    }
+
+	/* resolve from patch sym */
+    if (!elf_addr) {
+        elf_addr = resolve_patch_sym(uelf, obj, name, &patch_sym);
     }
 
     if (!elf_addr) {
@@ -278,12 +303,12 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
             if (!elf_addr)
                 ret = -ENOEXEC;
             sym[i].st_value = elf_addr;
-            log_debug("resolved symbol %s at 0x%lx \n", name,
+            log_debug("resolved symbol %s at 0x%lx\n", name,
                   (unsigned long)sym[i].st_value);
             break;
         case SHN_LIVEPATCH:
             sym[i].st_value += uelf->relf->load_bias;
-            log_debug("resolved livepatch symbol %s at 0x%lx \n",
+            log_debug("resolved livepatch symbol %s at 0x%lx\n",
                   name, (unsigned long)sym[i].st_value);
             break;
         default:
@@ -291,7 +316,7 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
             secbase =
                 uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
             sym[i].st_value += secbase;
-            log_debug("normal symbol %s at 0x%lx \n", name,
+            log_debug("normal symbol %s at 0x%lx\n", name,
                   (unsigned long)sym[i].st_value);
             break;
         }
