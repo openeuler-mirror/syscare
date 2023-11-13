@@ -788,6 +788,7 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) != 0) {
 				continue;
 			}
+			found = true;
 
 			ret = unapply_patch(obj, patch->funcs, patch->uinfo->changed_func_num);
 			if (ret) {
@@ -800,13 +801,11 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 				patch->uinfo->end - patch->uinfo->start
 			);
 
-			found = true;
 			break;
 		}
 	}
 
 	if (!found) {
-		ret = -1;
 		log_debug("can't found patch info memory\n");
 		goto out;
 	}
