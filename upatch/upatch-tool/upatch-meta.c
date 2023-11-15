@@ -139,11 +139,15 @@ static int symbol_add_cover(struct upatch_meta_symbol *finded, struct upatch_met
 static void symbol_delete_from_cover(struct upatch_meta_symbol *symbol)
 {
 	struct list_head *head = symbol->cover_head;
-	if (symbol->cover.next == LIST_POISON1)
-		return;
-	list_del(&symbol->cover);
-	if (head != NULL && head != &symbol->cover && list_empty(head)) {
-		free(head);
+	if (!list_empty(&symbol->cover)) {
+		list_del(&symbol->cover);
+		INIT_LIST_HEAD(&symbol->cover);
+	}
+	if (head != NULL) {
+		if (head != &symbol->cover && list_empty(head)) {
+			free(head);
+		}
+		symbol->cover_head = NULL;
 	}
 	return;
 }
