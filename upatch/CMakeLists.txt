@@ -15,7 +15,6 @@ add_custom_target(upatch ALL
 )
 
 add_subdirectory(upatch-diff)
-add_subdirectory(upatch-tool/ko)
 add_subdirectory(upatch-manage)
 add_subdirectory(upatch-compile)
 

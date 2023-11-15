@@ -20,12 +20,10 @@ use self::{helper::UPatchDriverHelper, monitor::UserPatchMonitor};
 use super::{Patch, PatchDriver, PatchOpFlag, UserPatchExt};
 
 mod ffi;
-mod guard;
 mod helper;
 mod monitor;
 
 use ffi::ToCString;
-pub use guard::*;
 
 lazy_static! {
     static ref ACTIVE_PATCH_MAP: Mutex<IndexMap<PathBuf, Vec<Arc<Patch>>>> =
@@ -33,7 +31,6 @@ lazy_static! {
 }
 
 pub struct UserPatchDriver {
-    _guard: UPatchDriverKmodGuard,
     monitor: UserPatchMonitor,
 }
 
@@ -68,7 +65,6 @@ impl UserPatchDriver {
 
     pub fn new() -> Result<Self> {
         let instance = Self {
-            _guard: UPatchDriverKmodGuard::new()?,
             monitor: UserPatchMonitor::new(Self::on_new_process_created)?,
         };
         Ok(instance)
