@@ -1,11 +1,9 @@
-use std::{
-    ffi::{OsStr, OsString},
-    os::unix::prelude::OsStringExt,
-    path::Path,
-};
+use std::{ffi::OsStr, path::Path};
 
 use anyhow::Result;
 use syscare_common::util::{fs, os_str::OsStrExt};
+
+use super::proc::ProcMappingReader;
 
 pub struct UPatchDriverHelper;
 
@@ -23,10 +21,16 @@ impl UPatchDriverHelper {
             .into_iter()
             .filter_map(Self::parse_proc_fs_pid)
             .filter(|pid| {
-                fs::read(format!("/proc/{}/maps", pid))
-                    .map(OsString::from_vec)
-                    .map(|proc_map| proc_map.contains(target_elf.as_ref().as_os_str()))
-                    .unwrap_or(false)
+                if let Ok(reader) = ProcMappingReader::new(*pid) {
+                    let elf_path = target_elf.as_ref().as_os_str();
+                    for mapping in reader {
+                        let mapped_file = mapping.path_name;
+                        if mapped_file.contains(elf_path) && !mapped_file.contains("(deleted)") {
+                            return true;
+                        }
+                    }
+                }
+                false
             })
             .collect::<Vec<_>>();
         Ok(pid_list)
