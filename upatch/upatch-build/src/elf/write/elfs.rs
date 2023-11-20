@@ -93,7 +93,7 @@ impl Elf {
         }
         Err(std::io::Error::new(
             std::io::ErrorKind::AddrNotAvailable,
-            "elf symbols is error".to_string(),
+            "symtab segment not found in elf(write)".to_string(),
         ))
     }
 }
