@@ -10,12 +10,9 @@ mod logger;
 mod rpc;
 
 use args::Arguments;
-use executor::{
-    build::BuildCommandExecutor, patch::PatchCommandExecutor, reboot::RebootCommandExecutor,
-    CommandExecutor,
-};
+use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, CommandExecutor};
 use logger::Logger;
-use rpc::{PatchProxy, RebootProxy, RpcRemote};
+use rpc::{RpcProxy, RpcRemote};
 
 struct SyscareCLI {
     args: Arguments,
@@ -36,14 +33,12 @@ impl SyscareCLI {
         let remote = Rc::new(RpcRemote::new(&instance.args.socket_file));
 
         debug!("Initializing remote procedure calls...");
-        let patch_proxy = PatchProxy::new(remote.clone());
-        let reboot_proxy = RebootProxy::new(remote);
+        let patch_proxy = RpcProxy::new(remote.clone());
 
         debug!("Initializing command executors...");
         let executors = vec![
             Box::new(BuildCommandExecutor) as Box<dyn CommandExecutor>,
             Box::new(PatchCommandExecutor::new(patch_proxy)) as Box<dyn CommandExecutor>,
-            Box::new(RebootCommandExecutor::new(reboot_proxy)) as Box<dyn CommandExecutor>,
         ];
 
         let command = instance.args.command;

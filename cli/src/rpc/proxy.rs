@@ -7,11 +7,11 @@ use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
 use super::{args::RpcArguments, remote::RpcRemote};
 
-pub struct PatchProxy {
+pub struct RpcProxy {
     remote: Rc<RpcRemote>,
 }
 
-impl PatchProxy {
+impl RpcProxy {
     pub fn new(remote: Rc<RpcRemote>) -> Self {
         Self { remote }
     }

@@ -3,18 +3,18 @@ use log::info;
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
-use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::PatchProxy};
+use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::RpcProxy};
 
 use super::CommandExecutor;
 
 const PATCH_OP_LOCK_PATH: &str = "/tmp/syscare_patch_op.lock";
 
 pub struct PatchCommandExecutor {
-    proxy: PatchProxy,
+    proxy: RpcProxy,
 }
 
 impl PatchCommandExecutor {
-    pub fn new(proxy: PatchProxy) -> Self {
+    pub fn new(proxy: RpcProxy) -> Self {
         Self { proxy }
     }
 }

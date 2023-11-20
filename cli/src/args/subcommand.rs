@@ -41,10 +41,6 @@ pub enum SubCommand {
     Restore {
         accepted: bool,
     },
-    Reboot {
-        target: Option<String>,
-        force: bool,
-    },
 }
 
 impl Parser<'_> for SubCommand {

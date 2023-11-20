@@ -5,7 +5,6 @@ use super::args::SubCommand;
 
 pub mod build;
 pub mod patch;
-pub mod reboot;
 
 pub trait CommandExecutor {
     fn invoke(&self, command: &SubCommand) -> Result<()>;
