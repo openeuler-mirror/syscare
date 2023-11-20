@@ -54,9 +54,9 @@ impl UserPatchDriver {
                 match ret_val {
                     0 => continue,
                     EEXIST => continue,
-                    EPERM => bail!("Upatch: Patch status is invalid"),
+                    EPERM => bail!("Upatch: Permission denied"),
                     ENOENT => bail!("Upatch: Cannot find patch entity"),
-                    _ => return Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
+                    _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
                 }
             }
         }
@@ -137,10 +137,10 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EPERM => bail!("Upatch: Patch status is invalid"),
+            EPERM => bail!("Upatch: Permission denied"),
             ENOENT => bail!("Upatch: Patch symbol is empty"),
             EEXIST => bail!("Upatch: Patch is already exist"),
-            _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
+            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
@@ -150,9 +150,9 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EPERM => bail!("Upatch: Patch status is invalid"),
+            EPERM => bail!("Upatch: Permission denied"),
             EFAULT => bail!("Upatch: Cannot remove a overrided patch"),
-            _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
+            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
@@ -180,9 +180,9 @@ impl PatchDriver for UserPatchDriver {
                 self.monitor.watch_file(target_elf)?;
                 Ok(())
             }
-            EPERM => bail!("Upatch: Patch status is invalid"),
+            EPERM => bail!("Upatch: Permission denied"),
             ENOENT => bail!("Upatch: Cannot find patch entity"),
-            _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
+            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
@@ -205,7 +205,7 @@ impl PatchDriver for UserPatchDriver {
                 self.monitor.remove_file(target_elf)?;
                 Ok(())
             }
-            EPERM => bail!("Upatch: Patch status is invalid"),
+            EPERM => bail!("Upatch: Permission denied"),
             EFAULT => bail!("Upatch: Cannot deactive a overrided patch"),
             ENOENT => bail!("Upatch: Cannot find patch entity"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
