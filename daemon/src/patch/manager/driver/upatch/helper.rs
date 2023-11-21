@@ -29,8 +29,18 @@ impl UPatchDriverHelper {
                 PathBuf::from("/usr/lib/systemd/systemd-hostnamed"),
                 PathBuf::from("/usr/bin/udevadm"),
                 PathBuf::from("/usr/sbin/auditd"),
+                PathBuf::from("/usr/bin/syscare"),
                 PathBuf::from("/usr/bin/syscared"),
-                PathBuf::from("/usr/libexec/upatch-manage"),
+                PathBuf::from("/usr/bin/upatchd"),
+                PathBuf::from("/usr/libexec/syscare/as-hijacker"),
+                PathBuf::from("/usr/libexec/syscare/cc-hijacker"),
+                PathBuf::from("/usr/libexec/syscare/c++-hijacker"),
+                PathBuf::from("/usr/libexec/syscare/gcc-hijacker"),
+                PathBuf::from("/usr/libexec/syscare/g++-hijacker"),
+                PathBuf::from("/usr/libexec/syscare/syscare-build"),
+                PathBuf::from("/usr/libexec/syscare/upatch-build"),
+                PathBuf::from("/usr/libexec/syscare/upatch-diff"),
+                PathBuf::from("/usr/libexec/syscare/upatch-manage"),
             ];
         }
         fs::read_link(format!("/proc/{}/exe", pid))
