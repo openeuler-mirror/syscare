@@ -6,8 +6,6 @@
 
 #include "upatch-ptrace.h"
 
-#define ORIGIN_INSN_LEN 5
-
 int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 			       unsigned long arg1, unsigned long arg2,
 			       unsigned long arg3, unsigned long arg4,
@@ -128,11 +126,33 @@ void copy_regs(struct user_regs_struct *dst, struct user_regs_struct *src)
 #undef COPY_REG
 }
 
+#define UPATCH_INSN_LEN 6
+#define UPATCH_ADDR_LEN 8
+#define ORIGIN_INSN_LEN (UPATCH_INSN_LEN + UPATCH_ADDR_LEN)
 size_t get_origin_insn_len()
 {
 	return ORIGIN_INSN_LEN;
 }
 
+size_t get_upatch_insn_len()
+{
+    return UPATCH_INSN_LEN;
+}
+
+size_t get_upatch_addr_len()
+{
+    return UPATCH_ADDR_LEN;
+}
+
+
+unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
+               unsigned long new_addr)
+{
+	char jmp_insn[] = { 0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
+	return *(unsigned long *)jmp_insn;
+}
+
+#if 0
 unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
 			   unsigned long new_addr)
 {
@@ -143,3 +163,4 @@ unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
 
 	return *(unsigned long *)jmp_insn;
 }
+#endif
