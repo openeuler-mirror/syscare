@@ -21,7 +21,7 @@ pub struct PatchTransaction<F> {
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, Arc<Patch>, PatchOpFlag) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     pub fn new(
         name: String,
@@ -46,7 +46,7 @@ where
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, Arc<Patch>, PatchOpFlag) -> Result<PatchStatus>,
+    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     fn start(&mut self) -> Result<Vec<PatchStateRecord>> {
         let mut patch_manager = self.patch_manager.write();
@@ -55,8 +55,8 @@ where
         let mut records = Vec::with_capacity(patch_list.len());
 
         while let Some(patch) = patch_list.pop() {
-            let old_status = patch_manager.get_patch_status(patch.clone())?;
-            let new_status = (self.action)(&mut patch_manager, patch.clone(), self.flag)?;
+            let old_status = patch_manager.get_patch_status(&patch)?;
+            let new_status = (self.action)(&mut patch_manager, &patch, self.flag)?;
 
             records.push(PatchStateRecord {
                 name: patch.to_string(),
@@ -70,7 +70,7 @@ where
     fn rollback(&mut self) -> Result<()> {
         let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            patch_manager.do_status_transition(patch, status, PatchOpFlag::SkipCheck)?;
+            patch_manager.do_status_transition(&patch, status, PatchOpFlag::SkipCheck)?;
         }
         Ok(())
     }

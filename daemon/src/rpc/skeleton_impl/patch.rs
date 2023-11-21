@@ -34,7 +34,7 @@ impl PatchSkeletonImpl {
         let patch_status = self
             .patch_manager
             .write()
-            .get_patch_status(patch)
+            .get_patch_status(&patch)
             .unwrap_or_default();
 
         Ok(PatchStateRecord {
@@ -49,7 +49,7 @@ impl PatchSkeletonImpl {
         let patch_status = self
             .patch_manager
             .write()
-            .get_patch_status(patch)
+            .get_patch_status(&patch)
             .unwrap_or_default();
 
         Ok(PatchListRecord {
@@ -66,7 +66,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
         RpcFunction::call(move || -> Result<()> {
             let mut patch_manager = self.patch_manager.write();
             for patch in patch_manager.match_patch(&identifier)? {
-                patch_manager.check_patch(patch, PatchOpFlag::Normal)?;
+                patch_manager.check_patch(&patch, PatchOpFlag::Normal)?;
             }
 
             Ok(())

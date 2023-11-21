@@ -2,7 +2,6 @@ use std::{
     ffi::OsString,
     os::unix::prelude::OsStringExt,
     path::{Path, PathBuf},
-    sync::Arc,
 };
 
 use anyhow::{anyhow, bail, ensure, Error, Result};
@@ -27,7 +26,7 @@ mod proc;
 use ffi::ToCString;
 
 lazy_static! {
-    static ref ACTIVE_PATCH_MAP: Mutex<IndexMap<PathBuf, Vec<Arc<Patch>>>> =
+    static ref ACTIVE_PATCH_MAP: Mutex<IndexMap<PathBuf, Vec<String>>> =
         Mutex::new(IndexMap::new());
 }
 
@@ -39,22 +38,21 @@ impl UserPatchDriver {
     fn on_new_process_created(target_elf: &Path) -> Result<()> {
         info!("New process started \"{}\"", target_elf.display());
         if let Some(stack) = ACTIVE_PATCH_MAP.lock().get(target_elf) {
-            for patch in stack {
-                let patch_uuid = patch.uuid.as_str().to_cstring()?;
+            for patch_uuid in stack {
+                let uuid = patch_uuid.to_cstring()?;
                 let pid_list = UPatchDriverHelper::find_target_elf_pid(target_elf)?;
 
                 info!(
                     "Activing patch {{{}}} for \"{}\"",
-                    patch.uuid,
+                    patch_uuid,
                     target_elf.display()
                 );
-                let ret_val = unsafe {
-                    ffi::upatch_active(patch_uuid.as_ptr(), pid_list.as_ptr(), pid_list.len())
-                };
+                let ret_val =
+                    unsafe { ffi::upatch_active(uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
                 match ret_val {
                     0 => continue,
                     EEXIST => continue,
-                    EPERM => bail!("Upatch: Permission denied"),
+                    EPERM => bail!("Upatch: Operation not permitted"),
                     ENOENT => bail!("Upatch: Cannot find patch entity"),
                     _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
                 }
@@ -73,7 +71,7 @@ impl UserPatchDriver {
 }
 
 impl PatchDriver for UserPatchDriver {
-    fn check(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
+    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         const ERR_MSG_LEN: usize = 512;
 
         if flag == PatchOpFlag::SkipCheck {
@@ -112,14 +110,14 @@ impl PatchDriver for UserPatchDriver {
         Ok(())
     }
 
-    fn status(&self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<PatchStatus> {
+    fn status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
         let uuid = patch.uuid.as_str().to_cstring()?;
         let status = unsafe { ffi::upatch_status(uuid.as_ptr()) };
 
         Ok(status.into())
     }
 
-    fn apply(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
+    fn apply(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
 
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
@@ -137,26 +135,26 @@ impl PatchDriver for UserPatchDriver {
 
         match ret_val {
             0 => Ok(()),
-            EPERM => bail!("Upatch: Permission denied"),
+            EPERM => bail!("Upatch: Operation not permitted"),
             ENOENT => bail!("Upatch: Patch symbol is empty"),
             EEXIST => bail!("Upatch: Patch is already exist"),
             _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
-    fn remove(&self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<()> {
+    fn remove(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         let patch_uuid = patch.uuid.as_str().to_cstring()?;
         let ret_val = unsafe { ffi::upatch_remove(patch_uuid.as_ptr()) };
 
         match ret_val {
             0 => Ok(()),
-            EPERM => bail!("Upatch: Permission denied"),
+            EPERM => bail!("Upatch: Operation not permitted"),
             EFAULT => bail!("Upatch: Cannot remove a overrided patch"),
             _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
-    fn active(&self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<()> {
+    fn active(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
         let target_elf = &patch_ext.target_elf;
 
@@ -170,23 +168,23 @@ impl PatchDriver for UserPatchDriver {
                 let mut active_patch_map = ACTIVE_PATCH_MAP.lock();
                 match active_patch_map.get_mut(target_elf) {
                     Some(patch_list) => {
-                        patch_list.push(patch.clone());
+                        patch_list.push(patch.uuid.clone());
                     }
                     None => {
-                        active_patch_map.insert(target_elf.to_owned(), vec![patch.clone()]);
+                        active_patch_map.insert(target_elf.to_owned(), vec![patch.uuid.clone()]);
                     }
                 };
 
                 self.monitor.watch_file(target_elf)?;
                 Ok(())
             }
-            EPERM => bail!("Upatch: Permission denied"),
+            EPERM => bail!("Upatch: Operation not permitted"),
             ENOENT => bail!("Upatch: Cannot find patch entity"),
             _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 
-    fn deactive(&self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<()> {
+    fn deactive(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
         let target_elf = &patch_ext.target_elf;
 
@@ -205,7 +203,7 @@ impl PatchDriver for UserPatchDriver {
                 self.monitor.remove_file(target_elf)?;
                 Ok(())
             }
-            EPERM => bail!("Upatch: Permission denied"),
+            EPERM => bail!("Upatch: Operation not permitted"),
             EFAULT => bail!("Upatch: Cannot deactive a overrided patch"),
             ENOENT => bail!("Upatch: Cannot find patch entity"),
             _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),

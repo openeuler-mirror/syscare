@@ -8,7 +8,6 @@ use std::{
 
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
-use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
 
 use syscare_abi::{PatchStatus, PatchType};
@@ -30,7 +29,7 @@ const PATCH_STATUS_FILE_NAME: &str = "patch_status";
 
 type Transition = (PatchStatus, PatchStatus);
 type TransitionAction =
-    &'static (dyn Fn(&mut PatchManager, Arc<Patch>, PatchOpFlag) -> Result<()> + Sync);
+    &'static (dyn Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<()> + Sync);
 
 const PATCH_CHECK: TransitionAction = &PatchManager::driver_check_patch;
 const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
@@ -42,83 +41,32 @@ const PATCH_DECLINE: TransitionAction = &PatchManager::driver_decline_patch;
 
 const PATCH_INIT_RESTORE_ACCEPTED_ONLY: bool = true;
 
-lazy_static! {
-    static ref TRANSITION_MAP: IndexMap<Transition, Vec<TransitionAction>> = IndexMap::from([
-        (
-            (PatchStatus::NotApplied, PatchStatus::Deactived),
-            vec![PATCH_CHECK, PATCH_APPLY]
-        ),
-        (
-            (PatchStatus::NotApplied, PatchStatus::Actived),
-            vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE]
-        ),
-        (
-            (PatchStatus::NotApplied, PatchStatus::Accepted),
-            vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT]
-        ),
-        (
-            (PatchStatus::Deactived, PatchStatus::NotApplied),
-            vec![PATCH_REMOVE]
-        ),
-        (
-            (PatchStatus::Deactived, PatchStatus::Actived),
-            vec![PATCH_ACTIVE]
-        ),
-        (
-            (PatchStatus::Deactived, PatchStatus::Accepted),
-            vec![PATCH_ACTIVE, PATCH_ACCEPT]
-        ),
-        (
-            (PatchStatus::Actived, PatchStatus::NotApplied),
-            vec![PATCH_DEACTIVE, PATCH_REMOVE]
-        ),
-        (
-            (PatchStatus::Actived, PatchStatus::Deactived),
-            vec![PATCH_DEACTIVE]
-        ),
-        (
-            (PatchStatus::Actived, PatchStatus::Accepted),
-            vec![PATCH_ACCEPT]
-        ),
-        (
-            (PatchStatus::Accepted, PatchStatus::NotApplied),
-            vec![PATCH_DECLINE, PATCH_DEACTIVE, PATCH_REMOVE]
-        ),
-        (
-            (PatchStatus::Accepted, PatchStatus::Deactived),
-            vec![PATCH_DECLINE, PATCH_DEACTIVE]
-        ),
-        (
-            (PatchStatus::Accepted, PatchStatus::Actived),
-            vec![PATCH_DECLINE]
-        ),
-    ]);
-}
-
-struct PatchEntry {
-    patch: Arc<Patch>,
-    status: PatchStatus,
-}
-
 pub struct PatchManager {
     patch_install_dir: PathBuf,
     patch_status_file: PathBuf,
-    entry_map: IndexMap<String, PatchEntry>,
     driver_map: IndexMap<PatchType, Box<dyn PatchDriver>>,
+    transition_map: IndexMap<Transition, Vec<TransitionAction>>,
+    patch_map: IndexMap<String, Arc<Patch>>,
+    status_map: IndexMap<String, PatchStatus>,
 }
 
 impl PatchManager {
     pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
         let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
         let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
+
         let driver_map = Self::create_driver_map();
-        let entry_map = Self::scan_patches(&patch_install_dir)?;
+        let transition_map = Self::create_transition_map();
+        let patch_map = Self::scan_patches(&patch_install_dir)?;
+        let status_map = IndexMap::new();
 
         let mut instance = Self {
             patch_install_dir,
             patch_status_file,
             driver_map,
-            entry_map,
+            transition_map,
+            patch_map,
+            status_map,
         };
         instance.restore_patch_status(PATCH_INIT_RESTORE_ACCEPTED_ONLY)?;
 
@@ -149,74 +97,99 @@ impl PatchManager {
     }
 
     pub fn get_patch_list(&self) -> Vec<Arc<Patch>> {
-        self.entry_map
-            .values()
-            .map(|entry| entry.patch.clone())
-            .collect::<Vec<_>>()
+        self.patch_map.values().cloned().collect()
     }
 
-    pub fn get_patch_status(&mut self, patch: Arc<Patch>) -> Result<PatchStatus> {
+    pub fn get_patch_status(&mut self, patch: &Patch) -> Result<PatchStatus> {
         let mut status = self
-            .entry_map
+            .status_map
             .get(&patch.uuid)
-            .with_context(|| format!("Cannot find patch \"{}\"", patch))?
-            .status;
+            .cloned()
+            .unwrap_or_default();
 
         if status == PatchStatus::Unknown {
-            status = self.driver_get_patch_status(patch.clone(), PatchOpFlag::Normal)?;
-            self.set_patch_status(patch.clone(), status)
-                .with_context(|| format!("Failed to set patch \"{}\" status", patch))?;
+            status = self.driver_get_patch_status(patch, PatchOpFlag::Normal)?;
+            self.set_patch_status(patch, status)?;
         }
 
         Ok(status)
     }
 
-    pub fn check_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
+    pub fn check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         info!("Check patch \"{}\"", patch);
         self.driver_check_patch(patch, flag)
     }
 
-    pub fn apply_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
+    pub fn apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Apply patch \"{}\"", patch);
+        let current_status = self.get_patch_status(patch)?;
+
+        // Not-Applied -> Actived
+        if current_status == PatchStatus::Actived {
+            return Ok(current_status);
+        }
+        if current_status > PatchStatus::NotApplied {
+            bail!("Patch \"{}\" is already applied", patch);
+        }
+
         self.do_status_transition(patch, PatchStatus::Actived, flag)
     }
 
-    pub fn remove_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
+    pub fn remove_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Remove patch \"{}\"", patch);
+        let current_status = self.get_patch_status(patch)?;
+
+        // Deactived -> Not-Applied
+        if current_status == PatchStatus::NotApplied {
+            return Ok(PatchStatus::NotApplied);
+        }
+
         self.do_status_transition(patch, PatchStatus::NotApplied, flag)
     }
 
-    pub fn active_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
+    pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Active patch \"{}\"", patch);
-        let current_status = self.get_patch_status(patch.clone())?;
-        let target_status = PatchStatus::Actived;
+        let current_status = self.get_patch_status(patch)?;
 
-        if current_status == PatchStatus::NotApplied {
+        // Deactived -> Actived
+        if current_status == PatchStatus::Actived {
+            return Ok(PatchStatus::Actived);
+        }
+        if current_status < PatchStatus::Deactived {
             bail!("Patch \"{}\" is not applied", patch);
         }
-        self.do_status_transition(patch, target_status, flag)
+
+        self.do_status_transition(patch, PatchStatus::Actived, flag)
     }
 
-    pub fn deactive_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
+    pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Deactive patch \"{}\"", patch);
-        let current_status = self.get_patch_status(patch.clone())?;
-        let target_status = PatchStatus::Deactived;
+        let current_status = self.get_patch_status(patch)?;
 
-        if current_status == PatchStatus::NotApplied {
-            bail!("Patch \"{}\" is not applied", patch);
+        // Actived -> Deactived
+        if current_status == PatchStatus::Deactived {
+            return Ok(PatchStatus::Deactived);
         }
-        self.do_status_transition(patch, target_status, flag)
+        if current_status < PatchStatus::Actived {
+            bail!("Patch \"{}\" is not actived", patch);
+        }
+
+        self.do_status_transition(patch, PatchStatus::Deactived, flag)
     }
 
-    pub fn accept_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
+    pub fn accept_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
         info!("Accept patch \"{}\"", patch);
-        let current_status = self.get_patch_status(patch.clone())?;
-        let target_status = PatchStatus::Accepted;
+        let current_status = self.get_patch_status(patch)?;
 
+        // Actived -> Accepted
+        if current_status == PatchStatus::Accepted {
+            return Ok(PatchStatus::Accepted);
+        }
         if current_status != PatchStatus::Actived {
             bail!("Patch \"{}\" is not actived", patch);
         }
-        self.do_status_transition(patch, target_status, flag)
+
+        self.do_status_transition(patch, PatchStatus::Accepted, flag)
     }
 
     pub fn save_patch_status(&mut self) -> Result<()> {
@@ -225,12 +198,12 @@ impl PatchManager {
         debug!("Updating all patch status...");
         for patch in self.get_patch_list() {
             debug!("Update patch \"{}\" status", patch);
-            self.get_patch_status(patch)?;
+            self.get_patch_status(&patch)?;
         }
 
         let mut status_map = HashMap::new();
-        for (uuid, entry) in self.entry_map.iter() {
-            status_map.insert(uuid, entry.status);
+        for (uuid, status) in &self.status_map {
+            status_map.insert(uuid, status);
         }
 
         debug!("Writing patch status file");
@@ -238,6 +211,7 @@ impl PatchManager {
             .context("Failed to write patch status file")?;
 
         fs::sync();
+
         info!("All patch status were saved");
         Ok(())
     }
@@ -293,7 +267,7 @@ impl PatchManager {
                 "Restore patch \"{}\" status to \"{}\"",
                 patch, target_status
             );
-            if let Err(e) = self.do_status_transition(patch, target_status, PatchOpFlag::SkipCheck)
+            if let Err(e) = self.do_status_transition(&patch, target_status, PatchOpFlag::SkipCheck)
             {
                 error!("{}", e);
             }
@@ -304,41 +278,26 @@ impl PatchManager {
     }
 
     pub fn rescan_patches(&mut self) -> Result<()> {
-        let entry_map = &mut self.entry_map;
-        let new_patch_list = Self::scan_patches(&self.patch_install_dir)?;
+        self.patch_map = Self::scan_patches(&self.patch_install_dir)?;
 
-        // Delete already removed patch
-        for uuid in entry_map.keys().cloned().collect::<Vec<_>>() {
-            if !new_patch_list.contains_key(&uuid) {
-                trace!("Remove patch {{{}}} from patch manager", uuid);
-                entry_map.remove(&uuid);
+        let status_keys = self.status_map.keys().cloned().collect::<Vec<_>>();
+        for patch_uuid in status_keys {
+            if !self.patch_map.contains_key(&patch_uuid) {
+                trace!("Patch {} was removed, remove its status", patch_uuid);
+                self.status_map.remove(&patch_uuid);
             }
         }
-        // Insert new installed patch
-        for (uuid, entry) in new_patch_list {
-            if !entry_map.contains_key(&uuid) {
-                trace!("Insert patch {{{}}} from patch manager", uuid);
-                entry_map.insert(uuid, entry);
-            }
-        }
-        // Sort patches by its entity name
-        entry_map.sort_by(|_, lhs_entry, _, rhs_entry| {
-            lhs_entry
-                .patch
-                .entity_name
-                .cmp(&rhs_entry.patch.entity_name)
-        });
 
         Ok(())
     }
 
     pub(super) fn do_status_transition(
         &mut self,
-        patch: Arc<Patch>,
+        patch: &Patch,
         status: PatchStatus,
         flag: PatchOpFlag,
     ) -> Result<PatchStatus> {
-        let current_status = self.get_patch_status(patch.clone())?;
+        let current_status = self.get_patch_status(patch)?;
         let target_status = status;
         if current_status == target_status {
             debug!(
@@ -348,7 +307,8 @@ impl PatchManager {
             return Ok(target_status);
         }
 
-        match TRANSITION_MAP
+        match self
+            .transition_map
             .get(&(current_status, target_status))
             .cloned()
         {
@@ -358,7 +318,7 @@ impl PatchManager {
                     patch, current_status, status
                 );
                 for action in action_list {
-                    action(self, patch.clone(), flag)?;
+                    action(self, patch, flag)?;
                 }
             }
             None => {
@@ -369,7 +329,7 @@ impl PatchManager {
             }
         }
 
-        let new_status = self.get_patch_status(patch.clone())?;
+        let new_status = self.get_patch_status(patch)?;
         if new_status != status {
             bail!("Patch \"{}\" does not reached \"{}\" status", patch, status);
         }
@@ -379,7 +339,7 @@ impl PatchManager {
 }
 
 impl PatchManager {
-    fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<IndexMap<String, PatchEntry>> {
+    fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<IndexMap<String, Arc<Patch>>> {
         const TRAVERSE_OPTION: fs::TraverseOptions = fs::TraverseOptions { recursive: false };
 
         let mut patch_map = IndexMap::new();
@@ -399,44 +359,36 @@ impl PatchManager {
                 Ok(patches) => {
                     for patch in patches {
                         debug!("Detected patch \"{}\"", patch);
-                        patch_map.insert(
-                            patch.uuid.clone(),
-                            PatchEntry {
-                                patch: Arc::new(patch),
-                                status: PatchStatus::Unknown,
-                            },
-                        );
+                        patch_map.insert(patch.uuid.clone(), Arc::new(patch));
                     }
                 }
                 Err(e) => error!("{:?}", e),
             }
         }
+
+        patch_map.sort_by(|_, lhs, _, rhs| lhs.cmp(rhs));
         info!("Found {} patch(es)", patch_map.len());
 
         Ok(patch_map)
     }
 
     fn find_patch_by_uuid(&self, uuid: &str) -> Result<Arc<Patch>> {
-        self.entry_map
+        self.patch_map
             .get(uuid)
-            .map(|entry| entry.patch.clone())
+            .cloned()
             .with_context(|| format!("Cannot find patch by uuid {{{}}}", uuid))
     }
 
     fn find_patch_by_name(&self, identifier: &str) -> Result<Vec<Arc<Patch>>> {
         let match_result = self
-            .entry_map
+            .patch_map
             .values()
-            .filter_map(|entry| {
-                let patch = &entry.patch;
-                let is_matched = (identifier == patch.entity_name)
+            .filter(|patch| {
+                (identifier == patch.entity_name)
                     || (identifier == patch.patch_name)
-                    || (identifier == patch.target_name);
-                match is_matched {
-                    true => Some(patch.clone()),
-                    false => None,
-                }
+                    || (identifier == patch.target_name)
             })
+            .cloned()
             .collect::<Vec<_>>();
 
         if match_result.is_empty() {
@@ -445,14 +397,20 @@ impl PatchManager {
         Ok(match_result)
     }
 
-    fn set_patch_status(&mut self, patch: Arc<Patch>, value: PatchStatus) -> Result<()> {
+    fn set_patch_status(&mut self, patch: &Patch, value: PatchStatus) -> Result<()> {
         if value == PatchStatus::Unknown {
             bail!("Cannot set patch {} status to {}", patch, value);
         }
-        self.entry_map
-            .get_mut(&patch.uuid)
-            .with_context(|| format!("Cannot find patch \"{}\"", patch))?
-            .status = value;
+
+        let status_map = &mut self.status_map;
+        match status_map.get_mut(&patch.uuid) {
+            Some(status) => {
+                *status = value;
+            }
+            None => {
+                status_map.insert(patch.uuid.to_string(), value);
+            }
+        }
 
         Ok(())
     }
@@ -484,14 +442,68 @@ impl PatchManager {
         driver_map
     }
 
+    fn create_transition_map() -> IndexMap<Transition, Vec<TransitionAction>> {
+        debug!("Initializing patch transition map...");
+        IndexMap::from([
+            (
+                (PatchStatus::NotApplied, PatchStatus::Deactived),
+                vec![PATCH_CHECK, PATCH_APPLY],
+            ),
+            (
+                (PatchStatus::NotApplied, PatchStatus::Actived),
+                vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE],
+            ),
+            (
+                (PatchStatus::NotApplied, PatchStatus::Accepted),
+                vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT],
+            ),
+            (
+                (PatchStatus::Deactived, PatchStatus::NotApplied),
+                vec![PATCH_REMOVE],
+            ),
+            (
+                (PatchStatus::Deactived, PatchStatus::Actived),
+                vec![PATCH_ACTIVE],
+            ),
+            (
+                (PatchStatus::Deactived, PatchStatus::Accepted),
+                vec![PATCH_ACTIVE, PATCH_ACCEPT],
+            ),
+            (
+                (PatchStatus::Actived, PatchStatus::NotApplied),
+                vec![PATCH_DEACTIVE, PATCH_REMOVE],
+            ),
+            (
+                (PatchStatus::Actived, PatchStatus::Deactived),
+                vec![PATCH_DEACTIVE],
+            ),
+            (
+                (PatchStatus::Actived, PatchStatus::Accepted),
+                vec![PATCH_ACCEPT],
+            ),
+            (
+                (PatchStatus::Accepted, PatchStatus::NotApplied),
+                vec![PATCH_DECLINE, PATCH_DEACTIVE, PATCH_REMOVE],
+            ),
+            (
+                (PatchStatus::Accepted, PatchStatus::Deactived),
+                vec![PATCH_DECLINE, PATCH_DEACTIVE],
+            ),
+            (
+                (PatchStatus::Accepted, PatchStatus::Actived),
+                vec![PATCH_DECLINE],
+            ),
+        ])
+    }
+
     fn call_driver<'a, T, U>(
         &'a self,
-        patch: Arc<Patch>,
+        patch: &Patch,
         driver_action: T,
         flag: PatchOpFlag,
     ) -> Result<U>
     where
-        T: FnOnce(&'a dyn PatchDriver, Arc<Patch>, PatchOpFlag) -> Result<U>,
+        T: FnOnce(&'a dyn PatchDriver, &Patch, PatchOpFlag) -> Result<U>,
     {
         let patch_type = patch.kind();
         let driver = self
@@ -503,49 +515,49 @@ impl PatchManager {
         driver_action(driver, patch, flag)
     }
 
-    fn driver_get_patch_status(&self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<PatchStatus> {
-        self.call_driver(patch.clone(), PatchDriver::status, flag)
+    fn driver_get_patch_status(&self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
+        self.call_driver(patch, PatchDriver::status, flag)
             .with_context(|| format!("Driver: Failed to get patch \"{}\" status", patch))
     }
 
-    fn driver_check_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
-        self.call_driver(patch.clone(), PatchDriver::check, flag)
+    fn driver_check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::check, flag)
             .with_context(|| format!("Driver: Patch \"{}\" check failed", patch))
     }
 
-    fn driver_apply_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
-        self.call_driver(patch.clone(), PatchDriver::apply, flag)
+    fn driver_apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::apply, flag)
             .with_context(|| format!("Driver: Failed to apply patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn driver_remove_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
-        self.call_driver(patch.clone(), PatchDriver::remove, flag)
+    fn driver_remove_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::remove, flag)
             .with_context(|| format!("Driver: Failed to remove patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::NotApplied)
     }
 
-    fn driver_active_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
-        self.call_driver(patch.clone(), PatchDriver::active, flag)
+    fn driver_active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::active, flag)
             .with_context(|| format!("Driver: Failed to active patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 
-    fn driver_deactive_patch(&mut self, patch: Arc<Patch>, flag: PatchOpFlag) -> Result<()> {
-        self.call_driver(patch.clone(), PatchDriver::deactive, flag)
+    fn driver_deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.call_driver(patch, PatchDriver::deactive, flag)
             .with_context(|| format!("Driver: Failed to deactive patch \"{}\"", patch))?;
 
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
-    fn driver_accept_patch(&mut self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<()> {
+    fn driver_accept_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Accepted)
     }
 
-    fn driver_decline_patch(&mut self, patch: Arc<Patch>, _flag: PatchOpFlag) -> Result<()> {
+    fn driver_decline_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 }
