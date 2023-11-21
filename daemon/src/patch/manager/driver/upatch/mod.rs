@@ -198,9 +198,12 @@ impl PatchDriver for UserPatchDriver {
                 let mut actived_patch = ACTIVE_PATCH_MAP.lock();
                 if let Some(patch_list) = actived_patch.get_mut(target_elf) {
                     patch_list.pop();
+                    if patch_list.is_empty() {
+                        self.monitor.remove_file(target_elf)?;
+                        actived_patch.remove(target_elf);
+                    }
                 }
 
-                self.monitor.remove_file(target_elf)?;
                 Ok(())
             }
             EPERM => bail!("Upatch: Operation not permitted"),
