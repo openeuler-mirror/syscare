@@ -33,7 +33,7 @@ impl SyscareCLI {
         let remote = Rc::new(RpcRemote::new(&instance.args.socket_file));
 
         debug!("Initializing remote procedure calls...");
-        let patch_proxy = RpcProxy::new(remote.clone());
+        let patch_proxy = RpcProxy::new(remote);
 
         debug!("Initializing command executors...");
         let executors = vec![
