@@ -15,7 +15,7 @@ use log::{error, info};
 use parking_lot::Mutex;
 
 const MONITOR_THREAD_NAME: &str = "upatch_monitor";
-const MONITOR_CHECK_PERIOD: u64 = 300;
+const MONITOR_CHECK_PERIOD: u64 = 100;
 
 pub struct UserPatchMonitor {
     inotify: Arc<Mutex<Inotify>>,
@@ -74,7 +74,7 @@ impl UserPatchMonitor {
         let wd = self
             .inotify
             .lock()
-            .add_watch(file_path, WatchMask::OPEN)
+            .add_watch(file_path, WatchMask::CLOSE_NOWRITE)
             .with_context(|| format!("Failed to watch file \"{}\"", file_path.display()))?;
 
         wd_map.insert(wd.clone(), file_path.to_owned());
@@ -120,7 +120,7 @@ impl UserPatchMonitor {
 
             if let Ok(events) = inotify.lock().read_events(&mut buffer) {
                 for event in events {
-                    if !event.mask.contains(EventMask::OPEN) {
+                    if !event.mask.contains(EventMask::CLOSE_NOWRITE) {
                         continue;
                     }
                     if let Some(file) = wd_map.lock().get(&event.wd) {

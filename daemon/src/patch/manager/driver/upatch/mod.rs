@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, bail, ensure, Error, Result};
+use anyhow::{anyhow, bail, ensure, Result};
 
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
@@ -28,6 +28,7 @@ use ffi::ToCString;
 lazy_static! {
     static ref ACTIVE_PATCH_MAP: Mutex<IndexMap<PathBuf, Vec<String>>> =
         Mutex::new(IndexMap::new());
+    static ref ELF_PID_MAP: Mutex<IndexMap<PathBuf, Vec<i32>>> = Mutex::new(IndexMap::new());
 }
 
 pub struct UserPatchDriver {
@@ -36,17 +37,33 @@ pub struct UserPatchDriver {
 
 impl UserPatchDriver {
     fn on_new_process_created(target_elf: &Path) -> Result<()> {
-        info!("New process started \"{}\"", target_elf.display());
-        if let Some(stack) = ACTIVE_PATCH_MAP.lock().get(target_elf) {
-            for patch_uuid in stack {
-                let uuid = patch_uuid.to_cstring()?;
-                let pid_list = UPatchDriverHelper::find_target_elf_pid(target_elf)?;
+        let actived_patch_map = ACTIVE_PATCH_MAP.lock();
+        let mut elf_pid_map = ELF_PID_MAP.lock();
 
+        if let Some(stack) = actived_patch_map.get(target_elf) {
+            for patch_uuid in stack {
+                let last_pid_list = elf_pid_map.get(target_elf).cloned().unwrap_or_default();
+                let new_pid_list = UPatchDriverHelper::find_target_elf_pid(target_elf)?;
+
+                let pid_list = new_pid_list
+                    .iter()
+                    .filter(|pid| !last_pid_list.contains(pid))
+                    .cloned()
+                    .collect::<Vec<_>>();
+                elf_pid_map.insert(target_elf.to_owned(), new_pid_list);
+
+                if pid_list.is_empty() {
+                    continue;
+                }
+
+                let uuid = patch_uuid.to_cstring()?;
                 info!(
-                    "Activing patch {{{}}} for \"{}\"",
+                    "Activing patch {{{}}} ({}) for {:?}",
                     patch_uuid,
-                    target_elf.display()
+                    target_elf.display(),
+                    pid_list,
                 );
+
                 let ret_val =
                     unsafe { ffi::upatch_active(uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
                 match ret_val {
@@ -209,7 +226,7 @@ impl PatchDriver for UserPatchDriver {
             EPERM => bail!("Upatch: Operation not permitted"),
             EFAULT => bail!("Upatch: Cannot deactive a overrided patch"),
             ENOENT => bail!("Upatch: Cannot find patch entity"),
-            _ => Err(Error::from(std::io::Error::from_raw_os_error(ret_val))),
+            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
     }
 }
