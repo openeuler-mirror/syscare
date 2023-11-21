@@ -5,7 +5,7 @@ authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare patch build utility"
 license      = "MulanPSL-2.0"
 edition      = "2018"
-rust-version = "1.51"
+rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
