@@ -12,8 +12,8 @@
 ############ Package syscare ###############
 ############################################
 Name:          syscare
-Version:       1.1.0
-Release:       6
+Version:       1.2.0
+Release:       1
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -21,7 +21,6 @@ Source0:       %{name}-%{version}.tar.gz
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
-Requires:      %{pkg_kmod} >= %{build_version}
 Requires:      coreutils systemd
 Requires:      kpatch-runtime
 
@@ -53,7 +52,6 @@ cd build
 %make_install
 
 mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
-mv -f %{buildroot}/usr/libexec/syscare/upatch.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 mv -f %{buildroot}/usr/libexec/syscare/upatch_hijacker.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 
 ############### PostInstall ################
@@ -87,39 +85,7 @@ fi
 %attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %attr(755,root,root) /usr/bin/syscared
 %attr(755,root,root) /usr/bin/syscare
-%attr(755,root,root) /usr/libexec/syscare/upatch-tool
-
-############################################
-########## Package syscare-kmod ############
-############################################
-%package kmod
-Summary: Syscare kernel module.
-BuildRequires: make gcc
-BuildRequires: kernel-devel
-Requires: kernel >= %{kernel_version}
-
-############### Description ################
-%description kmod
-Syscare dependency - kernel module.
-
-############### PostInstall ################
-%post kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --add-module --no-initramfs
-depmod
-
-############### PreUninstall ###############
-%preun kmod
-# Nothing
-
-############## PostUninstall ###############
-%postun kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch.ko" | /sbin/weak-modules --remove-module --no-initramfs
-depmod
-
-################## Files ###################
-%files kmod
-%dir /lib/modules/%{kernel_name}/extra/syscare
-%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch.ko
+%attr(755,root,root) /usr/libexec/syscare/upatch-manage
 
 ############################################
 ########## Package syscare-build ###########
@@ -241,6 +207,8 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-1
+- Fix various issue
 * Wed Oct 11 2023 renoseven<dev@renoseven.net> - 1.1.0-6
 - Support build patch for kernel moudules
 - Fix various issue
