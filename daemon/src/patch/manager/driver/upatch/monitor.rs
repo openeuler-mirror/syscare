@@ -74,7 +74,7 @@ impl UserPatchMonitor {
         let wd = self
             .inotify
             .lock()
-            .add_watch(file_path, WatchMask::CLOSE_NOWRITE)
+            .add_watch(file_path, WatchMask::OPEN)
             .with_context(|| format!("Failed to watch file \"{}\"", file_path.display()))?;
 
         wd_map.insert(wd.clone(), file_path.to_owned());
@@ -120,7 +120,7 @@ impl UserPatchMonitor {
 
             if let Ok(events) = inotify.lock().read_events(&mut buffer) {
                 for event in events {
-                    if !event.mask.contains(EventMask::CLOSE_NOWRITE) {
+                    if !event.mask.contains(EventMask::OPEN) {
                         continue;
                     }
                     if let Some(file) = wd_map.lock().get(&event.wd) {

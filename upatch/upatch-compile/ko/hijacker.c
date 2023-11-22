@@ -137,7 +137,11 @@ static int __kprobes hijack_execve_pre(struct kprobe *p, struct pt_regs *ctx)
 #if LINUX_VERSION_CODE <= KERNEL_VERSION(5,0,0)
     /* for do_execve, filename is the first argument */
     caller_ino = current->mm->exe_file->f_inode->i_ino;
+#ifdef __x86_64__
+    filename = (void *)ctx->di;
+#else
     filename = (void *)pt_regs_read_reg(ctx, 0);
+#endif
 #else
     /* for do_execveat_common, filename is the second argument */
     caller_ino = current->mm->exe_file->f_inode->i_ino;
