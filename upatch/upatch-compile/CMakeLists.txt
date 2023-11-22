@@ -3,7 +3,6 @@
 add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
 
 add_subdirectory(ko)
-add_subdirectory(ebpf)
 
 add_executable(compiler-hijacker gnu-compiler-hijacker.c)
 add_executable(as-hijacker gnu-as-hijacker.c)
