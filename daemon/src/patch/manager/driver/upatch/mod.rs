@@ -55,7 +55,6 @@ impl UserPatchDriver {
                     .filter(|pid| !last_pid_list.contains(pid))
                     .cloned()
                     .collect::<Vec<_>>();
-                elf_pid_map.insert(target_elf.to_owned(), new_pid_list);
 
                 if pid_list.is_empty() {
                     continue;
@@ -72,7 +71,10 @@ impl UserPatchDriver {
                 let ret_val =
                     unsafe { ffi::upatch_active(uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
                 match ret_val {
-                    0 => continue,
+                    0 => {
+                        elf_pid_map.insert(target_elf.to_owned(), new_pid_list);
+                        continue;
+                    },
                     EEXIST => continue,
                     EPERM => bail!("Upatch: Operation not permitted"),
                     ENOENT => bail!("Upatch: Cannot find patch entity"),
