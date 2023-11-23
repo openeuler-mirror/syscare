@@ -12,7 +12,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       3
+Release:       4
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -157,7 +157,7 @@ Syscare build dependency - kernel module.
 ############### PostInstall ################
 %post build-kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
-depmod
+depmod > /dev/null 2>&1
 
 ############### PreUninstall ###############
 %preun build-kmod
@@ -166,7 +166,7 @@ depmod
 ############## PostUninstall ###############
 %postun build-kmod
 echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
-depmod
+depmod > /dev/null 2>&1
 
 ################## Files ###################
 %files build-kmod
@@ -177,6 +177,8 @@ depmod
 ################ Change log ################
 ############################################
 %changelog
+* Fri Nov 24 2023 renoseven<dev@renoseven.net> - 1.2.0-4
+- Fix 'kpatch driver cannot support old version' issue
 * Fri Nov 24 2023 renoseven<dev@renoseven.net> - 1.2.0-3
 - Fix 'upatch only apply first patch for new process' issue
 * Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-2
