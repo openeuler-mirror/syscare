@@ -1,16 +1,18 @@
-%define _debugsource_template %{nil}
-
 %define build_version    %{version}-%{release}
 %define kernel_devel_rpm %(echo $(rpm -q kernel-devel | head -n 1))
 %define kernel_version   %(echo $(rpm -q --qf "\%%{VERSION}" %{kernel_devel_rpm}))
 %define kernel_name      %(echo $(rpm -q --qf "\%%{VERSION}-\%%{RELEASE}.\%%{ARCH}" %{kernel_devel_rpm}))
 
+%define pkg_kmod       %{name}-kmod
+%define pkg_build      %{name}-build
+%define pkg_build_kmod %{pkg_build}-kmod
+
 ############################################
 ############ Package syscare ###############
 ############################################
 Name:          syscare
-Version:       1.1.0
-Release:       6k
+Version:       1.2.0
+Release:       2
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -38,7 +40,7 @@ cd build
 cmake \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DBUILD_VERSION=%{build_version} \
-    -D_BUILD_UPATCH=0 \
+    -DKERNEL_VERSION=%{kernel_name} \
     ..
 
 make
@@ -47,6 +49,9 @@ make
 %install
 cd build
 %make_install
+
+mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
+mv -f %{buildroot}/usr/libexec/syscare/upatch_hijacker.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 
 ############### PostInstall ################
 %post
@@ -79,6 +84,7 @@ fi
 %attr(644,root,root) /usr/lib/systemd/system/syscare.service
 %attr(755,root,root) /usr/bin/syscared
 %attr(755,root,root) /usr/bin/syscare
+%attr(755,root,root) /usr/libexec/syscare/upatch-manage
 
 ############################################
 ########## Package syscare-build ###########
@@ -86,6 +92,7 @@ fi
 %package build
 Summary: Syscare build tools.
 BuildRequires: elfutils-libelf-devel
+Requires: %{pkg_build_kmod} >= %{build_version}
 Requires: coreutils
 Requires: patch
 Requires: kpatch
@@ -98,13 +105,22 @@ Syscare patch building toolset.
 
 ############### PostInstall ################
 %post build
+mkdir -p /etc/syscare
+systemctl daemon-reload
+systemctl enable upatch
+systemctl start upatch
 
 ############### PreUninstall ###############
 %preun build
+systemctl daemon-reload
+systemctl stop upatch
+systemctl disable upatch
 
 ############## PostUninstall ###############
 %postun build
 if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
+    rm -rf /etc/syscare
+    rm -f /var/log/syscare/upatchd*.log*
     if [ -z "$(ls -A /var/log/syscare)" ]; then
         rm -rf /var/log/syscare
     fi
@@ -114,14 +130,57 @@ fi
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
+%attr(644,root,root) /usr/lib/systemd/system/upatch.service
+%attr(755,root,root) /usr/bin/upatchd
 %attr(755,root,root) /usr/libexec/syscare/syscare-build
+%attr(755,root,root) /usr/libexec/syscare/upatch-build
+%attr(755,root,root) /usr/libexec/syscare/upatch-diff
+%attr(755,root,root) /usr/libexec/syscare/as-hijacker
+%attr(755,root,root) /usr/libexec/syscare/cc-hijacker
+%attr(755,root,root) /usr/libexec/syscare/c++-hijacker
+%attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
+%attr(755,root,root) /usr/libexec/syscare/g++-hijacker
+
+############################################
+######## Package syscare-build-kmod ########
+############################################
+%package build-kmod
+Summary: Kernel module for syscare patch build tools.
+BuildRequires: make gcc
+BuildRequires: kernel-devel
+Requires: kernel >= %{kernel_version}
+
+############### Description ################
+%description build-kmod
+Syscare build dependency - kernel module.
+
+############### PostInstall ################
+%post build-kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
+depmod
+
+############### PreUninstall ###############
+%preun build-kmod
+# Nothing
+
+############## PostUninstall ###############
+%postun build-kmod
+echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
+depmod
+
+################## Files ###################
+%files build-kmod
+%dir /lib/modules/%{kernel_name}/extra/syscare
+%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko
 
 ############################################
 ################ Change log ################
 ############################################
 %changelog
-* Wed Oct 11 2023 renoseven<dev@renoseven.net> - 1.1.0-6k
-- Disable upatch support
+* Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-2
+- Fix upatch process detection
+* Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-1
+- Fix various issue
 * Wed Oct 11 2023 renoseven<dev@renoseven.net> - 1.1.0-6
 - Support build patch for kernel moudules
 - Fix various issue

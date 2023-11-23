@@ -1,9 +1,9 @@
 #!/bin/bash -e
 
 readonly REPO_NAME="syscare"
-readonly REPO_PROVIDER="renoseven"
+readonly REPO_PROVIDER="openeuler"
 readonly REPO_URL="https://gitee.com/$REPO_PROVIDER/$REPO_NAME"
-readonly REPO_BRANCH="master"
+readonly REPO_BRANCH="openEuler-20.03"
 
 echo "Cloning source code..."
 repo_version=$(grep "Version" "$REPO_NAME.spec" | head -n 1 | awk -F ' ' '{print $NF}')
