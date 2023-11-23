@@ -44,22 +44,22 @@ impl UserPatchDriver {
         let active_patch_map = ACTIVE_PATCH_MAP.lock();
 
         if let Some(patch_list) = active_patch_map.get(target_elf) {
+            let mut elf_pid_map = ELF_PID_MAP.lock();
+
+            let new_pid_list = UPatchDriverHelper::find_target_elf_pid(target_elf)?;
+            let last_pid_list = elf_pid_map.get(target_elf).cloned().unwrap_or_default();
+
+            let pid_list = new_pid_list
+                .iter()
+                .filter(|pid| !last_pid_list.contains(pid))
+                .cloned()
+                .collect::<Vec<_>>();
+
+            if pid_list.is_empty() {
+                return Ok(());
+            }
+
             for patch_uuid in patch_list {
-                let mut elf_pid_map = ELF_PID_MAP.lock();
-
-                let new_pid_list = UPatchDriverHelper::find_target_elf_pid(target_elf)?;
-                let last_pid_list = elf_pid_map.get(target_elf).cloned().unwrap_or_default();
-
-                let pid_list = new_pid_list
-                    .iter()
-                    .filter(|pid| !last_pid_list.contains(pid))
-                    .cloned()
-                    .collect::<Vec<_>>();
-
-                if pid_list.is_empty() {
-                    continue;
-                }
-
                 let uuid = patch_uuid.to_cstring()?;
                 info!(
                     "Activing patch {{{}}} ({}) for {:?}",
@@ -71,16 +71,14 @@ impl UserPatchDriver {
                 let ret_val =
                     unsafe { ffi::upatch_active(uuid.as_ptr(), pid_list.as_ptr(), pid_list.len()) };
                 match ret_val {
-                    0 => {
-                        elf_pid_map.insert(target_elf.to_owned(), new_pid_list);
-                        continue;
-                    },
+                    0 => continue,
                     EEXIST => continue,
                     EPERM => bail!("Upatch: Operation not permitted"),
                     ENOENT => bail!("Upatch: Cannot find patch entity"),
                     _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
                 }
             }
+            elf_pid_map.insert(target_elf.to_owned(), new_pid_list);
         }
 
         Ok(())
