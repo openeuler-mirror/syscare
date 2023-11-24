@@ -154,7 +154,8 @@ impl KernelPatchBuilder {
                         .strip_suffix(&module_suffix)
                         .context("Unexpected patch suffix")?
                         .to_string_lossy()
-                        .replace(['.', '-'], "_");
+                        .replace('.', "_")
+                        .replace('-', "_");
 
                     let entity_uuid: String = Uuid::new_v4().to_string();
                     let entitiy_name = format!("{}-{}", module_name, entity_uuid);
