@@ -1,6 +1,10 @@
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use syscare_abi::PatchEntity;
+use syscare_common::util::os_str::OsStrExt;
 
 use super::PatchInfoExt;
 
@@ -12,13 +16,17 @@ pub struct KernelPatchExt {
 
 impl KernelPatchExt {
     pub fn new<P: AsRef<Path>>(patch_root: P, patch_entity: &PatchEntity) -> Self {
-        const KPATCH_SUFFIX: &str = "ko";
+        const KPATCH_SUFFIX: &str = ".ko";
         const KPATCH_MGNT_DIR: &str = "/sys/kernel/livepatch";
         const KPATCH_MGNT_FILE_NAME: &str = "enabled";
 
-        let patch_name = patch_entity.patch_name.to_string_lossy();
-        let patch_sys_name = patch_name.replace('-', "_").replace('.', "_");
-        let patch_file_name = format!("{}.{}", patch_name, KPATCH_SUFFIX);
+        let patch_name = patch_entity
+            .patch_name
+            .strip_suffix(KPATCH_SUFFIX)
+            .map(OsStr::to_string_lossy)
+            .unwrap_or(patch_entity.patch_name.to_string_lossy());
+        let patch_sys_name = patch_name.replace(['-', '.'], "_");
+        let patch_file_name = format!("{}{}", patch_name, KPATCH_SUFFIX);
 
         Self {
             patch_file: patch_root.as_ref().join(patch_file_name),
