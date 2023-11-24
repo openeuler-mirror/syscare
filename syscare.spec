@@ -13,7 +13,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       2
+Release:       3
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -207,6 +207,8 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Fri Nov 24 2023 renoseven<dev@renoseven.net> - 1.2.0-3
+- Fix 'upatch only apply first patch for new process' issue
 * Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-2
 - Fix upatch process detection
 * Wed Nov 22 2023 renoseven<dev@renoseven.net> - 1.2.0-1
