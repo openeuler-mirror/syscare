@@ -3,7 +3,7 @@ use std::{ops::Deref, process::exit, sync::Arc};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use lazy_static::lazy_static;
-use log::{debug, error, info, warn, LevelFilter};
+use log::{debug, error, info, LevelFilter};
 
 use parking_lot::Mutex;
 use syscare_abi::{PackageInfo, PackageType, PatchFile, PatchInfo, PatchType};
@@ -46,40 +46,46 @@ impl SyscareBuilder {
 
         for pkg_path in self.args.source.clone() {
             let mut pkg_info = PKG_IMPL.parse_package_info(&pkg_path)?;
+
+            // Source package's arch is meaningless, override it
+            pkg_info.arch = self.args.patch_arch.clone();
+
             info!("------------------------------");
             info!("Source Package");
             info!("------------------------------");
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::SourcePackage {
-                bail!("File \"{}\" is not a source package", pkg_path.display());
+                bail!(
+                    "Package \"{}\" is not a source package",
+                    pkg_info.short_name()
+                );
             }
-            // Source package's arch is meaningless, override it
-            pkg_info.arch = self.args.patch_arch.clone();
 
             pkg_list.push(pkg_info);
         }
 
         for pkg_path in self.args.debuginfo.clone() {
             let pkg_info = PKG_IMPL.parse_package_info(&pkg_path)?;
+
             info!("------------------------------");
             info!("Debuginfo Package");
             info!("------------------------------");
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::BinaryPackage {
-                bail!("File \"{}\" is not a debuginfo package", pkg_path.display());
+                bail!(
+                    "Package \"{}\" is not a debuginfo package",
+                    pkg_info.short_name()
+                );
             }
-            // TODO: check package source
-            // if !pkg_list
-            //     .iter()
-            //     .any(|src_pkg| src_pkg.is_source_of(&pkg_info))
-            // {
-            //     bail!(
-            //         "File \"{}\" cannot match to any source package",
-            //         pkg_path.display()
-            //     );
-            // }
+            if pkg_info.arch != self.args.patch_arch {
+                bail!(
+                    "Debuginfo package arch {} does not match to patch arch {}",
+                    pkg_info.arch,
+                    self.args.patch_arch
+                );
+            }
         }
         info!("------------------------------");
 
@@ -161,6 +167,7 @@ impl SyscareBuilder {
 
                 // Override target package
                 *patch_target = saved_patch_info.target;
+                patch_target.arch = self.args.patch_arch.clone();
 
                 // Override patch release
                 if patch_version == &saved_patch_info.version {
@@ -261,30 +268,6 @@ impl SyscareBuilder {
 
         info!("{}", build_params);
         Ok(build_params)
-    }
-
-    fn check_build_params(&self, build_params: &BuildParameters) -> Result<()> {
-        let source_pkg = &build_params.build_entry.target_pkg;
-        let patch_arch = build_params.patch_arch.as_str();
-        if patch_arch != os::cpu::arch() {
-            bail!("Patch arch \"{}\" is unsupported", patch_arch);
-        }
-        let target_arch = source_pkg.arch.as_str();
-        if patch_arch != target_arch {
-            bail!(
-                "Patch arch \"{}\" does not match target arch \"{}\"",
-                patch_arch,
-                target_arch
-            );
-        }
-        if build_params.skip_compiler_check {
-            warn!("Warning: Skipped compiler version check");
-        }
-        if build_params.skip_cleanup {
-            warn!("Warning: Skipped cleanup");
-        }
-
-        Ok(())
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> Result<()> {
@@ -455,9 +438,6 @@ impl SyscareBuilder {
         info!("==============================");
         info!("Preparing to build patch");
         let build_params = self.prepare_to_build()?;
-
-        info!("Checking build parameters");
-        self.check_build_params(&build_params)?;
 
         info!("Building patch, this may take a while");
         let patch_type = build_params.patch_type;

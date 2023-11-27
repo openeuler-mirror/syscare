@@ -35,12 +35,6 @@ impl PackageInfo {
             self.name, self.version, self.release, self.arch
         )
     }
-
-    pub fn is_source_of(&self, pkg_info: &PackageInfo) -> bool {
-        (self.kind == PackageType::SourcePackage)
-            && (pkg_info.kind == PackageType::BinaryPackage)
-            && (self.source_pkg == pkg_info.source_pkg)
-    }
 }
 
 impl std::fmt::Display for PackageInfo {

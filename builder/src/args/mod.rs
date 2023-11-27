@@ -1,9 +1,9 @@
 use std::path::PathBuf;
 
-use anyhow::{Context, Result};
+use anyhow::{bail, ensure, Result};
 use clap::ArgMatches;
 
-use syscare_common::util::fs;
+use syscare_common::{os, util::fs};
 
 mod matcher;
 mod parser;
@@ -88,22 +88,49 @@ impl Arguments {
     pub fn new() -> Result<Self> {
         let matcher = ArgMatcher::get_matched_args();
         Self::parse(&matcher)
-            .and_then(Self::normalize_pathes)
-            .context("Failed to parse arguments")
+            .and_then(Self::normalize_path)
+            .and_then(Self::check)
     }
 
-    fn normalize_pathes(mut self) -> Result<Self> {
-        for source in &mut self.source {
-            *source = fs::normalize(&source)?;
+    fn normalize_path(mut self) -> Result<Self> {
+        for source_file in &mut self.source {
+            *source_file = fs::normalize(&source_file)?;
         }
-        for debuginfo in &mut self.debuginfo {
-            *debuginfo = fs::normalize(&debuginfo)?;
+        for debuginfo_file in &mut self.debuginfo {
+            *debuginfo_file = fs::normalize(&debuginfo_file)?;
+        }
+        for patch_file in &mut self.patch {
+            *patch_file = fs::normalize(&patch_file)?;
         }
         self.workdir = fs::normalize(&self.workdir)?;
         self.output = fs::normalize(&self.output)?;
-        for patches in &mut self.patch {
-            *patches = fs::normalize(&patches)?;
+
+        Ok(self)
+    }
+
+    fn check(self) -> Result<Self> {
+        for source_file in &self.source {
+            ensure!(
+                source_file.is_file(),
+                format!("Cannot find file \"{}\"", source_file.display())
+            );
         }
+        for debuginfo_file in &self.debuginfo {
+            ensure!(
+                debuginfo_file.is_file(),
+                format!("Cannot find file \"{}\"", debuginfo_file.display())
+            );
+        }
+        for patch_file in &self.patch {
+            ensure!(
+                patch_file.is_file(),
+                format!("Cannot find file \"{}\"", patch_file.display())
+            );
+        }
+        if self.patch_arch.as_str() != os::cpu::arch() {
+            bail!("Cross compilation is unsupported");
+        }
+
         Ok(self)
     }
 }
