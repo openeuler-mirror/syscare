@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::{Context, Result};
 use lazy_static::lazy_static;
-use log::debug;
+use log::{debug, trace};
 use uuid::Uuid;
 use which::which;
 
@@ -123,11 +123,17 @@ impl UserPatchBuilder {
 
         debug!("- Detecting compilers");
         let compiler_list = self.detect_compilers();
+        for compiler in &compiler_list {
+            trace!("{}", compiler.display())
+        }
 
         debug!("- Parsing elf relations");
         let elf_relations = PKG_IMPL
             .parse_elf_relations(patch_target, debuginfo_pkg_root)
             .context("Failed to parse elf relation")?;
+        for elf_relation in &elf_relations {
+            trace!("{}", elf_relation);
+        }
 
         let ubuild_params = UBuildParameters {
             pkg_binary_dir,
