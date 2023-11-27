@@ -53,3 +53,13 @@ impl ElfRelation {
         })
     }
 }
+
+impl std::fmt::Display for ElfRelation {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_fmt(format_args!(
+            "{} -> {}",
+            self.debuginfo.display(),
+            self.elf.display()
+        ))
+    }
+}
