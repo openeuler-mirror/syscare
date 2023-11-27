@@ -1,15 +1,11 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 
-use std::io::{BufReader, Read};
-use std::os::unix::prelude::{OsStrExt, OsStringExt};
+use std::os::unix::prelude::OsStringExt;
 use std::process::{Command, Stdio};
-use std::thread::JoinHandle;
 
-use anyhow::{anyhow, bail, Context, Result};
+use anyhow::{bail, Context, Result};
 use log::trace;
-
-use super::raw_line::RawLines;
 
 pub struct ExternCommandArgs {
     args: Vec<OsString>,
@@ -115,33 +111,13 @@ pub struct ExternCommand {
 
 impl ExternCommand {
     #[inline(always)]
-    fn create_stdio_thread<R>(stdio: R) -> JoinHandle<Result<OsString>>
-    where
-        R: Read + Send + Sync + 'static,
-    {
-        std::thread::spawn(move || -> Result<OsString> {
-            let mut output = Vec::new();
-
-            for line in RawLines::from(BufReader::new(stdio)).flatten() {
-                trace!("{}", line.to_string_lossy());
-
-                output.extend(line.into_vec());
-                output.push(b'\n');
-            }
-            output.pop();
-
-            Ok(OsStr::from_bytes(&output).into())
-        })
-    }
-
-    #[inline(always)]
-    fn execute_command(&self, mut command: Command) -> Result<ExternCommandExitStatus> {
+    fn execute(&self, mut command: Command) -> Result<ExternCommandExitStatus> {
         trace!("Executing {:?}", command);
 
         let child_name = self.path.to_os_string();
         let child_display = child_name.as_os_str().to_string_lossy();
 
-        let mut child = command
+        let child = command
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()
@@ -150,27 +126,16 @@ impl ExternCommand {
         let child_pid = child.id();
         trace!("Process \"{}\" ({}) started", child_display, child_pid);
 
-        let stdout_thread = child
-            .stdout
-            .take()
-            .map(Self::create_stdio_thread)
-            .context("Failed to create pipe for stdout")?;
-        let stderr_thread = child
-            .stderr
-            .take()
-            .map(Self::create_stdio_thread)
-            .context("Failed to create pipe for stderr")?;
+        let child_output = child
+            .wait_with_output()
+            .with_context(|| format!("Failed to wait child process {}", child_pid))?;
 
-        let child_retval = child
-            .wait()?
+        let child_retval = child_output
+            .status
             .code()
-            .context("Failed to get process exit code")?;
-        let child_stdout = stdout_thread
-            .join()
-            .map_err(|_| anyhow!("Failed to join stdout thread"))??;
-        let child_stderr = stderr_thread
-            .join()
-            .map_err(|_| anyhow!("Failed to join stderr thread"))??;
+            .with_context(|| format!("Failed to get process {} exit code", child_pid))?;
+        let child_stdout = OsString::from_vec(child_output.stdout);
+        let child_stderr = OsString::from_vec(child_output.stderr);
         trace!(
             "Process \"{}\" ({}) exited, exit_code={}",
             child_display,
@@ -198,7 +163,7 @@ impl ExternCommand {
         let mut command = Command::new(&self.path);
         command.args(args);
 
-        self.execute_command(command)
+        self.execute(command)
     }
 
     pub fn execve(
@@ -210,7 +175,7 @@ impl ExternCommand {
         command.args(args);
         command.envs(vars);
 
-        self.execute_command(command)
+        self.execute(command)
     }
 }
 
