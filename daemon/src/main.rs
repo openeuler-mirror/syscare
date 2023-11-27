@@ -35,7 +35,9 @@ use rpc::{
 
 use crate::patch::{PatchManager, PatchMonitor};
 
+const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const DAEMON_UMASK: u32 = 0o027;
 const DAEMON_SLEEP_TIME: u64 = 100;
 

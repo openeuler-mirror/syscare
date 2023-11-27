@@ -1,6 +1,6 @@
 [package]
 name         = "upatch-build"
-version      = "1.1.0"
+version      = "1.2.0"
 authors      = ["lizongwu@huawei.com"]
 description  = "upatch-build tool"
 license      = "MulanPSL-2.0"
@@ -11,17 +11,17 @@ build        = "build.rs"
 [dependencies]
 common         = { path = "../../common", package = "syscare-common" }
 anyhow         = { version = "1.0" }
-clap           = { version = "2.34" }
-gimli          = { version = "0.26" }
+clap           = { version = "3.2", features = ["cargo", "derive"] }
+gimli          = { version = "0.27" }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
 libc           = { version = "0.2" }
-memmap2        = { version = "0.5" }
-memoffset      = { version = "0.8" }
-object         = { version = "0.28", features = ["write"] }
+memmap2        = { version = "0.9" }
+memoffset      = { version = "0.9" }
+object         = { version = "0.29", features = ["write"] }
 serde          = { version = "1.0", features = ["derive"] }
 typed-arena    = { version = "2.0" }
 which          = { version = "4.4" }
-jsonrpc        = { version = "0.13", features = ["simple_uds"] }
+jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 function_name  = { version = "0.3" }
-ctrlc          = { version = "3.1" }
+ctrlc          = { version = "3.3" }

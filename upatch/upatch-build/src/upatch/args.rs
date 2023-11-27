@@ -1,97 +1,90 @@
-use std::{ffi::OsString, path::PathBuf};
+use std::ffi::OsString;
+use std::path::PathBuf;
 
 use anyhow::bail;
-use clap::ArgMatches;
-
-use crate::tool::*;
-
-mod matcher;
-mod parser;
-
-use matcher::ArgMatcher;
-use parser::{ArgParser, ArgParserImpl, Parser};
+use clap::{AppSettings, ColorChoice, Parser};
 
 use super::Result;
+use crate::tool::*;
 
-#[derive(Debug, Clone)]
+const CLI_NAME: &str = env!("CARGO_PKG_NAME");
+const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+
+const DEFAULT_WORK_DIR: &str = "~/.upatch";
+const DEFAULT_BUILD_PATCH_CMD: &str = "";
+const DEFAULT_COMPILERS: &str = "gcc";
+const DEFAULT_OUTPUT_DIR: &str = "~/.upatch";
+
+#[derive(Parser, Debug)]
+#[clap(
+    bin_name = CLI_NAME,
+    version = CLI_VERSION,
+    about = CLI_ABOUT,
+    arg_required_else_help(true),
+    color(ColorChoice::Never),
+    global_setting(AppSettings::DeriveDisplayOrder),
+    term_width(120),
+)]
 pub struct Arguments {
-    /// Specify patch name
+    /// Specify output name
+    #[clap(short, long, default_value = "", hide_default_value = true)]
     pub name: OsString,
 
-    /// Specify work directory
+    /// Specify working directory
+    #[clap(short, long, default_value = DEFAULT_WORK_DIR)]
     pub work_dir: PathBuf,
 
     /// Specify source directory
+    #[clap(short, long)]
     pub source_dir: PathBuf,
 
     /// Specify build source command
+    #[clap(short, long)]
     pub build_source_cmd: String,
 
-    /// Specify build patched command
+    /// Specify build patched source command [default: <BUILD_SOURCE_CMD>]
+    #[clap(long, default_value = DEFAULT_BUILD_PATCH_CMD, hide_default_value = true)]
     pub build_patch_cmd: String,
 
-    /// Specify debug info list
+    /// Specify debuginfo files
+    #[clap(short, long, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
-    /// Specify the directory of searching elf
+    /// Specify the directory of searching elf [default: <SOURCE_DIR>]
+    #[clap(long, required = false)]
     pub elf_dir: Option<PathBuf>,
 
-    /// Specify elf's relative path relate to elf-dir or absolute path list
+    /// Specify elf's relative path relate to 'elf_dir' or absolute patch list
+    #[clap(long = "elf-path", required = true)]
     pub elf_path: Vec<PathBuf>,
 
-    /// Specify compiler
+    /// Specify compiler(s)
+    #[clap(short, long, default_value = DEFAULT_COMPILERS)]
     pub compiler: Vec<PathBuf>,
 
-    /// Specify output directory
+    /// Patch file(s)
+    #[clap(short, long, required = true)]
+    pub patch: Vec<PathBuf>,
+
+    /// Specify output directory [default: <WORK_DIR>]
+    #[clap(short, long, default_value = DEFAULT_OUTPUT_DIR, hide_default_value = true)]
     pub output_dir: PathBuf,
 
     /// Skip compiler version check (not recommended)
+    #[clap(long)]
     pub skip_compiler_check: bool,
 
     /// Provide more detailed info
+    #[clap(short, long)]
     pub verbose: bool,
-
-    /// Patch file(s)
-    pub patch: Vec<PathBuf>,
-}
-
-impl Parser<'_> for Arguments {
-    fn parse(matches: &ArgMatches<'_>) -> anyhow::Result<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            name: match ArgParserImpl::is_present(matches, "name") {
-                false => OsString::default(),
-                true => ArgParserImpl::parse_arg(matches, "name")?,
-            },
-            work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
-            source_dir: ArgParserImpl::parse_arg(matches, "source_dir")?,
-            build_source_cmd: ArgParserImpl::parse_arg(matches, "build_source_cmd")?,
-            build_patch_cmd: ArgParserImpl::parse_arg(matches, "build_patch_cmd")?,
-            debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
-            elf_dir: match ArgParserImpl::is_present(matches, "elf_dir") {
-                false => None,
-                true => Some(ArgParserImpl::parse_arg(matches, "elf_dir")?),
-            },
-            elf_path: ArgParserImpl::parse_args(matches, "elf_path")?,
-            compiler: ArgParserImpl::parse_args(matches, "compiler")?,
-            patch: ArgParserImpl::parse_args(matches, "patch")?,
-            output_dir: ArgParserImpl::parse_arg(matches, "output_dir")?,
-            skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
-            verbose: ArgParserImpl::is_present(matches, "verbose"),
-        })
-    }
 }
 
 impl Arguments {
     pub fn new() -> Result<Self> {
-        let matcher = ArgMatcher::get_matched_args();
-        let args = Self::parse(&matcher)
-            .and_then(Self::check)
-            .map_err(|e| super::Error::Mod(e.to_string()))?;
-
-        Ok(args)
+        Self::parse()
+            .check()
+            .map_err(|e| super::Error::Mod(e.to_string()))
     }
 
     fn check(mut self) -> anyhow::Result<Self> {

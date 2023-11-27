@@ -1,95 +1,99 @@
 use std::path::PathBuf;
 
 use anyhow::{bail, ensure, Result};
-use clap::ArgMatches;
+use clap::{AppSettings, ColorChoice, Parser};
+use lazy_static::lazy_static;
 
 use syscare_common::{os, util::fs};
 
-mod matcher;
-mod parser;
+use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
-use matcher::ArgMatcher;
-use parser::{ArgParser, ArgParserImpl, Parser};
+const DEFAULT_PATCH_VERSION: &str = "1";
+const DEFAULT_PATCH_RELEASE: &str = "1";
+const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
+const DEFAULT_WORK_DIR: &str = ".";
+const DEFAULT_OUTPUT_DIR: &str = ".";
 
-#[derive(Debug)]
+lazy_static! {
+    static ref DEFAULT_BUILD_JOBS: String = os::cpu::num().to_string();
+    static ref DEFAULT_PATCH_ARCH: String = os::cpu::arch().to_string_lossy().to_string();
+}
+
+#[derive(Parser, Debug)]
+#[clap(
+    bin_name = CLI_NAME,
+    version = CLI_VERSION,
+    about = CLI_ABOUT,
+    arg_required_else_help(true),
+    color(ColorChoice::Never),
+    global_setting(AppSettings::DeriveDisplayOrder),
+    term_width(120),
+)]
 pub struct Arguments {
     /// Patch name
+    #[clap(short = 'n', long)]
     pub patch_name: String,
 
     /// Patch architecture
+    #[clap(long, default_value = DEFAULT_PATCH_ARCH.as_str())]
     pub patch_arch: String,
 
     /// Patch version
+    #[clap(long, default_value = DEFAULT_PATCH_VERSION)]
     pub patch_version: String,
 
     /// Patch release
+    #[clap(long, default_value = DEFAULT_PATCH_RELEASE)]
     pub patch_release: u32,
 
     /// Patch description
+    #[clap(long, default_value = DEFAULT_PATCH_DESCRIPTION)]
     pub patch_description: String,
 
-    /// Patch requires
+    /// Patch requirements
+    #[clap(long)]
     pub patch_requires: Vec<String>,
 
-    /// Source package
+    /// Source package(s)
+    #[clap(short, long, required = true)]
     pub source: Vec<PathBuf>,
 
     /// Debuginfo package(s)
+    #[clap(short, long, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
     /// Patch file(s)
+    #[clap(short, long, required = true)]
     pub patch: Vec<PathBuf>,
 
     /// Working directory
+    #[clap(long, default_value = DEFAULT_WORK_DIR)]
     pub workdir: PathBuf,
 
-    /// Generated patch output directory
+    /// Output directory
+    #[clap(short, long, default_value = DEFAULT_OUTPUT_DIR)]
     pub output: PathBuf,
 
     /// Parallel build jobs
+    #[clap(short, long, default_value = DEFAULT_BUILD_JOBS.as_str())]
     pub jobs: usize,
 
     /// Skip compiler version check (not recommended)
+    #[clap(long)]
     pub skip_compiler_check: bool,
 
     /// Skip post-build cleanup
+    #[clap(long)]
     pub skip_cleanup: bool,
 
     /// Provide more detailed info
+    #[clap(short, long)]
     pub verbose: bool,
-}
-
-impl Parser<'_> for Arguments {
-    fn parse(matches: &ArgMatches<'_>) -> Result<Self>
-    where
-        Self: Sized,
-    {
-        Ok(Self {
-            patch_name: ArgParserImpl::parse_arg(matches, "patch_name")?,
-            patch_arch: ArgParserImpl::parse_arg(matches, "patch_arch")?,
-            patch_version: ArgParserImpl::parse_arg(matches, "patch_version")?,
-            patch_release: ArgParserImpl::parse_arg(matches, "patch_release")?,
-            patch_description: ArgParserImpl::parse_arg(matches, "patch_description")?,
-            patch_requires: ArgParserImpl::parse_args(matches, "patch_requires")?,
-            source: ArgParserImpl::parse_args(matches, "source")?,
-            debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
-            patch: ArgParserImpl::parse_args(matches, "patch")?,
-            workdir: ArgParserImpl::parse_arg(matches, "workdir")?,
-            output: ArgParserImpl::parse_arg(matches, "output")?,
-            jobs: ArgParserImpl::parse_arg(matches, "jobs")?,
-            skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
-            skip_cleanup: ArgParserImpl::is_present(matches, "skip_cleanup"),
-            verbose: ArgParserImpl::is_present(matches, "verbose"),
-        })
-    }
 }
 
 impl Arguments {
     pub fn new() -> Result<Self> {
-        let matcher = ArgMatcher::get_matched_args();
-        Self::parse(&matcher)
-            .and_then(Self::normalize_path)
-            .and_then(Self::check)
+        Self::parse().normalize_path().and_then(Self::check)
     }
 
     fn normalize_path(mut self) -> Result<Self> {

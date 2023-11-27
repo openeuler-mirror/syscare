@@ -14,6 +14,10 @@ use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, Command
 use logger::Logger;
 use rpc::{RpcProxy, RpcRemote};
 
+pub const CLI_NAME: &str = env!("CARGO_PKG_NAME");
+pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
+pub const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+
 struct SyscareCLI {
     args: Arguments,
 }

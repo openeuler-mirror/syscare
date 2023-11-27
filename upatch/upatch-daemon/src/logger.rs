@@ -9,7 +9,6 @@ use flexi_logger::{
 use lazy_static::lazy_static;
 use log::{LevelFilter, Record};
 use once_cell::sync::OnceCell;
-use time::{format_description::FormatItem, macros::format_description};
 
 use syscare_common::os;
 
@@ -41,9 +40,7 @@ impl Logger {
         now: &mut DeferredNow,
         record: &Record,
     ) -> Result<(), std::io::Error> {
-        const LOG_FORMAT: &[FormatItem<'static>] = format_description!(
-            "[year]-[month]-[day] [hour]:[minute]:[second].[subsecond digits:6]"
-        );
+        const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
         write!(
             w,

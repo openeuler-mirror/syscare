@@ -1,6 +1,6 @@
 [package]
 name         = "syscare-common"
-version      = "1.1.0"
+version      = "1.2.0"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare common library"
 license      = "MulanPSL-2.0"
@@ -14,7 +14,7 @@ lazy_static = { version = "1.4" }
 libc        = { version = "0.2" }
 signal-hook = { version = "0.3" }
 log         = { version = "0.4" }
-regex       = { version = "1.7" }
-sha2        = { version = "0.8" }
+regex       = { version = "1.9" }
+sha2        = { version = "0.10" }
 serde       = { version = "1.0", features = ["derive"] }
 serde_cbor  = { version = "0.11.2" }

@@ -1,6 +1,6 @@
 [package]
 name         = "syscare-build"
-version      = "1.1.0"
+version      = "1.2.0"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare patch build utility"
 license      = "MulanPSL-2.0"
@@ -12,14 +12,14 @@ build        = "build.rs"
 syscare-common = { package = "syscare-common", path = "../common" }
 syscare-abi    = { package = "syscare-abi", path = "../abi" }
 anyhow         = { version = "1.0" }
-once_cell      = { version = "1.14" }
+once_cell      = { version = "1.18" }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
 chrono         = { version = "0.4" }
-parking_lot    = { version = "0.10" }
-flexi_logger   = { version = "0.21" }
-clap           = { version = "2.34" }
-uuid           = { version = "1.2", features = ["v4"] }
+parking_lot    = { version = "0.11" }
+flexi_logger   = { version = "0.24" }
+clap           = { version = "3.2", features = ["derive"] }
+uuid           = { version = "1.6", features = ["v4"] }
 serde          = { version = "1.0", features = ["derive"] }
 which          = { version = "4.4" }
-ctrlc          = { version = "3.1" }
+ctrlc          = { version = "3.3" }
