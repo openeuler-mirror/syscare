@@ -48,7 +48,7 @@ pub struct Arguments {
     pub build_patch_cmd: String,
 
     /// Specify debuginfo files
-    #[clap(short, long, required = true)]
+    #[clap(short, long, multiple = true, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
     /// Specify the directory of searching elf [default: <SOURCE_DIR>]
@@ -56,15 +56,15 @@ pub struct Arguments {
     pub elf_dir: Option<PathBuf>,
 
     /// Specify elf's relative path relate to 'elf_dir' or absolute patch list
-    #[clap(long = "elf-path", required = true)]
+    #[clap(long = "elf-path", multiple = true, required = true)]
     pub elf_path: Vec<PathBuf>,
 
     /// Specify compiler(s)
-    #[clap(short, long, default_value = DEFAULT_COMPILERS)]
+    #[clap(short, long,  multiple = true, default_value = DEFAULT_COMPILERS)]
     pub compiler: Vec<PathBuf>,
 
     /// Patch file(s)
-    #[clap(short, long, required = true)]
+    #[clap(short, long, multiple = true, required = true)]
     pub patch: Vec<PathBuf>,
 
     /// Specify output directory [default: <WORK_DIR>]

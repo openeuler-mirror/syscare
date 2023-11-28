@@ -51,19 +51,19 @@ pub struct Arguments {
     pub patch_description: String,
 
     /// Patch requirements
-    #[clap(long)]
+    #[clap(long, multiple = true)]
     pub patch_requires: Vec<String>,
 
     /// Source package(s)
-    #[clap(short, long, required = true)]
+    #[clap(short, long, multiple = true, required = true)]
     pub source: Vec<PathBuf>,
 
     /// Debuginfo package(s)
-    #[clap(short, long, required = true)]
+    #[clap(short, long, multiple = true, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
     /// Patch file(s)
-    #[clap(short, long, required = true)]
+    #[clap(short, long, multiple = true, required = true)]
     pub patch: Vec<PathBuf>,
 
     /// Working directory

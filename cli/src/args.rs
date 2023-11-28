@@ -45,19 +45,19 @@ pub enum SubCommand {
     Build { args: Vec<String> },
     /// Show patch info
     Info {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Show patch target
     Target {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Show patch status
     Status {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
@@ -65,40 +65,40 @@ pub enum SubCommand {
     List,
     /// Check a patch
     Check {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Apply a patch
     Apply {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
-        /// Skip all checks, force apply
-        #[clap(long)]
+        /// Force to apply a patch
+        #[clap(short, long)]
         force: bool,
     },
     /// Remove a patch
     Remove {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Active a patch
     Active {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Deactive a patch
     Deactive {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
     /// Accept a patch
     Accept {
-        /// Patch identifier, typically would be "<TARGET_NAME>/<PATCH_NAME>"
+        /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
     },
