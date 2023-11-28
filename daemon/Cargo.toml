@@ -1,6 +1,6 @@
 [package]
 name         = "syscared"
-version      = "1.1.0"
+version      = "1.2.0"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare daemon"
 license      = "MulanPSL-2.0"

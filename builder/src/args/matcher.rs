@@ -22,14 +22,20 @@ impl ArgMatcher {
             (name: crate_name!())
             (version: crate_version!())
             (about: crate_description!())
-            (global_settings: &[ AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage ])
+            (set_term_width: 120)
+            (global_settings: &[
+                AppSettings::ArgRequiredElseHelp,
+                AppSettings::ColorNever,
+                AppSettings::DeriveDisplayOrder,
+                AppSettings::UnifiedHelpMessage,
+            ])
             (@arg patch_name: short("n") long("patch-name") +required +takes_value value_name("PATCH_NAME") "Patch name")
             (@arg patch_arch: long("patch-arch") +takes_value value_name("PATCH_ARCH") default_value(&DEFAULT_PATCH_ARCH)  "Patch architecture")
             (@arg patch_version: long("patch-version") +takes_value value_name("PATCH_VERSION") default_value(DEFAULT_PATCH_VERSION) "Patch version")
             (@arg patch_release: long("patch-release") +takes_value value_name("PATCH_RELEASE") default_value(DEFAULT_PATCH_RELEASE) "Patch release")
             (@arg patch_description: long("patch-description") +takes_value value_name("PATCH_DESCRIPTION") default_value(DEFAULT_PATCH_DESCRIPTION) "Patch description")
-            (@arg patch_requires: long("patch-requires") +takes_value +multiple value_name("PATCH_REQUIRES") "Patch requirments")
-            (@arg source: short("s") long("source") +required +takes_value +multiple value_name("SOURCE") "Source package")
+            (@arg patch_requires: long("patch-requires") +takes_value +multiple value_name("PATCH_REQUIRES") "Patch requirements")
+            (@arg source: short("s") long("source") +required +takes_value +multiple value_name("SOURCE") "Source package(s)")
             (@arg debuginfo: short("d") long("debuginfo") +required +takes_value +multiple value_name("DEBUGINFO") "Debuginfo package(s)")
             (@arg patch: short("p") long("patch") +required +takes_value +multiple value_name("PATCH") "Patch file(s)")
             (@arg workdir: long("workdir") +takes_value value_name("WORKDIR") default_value(DEFAULT_WORK_DIR) "Working directory")

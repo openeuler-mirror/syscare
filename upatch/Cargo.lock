@@ -1101,7 +1101,7 @@ dependencies = [
 
 [[package]]
 name = "syscare-common"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1408,7 +1408,7 @@ checksum = "c0edd1e5b14653f783770bce4a4dabb4a5108a5370a5f5d8cfe8710c361f6c8b"
 
 [[package]]
 name = "upatch-build"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1430,7 +1430,7 @@ dependencies = [
 
 [[package]]
 name = "upatchd"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "cc",

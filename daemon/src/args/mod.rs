@@ -29,7 +29,7 @@ pub struct Arguments {
     /// Daemon data directory
     pub data_dir: PathBuf,
 
-    /// Daemon log directory
+    /// Daemon logging directory
     pub log_dir: PathBuf,
 
     /// Set the logging level ("trace"|"debug"|"info"|"warn"|"error")
