@@ -13,9 +13,15 @@ impl ArgMatcher {
             (name: crate_name!())
             (version: crate_version!())
             (about: crate_description!())
-            (global_settings: &[ AppSettings::ArgsNegateSubcommands, AppSettings::DeriveDisplayOrder, AppSettings::UnifiedHelpMessage ])
+            (set_term_width: 120)
+            (global_settings: &[
+                AppSettings::ArgRequiredElseHelp,
+                AppSettings::ColorNever,
+                AppSettings::DeriveDisplayOrder,
+                AppSettings::UnifiedHelpMessage,
+            ])
             (@arg name: short("n") long("name") +takes_value value_name("NAME") "Specify output name")
-            (@arg work_dir: short("w") long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify work directory")
+            (@arg work_dir: short("w") long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify working directory")
             (@arg source_dir: short("s") long("source-dir") +required +takes_value value_name("SOURCE_DIR") "Specify source directory")
             (@arg build_source_cmd: short("b") long("build-source-cmd") +required +takes_value value_name("BUILD_SOURCE_CMD") "Specify build source command")
             (@arg build_patch_cmd: long("build-patch-cmd") +takes_value value_name("BUILD_PATCH_CMD") default_value(DEFAULT_BUILD_PATCH_CMD) +hide_default_value "Specify build patched source command [default: <BUILD_SOURCE_CMD>]")

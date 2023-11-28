@@ -1082,7 +1082,7 @@ dependencies = [
 
 [[package]]
 name = "syscare"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "clap",
@@ -1101,14 +1101,14 @@ dependencies = [
 
 [[package]]
 name = "syscare-abi"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "syscare-build"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1128,7 +1128,7 @@ dependencies = [
 
 [[package]]
 name = "syscare-common"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1143,7 +1143,7 @@ dependencies = [
 
 [[package]]
 name = "syscared"
-version = "1.1.0"
+version = "1.2.0"
 dependencies = [
  "anyhow",
  "cc",

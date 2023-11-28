@@ -10,14 +10,16 @@ impl ArgMatcher {
             (name: crate_name!())
             (version: crate_version!())
             (about: crate_description!())
+            (set_term_width: 120)
+            (settings: &[
+                AppSettings::SubcommandRequiredElseHelp,
+            ])
             (global_settings: &[
+                AppSettings::ColorNever,
                 AppSettings::DeriveDisplayOrder,
                 AppSettings::UnifiedHelpMessage,
                 AppSettings::VersionlessSubcommands,
                 AppSettings::DisableHelpSubcommand,
-            ])
-            (settings: &[
-                AppSettings::SubcommandRequiredElseHelp,
             ])
             (@arg socket_file: short("s") long("socket-file") value_name("SOCKET_FILE") +takes_value default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
             (@arg verbose: short("v") long("verbose") "Provide more detailed info")
