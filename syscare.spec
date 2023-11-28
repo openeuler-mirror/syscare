@@ -13,7 +13,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       6
+Release:       7
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -205,6 +205,8 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Wed Nov 29 2023 renoseven<dev@renoseven.net> - 1.2.0-7
+- Fix aarch64 compile issue
 * Tue Nov 28 2023 renoseven<dev@renoseven.net> - 1.2.0-6
 - Enable debuginfo for rust code
 - Sync arguments with old version
