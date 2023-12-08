@@ -212,9 +212,9 @@ impl KernelPatchBuilder {
     fn parse_kbuild_cmd_envs(&self, build_root: &Path) -> ExternCommandEnvs {
         ExternCommandEnvs::new()
             .env("CACHEDIR", build_root)
-            .env("NO_PROFILING_CALLS", "1")
-            .env("DISABLE_AFTER_LOAD", "1")
-            .env("KEEP_JUMP_LABEL", "1")
+            .env("NO_PROFILING_CALLS", "yes")
+            .env("DISABLE_AFTER_LOAD", "yes")
+            .env("KEEP_JUMP_LABEL", "yes")
     }
 
     fn invoke_kpatch_build(
