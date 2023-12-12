@@ -196,7 +196,6 @@ impl KernelPatchBuilder {
             .arg(kbuild_params.jobs.to_string())
             .arg("--output")
             .arg(&kbuild_params.patch_output_dir)
-            .arg("--non-replace")
             .arg("--skip-cleanup");
 
         if let Some(oot_module) = &kbuild_entity.module_path {
@@ -213,9 +212,9 @@ impl KernelPatchBuilder {
     fn parse_kbuild_cmd_envs(&self, build_root: &Path) -> ExternCommandEnvs {
         ExternCommandEnvs::new()
             .env("CACHEDIR", build_root)
-            .env("NO_PROFILING_CALLS", "yes")
-            .env("DISABLE_AFTER_LOAD", "yes")
-            .env("KEEP_JUMP_LABEL", "yes")
+            .env("NO_PROFILING_CALLS", "1")
+            .env("DISABLE_AFTER_LOAD", "1")
+            .env("KEEP_JUMP_LABEL", "1")
     }
 
     fn invoke_kpatch_build(
