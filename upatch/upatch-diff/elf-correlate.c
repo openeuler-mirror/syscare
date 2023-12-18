@@ -116,11 +116,13 @@ static void correlate_section(struct section *sec_orig, struct section *sec_patc
 		__correlate_section(sec_orig->rela, sec_patched->rela);
 	}
 
-	if (sec_orig->secsym)
+	if (sec_orig->secsym && sec_patched->secsym) {
 		correlate_symbol(sec_orig->secsym, sec_patched->secsym);
+	}
 
-	if (sec_orig->sym)
+	if (sec_orig->sym) {
 		correlate_symbol(sec_orig->sym, sec_patched->sym);
+	}
 }
 
 void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
