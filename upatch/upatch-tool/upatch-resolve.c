@@ -65,15 +65,19 @@ struct list_head* patch_symbols_resolve(const char *target_elf, const char *patc
 	INIT_LIST_HEAD(head);
 
 	int ret = upatch_init(&uelf, patch_file);
-
 	if (ret < 0) {
 		log_warn("upatch-resolve: upatch_init failed\n");
 		goto out;
 	}
 
 	ret = binary_init(&relf, target_elf);
-	if (ret) {
+	if (ret < 0) {
 		log_warn("upatch-resolve: binary_init failed %d \n", ret);
+		goto out;
+	}
+
+	if (check_build_id(&uelf.info, &relf.info) == false) {
+		log_error("upatch-resolve: Build id mismatched!\n");
 		goto out;
 	}
 
