@@ -58,7 +58,7 @@ int main(int argc, char **argv)
 			skel->progs.install_breakpoint, false, "install_breakpoint");
 	if (!skel->links.install_breakpoint) {
 		err = -errno;
-		fprintf(stderr, "Failed to attach kprobe for install_breakpoint: %d \n", err);
+		fprintf(stderr, "Failed to attach kprobe for install_breakpoint: %d\n", err);
 		goto cleanup;
 	}
 

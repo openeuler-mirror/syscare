@@ -18,6 +18,7 @@
 #include "log.h"
 #include "upatch-common.h"
 #include "upatch-patch.h"
+#include "upatch-process.h"
 #include "upatch-ptrace.h"
 #include "upatch-relocation.h"
 #include "upatch-resolve.h"
@@ -101,7 +102,7 @@ static int rewrite_section_headers(struct upatch_elf *uelf)
 		/* Mark all sections sh_addr with their address in the
 		   temporary image. */
 		shdr->sh_addr = (size_t)uelf->info.hdr + shdr->sh_offset;
-		log_debug("section %s at 0x%lx \n",
+		log_debug("section %s at 0x%lx\n",
 			  uelf->info.shstrtab + shdr->sh_name, shdr->sh_addr);
 	}
 
@@ -165,7 +166,7 @@ static void layout_sections(struct upatch_elf *uelf)
 	for (i = 0; i < uelf->info.hdr->e_shnum; i++)
 		uelf->info.shdrs[i].sh_entsize = ~0UL;
 
-	log_debug("upatch section allocation order: \n");
+	log_debug("upatch section allocation order:\n");
 	for (m = 0; m < ARRAY_SIZE(masks); ++m) {
 		for (i = 0; i < uelf->info.hdr->e_shnum; ++i) {
 			GElf_Shdr *s = &uelf->info.shdrs[i];
@@ -279,18 +280,17 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
 				  0);
 	if (addr == 0) {
-		log_error("remote alloc memory for patch failed\n");
+		log_error("Failed to alloc remote patch memory\n");
 		return NULL;
 	}
 
-	log_debug("allocated 0x%lx bytes at 0x%lx for '%s' patch\n", sz, addr,
-		  obj->name);
+	log_debug("Allocated 0x%lx bytes at 0x%lx of '%s'\n", sz, addr, obj->name);
 
 	// log_debug("Marking this space as busy\n");
 	ret = vm_hole_split(hole, addr, addr + sz);
 	if (ret) {
 		// TODO: clear
-		log_error("vm_hole_split failed\n");
+		log_error("Failed to split vm hole\n");
 		return NULL;
 	}
 
@@ -300,10 +300,9 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 static void __upatch_memfree(struct object_file *obj, void *base,
 			     unsigned int size)
 {
-	log_debug("munmap upatch memory at: %p\n", base);
-	if (upatch_munmap_remote(proc2pctx(obj->proc), (unsigned long)base,
-				 size)) {
-		log_error("Failed to munmap upatch memory at: %p\n", base);
+	log_debug("Free patch memory %p\n", base);
+	if (upatch_munmap_remote(proc2pctx(obj->proc), (unsigned long)base, size)) {
+		log_error("Failed to free patch memory %p\n", base);
 	}
 }
 
@@ -313,8 +312,7 @@ static int __alloc_memory(struct object_file *obj_file,
 	/* Do the allocs. */
 	layout->base = upatch_alloc(obj_file, layout->size);
 	if (!layout->base) {
-		log_error("alloc upatch core_layout memory failed: %p \n",
-			  layout->base);
+		log_error("Failed to alloc patch core layout %p\n", layout->base);
 		return -ENOMEM;
 	}
 
@@ -336,25 +334,28 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
 	/* Do the allocs. */
 	ret = __alloc_memory(obj, &uelf->core_layout);
 	if (ret) {
-		log_error("alloc upatch module memory failed: %d \n", ret);
+		log_error("Failed to alloc patch memory, ret=%d\n", ret);
 		return ret;
 	}
 
 	/* Transfer each section which specifies SHF_ALLOC */
-	log_debug("final section addresses:\n");
+	log_debug("Final section addresses:\n");
 	for (i = 0; i < uelf->info.hdr->e_shnum; i++) {
 		void *kdest;
 		void *dest;
 		GElf_Shdr *shdr = &uelf->info.shdrs[i];
 
-		if (!(shdr->sh_flags & SHF_ALLOC))
+		if (!(shdr->sh_flags & SHF_ALLOC)) {
 			continue;
+		}
 
 		kdest = uelf->core_layout.kbase + shdr->sh_entsize;
 		dest = uelf->core_layout.base + shdr->sh_entsize;
 
-		if (shdr->sh_type != SHT_NOBITS)
+		if (shdr->sh_type != SHT_NOBITS) {
 			memcpy(kdest, (void *)shdr->sh_addr, shdr->sh_size);
+		}
+
 		shdr->sh_addr = (unsigned long)kdest;
 		/* overuse this attr to record user address */
 		shdr->sh_addralign = (unsigned long)dest;
@@ -369,7 +370,7 @@ static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
 {
 	int ret = 0;
 
-	log_debug("post kbase %lx(%x) to base %lx\n",
+	log_debug("Post kbase %lx(%x) to base %lx\n",
 		  (unsigned long)uelf->core_layout.kbase,
 		  uelf->core_layout.size,
 		  (unsigned long)uelf->core_layout.base);
@@ -377,7 +378,7 @@ static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
 				       (unsigned long)uelf->core_layout.base,
 				       uelf->core_layout.size);
 	if (ret) {
-		log_error("can't move kbase to base - %d\n", ret);
+		log_error("Failed to move kbase to base, ret=%d\n", ret);
 		goto out;
 	}
 
@@ -404,7 +405,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 		sizeof(struct upatch_patch_func);
 	memcpy(uinfo->id, uuid, strlen(uuid));
 
-	log_debug("change insn:\n");
+	log_debug("Changed insn:\n");
 	for (i = 0; i < uinfo->changed_func_num; ++i) {
 		struct upatch_info_func *upatch_func =
 			(void *)uelf->core_layout.kbase +
@@ -440,26 +441,21 @@ static int unapply_patch(struct object_file *obj,
 			 struct upatch_info_func *funcs,
 			 unsigned int changed_func_num)
 {
-	int ret = 0, i;
-
-	log_debug("change insn:\n");
-	for (i = 0; i < changed_func_num; ++i) {
+	log_debug("Changed insn:\n");
+	for (int i = 0; i < changed_func_num; ++i) {
 		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
 			  funcs[i].new_insn, funcs[i].old_insn[0]);
 
-		ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
-					       (unsigned long)funcs[i].old_addr,
-					       get_origin_insn_len());
+		int ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
+			(unsigned long)funcs[i].old_addr, get_origin_insn_len());
 
 		if (ret) {
-			log_error("can't write old insn at 0x%lx - %d\n",
-				  funcs[i].old_addr, ret);
-			goto out;
+			log_error("Failed to write old insn at 0x%lx, ret=%d\n",
+				funcs[i].old_addr, ret);
+			return ret;
 		}
 	}
-
-out:
-	return ret;
+	return 0;
 }
 
 static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
@@ -475,40 +471,37 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 			sizeof(struct upatch_info) +
 			i * sizeof(struct upatch_info_func);
 
-		// write jumper insn to first 8bytes
-		ret = upatch_process_mem_write(
-			obj->proc, &upatch_func->new_insn,
-			(unsigned long)upatch_func->old_addr,
-			get_upatch_insn_len());
+		// write jumper insn to first 8 bytes
+		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_insn,
+			(unsigned long)upatch_func->old_addr, get_upatch_insn_len());
 		if (ret) {
 			log_error(
-				"can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
+				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
 				upatch_func->old_addr, upatch_func->new_insn,
 				ret);
 			goto out;
 		}
-		// write 64bit new addr to second 8bytes
-		ret = upatch_process_mem_write(
-			obj->proc, &upatch_func->new_addr,
+		// write 64bit new addr to second 8 bytes
+		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_addr,
 			(unsigned long)upatch_func->old_addr + get_upatch_insn_len(),
 			get_upatch_addr_len());
 		if (ret) {
-                        log_error(
-                                "can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
-                                upatch_func->old_addr + get_upatch_insn_len(),
+			log_error(
+				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
+				upatch_func->old_addr + get_upatch_insn_len(),
 				upatch_func->new_addr,
-                                ret);
-                        goto out;
-                }
+				ret);
+			goto out;
+		}
 	}
 
 out:
 	if (ret) {
 		unapply_patch(obj,
-			      (void *)uelf->core_layout.kbase +
-				      uelf->core_layout.info_size +
-				      sizeof(struct upatch_info),
-			      i);
+			(void *)uelf->core_layout.kbase +
+			uelf->core_layout.info_size +
+			sizeof(struct upatch_info),
+			i);
 	}
 	return ret;
 }
@@ -523,8 +516,7 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 			(unsigned long)uelf->core_layout.base,
 			uelf->core_layout.text_size, PROT_READ | PROT_EXEC);
 		if (ret < 0) {
-			log_error(
-				"Failed to change upatch text protection to r-x");
+			log_error("Failed to change upatch text protection to r-x");
 			return ret;
 		}
 	}
@@ -532,13 +524,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 	if (uelf->core_layout.ro_size > uelf->core_layout.text_size) {
 		ret = upatch_mprotect_remote(
 			proc2pctx(obj->proc),
-			(unsigned long)uelf->core_layout.base +
-				uelf->core_layout.text_size,
+			(unsigned long)uelf->core_layout.base + uelf->core_layout.text_size,
 			uelf->core_layout.ro_size - uelf->core_layout.text_size,
 			PROT_READ);
 		if (ret < 0) {
-			log_error(
-				"Failed to change upatch ro protection to r--");
+			log_error("Failed to change upatch ro protection to r--");
 			return ret;
 		}
 	}
@@ -546,14 +536,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 	if (uelf->core_layout.ro_after_init_size > uelf->core_layout.ro_size) {
 		ret = upatch_mprotect_remote(
 			proc2pctx(obj->proc),
-			(unsigned long)uelf->core_layout.base +
-				uelf->core_layout.ro_size,
-			uelf->core_layout.ro_after_init_size -
-				uelf->core_layout.ro_size,
+			(unsigned long)uelf->core_layout.base + uelf->core_layout.ro_size,
+			uelf->core_layout.ro_after_init_size - uelf->core_layout.ro_size,
 			PROT_READ);
 		if (ret < 0) {
-			log_error(
-				"Failed to change upatch ro init protection to r--");
+			log_error("Failed to change upatch ro init protection to r--");
 			return ret;
 		}
 	}
@@ -562,14 +549,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 	    uelf->core_layout.ro_after_init_size) {
 		ret = upatch_mprotect_remote(
 			proc2pctx(obj->proc),
-			(unsigned long)uelf->core_layout.base +
-				uelf->core_layout.ro_after_init_size,
-			uelf->core_layout.info_size -
-				uelf->core_layout.ro_after_init_size,
+			(unsigned long)uelf->core_layout.base + uelf->core_layout.ro_after_init_size,
+			uelf->core_layout.info_size - uelf->core_layout.ro_after_init_size,
 			PROT_READ | PROT_WRITE);
 		if (ret < 0) {
-			log_error(
-				"Failed to change upatch rw protection to rw-");
+			log_error("Failed to change upatch rw protection to rw-");
 			return ret;
 		}
 	}
@@ -577,13 +561,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 	if (uelf->core_layout.size > uelf->core_layout.info_size) {
 		ret = upatch_mprotect_remote(
 			proc2pctx(obj->proc),
-			(unsigned long)uelf->core_layout.base +
-				uelf->core_layout.info_size,
+			(unsigned long)uelf->core_layout.base + uelf->core_layout.info_size,
 			uelf->core_layout.size - uelf->core_layout.info_size,
 			PROT_READ);
 		if (ret < 0) {
-			log_error(
-				"Failed to change upatch info protection to r--");
+			log_error("Failed to change upatch info protection to r--");
 			return ret;
 		}
 	}
@@ -628,9 +610,9 @@ static int upatch_apply_patches(struct upatch_process *proc,
 	layout_symtab(uelf);
 	layout_upatch_info(uelf);
 
-	log_debug("calculate core_layout = %x \n", uelf->core_layout.size);
+	log_debug("calculate core layout = %x\n", uelf->core_layout.size);
 	log_debug(
-		"core_layout: text_size = %x, ro_size = %x, ro_after_init_size = "
+		"Core layout: text_size = %x, ro_size = %x, ro_after_init_size = "
 		"%x, info = %x, size = %x\n",
 		uelf->core_layout.text_size, uelf->core_layout.ro_size,
 		uelf->core_layout.ro_after_init_size,
@@ -641,35 +623,42 @@ static int upatch_apply_patches(struct upatch_process *proc,
 	 * Otherwise we can't use 32-bit jumps.
 	 */
 	ret = alloc_memory(uelf, obj);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	ret = upatch_mprotect(uelf, obj);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	/* Fix up syms, so that st_value is a pointer to location. */
 	ret = simplify_symbols(uelf, obj);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	/* upatch new address will be updated */
 	ret = apply_relocations(uelf);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	/* upatch upatch info */
 	ret = complete_info(uelf, obj, uuid);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	ret = post_memory(uelf, obj);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	ret = apply_patch(uelf, obj);
-	if (ret)
+	if (ret) {
 		goto free;
+	}
 
 	ret = 0;
 	goto out;
@@ -686,12 +675,14 @@ int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
 	struct object_file *obj;
 	struct object_patch *patch;
 	list_for_each_entry(obj, &proc->objs, list) {
-		if (!obj->is_patch)
+		if (!obj->is_patch) {
 			continue;
+		}
 		list_for_each_entry(patch, &obj->applied_patch, list) {
-			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0)
+			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0) {
 				return -EEXIST;
 			}
+		}
 	}
 	return 0;
 }
@@ -707,15 +698,16 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("cannot init process %d\n", pid);
+		log_error("Failed to init process %d, ret=%d\n", pid, ret);
 		goto out;
 	}
 
 	upatch_process_print_short(&proc);
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out_free;
+	}
 
 	// use uprobe to hack function. the program has been executed to the entry
 	// point
@@ -736,7 +728,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	}
 	ret = binary_init(relf, binary_path);
     if (ret) {
-        log_error("binary_init failed %d \n", ret);
+        log_error("Failed to load binary, ret=%d\n", ret);
         goto out_free;
     }
 
@@ -759,7 +751,9 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	ret = 0;
 
 out_free:
-	upatch_process_memfree(&proc);
+	upatch_process_detach(&proc);
+	upatch_process_destroy(&proc);
+
 out:
 	if (is_calc_time) {
 		gettimeofday(&end_tv, NULL);
@@ -856,18 +850,22 @@ int process_unpatch(int pid, const char *uuid)
 
 	/* Finally, attach to process */
 	ret = upatch_process_attach(&proc);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out_free;
+	}
 
 	// 应用
 	ret = upatch_unapply_patches(&proc, uuid);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out_free;
+	}
 
 	ret = 0;
 
 out_free:
-	upatch_process_memfree(&proc);
+	upatch_process_detach(&proc);
+	upatch_process_destroy(&proc);
+
 out:
 	if (is_calc_time) {
 		gettimeofday(&end_tv, NULL);
@@ -916,29 +914,33 @@ int process_info(int pid)
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("cannot init process %d\n", pid);
+		log_error("Failed to init process %d, ret=%d\n", pid, ret);
 		goto out;
 	}
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out_free;
+	}
 
 	ret = upatch_process_map_object_files(&proc, NULL);
-	if (ret < 0)
+	if (ret < 0) {
 		goto out_free;
+	}
 
-	// 应用
 	ret = upatch_info(&proc);
-	if (ret)
+	if (ret) {
 		status = "active";
-	else
+	}
+	else {
 		status = "removed";
+	}
 
 	ret = 0;
 
 out_free:
-	upatch_process_memfree(&proc);
+	upatch_process_destroy(&proc);
+
 out:
 	log_normal("%s\n", status);
 	return ret;

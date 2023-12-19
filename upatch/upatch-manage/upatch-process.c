@@ -19,6 +19,8 @@
 #include "upatch-process.h"
 #include "upatch-ptrace.h"
 
+static const int MAX_ATTACH_ATTEMPTS = 3;
+
 /*
  * Locks process by opening /proc/<pid>/maps
  * This ensures that task_struct will not be
@@ -32,17 +34,26 @@ static int lock_process(int pid)
 
 	log_debug("Locking PID %d...", pid);
 	snprintf(path, sizeof(path), "/proc/%d/maps", pid);
+
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
-		log_error("cannot open '/proc/%d/maps'\n", pid);
+		log_error("Failed to open '%s'\n", path);
 		return -1;
 	}
 	log_debug("OK\n");
+
 	return fd;
 }
 
+static void unlock_process(int pid, int fdmaps)
+{
+	int errsv = errno;
+	close(fdmaps);
+	errno = errsv;
+}
+
 // TODO: get addr_space
-int upatch_coroutines_init(struct upatch_process *proc)
+static int upatch_coroutines_init(struct upatch_process *proc)
 {
 	INIT_LIST_HEAD(&proc->coro.coros);
 
@@ -56,17 +67,20 @@ static int process_get_comm(struct upatch_process *proc)
 	char *bn, *c;
 	ssize_t ret;
 
-	log_debug("process_get_comm %d...", proc->pid);
 	snprintf(path, sizeof(path), "/proc/%d/exe", proc->pid);
+	log_debug("Reading from '%s'...", path);
 
 	ret = readlink(path, realpath, sizeof(realpath));
-	if (ret < 0)
+	if (ret < 0) {
 		return -1;
+	}
+
 	realpath[ret] = '\0';
 	bn = basename(realpath);
 	strncpy(path, bn, sizeof(path) - 1);
-	if ((c = strstr(path, " (deleted)")))
+	if ((c = strstr(path, " (deleted)"))) {
 		*c = '\0';
+	}
 
 	proc->comm[sizeof(proc->comm) - 1] = '\0';
 	memcpy(proc->comm, path, sizeof(proc->comm) - 1);
@@ -76,20 +90,14 @@ static int process_get_comm(struct upatch_process *proc)
 	return 0;
 }
 
-static void unlock_process(int pid, int fdmaps)
-{
-	int errsv = errno;
-	close(fdmaps);
-	errno = errsv;
-}
-
 int upatch_process_init(struct upatch_process *proc, int pid)
 {
 	int fdmaps;
 
 	fdmaps = lock_process(pid);
-	if (fdmaps < 0)
+	if (fdmaps < 0) {
 		goto out_err;
+	}
 
 	memset(proc, 0, sizeof(*proc));
 
@@ -102,10 +110,13 @@ int upatch_process_init(struct upatch_process *proc, int pid)
 	INIT_LIST_HEAD(&proc->vmaholes);
 	proc->num_objs = 0;
 
-	if (upatch_coroutines_init(proc))
+	if (upatch_coroutines_init(proc)) {
 		goto out_unlock;
-	if (process_get_comm(proc))
+	}
+
+	if (process_get_comm(proc)) {
 		goto out_unlock;
+	}
 
 	return 0;
 
@@ -115,15 +126,63 @@ out_err:
 	return -1;
 }
 
+static void upatch_object_memfree(struct object_file *obj)
+{
+	struct object_patch *opatch, *opatch_safe;
+	struct obj_vm_area *ovma, *ovma_safe;
+
+	if (obj->name) {
+		free(obj->name);
+	}
+
+	list_for_each_entry_safe(opatch, opatch_safe, &obj->applied_patch, list) {
+		if (opatch->uinfo) {
+			free(opatch->uinfo);
+		}
+		if (opatch->funcs) {
+			free(opatch->funcs);
+		}
+		free(opatch);
+	}
+
+	list_for_each_entry_safe(ovma, ovma_safe, &obj->vma, list) {
+		free(ovma);
+	}
+}
+
+static void upatch_process_memfree(struct upatch_process *proc)
+{
+	struct upatch_ptrace_ctx *p, *p_safe;
+	struct object_file *obj, *obj_safe;
+	struct vm_hole *hole, *hole_safe;
+
+	list_for_each_entry_safe(p, p_safe, &proc->ptrace.pctxs, list) {
+		free(p);
+	}
+
+	list_for_each_entry_safe(hole, hole_safe, &proc->vmaholes, list) {
+		free(hole);
+	}
+
+	list_for_each_entry_safe(obj, obj_safe, &proc->objs, list) {
+		upatch_object_memfree(obj);
+		free(obj);
+	}
+}
+
+void upatch_process_destroy(struct upatch_process *proc)
+{
+	unlock_process(proc->pid, proc->fdmaps);
+	upatch_process_memfree(proc);
+}
+
 static void process_print_cmdline(struct upatch_process *proc)
 {
-	char buf[1024];
-	int fd;
+	char buf[PATH_MAX];
 	ssize_t i, rv;
 
-	snprintf(buf, sizeof("/proc/0123456789/cmdline"), "/proc/%d/cmdline",
-		 proc->pid);
-	fd = open(buf, O_RDONLY);
+	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
+	int fd = open(buf, O_RDONLY);
 	if (fd == -1) {
 		log_error("open\n");
 		return;
@@ -144,10 +203,12 @@ static void process_print_cmdline(struct upatch_process *proc)
 			break;
 
 		for (i = 0; i < rv; i++) {
-			if (buf[i] != '\n' && isprint(buf[i]))
+			if (buf[i] != '\n' && isprint(buf[i])) {
 				putchar(buf[i]);
-			else
+			}
+			else {
 				printf("\\x%02x", (unsigned char)buf[i]);
+			}
 		}
 	}
 
@@ -164,7 +225,7 @@ void upatch_process_print_short(struct upatch_process *proc)
 
 int upatch_process_mem_open(struct upatch_process *proc, int mode)
 {
-	char path[sizeof("/proc/0123456789/mem")];
+	char path[PATH_MAX];
 
 	if (proc->memfd >= 0) {
 		close(proc->memfd);
@@ -272,7 +333,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
 
 	o = malloc(sizeof(*o));
 	if (!o) {
-		log_error("FAIL\n");
+		log_error("FAILED\n");
 		return NULL;
 	}
 	memset(o, 0, sizeof(struct object_file));
@@ -288,7 +349,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
 
 	o->previous_hole = hole;
 	if (object_add_vm_area(o, vma, hole) < 0) {
-		log_error("can't add vm_area for %s\n", name);
+		log_error("Cannot add vm area for %s\n", name);
 		free(o);
 		return NULL;
 	}
@@ -298,6 +359,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
 
 	list_add(&o->list, &proc->objs);
 	proc->num_objs++;
+
 	log_debug("OK\n");
 	return o;
 }
@@ -332,19 +394,22 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
 	}
 
 	o = process_new_object(proc, dev, inode, name, vma, hole);
-	if (o == NULL)
+	if (o == NULL) {
 		return -1;
+	}
 
 	if (object_type == OBJECT_UPATCH) {
 		struct object_patch *opatch;
 
 		opatch = malloc(sizeof(struct object_patch));
-		if (opatch == NULL)
+		if (opatch == NULL) {
 			return -1;
+		}
 
 		opatch->uinfo = malloc(sizeof(struct upatch_info));
-		if (opatch->uinfo == NULL)
+		if (opatch->uinfo == NULL) {
 			return -1;
+		}
 
 		memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
 		opatch->funcs = malloc(opatch->uinfo->changed_func_num *
@@ -372,7 +437,7 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
 int upatch_process_parse_proc_maps(struct upatch_process *proc)
 {
 	FILE *f;
-	int ret, fd, is_libc_base_set = 0;
+	int ret, is_libc_base_set = 0;
 	unsigned long hole_start = 0;
 	struct vm_hole *hole = NULL;
 
@@ -383,7 +448,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 	 *    of the object (we might have references to them
 	 *    in the patch).
 	 */
-	fd = dup(proc->fdmaps);
+	int fd = dup(proc->fdmaps);
 	if (fd < 0) {
 		log_error("unable to dup fd %d", proc->fdmaps);
 		return -1;
@@ -405,17 +470,20 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 		char perms[5], name_[256], *name = name_;
 		int r;
 
-		if (!fgets(line, sizeof(line), f))
+		if (!fgets(line, sizeof(line), f)) {
 			break;
+		}
+
 		r = sscanf(line, "%lx-%lx %s %lx %x:%x %d %255s", &start, &end,
 			   perms, &offset, &maj, &min, &inode, name_);
-
 		if (r == EOF) {
-			log_error("sscanf failed: end of file");
+			log_error("Failed to read maps: unexpected EOF");
 			goto error;
 		}
-		if (r != 8)
+
+		if (r != 8) {
 			strcpy(name, "[anonymous]");
+		}
 
 		vma.start = start;
 		vma.end = end;
@@ -451,7 +519,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 	} while (1);
 	fclose(f);
 
-	log_debug("Found %d object file(s) \n", proc->num_objs);
+	log_debug("Found %d object file(s)\n", proc->num_objs);
 
 	if (!is_libc_base_set) {
 		log_error("Can't find libc_base required for manipulations: %d",
@@ -497,29 +565,30 @@ static int process_list_threads(struct upatch_process *proc, int **ppids,
 {
 	DIR *dir = NULL;
 	struct dirent *de;
-	char path[128];
+	char path[PATH_MAX];
 	int *pids = *ppids;
 
 	snprintf(path, sizeof(path), "/proc/%d/task", proc->pid);
+
 	dir = opendir(path);
 	if (!dir) {
-		log_error("can't open '%s' directory\n", path);
+		log_error("Failed to open directory '%s'\n", path);
 		goto dealloc;
 	}
 
 	*npids = 0;
 	while ((de = readdir(dir))) {
 		int *t;
-		if (de->d_name[0] == '.')
+		if (de->d_name[0] == '.') {
 			continue;
+		}
 
 		if (*npids >= *alloc) {
 			*alloc = *alloc ? *alloc * 2 : 1;
 
 			t = realloc(pids, *alloc * sizeof(*pids));
 			if (t == NULL) {
-				log_error(
-					"Failed to (re)allocate memory for pids\n");
+				log_error("Failed to (re)allocate memory for pids\n");
 				goto dealloc;
 			}
 
@@ -536,62 +605,25 @@ static int process_list_threads(struct upatch_process *proc, int **ppids,
 	return *npids;
 
 dealloc:
-	if (dir)
+	if (dir) {
 		closedir(dir);
+	}
 	free(pids);
 	*ppids = NULL;
 	*alloc = *npids = 0;
 	return -1;
 }
 
-static void process_detach(struct upatch_process *proc)
-{
-	struct upatch_ptrace_ctx *p, *ptmp;
-	int status;
-	pid_t pid;
-
-	if (proc->memfd >= 0 && close(proc->memfd) < 0)
-		log_error("can't close memfd");
-	proc->memfd = -1;
-
-	list_for_each_entry_safe(p, ptmp, &proc->ptrace.pctxs, list) {
-		/**
-		 * If upatch_ptrace_detach(p) return -ESRCH, there are two situations,
-		 * as described below:
-		 * 1. the specified thread does not exist, it means the thread dead
-		 *    during the attach processing, so we need to wait for the thread
-		 *    to exit;
-		 * 2. the specified thread is not currently being traced by us,
-		 *    or is not stopped, so we just ignore it;
-		 *
-		 * We using the running variable of the struct upatch_ptrace_ctx to
-		 * distinguish them:
-		 * 1. if pctx->running = 0, it means the thread is traced by us, we
-		 *    will wait for the thread to exit;
-		 * 2. if pctx->running = 1, it means we can not sure about the status of
-		 *    the thread, we just ignore it;
-		 */
-		if (upatch_ptrace_detach(p) == -ESRCH && !p->running) {
-			do {
-				pid = waitpid(p->pid, &status, __WALL);
-			} while (pid > 0 && !WIFEXITED(status));
-		}
-		// upatch_ptrace_ctx_destroy(p);
-	}
-	log_debug("Finished ptrace detaching.\n");
-}
-
-static const int max_attach_attempts = 3;
-
 int upatch_process_attach(struct upatch_process *proc)
 {
 	int *pids = NULL, ret;
 	size_t i, npids = 0, alloc = 0, prevnpids = 0, nattempts;
 
-	if (upatch_process_mem_open(proc, MEM_WRITE) < 0)
+	if (upatch_process_mem_open(proc, MEM_WRITE) < 0) {
 		return -1;
+	}
 
-	for (nattempts = 0; nattempts < max_attach_attempts; nattempts++) {
+	for (nattempts = 0; nattempts < MAX_ATTACH_ATTEMPTS; nattempts++) {
 		ret = process_list_threads(proc, &pids, &npids, &alloc);
 		if (ret == -1)
 			goto detach;
@@ -627,23 +659,62 @@ int upatch_process_attach(struct upatch_process *proc)
 		prevnpids = npids;
 	}
 
-	if (nattempts == max_attach_attempts) {
-		log_error("unable to catch up with process, bailing\n");
+	if (nattempts == MAX_ATTACH_ATTEMPTS) {
+		log_error("Unable to catch up with process, bailing\n");
 		goto detach;
 	}
 
-	log_debug("attached to %lu thread(s): %d", npids, pids[0]);
-	for (i = 1; i < npids; i++)
+	log_debug("Attached to %lu thread(s): %d", npids, pids[0]);
+	for (i = 1; i < npids; i++) {
 		log_debug(", %d", pids[i]);
+	}
 	log_debug("\n");
 
 	free(pids);
 	return 0;
 
 detach:
-	process_detach(proc);
+	upatch_process_detach(proc);
 	free(pids);
 	return -1;
+}
+
+void upatch_process_detach(struct upatch_process *proc)
+{
+	struct upatch_ptrace_ctx *p, *ptmp;
+	int status;
+	pid_t pid;
+
+	if (proc->memfd >= 0 && close(proc->memfd) < 0) {
+		log_error("Failed to close memfd");
+	}
+	proc->memfd = -1;
+
+	list_for_each_entry_safe(p, ptmp, &proc->ptrace.pctxs, list) {
+		/**
+		 * If upatch_ptrace_detach(p) return -ESRCH, there are two situations,
+		 * as described below:
+		 * 1. the specified thread does not exist, it means the thread dead
+		 *    during the attach processing, so we need to wait for the thread
+		 *    to exit;
+		 * 2. the specified thread is not currently being traced by us,
+		 *    or is not stopped, so we just ignore it;
+		 *
+		 * We using the running variable of the struct upatch_ptrace_ctx to
+		 * distinguish them:
+		 * 1. if pctx->running = 0, it means the thread is traced by us, we
+		 *    will wait for the thread to exit;
+		 * 2. if pctx->running = 1, it means we can not sure about the status of
+		 *    the thread, we just ignore it;
+		 */
+		if (upatch_ptrace_detach(p) == -ESRCH && !p->running) {
+			do {
+				pid = waitpid(p->pid, &status, __WALL);
+			} while (pid > 0 && !WIFEXITED(status));
+		}
+		// upatch_ptrace_ctx_destroy(p);
+	}
+	log_debug("Process detached\n");
 }
 
 static inline struct vm_hole *next_hole(struct vm_hole *hole,
@@ -765,13 +836,12 @@ unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
 	}
 
 	if (region_start == region_end) {
-		log_error("can't find suitable region for patch on '%s'\n",
-			  obj->name);
+		log_error("Cannot find suitable region for patch '%s'\n", obj->name);
 		return -1UL;
 	}
 
 	region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
-	log_debug("Found patch region for '%s' at %lx\n", obj->name,
+	log_debug("Found patch region for '%s' at 0x%lx\n", obj->name,
 		  region_start);
 
 	return region_start;
@@ -801,58 +871,12 @@ unsigned long object_find_patch_region_nolimit(struct object_file *obj, size_t m
 			left_hole = prev_hole(left_hole, head);
 	}
 
-	log_error("can't find suitable region for patch on '%s'\n",
-			obj->name);
+	log_error("Cannot find suitable region for patch '%s'\n", obj->name);
 	return -1UL;
 found:
 	region_start = ((*hole)->start >> PAGE_SHIFT) << PAGE_SHIFT;
-	log_debug("Found patch region for '%s' at %lx\n", obj->name,
+	log_debug("Found patch region for '%s' 0xat %lx\n", obj->name,
 		  region_start);
 
 	return region_start;
-}
-
-static void upatch_object_memfree(struct object_file *obj)
-{
-	struct object_patch *opatch, *opatch_safe;
-	struct obj_vm_area *ovma, *ovma_safe;
-
-	if (obj->name)
-		free(obj->name);
-
-	list_for_each_entry_safe(opatch, opatch_safe, &obj->applied_patch,
-				 list) {
-		if (opatch->uinfo)
-			free(opatch->uinfo);
-		if (opatch->funcs)
-			free(opatch->funcs);
-		free(opatch);
-	}
-
-	list_for_each_entry_safe(ovma, ovma_safe, &obj->vma, list) {
-		free(ovma);
-	}
-}
-
-void upatch_process_memfree(struct upatch_process *proc)
-{
-	struct upatch_ptrace_ctx *p, *p_safe;
-	struct object_file *obj, *obj_safe;
-	struct vm_hole *hole, *hole_safe;
-
-	list_for_each_entry_safe(p, p_safe, &proc->ptrace.pctxs, list) {
-		free(p);
-	}
-
-	list_for_each_entry_safe(hole, hole_safe, &proc->vmaholes, list) {
-		free(hole);
-	}
-
-	list_for_each_entry_safe(obj, obj_safe, &proc->objs, list) {
-		upatch_object_memfree(obj);
-		free(obj);
-	}
-
-	unlock_process(proc->pid, proc->fdmaps);
-	process_detach(proc);
 }

@@ -110,7 +110,7 @@ u64 extract_insn_imm(s64 sval, int len, int lsb)
 	imm_mask = (BIT(lsb + len) - 1) >> lsb;
 	imm = imm & imm_mask;
 
-	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx \n", sval,
+	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n", sval,
 		  (len + lsb - 1), lsb, imm);
 	return imm;
 }
@@ -124,7 +124,7 @@ u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
 
 	log_debug(
 		"upatch: insert imm, P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, "
-		"new_insn=0x%x \n",
+		"new_insn=0x%x\n",
 		(u64)place, insn, imm_type, imm, new_insn);
 	return new_insn;
 }

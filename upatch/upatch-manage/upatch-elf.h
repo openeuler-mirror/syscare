@@ -17,6 +17,8 @@
 
 #include "list.h"
 
+#define SYMTAB_NAME ".symtab"
+#define DYNSYM_NAME ".dynsym"
 #define GOT_RELA_NAME ".rela.dyn"
 #define PLT_RELA_NAME ".rela.plt"
 #define BUILD_ID_NAME ".note.gnu.build-id"
