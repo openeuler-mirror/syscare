@@ -107,6 +107,8 @@ struct upatch_process {
 
 int upatch_process_init(struct upatch_process *, int);
 
+void upatch_process_destroy(struct upatch_process *);
+
 void upatch_process_print_short(struct upatch_process *);
 
 int upatch_process_mem_open(struct upatch_process *, int);
@@ -115,13 +117,13 @@ int upatch_process_map_object_files(struct upatch_process *, const char *);
 
 int upatch_process_attach(struct upatch_process *);
 
+void upatch_process_detach(struct upatch_process *proc);
+
 int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
 
 unsigned long object_find_patch_region(struct object_file *, size_t,
 				       struct vm_hole **);
 unsigned long object_find_patch_region_nolimit(struct object_file *, size_t,
 				       struct vm_hole **);
-
-void upatch_process_memfree(struct upatch_process *);
 
 #endif

@@ -31,11 +31,10 @@ int apply_relocations(struct upatch_elf *uelf)
 		if (!(uelf->info.shdrs[infosec].sh_flags & SHF_ALLOC))
 			continue;
 
+		log_debug("Relocate '%s'\n", name);
 		if (uelf->info.shdrs[i].sh_type == SHT_REL) {
-			log_error("do rel relocations for %s \n", name);
 			return -EPERM;
 		} else if (uelf->info.shdrs[i].sh_type == SHT_RELA) {
-			log_debug("do rela relocations for %s \n", name);
 			err = apply_relocate_add(uelf, uelf->index.sym, i);
 		}
 

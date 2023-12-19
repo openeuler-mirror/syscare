@@ -124,55 +124,32 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, program_doc };
 
-static void show_program_info(struct arguments *arguments)
-{
-	log_debug("pid: %d\n", arguments->pid);
-	log_debug("upatch object: %s\n", arguments->upatch);
-	log_debug("binary object: %s\n", arguments->binary);
-	log_debug("uuid object: %s\n", arguments->uuid);
-}
+FILE *upatch_manage_log_fd = NULL;
 
 int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
 {
-	int ret;
 	struct upatch_elf uelf;
 	struct running_elf relf;
 	memset(&uelf, 0, sizeof(struct upatch_elf));
 	memset(&relf, 0, sizeof(struct running_elf));
 
-	ret = upatch_init(&uelf, upatch_path);
+	int ret = upatch_init(&uelf, upatch_path);
 	if (ret) {
-		log_error("upatch_init failed %d \n", ret);
+		log_error("Failed to initialize patch, ret=%d\n", ret);
 		goto out;
 	}
-
-	/*ret = binary_init(&relf, binary_path);
-	if (ret) {
-		log_error("binary_init failed %d \n", ret);
-		goto out;
-	}
-
-	uelf.relf = &relf;
-*/
-	// ret = check_build_id(&uelf.info, &relf.info);
-	// if (ret) {
-	//     log_error("check build id failed %d \n", ret);
-	//     goto out;
-	// }
 
 	ret = process_patch(pid, &uelf, &relf, uuid, binary_path);
 	if (ret) {
-		log_error("process patch failed %d \n", ret);
+		log_error("Failed to patch process, pid=%d ret=%d\n", pid, ret);
 		goto out;
 	}
+	log_normal("SUCCESS\n");
 
 out:
 	upatch_close(&uelf);
 	binary_close(&relf);
-	if (ret)
-		log_normal("FAIL\n");
-	else
-		log_normal("SUCCESS\n");
+
 	return ret;
 }
 
@@ -182,66 +159,64 @@ int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch
 
 	ret = process_unpatch(pid, uuid);
 	if (ret) {
-		log_error("process patch failed %d \n", ret);
-		goto out;
+		log_error("Failed to unpatch process, pid=%d, ret=%d\n", pid, ret);
+		return ret;
 	}
+	log_normal("SUCCESS\n");
 
-out:
-	if (ret)
-		log_normal("FAIL\n");
-	else
-		log_normal("SUCCESS\n");
-	return ret;
+	return 0;
 }
 
 int info_upatch(const char *binary_path, const char *upatch_path, int pid)
 {
-	int ret = 0;
-
-	ret = process_info(pid);
-	if (ret) {
-		log_error("process patch failed %d \n", ret);
-		goto out;
+	int ret = process_info(pid);
+	if (ret != 0) {
+		log_error("Failed to get patch info, pid=%d, ret=%d\n", pid, ret);
+		return ret;
 	}
+	log_normal("SUCCESS\n");
 
-out:
-	return ret;
+	return 0;
 }
 
-FILE *upatch_manage_log_fd = NULL;
 int main(int argc, char *argv[])
 {
-	struct arguments arguments;
+	struct arguments args;
 	int ret;
+
 	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
-
-	if (upatch_manage_log_fd < 0)
+	if (upatch_manage_log_fd < 0) {
 		return -1;
-	memset(&arguments, 0, sizeof(arguments));
-	argp_parse(&argp, argc, argv, 0, NULL, &arguments);
-	if (arguments.verbose)
-		loglevel = DEBUG;
+	}
 
-	logprefix = basename(arguments.upatch);
-	show_program_info(&arguments);
-	switch (arguments.cmd) {
+	memset(&args, 0, sizeof(struct arguments));
+	argp_parse(&argp, argc, argv, 0, NULL, &args);
+	if (args.verbose) {
+		loglevel = DEBUG;
+	}
+
+	logprefix = basename(args.upatch);
+	log_debug("PID: %d\n", args.pid);
+	log_debug("UUID: %s\n", args.uuid);
+	log_debug("Patch: %s\n", args.upatch);
+	log_debug("Binary: %s\n", args.binary);
+
+	switch (args.cmd) {
 	case PATCH:
-		ret = patch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
-				    arguments.pid);
+		ret = patch_upatch(args.uuid, args.binary, args.upatch, args.pid);
 		break;
 	case UNPATCH:
-		ret = unpatch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
-				      arguments.pid);
+		ret = unpatch_upatch(args.uuid, args.binary, args.upatch, args.pid);
 		break;
 	case INFO:
-		ret = info_upatch(arguments.binary, arguments.upatch,
-				   arguments.pid);
+		ret = info_upatch(args.binary, args.upatch, args.pid);
 		break;
 	default:
-		ERROR("unknown command");
+		ERROR("Unknown command");
 		ret = EINVAL;
 		break;
 	}
+
 	fclose(upatch_manage_log_fd);
 	return abs(ret);
 }

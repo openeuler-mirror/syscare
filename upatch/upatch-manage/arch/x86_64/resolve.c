@@ -32,7 +32,7 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
 		uelf->core_layout.kbase + uelf->jmp_offs;
 	unsigned int index = uelf->jmp_cur_entry;
 	if (index >= uelf->jmp_max_entry) {
-		log_error("jmp table overflow \n");
+		log_error("jmp table overflow\n");
 		return 0;
 	}
 
@@ -57,7 +57,7 @@ static unsigned long setup_got_table(struct upatch_elf *uelf,
 		uelf->core_layout.kbase + uelf->jmp_offs;
 	unsigned int index = uelf->jmp_cur_entry;
 	if (index >= uelf->jmp_max_entry) {
-		log_error("got table overflow \n");
+		log_error("got table overflow\n");
 		return 0;
 	}
 
@@ -76,13 +76,13 @@ unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
 
 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
 				    sizeof(jmp_addr))) {
-		log_error("copy address failed \n");
+		log_error("copy address failed\n");
 		goto out;
 	}
 
 	elf_addr = setup_jmp_table(uelf, jmp_addr);
 
-	log_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
+	log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
 
 out:
 	return elf_addr;
@@ -97,7 +97,7 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
 
 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
 				    sizeof(jmp_addr))) {
-		log_error("copy address failed \n");
+		log_error("copy address failed\n");
 		goto out;
 	}
 
@@ -109,13 +109,13 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
 	if (r_type == R_X86_64_DTPMOD64 &&
 	    upatch_process_mem_read(obj->proc, addr + sizeof(unsigned long),
 				    &tls_addr, sizeof(tls_addr))) {
-		log_error("copy address failed \n");
+		log_error("copy address failed\n");
 		goto out;
 	}
 
 	elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
 
-	log_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
+	log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
 
 out:
 	return elf_addr;

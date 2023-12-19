@@ -36,6 +36,6 @@ int BPF_KPROBE(install_breakpoint, struct uprobe *uprobe, struct mm_struct *mm,
 	ep.ino = BPF_CORE_READ(uprobe, inode, i_ino);
 	ep.pid = BPF_CORE_READ(mm, owner, pid);
 	bpf_map_update_elem(&elf_process_maps, &ep, &initial_entry, BPF_ANY);
-	bpf_printk("ino %lu works for pid %d in addr 0x%lx \n", ep.ino, ep.pid, vaddr);
+	bpf_printk("ino %lu works for pid %d in addr 0x%lx\n", ep.ino, ep.pid, vaddr);
 	return 0;
 }

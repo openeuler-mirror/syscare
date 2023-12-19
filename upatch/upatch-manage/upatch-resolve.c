@@ -121,7 +121,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
         unsigned long sym_addr = relf->load_bias + rela_plt[i].r_offset;
         elf_addr = insert_plt_table(uelf, obj, GELF_R_TYPE(rela_plt[i].r_info), sym_addr);
 
-        log_debug("resolved %s from .rela_plt at 0x%lx\n", name, elf_addr);
+        log_debug("Resolved '%s' from '.rela_plt' at 0x%lx\n", name, elf_addr);
         break;
     }
 
@@ -160,7 +160,7 @@ static unsigned long resolve_dynsym(struct upatch_elf *uelf,
         unsigned long sym_addr = relf->load_bias + dynsym[i].st_value;
         elf_addr = insert_got_table(uelf, obj, 0, sym_addr);
 
-        log_debug("resolved %s from .dynsym at 0x%lx\n", name, elf_addr);
+        log_debug("Resolved '%s' from '.dynsym' at 0x%lx\n", name, elf_addr);
         break;
     }
 
@@ -198,7 +198,7 @@ static unsigned long resolve_sym(struct upatch_elf *uelf,
 
         elf_addr = relf->load_bias + sym[i].st_value;
 
-        log_debug("resolved %s from .sym at 0x%lx\n", name, elf_addr);
+        log_debug("Resolved '%s' from '.sym' at 0x%lx\n", name, elf_addr);
         break;
     }
 
@@ -220,7 +220,7 @@ static unsigned long resolve_patch_sym(struct upatch_elf *uelf,
     }
 
     elf_addr = relf->load_bias + patch_sym->st_value;
-    log_debug("resolved %s from patch .sym at 0x%lx\n", name, elf_addr);
+    log_debug("Resolved '%s' from patch '.sym' at 0x%lx\n", name, elf_addr);
 
     return elf_addr;
 }
@@ -268,7 +268,7 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
     }
 
     if (!elf_addr) {
-        log_error("Cannot resolve symbol %s\n", name);
+        log_error("Cannot resolve symbol '%s'\n", name);
     }
     return elf_addr;
 }
@@ -286,38 +286,37 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
 
         if (GELF_ST_TYPE(sym[i].st_info) == STT_SECTION &&
             sym[i].st_shndx < uelf->info.hdr->e_shnum)
-            name = uelf->info.shstrtab +
-                   uelf->info.shdrs[sym[i].st_shndx].sh_name;
+            name = uelf->info.shstrtab + uelf->info.shdrs[sym[i].st_shndx].sh_name;
         else
             name = uelf->strtab + sym[i].st_name;
 
         switch (sym[i].st_shndx) {
         case SHN_COMMON:
-            log_debug("unsupported Common symbol: %s\n", name);
+            log_debug("Unsupported common symbol '%s'\n", name);
             ret = -ENOEXEC;
             break;
         case SHN_ABS:
             break;
         case SHN_UNDEF:
             elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
-            if (!elf_addr)
+            if (!elf_addr) {
                 ret = -ENOEXEC;
+            }
             sym[i].st_value = elf_addr;
-            log_debug("resolved symbol %s at 0x%lx\n", name,
-                  (unsigned long)sym[i].st_value);
+            log_debug("Resolved symbol '%s' at 0x%lx\n",
+                name, (unsigned long)sym[i].st_value);
             break;
         case SHN_LIVEPATCH:
             sym[i].st_value += uelf->relf->load_bias;
-            log_debug("resolved livepatch symbol %s at 0x%lx\n",
+            log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
                   name, (unsigned long)sym[i].st_value);
             break;
         default:
             /* use real address to calculate secbase */
-            secbase =
-                uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
+            secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
             sym[i].st_value += secbase;
-            log_debug("normal symbol %s at 0x%lx\n", name,
-                  (unsigned long)sym[i].st_value);
+            log_debug("Symbol '%s' at 0x%lx\n",
+                name, (unsigned long)sym[i].st_value);
             break;
         }
     }
