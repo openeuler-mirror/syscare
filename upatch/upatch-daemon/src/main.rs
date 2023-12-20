@@ -1,5 +1,5 @@
 use std::{
-    fs,
+    fs::{self, Permissions},
     os::unix::fs::PermissionsExt,
     path::Path,
     process,
@@ -31,8 +31,15 @@ use rpc::{Skeleton, SkeletonImpl};
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
-const DAEMON_UMASK: u32 = 0o027;
-const DAEMON_PARK_TIMEOUT: u64 = 100;
+
+const DAEMON_UMASK: u32 = 0o077;
+const DAEMON_PARK_TIME: u64 = 100;
+
+const PID_FILE_NAME: &str = "upatchd.pid";
+const SOCKET_FILE_NAME: &str = "upatchd.sock";
+
+const WORK_DIR_PERMISSION: u32 = 0o755;
+const SOCKET_FILE_PERMISSION: u32 = 0o666;
 
 struct Daemon {
     args: Arguments,
@@ -70,7 +77,13 @@ impl Daemon {
 
     fn prepare_environment(&self) -> Result<()> {
         self.prepare_directory(&self.args.work_dir)?;
+        fs::set_permissions(
+            &self.args.work_dir,
+            Permissions::from_mode(WORK_DIR_PERMISSION),
+        )?;
+
         self.prepare_directory(&self.args.log_dir)?;
+
         Ok(())
     }
 
@@ -79,10 +92,11 @@ impl Daemon {
             return Ok(());
         }
 
+        let pid_file = self.args.work_dir.join(PID_FILE_NAME);
         Daemonize::new()
-            .pid_file(&self.args.pid_file)
-            .working_directory(&self.args.work_dir)
             .umask(DAEMON_UMASK)
+            .working_directory(&self.args.work_dir)
+            .pid_file(pid_file)
             .start()
             .context("Daemonize failed")
     }
@@ -116,9 +130,7 @@ impl Daemon {
     }
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
-        const SOCKET_FILE_PERMISSION: u32 = 0o666;
-
-        let socket_file = self.args.socket_file.as_path();
+        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
         let builder = ServerBuilder::new(io_handler).set_client_buffer_size(1);
         let server = builder.start(
             socket_file
@@ -126,10 +138,7 @@ impl Daemon {
                 .context("Failed to convert socket path to string")?,
         )?;
 
-        let mut perm = socket_file.metadata()?.permissions();
-        perm.set_mode(SOCKET_FILE_PERMISSION);
-
-        fs::set_permissions(socket_file, perm)?;
+        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERMISSION))?;
 
         Ok(server)
     }
@@ -139,7 +148,7 @@ impl Daemon {
         instance.initialize_logger()?;
 
         info!("============================");
-        info!("Syscare Builder Daemon - v{}", DAEMON_VERSION);
+        info!("Upatch Daemon - v{}", DAEMON_VERSION);
         info!("============================");
         info!("Preparing environment...");
         instance.prepare_environment()?;
@@ -164,7 +173,7 @@ impl Daemon {
 
         info!("Daemon is running...");
         while !instance.term_flag.load(Ordering::Relaxed) {
-            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIMEOUT));
+            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIME));
         }
 
         info!("Shutting down...");

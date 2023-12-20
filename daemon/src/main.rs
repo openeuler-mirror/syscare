@@ -1,5 +1,6 @@
 use std::{
-    fs,
+    fs::{self, Permissions},
+    os::unix::fs::PermissionsExt,
     path::Path,
     process,
     sync::{
@@ -38,8 +39,13 @@ use crate::patch::{PatchManager, PatchMonitor};
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
-const DAEMON_UMASK: u32 = 0o027;
-const DAEMON_SLEEP_TIME: u64 = 100;
+
+const DAEMON_UMASK: u32 = 0o077;
+const DAEMON_PARK_TIME: u64 = 100;
+
+const WORK_DIR_PERMISSION: u32 = 0o755;
+const PID_FILE_NAME: &str = "syscared.pid";
+const SOCKET_FILE_NAME: &str = "syscared.sock";
 
 struct Daemon {
     args: Arguments,
@@ -77,6 +83,11 @@ impl Daemon {
 
     fn prepare_environment(&self) -> Result<()> {
         self.prepare_directory(&self.args.work_dir)?;
+        fs::set_permissions(
+            &self.args.work_dir,
+            Permissions::from_mode(WORK_DIR_PERMISSION),
+        )?;
+
         self.prepare_directory(&self.args.data_dir)?;
         self.prepare_directory(&self.args.log_dir)?;
 
@@ -99,10 +110,11 @@ impl Daemon {
             return Ok(());
         }
 
+        let pid_file = self.args.work_dir.join(PID_FILE_NAME);
         Daemonize::new()
-            .pid_file(&self.args.pid_file)
-            .working_directory(&self.args.work_dir)
             .umask(DAEMON_UMASK)
+            .working_directory(&self.args.work_dir)
+            .pid_file(pid_file)
             .start()
             .context("Daemonize failed")
     }
@@ -126,15 +138,14 @@ impl Daemon {
     }
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
-        let socket_path = &self
-            .args
-            .socket_file
-            .to_str()
-            .context("Failed to convert socket path to string")?;
-
+        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
         let server = ServerBuilder::new(io_handler)
             .set_client_buffer_size(1)
-            .start(socket_path)?;
+            .start(
+                socket_file
+                    .to_str()
+                    .context("Failed to convert socket path to string")?,
+            )?;
 
         Ok(server)
     }
@@ -179,7 +190,7 @@ impl Daemon {
 
         info!("Daemon is running...");
         while !instance.term_flag.load(Ordering::Relaxed) {
-            std::thread::sleep(Duration::from_millis(DAEMON_SLEEP_TIME));
+            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIME));
         }
 
         info!("Shutting down...");

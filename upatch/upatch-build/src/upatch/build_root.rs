@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use super::Result;
 use crate::tool::*;
 
-pub struct WorkDir {
+pub struct BuildRoot {
     cache_dir: PathBuf,
     source_dir: PathBuf,
     patch_dir: PathBuf,
@@ -13,7 +13,7 @@ pub struct WorkDir {
     log_file: PathBuf,
 }
 
-impl WorkDir {
+impl BuildRoot {
     pub fn new() -> Self {
         Self {
             cache_dir: PathBuf::new(),
@@ -25,8 +25,8 @@ impl WorkDir {
         }
     }
 
-    pub fn create_dir<P: AsRef<Path>>(&mut self, work_dir: P) -> Result<()> {
-        self.cache_dir = work_dir.as_ref().to_path_buf();
+    pub fn create_dir<P: AsRef<Path>>(&mut self, build_root: P) -> Result<()> {
+        self.cache_dir = build_root.as_ref().to_path_buf();
         self.source_dir = self.cache_dir.join("source");
         self.patch_dir = self.cache_dir.join("patch");
         self.debuginfo_dir = self.cache_dir.join("debug_info");
@@ -71,7 +71,7 @@ impl WorkDir {
     }
 }
 
-impl Default for WorkDir {
+impl Default for BuildRoot {
     fn default() -> Self {
         Self::new()
     }

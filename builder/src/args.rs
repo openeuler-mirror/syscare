@@ -11,7 +11,8 @@ use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
-const DEFAULT_WORK_DIR: &str = ".";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
 lazy_static! {
@@ -68,7 +69,11 @@ pub struct Arguments {
 
     /// Working directory
     #[clap(long, default_value = DEFAULT_WORK_DIR)]
-    pub workdir: PathBuf,
+    pub work_dir: PathBuf,
+
+    /// Build temporary directory
+    #[clap(long, default_value = DEFAULT_BUILD_ROOT)]
+    pub build_root: PathBuf,
 
     /// Output directory
     #[clap(short, long, default_value = DEFAULT_OUTPUT_DIR)]
@@ -106,7 +111,8 @@ impl Arguments {
         for patch_file in &mut self.patch {
             *patch_file = fs::normalize(&patch_file)?;
         }
-        self.workdir = fs::normalize(&self.workdir)?;
+        self.work_dir = fs::normalize(&self.work_dir)?;
+        self.build_root = fs::normalize(&self.build_root)?;
         self.output = fs::normalize(&self.output)?;
 
         Ok(self)

@@ -110,7 +110,7 @@ impl std::cmp::Eq for Patch {}
 
 impl std::cmp::PartialOrd for Patch {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.entity_name.partial_cmp(&other.entity_name)
+        Some(self.entity_name.cmp(&other.entity_name))
     }
 }
 impl std::cmp::Ord for Patch {

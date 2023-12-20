@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use anyhow::{anyhow, ensure, Error, Result};
 use log::info;
 
@@ -7,15 +9,14 @@ use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::RpcProxy};
 
 use super::CommandExecutor;
 
-const PATCH_OP_LOCK_PATH: &str = "/tmp/syscare_patch_op.lock";
-
 pub struct PatchCommandExecutor {
     proxy: RpcProxy,
+    lock_file: PathBuf,
 }
 
 impl PatchCommandExecutor {
-    pub fn new(proxy: RpcProxy) -> Self {
-        Self { proxy }
+    pub fn new(proxy: RpcProxy, lock_file: PathBuf) -> Self {
+        Self { proxy, lock_file }
     }
 }
 
@@ -122,7 +123,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 Self::show_patch_list(self.proxy.get_patch_list()?);
             }
             SubCommand::Check { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut error_list = vec![];
                 for identifier in identifiers {
@@ -134,7 +135,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Apply { identifiers, force } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -149,7 +150,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Remove { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -164,7 +165,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Active { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -179,7 +180,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Deactive { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -194,7 +195,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Accept { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -209,12 +210,12 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Save => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 self.proxy.save_patch_status()?;
             }
             SubCommand::Restore { accepted } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
+                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
 
                 self.proxy.restore_patch_status(*accepted)?;
             }

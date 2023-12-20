@@ -11,7 +11,8 @@ const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 
-const DEFAULT_WORK_DIR: &str = "~/.upatch";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+const DEFAULT_BUILD_ROOT: &str = "~/.upatch";
 const DEFAULT_BUILD_PATCH_CMD: &str = "";
 const DEFAULT_COMPILERS: &str = "gcc";
 const DEFAULT_OUTPUT_DIR: &str = "~/.upatch";
@@ -32,8 +33,12 @@ pub struct Arguments {
     pub name: OsString,
 
     /// Specify working directory
-    #[clap(short, long, default_value = DEFAULT_WORK_DIR)]
+    #[clap(long, default_value = DEFAULT_WORK_DIR)]
     pub work_dir: PathBuf,
+
+    /// Specify build temporary directory
+    #[clap(long, default_value = DEFAULT_BUILD_ROOT)]
+    pub build_root: PathBuf,
 
     /// Specify source directory
     #[clap(short, long)]
@@ -90,11 +95,19 @@ impl Arguments {
     fn check(mut self) -> anyhow::Result<Self> {
         if !self.work_dir.is_dir() {
             bail!(
-                "Working directory \"{}\" should be a directory",
-                self.work_dir.display()
+                "Work directory \"{}\" should be a directory",
+                self.build_root.display()
             );
         }
-        self.work_dir = real_arg(self.work_dir)?.join("upatch");
+        self.work_dir = real_arg(&self.work_dir)?;
+
+        if !self.build_root.is_dir() {
+            bail!(
+                "Build root directory \"{}\" should be a directory",
+                self.build_root.display()
+            );
+        }
+        self.build_root = real_arg(self.build_root)?.join("upatch");
 
         if !self.source_dir.is_dir() {
             bail!(

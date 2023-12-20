@@ -59,8 +59,8 @@ impl KernelPatchBuilder {
 
         debug!("- Finding kernel directories");
         let pkg_build_dir = build_params.pkg_build_root.build.clone();
-        let patch_build_root = build_params.workdir.patch.build.clone();
-        let patch_output_dir: PathBuf = build_params.workdir.patch.output.clone();
+        let patch_build_root = build_params.build_root.patch.build.clone();
+        let patch_output_dir: PathBuf = build_params.build_root.patch.output.clone();
 
         let kernel_pkg = &kernel_entry.target_pkg;
         let kernel_source_dir: PathBuf = PKG_IMPL
@@ -72,7 +72,7 @@ impl KernelPatchBuilder {
                 ),
             )
             .context("Cannot find kernel source directory")?;
-        let kernel_debug_dir = &build_params.workdir.package.debuginfo;
+        let kernel_debug_dir = &build_params.build_root.package.debuginfo;
         let oot_source_dir = oot_module_entry.map(|build_entry| build_entry.build_source.clone());
 
         debug!("- Generating kernel default config");

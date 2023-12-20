@@ -10,8 +10,6 @@ use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
 
 const DEFAULT_DATA_ROOT: &str = "/usr/lib/syscare";
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
-const DEFAULT_PID_FILE: &str = "/var/run/syscared.pid";
-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
 const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
 const DEFAULT_LOG_LEVEL: &str = "info";
 
@@ -29,14 +27,6 @@ pub struct Arguments {
     /// Run as a daemon
     #[clap(short, long)]
     pub daemon: bool,
-
-    /// Path for daemon pid file
-    #[clap(long, default_value = DEFAULT_PID_FILE)]
-    pub pid_file: PathBuf,
-
-    /// Path for daemon unix socket
-    #[clap(long, default_value = DEFAULT_SOCKET_FILE)]
-    pub socket_file: PathBuf,
 
     /// Daemon data directory
     #[clap(long, default_value = DEFAULT_DATA_ROOT)]
@@ -64,8 +54,6 @@ impl Arguments {
         self.work_dir = fs::normalize(&self.work_dir)?;
         self.data_dir = fs::normalize(&self.data_dir)?;
         self.log_dir = fs::normalize(&self.log_dir)?;
-        self.pid_file = fs::normalize(&self.pid_file)?;
-        self.socket_file = fs::normalize(&self.socket_file)?;
 
         Ok(self)
     }

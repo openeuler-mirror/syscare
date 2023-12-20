@@ -7,7 +7,7 @@ use syscare_common::util::fs;
 
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 
 #[derive(Parser, Debug)]
 #[clap(
@@ -25,9 +25,9 @@ pub struct Arguments {
     #[clap(subcommand)]
     pub command: SubCommand,
 
-    /// Path for daemon unix socket
-    #[clap(short, long, default_value=DEFAULT_SOCKET_FILE)]
-    pub socket_file: PathBuf,
+    /// Path for working directory
+    #[clap(short, long, default_value=DEFAULT_WORK_DIR)]
+    pub work_dir: PathBuf,
 
     /// Provide more detailed info
     #[clap(short, long)]
@@ -118,16 +118,16 @@ impl Arguments {
     }
 
     fn normalize_path(mut self) -> Result<Self> {
-        self.socket_file = fs::normalize(&self.socket_file)?;
+        self.work_dir = fs::normalize(&self.work_dir)?;
 
         Ok(self)
     }
 
     fn check(self) -> Result<Self> {
-        let socket_file = &self.socket_file;
+        let work_dir = &self.work_dir;
         ensure!(
-            socket_file.exists() || !socket_file.is_dir(),
-            format!("Cannot find file \"{}\"", socket_file.display())
+            work_dir.is_dir(),
+            format!("Cannot find directory \"{}\"", work_dir.display())
         );
 
         Ok(self)

@@ -26,6 +26,7 @@ lazy_static! {
 }
 
 struct UBuildParameters {
+    work_dir: PathBuf,
     pkg_binary_dir: PathBuf,
     pkg_output_dir: PathBuf,
     patch_build_root: PathBuf,
@@ -89,11 +90,11 @@ impl UserPatchBuilder {
         let pkg_build_root = &build_params.pkg_build_root;
         let pkg_binary_dir = pkg_build_root.buildroot.clone();
         let pkg_output_dir = pkg_build_root.rpms.clone();
-        let debuginfo_pkg_root = &build_params.workdir.package.debuginfo;
+        let debuginfo_pkg_root = &build_params.build_root.package.debuginfo;
 
         let build_entry = &build_params.build_entry;
-        let patch_build_root = build_params.workdir.patch.build.clone();
-        let patch_output_dir = build_params.workdir.patch.output.clone();
+        let patch_build_root = build_params.build_root.patch.build.clone();
+        let patch_output_dir = build_params.build_root.patch.output.clone();
         let patch_source_dir = build_entry.build_source.clone();
 
         let patch_spec = &build_entry.build_spec;
@@ -136,6 +137,7 @@ impl UserPatchBuilder {
         }
 
         let ubuild_params = UBuildParameters {
+            work_dir: build_params.work_dir.to_owned(),
             pkg_binary_dir,
             pkg_output_dir,
             patch_build_root,
@@ -163,6 +165,8 @@ impl UserPatchBuilder {
     fn parse_ubuild_cmd_args(&self, ubuild_params: &UBuildParameters) -> ExternCommandArgs {
         let mut cmd_args = ExternCommandArgs::new()
             .arg("--work-dir")
+            .arg(&ubuild_params.work_dir)
+            .arg("--build-root")
             .arg(&ubuild_params.patch_build_root)
             .arg("--source-dir")
             .arg(&ubuild_params.patch_source_dir)

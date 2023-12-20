@@ -1,5 +1,5 @@
 use std::path::{Path, PathBuf};
-use std::{ops::Deref, process::exit, sync::Arc};
+use std::{process::exit, sync::Arc};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use lazy_static::lazy_static;
@@ -11,18 +11,18 @@ use syscare_common::{os, util::fs};
 
 mod args;
 mod build_params;
+mod build_root;
 mod logger;
 mod package;
 mod patch;
 mod util;
-mod workdir;
 
 use args::Arguments;
 use build_params::{BuildEntry, BuildParameters};
+use build_root::BuildRoot;
 use logger::Logger;
 use package::{PackageBuildRoot, PackageBuilderFactory, PackageFormat, PackageImpl};
 use patch::{PatchBuilderFactory, PatchHelper, PatchMetadata, PATCH_FILE_EXT};
-use workdir::WorkDir;
 
 use crate::package::{PackageSpecBuilderFactory, PackageSpecWriterFactory};
 
@@ -39,7 +39,7 @@ lazy_static! {
 
 pub struct SyscareBuilder {
     args: Arguments,
-    workdir: WorkDir,
+    build_root: BuildRoot,
 }
 
 impl SyscareBuilder {
@@ -202,7 +202,7 @@ impl SyscareBuilder {
     }
 
     fn prepare_to_build(&mut self) -> Result<BuildParameters> {
-        let pkg_root = &self.workdir.package;
+        let pkg_root = &self.build_root.package;
 
         debug!("- Collecting patch file(s)");
         let mut patch_files = PatchHelper::collect_patch_files(&self.args.patch)
@@ -251,7 +251,8 @@ impl SyscareBuilder {
 
         debug!("- Generating build parameters");
         let build_params = BuildParameters {
-            workdir: self.workdir.to_owned(),
+            work_dir: self.args.work_dir.to_owned(),
+            build_root: self.build_root.to_owned(),
             pkg_build_root,
             build_entry,
             kernel_build_entry,
@@ -273,10 +274,10 @@ impl SyscareBuilder {
     }
 
     fn build_patch_package(&self, patch_info: &PatchInfo) -> Result<()> {
-        let pkg_build_root = &self.workdir.package.build_root;
+        let pkg_build_root = &self.build_root.package.build_root;
         let pkg_source_dir = &pkg_build_root.sources;
         let pkg_spec_dir = &pkg_build_root.specs;
-        let patch_output_dir = &self.workdir.patch.output;
+        let patch_output_dir = &self.build_root.patch.output;
 
         debug!("- Writing patch metadata");
         let metadata_file = pkg_source_dir.join(PatchMetadata::metadata_file_name());
@@ -361,23 +362,24 @@ impl SyscareBuilder {
     }
 
     fn clean_up(&mut self) {
-        self.workdir.remove().ok();
+        self.build_root.remove().ok();
     }
 }
 
 impl SyscareBuilder {
     fn new() -> Result<Self> {
-        let args = Arguments::new()?;
+        let mut args = Arguments::new()?;
         Self::check_input_args(&args)?;
 
         os::umask::set_umask(CLI_UMASK);
-        let workdir = WorkDir::new(
-            args.workdir
-                .join(format!("syscare-build.{}", os::process::id())),
-        )?;
+
+        args.build_root = args
+            .build_root
+            .join(format!("syscare-build.{}", os::process::id()));
+        let build_root = BuildRoot::new(&args.build_root)?;
 
         Logger::initialize(
-            workdir.deref(),
+            &args.build_root,
             LevelFilter::Trace,
             match &args.verbose {
                 false => LevelFilter::Info,
@@ -385,7 +387,7 @@ impl SyscareBuilder {
             },
         )?;
 
-        Ok(SyscareBuilder { args, workdir })
+        Ok(SyscareBuilder { args, build_root })
     }
 
     fn check_input_args(args: &Arguments) -> Result<()> {
@@ -409,7 +411,7 @@ impl SyscareBuilder {
             }
         }
 
-        let workdir = &args.workdir;
+        let workdir = &args.work_dir;
         if !workdir.exists() {
             fs::create_dir_all(workdir)?;
         }
@@ -433,7 +435,7 @@ impl SyscareBuilder {
     }
 
     fn build_main(mut self, log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
-        *log_file.lock() = self.workdir.log_file.clone();
+        *log_file.lock() = self.build_root.log_file.clone();
 
         info!("==============================");
         info!("{}", CLI_ABOUT);
