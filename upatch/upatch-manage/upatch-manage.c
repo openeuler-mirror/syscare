@@ -124,8 +124,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 
 static struct argp argp = { options, parse_opt, args_doc, program_doc };
 
-FILE *upatch_manage_log_fd = NULL;
-
 int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
 {
 	struct upatch_elf uelf;
@@ -184,11 +182,6 @@ int main(int argc, char *argv[])
 	struct arguments args;
 	int ret;
 
-	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
-	if (upatch_manage_log_fd < 0) {
-		return -1;
-	}
-
 	memset(&args, 0, sizeof(struct arguments));
 	argp_parse(&argp, argc, argv, 0, NULL, &args);
 	if (args.verbose) {
@@ -217,6 +210,5 @@ int main(int argc, char *argv[])
 		break;
 	}
 
-	fclose(upatch_manage_log_fd);
 	return abs(ret);
 }
