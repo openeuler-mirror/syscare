@@ -573,7 +573,6 @@ patch_status_e meta_get_patch_status(const char *uuid)
 	}
 	patch = find_patch_by_uuid(uuid);
 	if (patch == NULL) {
-		log_warn("can't find patch uuid:%s failed to get status\n", uuid);
 		return UPATCH_PATCH_STATUS_NOT_APPLIED;
 	}
 	return patch->status;
