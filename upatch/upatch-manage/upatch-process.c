@@ -518,6 +518,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 
 	} while (1);
 	fclose(f);
+	close(fd);
 
 	log_debug("Found %d object file(s)\n", proc->num_objs);
 
@@ -531,6 +532,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 
 error:
 	fclose(f);
+	close(fd);
 	return -1;
 }
 
