@@ -30,7 +30,6 @@
 /* Files that include log.h must define loglevel and logprefix */
 extern enum loglevel loglevel;
 extern char *logprefix;
-extern FILE *upatch_manage_log_fd;
 
 enum exit_status {
 	EXIT_STATUS_SUCCESS = 0,
@@ -58,7 +57,7 @@ enum exit_status {
 #define log(level, format, ...)                        \
 	({                                             \
 		if (loglevel <= (level))               \
-			fprintf(upatch_manage_log_fd, format, ##__VA_ARGS__); \
+			printf(format, ##__VA_ARGS__); \
 	})
 
 #define REQUIRE(COND, message)          \
