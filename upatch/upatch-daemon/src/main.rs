@@ -35,6 +35,7 @@ const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const DAEMON_UMASK: u32 = 0o077;
 const DAEMON_PARK_TIME: u64 = 100;
 
+const CONFIG_FILE_NAME: &str = "upatchd.yaml";
 const PID_FILE_NAME: &str = "upatchd.pid";
 const SOCKET_FILE_NAME: &str = "upatchd.sock";
 
@@ -76,6 +77,8 @@ impl Daemon {
     }
 
     fn prepare_environment(&self) -> Result<()> {
+        self.prepare_directory(&self.args.config_dir)?;
+
         self.prepare_directory(&self.args.work_dir)?;
         fs::set_permissions(
             &self.args.work_dir,
@@ -115,7 +118,8 @@ impl Daemon {
     fn initialize_skeleton(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        io_handler.extend_with(SkeletonImpl::new(&self.args.config_file)?.to_delegate());
+        let config_file = self.args.config_dir.join(CONFIG_FILE_NAME);
+        io_handler.extend_with(SkeletonImpl::new(config_file)?.to_delegate());
 
         Ok(io_handler)
     }

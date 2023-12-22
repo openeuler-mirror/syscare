@@ -8,8 +8,8 @@ use syscare_common::util::fs;
 
 use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
 
-const DEFAULT_CONFIG_FILE: &str = "/etc/syscare/upatchd.yaml";
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
 const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
 const DEFAULT_LOG_LEVEL: &str = "info";
 
@@ -28,9 +28,9 @@ pub struct Arguments {
     #[clap(short, long)]
     pub daemon: bool,
 
-    /// Path for daemon config file
-    #[clap(long, default_value=DEFAULT_CONFIG_FILE)]
-    pub config_file: PathBuf,
+    /// Daemon config directory
+    #[clap(long, default_value=DEFAULT_CONFIG_DIR)]
+    pub config_dir: PathBuf,
 
     /// Daemon working directory
     #[clap(long, default_value=DEFAULT_WORK_DIR)]
@@ -51,7 +51,7 @@ impl Arguments {
     }
 
     fn normalize_path(mut self) -> Result<Self> {
-        self.config_file = fs::normalize(&self.config_file)?;
+        self.config_dir = fs::normalize(&self.config_dir)?;
         self.work_dir = fs::normalize(self.work_dir)?;
         self.log_dir = fs::normalize(&self.log_dir)?;
 
