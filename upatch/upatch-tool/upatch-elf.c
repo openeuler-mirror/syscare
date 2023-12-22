@@ -201,11 +201,18 @@ out:
 
 bool check_build_id(struct elf_info *uelf, struct elf_info *relf)
 {
-	return uelf->shdrs[uelf->num_build_id].sh_size ==
-		       relf->shdrs[relf->num_build_id].sh_size &&
-	       !memcmp(uelf->hdr + uelf->shdrs[uelf->num_build_id].sh_offset,
-		       relf->hdr + relf->shdrs[relf->num_build_id].sh_offset,
-		       uelf->shdrs[uelf->num_build_id].sh_size);
+	if (uelf->shdrs[uelf->num_build_id].sh_size != relf->shdrs[relf->num_build_id].sh_size) {
+		return false;
+	}
+
+	void* uelf_build_id = (void *)uelf->hdr + uelf->shdrs[uelf->num_build_id].sh_offset;
+	void* relf_build_id = (void *)relf->hdr + relf->shdrs[relf->num_build_id].sh_offset;
+	size_t build_id_len = uelf->shdrs[uelf->num_build_id].sh_size;
+
+	if (memcmp(uelf_build_id, relf_build_id, build_id_len) != 0) {
+		return false;
+	}
+	return true;
 }
 
 void binary_close(struct running_elf *relf)
