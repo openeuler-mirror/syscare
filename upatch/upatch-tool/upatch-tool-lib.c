@@ -22,7 +22,8 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, 
 {
     struct list_head *patch_syms = patch_symbols_resolve(target_elf, patch_file);
     if (patch_syms == NULL) {
-        return ENOENT;
+        snprintf(err_msg, max_len, "Patch format error");
+        return ENOEXEC;
     }
 
     struct list_head *collision_list = meta_get_symbol_collision(target_elf, patch_syms);
@@ -30,7 +31,7 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, 
         return 0;
     }
 
-    int offset = snprintf(err_msg, max_len, "Upatch: Patch is conflicted with ");
+    int offset = snprintf(err_msg, max_len, "Patch is conflicted with ");
     symbol_collision *collision = NULL;
     list_for_each_entry(collision, collision_list, self) {
         err_msg += offset;
@@ -61,8 +62,8 @@ int upatch_load(const char *uuid, const char *target, const char *patch, bool fo
     // Resolve patch symbols
     struct list_head *patch_syms = patch_symbols_resolve(target, patch);
     if (patch_syms == NULL) {
-        log_warn("{%s}: Patch symbol is empty\n", uuid);
-        return ENOENT;
+        log_warn("{%s}: Patch format error\n", uuid);
+        return ENOEXEC;
     }
 
     // Check patch symbol collision

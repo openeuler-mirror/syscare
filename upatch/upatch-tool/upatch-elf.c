@@ -44,53 +44,65 @@ out:
 
 static int open_elf(struct elf_info *einfo, const char *name)
 {
-	int ret = 0, fd = -1, i;
-	char *sec_name;
-	struct stat st;
+    int ret = 0, fd = -1, i;
+    char *sec_name;
+    struct stat st;
 
-	// TODO: check ELF
-	fd = open(name, O_RDONLY);
-	if (fd == -1)
-		log_warn("open %s failed with errno %d \n", name, errno);
+    fd = open(name, O_RDONLY);
+    if (fd == -1) {
+        ret = -errno;
+        log_error("Failed to open file '%s', ret=%d\n", name, ret);
+        goto out;
+    }
 
-	ret = stat(name, &st);
-	if (ret)
-		log_warn("get %s stat failed with errno %d \n", name, errno);
+    ret = stat(name, &st);
+    if (ret != 0) {
+        ret = -errno;
+        log_error("Failed to stat file '%s', ret=%d\n", name, ret);
+        goto out;
+    }
 
-	ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
-	if (ret)
-		goto out;
+    ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
+    if (ret != 0) {
+        log_error("Failed to read file '%s', ret=%d\n", name, ret);
+        goto out;
+    }
 
-	einfo->name = name;
-	einfo->inode = st.st_ino;
-	einfo->patch_size = st.st_size;
-	einfo->hdr = (void *)einfo->patch_buff;
-	einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
-	einfo->shstrtab = (void *)einfo->hdr +
-			  einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
+    einfo->name = name;
+    einfo->inode = st.st_ino;
+    einfo->patch_size = st.st_size;
+    einfo->hdr = (void *)einfo->patch_buff;
+    einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
+    einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
 
-	for (i = 0; i < einfo->hdr->e_shnum; ++i) {
-		sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
-		if (streql(sec_name, BUILD_ID_NAME) &&
-		    einfo->shdrs[i].sh_type == SHT_NOTE) {
-			einfo->num_build_id = i;
-			break;
-		}
-	}
+    void *einfo_eof = einfo->hdr + einfo->patch_size;
+    if ((void *)einfo->shdrs > einfo_eof || (void *)einfo->shstrtab > einfo_eof) {
+        log_error("File '%s' is not a valid elf\n", name);
+        ret = -ENOEXEC;
+        goto out;
+    }
 
-	if (einfo->num_build_id == 0) {
-		ret = EINVAL;
-		log_warn("no %s found \n", BUILD_ID_NAME);
-		goto out;
-	}
+    for (i = 0; i < einfo->hdr->e_shnum; ++i) {
+        sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
+        if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
+            einfo->num_build_id = i;
+            break;
+        }
+    }
 
-	log_warn("no %ld found \n", einfo->inode);
+    if (einfo->num_build_id == 0) {
+        ret = -EINVAL;
+        log_error("Cannot find section '%s'\n", BUILD_ID_NAME);
+        goto out;
+    }
 
-	ret = 0;
+    ret = 0;
+
 out:
-	if (fd != -1)
-		close(fd);
-	return ret;
+    if (fd > 0) {
+        close(fd);
+    }
+    return ret;
 }
 
 int upatch_init(struct upatch_elf *uelf, const char *name)

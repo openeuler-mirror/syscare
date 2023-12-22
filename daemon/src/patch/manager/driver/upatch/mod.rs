@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use libc::{c_char, EEXIST, EFAULT, ENOENT, EPERM};
+use libc::{c_char, EEXIST, EFAULT, ENOENT, ENOEXEC, EPERM};
 use log::{debug, info};
 use parking_lot::Mutex;
 use syscare_abi::PatchStatus;
@@ -182,7 +182,7 @@ impl PatchDriver for UserPatchDriver {
         match ret_val {
             0 => Ok(()),
             EPERM => bail!("Upatch: Operation not permitted"),
-            ENOENT => bail!("Upatch: Patch symbol is empty"),
+            ENOEXEC => bail!("Upatch: Patch format error"),
             EEXIST => bail!("Upatch: Patch is already exist"),
             _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
         }
