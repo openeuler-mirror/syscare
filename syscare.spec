@@ -13,7 +13,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       8
+Release:       9
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -71,10 +71,21 @@ systemctl disable syscare
 ############## PostUninstall ###############
 %postun
 if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
+    # Remove patch directory
     rm -rf /usr/lib/syscare
-    rm -f /var/log/syscare/syscared*.log*
+
+    # Remove log directory
+    rm -f /var/log/syscare/syscared_r*.log
+    rm -f /var/log/syscare/syscared_r*.log.gz
     if [ -z "$(ls -A /var/log/syscare)" ]; then
         rm -rf /var/log/syscare
+    fi
+
+    # Remove run directory
+    rm -f /var/run/syscare/patch_op.lock
+    rm -f /var/run/syscare/syscared.*
+    if [ -z "$(ls -A /var/run/syscare)" ]; then
+        rm -rf /var/run/syscare
     fi
 fi
 
@@ -93,6 +104,7 @@ fi
 %package build
 Summary: Syscare build tools.
 BuildRequires: elfutils-libelf-devel
+Suggests: %{pkg_build_kmod}
 Requires: (%{pkg_build_kmod} >= %{build_version} or %{pkg_build_ebpf} >= %{build_version})
 Requires: coreutils
 Requires: patch
@@ -106,7 +118,6 @@ Syscare patch building toolset.
 
 ############### PostInstall ################
 %post build
-mkdir -p /etc/syscare
 systemctl daemon-reload
 systemctl enable upatch
 systemctl start upatch
@@ -120,10 +131,20 @@ systemctl disable upatch
 ############## PostUninstall ###############
 %postun build
 if [ "$1" -eq 0 ] || { [ -n "$2" ] && [ "$2" -eq 0 ]; }; then
+    # Remove config directory
     rm -rf /etc/syscare
-    rm -f /var/log/syscare/upatchd*.log*
+
+    # Remove log directory
+    rm -f /var/log/syscare/upatchd_r*.log
+    rm -f /var/log/syscare/upatchd_r*.log.gz
     if [ -z "$(ls -A /var/log/syscare)" ]; then
         rm -rf /var/log/syscare
+    fi
+
+    # Remove run directory
+    rm -f /var/run/syscare/upatchd.*
+    if [ -z "$(ls -A /var/run/syscare)" ]; then
+        rm -rf /var/run/syscare
     fi
 fi
 
@@ -205,6 +226,9 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Fri Dec 22 2023 ningyu<ningyu9@huawei.com> - 1.2.0-9
+- Add Suggests for syscare-build
+- Remove log directory
 * Tue Dec 12 2023 renoseven<dev@renoseven.net> - 1.2.0-8
 - Builder: fix 'enabling multiple kpatch may lead soft-lockup' issue
 * Wed Nov 29 2023 renoseven<dev@renoseven.net> - 1.2.0-7
