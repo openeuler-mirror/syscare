@@ -67,6 +67,13 @@ static int open_elf(struct elf_info *einfo, const char *name)
     einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
     einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
 
+    void *einfo_eof = einfo->hdr + einfo->patch_size;
+    if ((void *)einfo->shdrs > einfo_eof || (void *)einfo->shstrtab > einfo_eof) {
+        log_error("File '%s' is not a valid elf\n", name);
+        ret = -ENOEXEC;
+        goto out;
+    }
+
     for (i = 0; i < einfo->hdr->e_shnum; ++i) {
         sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
         if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
