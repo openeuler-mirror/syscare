@@ -1,6 +1,5 @@
 use std::{
-    ffi::OsString,
-    os::unix::prelude::OsStringExt,
+    ffi::CStr,
     path::{Path, PathBuf},
 };
 
@@ -9,7 +8,7 @@ use anyhow::{anyhow, bail, ensure, Result};
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use libc::{c_char, EEXIST, EFAULT, ENOENT, EPERM};
-use log::{info, warn};
+use log::{debug, info};
 use parking_lot::Mutex;
 use syscare_abi::PatchStatus;
 use syscare_common::util::digest;
@@ -92,24 +91,32 @@ impl UserPatchDriver {
     }
 }
 
-impl PatchDriver for UserPatchDriver {
-    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        const ERR_MSG_LEN: usize = 512;
+impl UserPatchDriver {
+    fn check_compatiblity(&self, _patch: &Patch) -> Result<()> {
+        Ok(())
+    }
 
-        if flag == PatchOpFlag::SkipCheck {
-            warn!("Skipped patch \"{}\" check", patch);
-            return Ok(());
-        }
-
+    fn check_consistency(&self, patch: &Patch) -> Result<()> {
         let patch_ext: &UserPatchExt = (&patch.info_ext).into();
         let patch_file = &patch_ext.patch_file;
 
         let real_checksum = digest::file(patch_file).map_err(|e| anyhow!("Upatch: {}", e))?;
+        debug!("Target checksum: {}", patch.checksum);
+        debug!("Expected checksum: {}", real_checksum);
+
         ensure!(
             patch.checksum.eq(&real_checksum),
-            "Upatch: Patch file \"{}\" checksum failed",
+            "Upatch: Patch \"{}\" consistency check failed",
             patch_file.display()
         );
+
+        Ok(())
+    }
+
+    fn check_confliction(&self, patch: &Patch) -> Result<()> {
+        const ERR_MSG_LEN: usize = 512;
+
+        let patch_ext: &UserPatchExt = (&patch.info_ext).into();
 
         let target_elf = patch_ext.target_elf.to_cstring()?;
         let patch_file = patch_ext.patch_file.to_cstring()?;
@@ -123,11 +130,28 @@ impl PatchDriver for UserPatchDriver {
                 msg_buf.capacity(),
             )
         };
+        if ret_val != 0 {
+            match CStr::from_bytes_until_nul(&msg_buf) {
+                Ok(err_msg) => bail!(format!("Upatch: {}", err_msg.to_string_lossy())),
+                Err(_) => bail!(format!(
+                    "Upatch: {}",
+                    std::io::Error::from_raw_os_error(ret_val)
+                )),
+            }
+        }
 
-        ensure!(
-            ret_val == 0,
-            OsString::from_vec(msg_buf).to_string_lossy().to_string()
-        );
+        Ok(())
+    }
+}
+
+impl PatchDriver for UserPatchDriver {
+    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.check_compatiblity(patch)?;
+        self.check_consistency(patch)?;
+
+        if flag != PatchOpFlag::Force {
+            self.check_confliction(patch)?;
+        }
 
         Ok(())
     }
@@ -151,7 +175,7 @@ impl PatchDriver for UserPatchDriver {
                 patch_uuid.as_ptr(),
                 target_elf.as_ptr(),
                 patch_file.as_ptr(),
-                matches!(flag, PatchOpFlag::SkipCheck),
+                matches!(flag, PatchOpFlag::Force),
             )
         };
 

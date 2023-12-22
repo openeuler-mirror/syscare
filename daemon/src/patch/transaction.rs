@@ -70,7 +70,7 @@ where
     fn rollback(&mut self) -> Result<()> {
         let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            patch_manager.do_status_transition(&patch, status, PatchOpFlag::SkipCheck)?;
+            patch_manager.do_status_transition(&patch, status, PatchOpFlag::Force)?;
         }
         Ok(())
     }
