@@ -1,7 +1,4 @@
-use std::{
-    ffi::CStr,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, bail, ensure, Result};
 
@@ -130,15 +127,13 @@ impl UserPatchDriver {
                 msg_buf.capacity(),
             )
         };
-        if ret_val != 0 {
-            match CStr::from_bytes_until_nul(&msg_buf) {
-                Ok(err_msg) => bail!(format!("Upatch: {}", err_msg.to_string_lossy())),
-                Err(_) => bail!(format!(
-                    "Upatch: {}",
-                    std::io::Error::from_raw_os_error(ret_val)
-                )),
-            }
-        }
+        ensure!(
+            ret_val == 0,
+            format!(
+                "Upatch: {}",
+                String::from_utf8_lossy(&msg_buf).trim_end_matches(|c| c == '\0')
+            )
+        );
 
         Ok(())
     }
