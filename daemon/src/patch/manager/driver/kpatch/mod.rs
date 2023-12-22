@@ -2,7 +2,7 @@ use std::{ffi::OsString, os::unix::prelude::OsStrExt, path::Path};
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use lazy_static::lazy_static;
-use log::{debug, warn};
+use log::debug;
 
 use syscare_abi::PatchStatus;
 use syscare_common::{
@@ -87,14 +87,9 @@ impl KernelPatchDriver {
     }
 }
 
-impl PatchDriver for KernelPatchDriver {
-    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+impl KernelPatchDriver {
+    fn check_compatiblity(&self, patch: &Patch) -> Result<()> {
         const KERNEL_NAME_PREFIX: &str = "kernel-";
-
-        if flag == PatchOpFlag::SkipCheck {
-            warn!("Skipped patch \"{}\" check", patch);
-            return Ok(());
-        }
 
         let kernel_version = os::kernel::version();
         let current_kernel = OsString::from(KERNEL_NAME_PREFIX).concat(kernel_version);
@@ -113,14 +108,38 @@ impl PatchDriver for KernelPatchDriver {
             );
         }
 
+        Ok(())
+    }
+
+    fn check_consistency(&self, patch: &Patch) -> Result<()> {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let patch_file = patch_ext.patch_file.as_path();
         let real_checksum = digest::file(patch_file)?;
+        debug!("Target checksum: {}", patch.checksum);
+        debug!("Expected checksum: {}", real_checksum);
+
         ensure!(
             patch.checksum.eq(&real_checksum),
-            "Kpatch: Patch file \"{}\" checksum failed",
+            "Kpatch: Patch \"{}\" consistency check failed",
             patch_file.display()
         );
+
+        Ok(())
+    }
+
+    fn check_confliction(&self, _patch: &Patch) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl PatchDriver for KernelPatchDriver {
+    fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        self.check_compatiblity(patch)?;
+        self.check_consistency(patch)?;
+
+        if flag != PatchOpFlag::Force {
+            self.check_confliction(patch)?;
+        }
 
         Ok(())
     }

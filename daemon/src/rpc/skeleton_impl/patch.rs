@@ -82,7 +82,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 PatchManager::apply_patch,
                 match force {
                     false => PatchOpFlag::Normal,
-                    true => PatchOpFlag::SkipCheck,
+                    true => PatchOpFlag::Force,
                 },
                 identifier,
             )?

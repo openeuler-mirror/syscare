@@ -13,7 +13,7 @@ use super::entity::*;
 #[derive(PartialEq, Clone, Copy)]
 pub enum PatchOpFlag {
     Normal,
-    SkipCheck,
+    Force,
 }
 
 /// Basic abstraction of patch operation
