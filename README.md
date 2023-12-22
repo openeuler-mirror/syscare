@@ -63,7 +63,20 @@ $ syscare build \
    --source ./redis-6.2.5-1.src.rpm \
    --debuginfo ./redis-debuginfo-6.2.5-1.x86_64.rpm \
    --output ./output \
-   ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+   --patch ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+```
+
+### 内核模块热补丁制作
+```
+$ syscare build \
+   --patch-name HP001 \
+   --source ./kernel-5.10.0-60.91.0.115.src.rpm \
+   --source ./testmod-1-1.src.rpm \
+   --debuginfo ./kernel-debuginfo-5.10.0-60.91.0.115.aarch64.rpm \
+   --output ./output \
+   --verbose \
+   --skip-cleanup \
+   --patch ./0001-test.patch
 ```
 
 补丁制作详细使用说明请见[build/README.md](https://gitee.com/openeuler/syscare/blob/master/build/README.md)
