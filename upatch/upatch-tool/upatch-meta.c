@@ -197,9 +197,11 @@ static int patch_deactive_in_cover(struct upatch_meta_patch *patch)
 static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sym)
 {
 	struct upatch_meta_symbol *newsym = (struct upatch_meta_symbol *)malloc(sizeof(struct upatch_meta_symbol));
-	if (newsym == NULL)
+	if (newsym == NULL) {
 		return ENOMEM;
+	}
 	memset(newsym, 0, sizeof(struct upatch_meta_symbol));
+
 	strncpy(newsym->name, sym->name, sizeof(newsym->name));
 	newsym->offset = sym->offset;
 	INIT_LIST_HEAD(&newsym->self);
@@ -212,9 +214,11 @@ static int list_add_symbol(struct list_head *head, struct upatch_meta_symbol *sy
 static int list_add_symbol_for_patch(struct upatch_meta_patch *patch, struct list_head *head, struct upatch_meta_symbol *sym)
 {
 	struct upatch_meta_symbol *newsym = (struct upatch_meta_symbol *)malloc(sizeof(struct upatch_meta_symbol));
-	if (newsym == NULL)
+	if (newsym == NULL) {
 		return ENOMEM;
+	}
 	memset(newsym, 0, sizeof(struct upatch_meta_symbol));
+
 	strncpy(newsym->name, sym->name, sizeof(newsym->name));
 	newsym->offset = sym->offset;
 	INIT_LIST_HEAD(&newsym->self);

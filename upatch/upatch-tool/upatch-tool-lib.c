@@ -14,21 +14,43 @@
 
 #include "log.h"
 #include "list.h"
+#include "upatch-elf.h"
 #include "upatch-meta.h"
 #include "upatch-resolve.h"
 #include "upatch-ioctl.h"
 
 int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, size_t max_len)
 {
-    struct list_head *patch_syms = patch_symbols_resolve(target_elf, patch_file);
+    int ret = 0;
+    struct list_head *patch_syms = NULL;
+    struct list_head *collision_list = NULL;
+
+    struct upatch_elf uelf;
+    ret = upatch_init(&uelf, patch_file);
+	if (ret < 0) {
+        snprintf(err_msg, max_len, "Failed to read patch");
+		goto out;
+	}
+
+    struct running_elf relf;
+	ret = binary_init(&relf, target_elf);
+	if (ret < 0) {
+        snprintf(err_msg, max_len, "Failed to read target elf");
+		goto out;
+	}
+	uelf.relf = &relf;
+
+    patch_syms = patch_symbols_resolve(&uelf, &relf);
     if (patch_syms == NULL) {
         snprintf(err_msg, max_len, "Patch format error");
-        return ENOEXEC;
+        ret = ENOEXEC;
+        goto out;
     }
 
-    struct list_head *collision_list = meta_get_symbol_collision(target_elf, patch_syms);
+    collision_list = meta_get_symbol_collision(target_elf, patch_syms);
     if (collision_list == NULL) {
-        return 0;
+        ret = 0;
+        goto out;
     }
 
     int offset = snprintf(err_msg, max_len, "Patch is conflicted with ");
@@ -39,50 +61,78 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, 
         offset = snprintf(err_msg, max_len, "\"%s\" ", collision->uuid);
     }
 
-    patch_symbols_free(patch_syms);
-    meta_put_symbol_collision(collision_list);
+out:
+    if (patch_syms != NULL) {
+        patch_symbols_free(patch_syms);
+    }
+    if (collision_list != NULL) {
+        meta_put_symbol_collision(collision_list);
+    }
+	binary_close(&relf);
+	upatch_close(&uelf);
 
-    return EEXIST;
+    return ret;
 }
 
 int upatch_load(const char *uuid, const char *target, const char *patch, bool force)
 {
+    int ret = 0;
+    struct list_head *patch_syms = NULL;
+    patch_entity_t *patch_entity = NULL;
+    struct list_head *collision_syms = NULL;
+
     // Pointer check
     if (uuid == NULL || target == NULL || patch == NULL) {
         return EINVAL;
     }
     log_normal("Loading patch {%s} (\"%s\") for \"%s\"\n", uuid, patch, target);
 
+    struct upatch_elf uelf;
+    ret = upatch_init(&uelf, patch);
+	if (ret < 0) {
+        log_warn("Failed to read patch\n");
+		goto out;
+	}
+
+    struct running_elf relf;
+	ret = binary_init(&relf, target);
+	if (ret < 0) {
+        log_warn("Failed to read target elf\n");
+		goto out;
+	}
+	uelf.relf = &relf;
+
     // Fails if patch is already exist
     if (meta_get_patch_status(uuid) != UPATCH_PATCH_STATUS_NOT_APPLIED) {
         log_warn("{%s}: Patch status is invalid\n", uuid);
-        return EPERM;
+        ret = EPERM;
+        goto out;
     }
 
     // Resolve patch symbols
-    struct list_head *patch_syms = patch_symbols_resolve(target, patch);
+    patch_syms = patch_symbols_resolve(&uelf, &relf);
     if (patch_syms == NULL) {
         log_warn("{%s}: Patch format error\n", uuid);
-        return ENOEXEC;
+        ret = ENOEXEC;
+        goto out;
     }
 
     // Check patch symbol collision
     if (!force) {
-        struct list_head *collision_syms = meta_get_symbol_collision(target, patch_syms);
+        collision_syms = meta_get_symbol_collision(target, patch_syms);
         if (collision_syms != NULL) {
             log_warn("{%s}: Patch symbol conflicted\n", uuid);
-            patch_symbols_free(patch_syms);
-            meta_put_symbol_collision(collision_syms);
-            return EEXIST;
+            ret = EEXIST;
+            goto out;
         }
     }
 
     // Alloc memory for patch
-    patch_entity_t *patch_entity = calloc(1, sizeof(patch_entity_t));
+    patch_entity = calloc(1, sizeof(patch_entity_t));
     if (patch_entity == NULL) {
         log_warn("{%s}: Failed to alloc memory\n", uuid);
-        patch_symbols_free(patch_syms);
-        return ENOMEM;
+        ret = ENOMEM;
+        goto out;
     }
 
     strncpy(patch_entity->target_path, target, strnlen(target, PATH_MAX));
@@ -91,16 +141,26 @@ int upatch_load(const char *uuid, const char *target, const char *patch, bool fo
     log_normal("patch: %s, patch_path: %s\n", patch, patch_entity->patch_path);
     patch_entity->symbols = patch_syms;
 
-    int ret = meta_create_patch(uuid, patch_entity);
+    ret = meta_create_patch(uuid, patch_entity);
     if (ret != 0) {
         log_warn("{%s}: Failed to create patch entity\n", uuid);
-        free(patch_entity);
-        patch_symbols_free(patch_syms);
-        return ret;
+        goto out;
     }
 
-    free(patch_entity);
     meta_set_patch_status(uuid, UPATCH_PATCH_STATUS_DEACTIVED);
+
+out:
+    if (collision_syms != NULL) {
+        meta_put_symbol_collision(collision_syms);
+    }
+    if (patch_syms != NULL) {
+        patch_symbols_free(patch_syms);
+    }
+    if (patch_entity != NULL) {
+        free(patch_entity);
+    }
+	binary_close(&relf);
+	upatch_close(&uelf);
 
     return ret;
 }

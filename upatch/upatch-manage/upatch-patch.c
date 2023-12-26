@@ -590,8 +590,8 @@ static int upatch_apply_patches(struct upatch_process *proc,
 
 	if (!found) {
 		ret = -1;
-		log_debug("can't found inode %lu in pid %d\n",
-			  uelf->relf->info.inode, proc->pid);
+		log_debug("Cannot find inode %lu in pid %d, file is not loaded\n",
+			uelf->relf->info.inode, proc->pid);
 		goto out;
 	}
 
