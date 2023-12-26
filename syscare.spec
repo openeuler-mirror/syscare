@@ -13,11 +13,14 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       9
+Release:       10
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
+
+Patch0001:     0001-upatch-fix-memory-leak.patch
+
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
@@ -226,6 +229,8 @@ Syscare build dependency - eBPF.
 ################ Change log ################
 ############################################
 %changelog
+* Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
+- fix memory leak
 * Fri Dec 22 2023 ningyu<ningyu9@huawei.com> - 1.2.0-9
 - Add Suggests for syscare-build
 - Remove log directory
