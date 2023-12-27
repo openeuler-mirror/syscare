@@ -28,6 +28,8 @@ use args::Arguments;
 use logger::Logger;
 use rpc::{Skeleton, SkeletonImpl};
 
+const CONFIG_FILE_NAME: &str = "upatchd.yaml";
+
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_UMASK: u32 = 0o027;
 const DAEMON_PARK_TIMEOUT: u64 = 100;
@@ -67,6 +69,8 @@ impl Daemon {
     }
 
     fn prepare_environment(&self) -> Result<()> {
+        self.prepare_directory(&self.args.config_dir)?;
+
         self.prepare_directory(&self.args.work_dir)?;
         self.prepare_directory(&self.args.log_dir)?;
         Ok(())
@@ -99,7 +103,8 @@ impl Daemon {
     fn initialize_skeleton(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
-        io_handler.extend_with(SkeletonImpl::new(&self.args.config_file)?.to_delegate());
+        let config_file = self.args.config_dir.join(CONFIG_FILE_NAME);
+        io_handler.extend_with(SkeletonImpl::new(config_file)?.to_delegate());
 
         Ok(io_handler)
     }
