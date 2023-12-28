@@ -12,11 +12,28 @@
 ############################################
 Name:          syscare
 Version:       1.2.0
-Release:       6
+Release:       10
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
+
+Patch0001:     0001-builder-fix-enabling-multiple-kpatch-may-lead-soft-l.patch
+Patch0002:     0002-upatch-fix-upatch-manage-detach-failure-issue.patch
+Patch0003:     0003-upatch-remove-upatch-manage-log-file.patch
+Patch0004:     0004-upatch-remove-redudant-log-output.patch
+Patch0005:     0005-upatch-manage-close-dup-fd.patch
+Patch0006:     0006-daemon-check-patch-before-patch-restoration.patch
+Patch0007:     0007-upatch-elf-verification.patch
+Patch0008:     0008-upatch-check-build-id.patch
+Patch0009:     0009-README-add-example-for-kernel-module-patch-build.patch
+Patch0010:     0010-daemon-fix-check-build-id-logic.patch
+Patch0011:     0011-upatch-diff-fix-a-nullptr-issue.patch
+Patch0012:     0012-daemon-fix-rust-1.60-compile-issue.patch
+Patch0013:     0013-upatchd-create-config-dir-at-startup.patch
+Patch0014:     0014-syscare-move-files-to-working-directory.patch
+Patch0015:     0015-upatch-fix-memory-leak.patch
+
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
@@ -177,6 +194,15 @@ depmod > /dev/null 2>&1
 ################ Change log ################
 ############################################
 %changelog
+* Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
+- fix memory leak
+* Fri Dec 22 2023 ningyu<ningyu9@huawei.com> - 1.2.0-9
+- Add Suggests for syscare-build
+- Remove log directory
+* Tue Dec 12 2023 renoseven<dev@renoseven.net> - 1.2.0-8
+- Builder: fix 'enabling multiple kpatch may lead soft-lockup' issue
+* Wed Nov 29 2023 renoseven<dev@renoseven.net> - 1.2.0-7
+- Fix aarch64 compile issue
 * Tue Nov 28 2023 renoseven<dev@renoseven.net> - 1.2.0-6
 - Enable debuginfo for rust code
 - Sync arguments with old version

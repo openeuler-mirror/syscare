@@ -1,0 +1,42 @@
+From b23af1223e0a284a6dd603ed21c60612170d6767 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Mon, 18 Dec 2023 18:34:52 +0800
+Subject: [PATCH 08/15] upatch: check build id
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-tool/upatch-resolve.c | 8 ++++++--
+ 1 file changed, 6 insertions(+), 2 deletions(-)
+
+diff --git a/upatch/upatch-tool/upatch-resolve.c b/upatch/upatch-tool/upatch-resolve.c
+index d12bdae..aeb655c 100644
+--- a/upatch/upatch-tool/upatch-resolve.c
++++ b/upatch/upatch-tool/upatch-resolve.c
+@@ -65,18 +65,22 @@ struct list_head* patch_symbols_resolve(const char *target_elf, const char *patc
+ 	INIT_LIST_HEAD(head);
+ 
+ 	int ret = upatch_init(&uelf, patch_file);
+-
+ 	if (ret < 0) {
+ 		log_warn("upatch-resolve: upatch_init failed\n");
+ 		goto out;
+ 	}
+ 
+ 	ret = binary_init(&relf, target_elf);
+-	if (ret) {
++	if (ret < 0) {
+ 		log_warn("upatch-resolve: binary_init failed %d \n", ret);
+ 		goto out;
+ 	}
+ 
++	if (check_build_id(&uelf.info, &relf.info) == false) {
++		log_error("upatch-resolve: Build id mismatched!\n");
++		goto out;
++	}
++
+ 	uelf.relf = &relf;
+ 	upatch_shdr = &uelf.info.shdrs[uelf.index.upatch_funcs];
+ 	upatch_funcs = uelf.info.patch_buff + upatch_shdr->sh_offset;
+-- 
+2.33.0
+

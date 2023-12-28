@@ -1,0 +1,217 @@
+From 727ece331961c5a495350b38afa982f1598e5b82 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 22 Dec 2023 13:45:48 +0800
+Subject: [PATCH 07/15] upatch: elf verification
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ daemon/src/patch/manager/driver/upatch/mod.rs |   4 +-
+ upatch/upatch-manage/upatch-elf.c             |   7 ++
+ upatch/upatch-tool/log.h                      |   1 +
+ upatch/upatch-tool/upatch-elf.c               | 102 ++++++++++--------
+ upatch/upatch-tool/upatch-tool-lib.c          |   9 +-
+ 5 files changed, 72 insertions(+), 51 deletions(-)
+
+diff --git a/daemon/src/patch/manager/driver/upatch/mod.rs b/daemon/src/patch/manager/driver/upatch/mod.rs
+index e4a914b..4d06e84 100644
+--- a/daemon/src/patch/manager/driver/upatch/mod.rs
++++ b/daemon/src/patch/manager/driver/upatch/mod.rs
+@@ -7,7 +7,7 @@ use anyhow::{anyhow, bail, ensure, Result};
+ 
+ use indexmap::IndexMap;
+ use lazy_static::lazy_static;
+-use libc::{c_char, EEXIST, EFAULT, ENOENT, EPERM};
++use libc::{c_char, EEXIST, EFAULT, ENOENT, ENOEXEC, EPERM};
+ use log::{debug, info};
+ use parking_lot::Mutex;
+ use syscare_abi::PatchStatus;
+@@ -182,7 +182,7 @@ impl PatchDriver for UserPatchDriver {
+         match ret_val {
+             0 => Ok(()),
+             EPERM => bail!("Upatch: Operation not permitted"),
+-            ENOENT => bail!("Upatch: Patch symbol is empty"),
++            ENOEXEC => bail!("Upatch: Patch format error"),
+             EEXIST => bail!("Upatch: Patch is already exist"),
+             _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(ret_val)),
+         }
+diff --git a/upatch/upatch-manage/upatch-elf.c b/upatch/upatch-manage/upatch-elf.c
+index 2bd3175..31180b5 100644
+--- a/upatch/upatch-manage/upatch-elf.c
++++ b/upatch/upatch-manage/upatch-elf.c
+@@ -67,6 +67,13 @@ static int open_elf(struct elf_info *einfo, const char *name)
+     einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
+     einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
+ 
++    void *einfo_eof = einfo->hdr + einfo->patch_size;
++    if ((void *)einfo->shdrs > einfo_eof || (void *)einfo->shstrtab > einfo_eof) {
++        log_error("File '%s' is not a valid elf\n", name);
++        ret = -ENOEXEC;
++        goto out;
++    }
++
+     for (i = 0; i < einfo->hdr->e_shnum; ++i) {
+         sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
+         if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
+diff --git a/upatch/upatch-tool/log.h b/upatch/upatch-tool/log.h
+index 75213d8..e42e290 100644
+--- a/upatch/upatch-tool/log.h
++++ b/upatch/upatch-tool/log.h
+@@ -11,5 +11,6 @@
+ #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
+ #define log_normal(format, ...) log(NORMAL, format, ##__VA_ARGS__)
+ #define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
++#define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
+ 
+ #endif
+diff --git a/upatch/upatch-tool/upatch-elf.c b/upatch/upatch-tool/upatch-elf.c
+index 5b9b0bd..def536c 100644
+--- a/upatch/upatch-tool/upatch-elf.c
++++ b/upatch/upatch-tool/upatch-elf.c
+@@ -44,53 +44,65 @@ out:
+ 
+ static int open_elf(struct elf_info *einfo, const char *name)
+ {
+-	int ret = 0, fd = -1, i;
+-	char *sec_name;
+-	struct stat st;
+-
+-	// TODO: check ELF
+-	fd = open(name, O_RDONLY);
+-	if (fd == -1)
+-		log_warn("open %s failed with errno %d \n", name, errno);
++    int ret = 0, fd = -1, i;
++    char *sec_name;
++    struct stat st;
++
++    fd = open(name, O_RDONLY);
++    if (fd == -1) {
++        ret = -errno;
++        log_error("Failed to open file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    ret = stat(name, &st);
++    if (ret != 0) {
++        ret = -errno;
++        log_error("Failed to stat file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
++    if (ret != 0) {
++        log_error("Failed to read file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    einfo->name = name;
++    einfo->inode = st.st_ino;
++    einfo->patch_size = st.st_size;
++    einfo->hdr = (void *)einfo->patch_buff;
++    einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
++    einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
++
++    void *einfo_eof = einfo->hdr + einfo->patch_size;
++    if ((void *)einfo->shdrs > einfo_eof || (void *)einfo->shstrtab > einfo_eof) {
++        log_error("File '%s' is not a valid elf\n", name);
++        ret = -ENOEXEC;
++        goto out;
++    }
++
++    for (i = 0; i < einfo->hdr->e_shnum; ++i) {
++        sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
++        if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
++            einfo->num_build_id = i;
++            break;
++        }
++    }
++
++    if (einfo->num_build_id == 0) {
++        ret = -EINVAL;
++        log_error("Cannot find section '%s'\n", BUILD_ID_NAME);
++        goto out;
++    }
++
++    ret = 0;
+ 
+-	ret = stat(name, &st);
+-	if (ret)
+-		log_warn("get %s stat failed with errno %d \n", name, errno);
+-
+-	ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
+-	if (ret)
+-		goto out;
+-
+-	einfo->name = name;
+-	einfo->inode = st.st_ino;
+-	einfo->patch_size = st.st_size;
+-	einfo->hdr = (void *)einfo->patch_buff;
+-	einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
+-	einfo->shstrtab = (void *)einfo->hdr +
+-			  einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
+-
+-	for (i = 0; i < einfo->hdr->e_shnum; ++i) {
+-		sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
+-		if (streql(sec_name, BUILD_ID_NAME) &&
+-		    einfo->shdrs[i].sh_type == SHT_NOTE) {
+-			einfo->num_build_id = i;
+-			break;
+-		}
+-	}
+-
+-	if (einfo->num_build_id == 0) {
+-		ret = EINVAL;
+-		log_warn("no %s found \n", BUILD_ID_NAME);
+-		goto out;
+-	}
+-
+-	log_warn("no %ld found \n", einfo->inode);
+-
+-	ret = 0;
+ out:
+-	if (fd != -1)
+-		close(fd);
+-	return ret;
++    if (fd > 0) {
++        close(fd);
++    }
++    return ret;
+ }
+ 
+ int upatch_init(struct upatch_elf *uelf, const char *name)
+diff --git a/upatch/upatch-tool/upatch-tool-lib.c b/upatch/upatch-tool/upatch-tool-lib.c
+index 4f816bb..4e5bda1 100644
+--- a/upatch/upatch-tool/upatch-tool-lib.c
++++ b/upatch/upatch-tool/upatch-tool-lib.c
+@@ -22,7 +22,8 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg,
+ {
+     struct list_head *patch_syms = patch_symbols_resolve(target_elf, patch_file);
+     if (patch_syms == NULL) {
+-        return ENOENT;
++        snprintf(err_msg, max_len, "Patch format error");
++        return ENOEXEC;
+     }
+ 
+     struct list_head *collision_list = meta_get_symbol_collision(target_elf, patch_syms);
+@@ -30,7 +31,7 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg,
+         return 0;
+     }
+ 
+-    int offset = snprintf(err_msg, max_len, "Upatch: Patch is conflicted with ");
++    int offset = snprintf(err_msg, max_len, "Patch is conflicted with ");
+     symbol_collision *collision = NULL;
+     list_for_each_entry(collision, collision_list, self) {
+         err_msg += offset;
+@@ -61,8 +62,8 @@ int upatch_load(const char *uuid, const char *target, const char *patch, bool fo
+     // Resolve patch symbols
+     struct list_head *patch_syms = patch_symbols_resolve(target, patch);
+     if (patch_syms == NULL) {
+-        log_warn("{%s}: Patch symbol is empty\n", uuid);
+-        return ENOENT;
++        log_warn("{%s}: Patch format error\n", uuid);
++        return ENOEXEC;
+     }
+ 
+     // Check patch symbol collision
+-- 
+2.33.0
+

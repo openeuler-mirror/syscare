@@ -1,0 +1,1382 @@
+From c2c863a88390c7e479fc4c77350c01dd6edf8ac4 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Thu, 28 Dec 2023 10:32:42 +0800
+Subject: [PATCH 14/15] syscare: move files to working directory
+
+syscared & syscare:
+1. move pid file to /var/run/syscare/syscared.pid
+2. move socket file to /var/run/syscare/syscared.sock
+3. move lock file to /var/run/syscare/patch_op.lock
+
+upatchd & upatch-build:
+1. move pid file to /var/run/syscare/upatchd.pid
+2. move socket file to /var/run/syscare/upatchd.sock
+3. rewrite compiler hacking & unhacking logic
+
+syscare-build & upatch-build:
+1. reuse '--work-dir' as daemon working directory, ie. /var/run/syscare
+2. add '--build-root' as build temp directory
+3. rename WorkDir to BuildRoot
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ builder/src/args/matcher.rs                   |   6 +-
+ builder/src/args/mod.rs                       |  10 +-
+ builder/src/build_params.rs                   |   5 +-
+ builder/src/{workdir => build_root}/mod.rs    |   8 +-
+ .../{workdir => build_root}/package_root.rs   |   0
+ .../src/{workdir => build_root}/patch_root.rs |   0
+ builder/src/main.rs                           |  38 ++---
+ .../src/patch/kernel_patch/kpatch_builder.rs  |   6 +-
+ .../src/patch/user_patch/upatch_builder.rs    |  10 +-
+ cli/src/args/matcher.rs                       |   4 +-
+ cli/src/args/mod.rs                           |   6 +-
+ cli/src/executor/patch.rs                     |  25 ++--
+ cli/src/main.rs                               |  15 +-
+ daemon/src/args/matcher.rs                    |   4 -
+ daemon/src/args/mod.rs                        |  10 --
+ daemon/src/main.rs                            |  36 +++--
+ daemon/src/patch/manager/entity/mod.rs        |   2 +-
+ .../upatch-build/src/upatch/args/matcher.rs   |   6 +-
+ upatch/upatch-build/src/upatch/args/mod.rs    |  18 ++-
+ upatch/upatch-build/src/upatch/build.rs       |  51 ++++---
+ .../src/upatch/{workdir.rs => build_root.rs}  |  10 +-
+ upatch/upatch-build/src/upatch/compiler.rs    | 137 +++++++-----------
+ upatch/upatch-build/src/upatch/mod.rs         |   4 +-
+ upatch/upatch-daemon/src/args/matcher.rs      |   6 +-
+ upatch/upatch-daemon/src/args/mod.rs          |  10 --
+ upatch/upatch-daemon/src/main.rs              |  36 +++--
+ 26 files changed, 238 insertions(+), 225 deletions(-)
+ rename builder/src/{workdir => build_root}/mod.rs (91%)
+ rename builder/src/{workdir => build_root}/package_root.rs (100%)
+ rename builder/src/{workdir => build_root}/patch_root.rs (100%)
+ rename upatch/upatch-build/src/upatch/{workdir.rs => build_root.rs} (89%)
+
+diff --git a/builder/src/args/matcher.rs b/builder/src/args/matcher.rs
+index 8bc89a2..93e9420 100644
+--- a/builder/src/args/matcher.rs
++++ b/builder/src/args/matcher.rs
+@@ -6,7 +6,8 @@ use syscare_common::os;
+ const DEFAULT_PATCH_VERSION: &str = "1";
+ const DEFAULT_PATCH_RELEASE: &str = "1";
+ const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
+-const DEFAULT_WORK_DIR: &str = ".";
++const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
++const DEFAULT_BUILD_ROOT: &str = ".";
+ const DEFAULT_OUTPUT_DIR: &str = ".";
+ 
+ lazy_static! {
+@@ -38,7 +39,8 @@ impl ArgMatcher {
+             (@arg source: short("s") long("source") +required +takes_value +multiple value_name("SOURCE") "Source package(s)")
+             (@arg debuginfo: short("d") long("debuginfo") +required +takes_value +multiple value_name("DEBUGINFO") "Debuginfo package(s)")
+             (@arg patch: short("p") long("patch") +required +takes_value +multiple value_name("PATCH") "Patch file(s)")
+-            (@arg workdir: long("workdir") +takes_value value_name("WORKDIR") default_value(DEFAULT_WORK_DIR) "Working directory")
++            (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Working directory")
++            (@arg build_root: long("build-root") +takes_value value_name("BUILD_ROOT") default_value(DEFAULT_BUILD_ROOT) "Build temporary directory")
+             (@arg output: short("o") long("output") +takes_value value_name("OUTPUT") default_value(DEFAULT_OUTPUT_DIR) "Output directory")
+             (@arg jobs: short("j") long("jobs") +takes_value value_name("JOBS") default_value(&DEFAULT_BUILD_JOBS) "Parallel build jobs")
+             (@arg skip_compiler_check: long("skip-compiler-check") "Skip compiler version check (not recommended)")
+diff --git a/builder/src/args/mod.rs b/builder/src/args/mod.rs
+index 7fe575b..f81d26e 100644
+--- a/builder/src/args/mod.rs
++++ b/builder/src/args/mod.rs
+@@ -41,7 +41,10 @@ pub struct Arguments {
+     pub patch: Vec<PathBuf>,
+ 
+     /// Working directory
+-    pub workdir: PathBuf,
++    pub work_dir: PathBuf,
++
++    /// Build temporary directory
++    pub build_root: PathBuf,
+ 
+     /// Generated patch output directory
+     pub output: PathBuf,
+@@ -74,7 +77,8 @@ impl Parser<'_> for Arguments {
+             source: ArgParserImpl::parse_args(matches, "source")?,
+             debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
+             patch: ArgParserImpl::parse_args(matches, "patch")?,
+-            workdir: ArgParserImpl::parse_arg(matches, "workdir")?,
++            work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
++            build_root: ArgParserImpl::parse_arg(matches, "build_root")?,
+             output: ArgParserImpl::parse_arg(matches, "output")?,
+             jobs: ArgParserImpl::parse_arg(matches, "jobs")?,
+             skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
+@@ -102,7 +106,7 @@ impl Arguments {
+         for patch_file in &mut self.patch {
+             *patch_file = fs::normalize(&patch_file)?;
+         }
+-        self.workdir = fs::normalize(&self.workdir)?;
++        self.build_root = fs::normalize(&self.build_root)?;
+         self.output = fs::normalize(&self.output)?;
+ 
+         Ok(self)
+diff --git a/builder/src/build_params.rs b/builder/src/build_params.rs
+index f252ec7..a8296a3 100644
+--- a/builder/src/build_params.rs
++++ b/builder/src/build_params.rs
+@@ -2,7 +2,7 @@ use std::path::PathBuf;
+ 
+ use syscare_abi::{PackageInfo, PatchFile, PatchType};
+ 
+-use crate::{package::PackageBuildRoot, workdir::WorkDir};
++use crate::{build_root::BuildRoot, package::PackageBuildRoot};
+ 
+ #[derive(Debug, Clone)]
+ pub struct BuildEntry {
+@@ -12,7 +12,8 @@ pub struct BuildEntry {
+ }
+ 
+ pub struct BuildParameters {
+-    pub workdir: WorkDir,
++    pub work_dir: PathBuf,
++    pub build_root: BuildRoot,
+     pub pkg_build_root: PackageBuildRoot,
+     pub build_entry: BuildEntry,
+     pub kernel_build_entry: Option<BuildEntry>,
+diff --git a/builder/src/workdir/mod.rs b/builder/src/build_root/mod.rs
+similarity index 91%
+rename from builder/src/workdir/mod.rs
+rename to builder/src/build_root/mod.rs
+index 871e628..329a318 100644
+--- a/builder/src/workdir/mod.rs
++++ b/builder/src/build_root/mod.rs
+@@ -19,14 +19,14 @@ const PATCH_ROOT_NAME: &str = "patch";
+ const BUILD_LOG_NAME: &str = "build.log";
+ 
+ #[derive(Debug, Clone)]
+-pub struct WorkDir {
++pub struct BuildRoot {
+     pub path: PathBuf,
+     pub package: PackageRoot,
+     pub patch: PatchRoot,
+     pub log_file: PathBuf,
+ }
+ 
+-impl WorkDir {
++impl BuildRoot {
+     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
+         let path = path.as_ref().to_path_buf();
+         let package = PackageRoot::new(path.join(PACKAGE_ROOT_NAME))?;
+@@ -46,7 +46,7 @@ impl WorkDir {
+     }
+ }
+ 
+-impl Deref for WorkDir {
++impl Deref for BuildRoot {
+     type Target = Path;
+ 
+     fn deref(&self) -> &Self::Target {
+@@ -54,7 +54,7 @@ impl Deref for WorkDir {
+     }
+ }
+ 
+-impl AsRef<OsStr> for WorkDir {
++impl AsRef<OsStr> for BuildRoot {
+     fn as_ref(&self) -> &OsStr {
+         self.as_os_str()
+     }
+diff --git a/builder/src/workdir/package_root.rs b/builder/src/build_root/package_root.rs
+similarity index 100%
+rename from builder/src/workdir/package_root.rs
+rename to builder/src/build_root/package_root.rs
+diff --git a/builder/src/workdir/patch_root.rs b/builder/src/build_root/patch_root.rs
+similarity index 100%
+rename from builder/src/workdir/patch_root.rs
+rename to builder/src/build_root/patch_root.rs
+diff --git a/builder/src/main.rs b/builder/src/main.rs
+index 3e92019..1b40122 100644
+--- a/builder/src/main.rs
++++ b/builder/src/main.rs
+@@ -1,5 +1,5 @@
+ use std::path::{Path, PathBuf};
+-use std::{ops::Deref, process::exit, sync::Arc};
++use std::{process::exit, sync::Arc};
+ 
+ use anyhow::{anyhow, bail, ensure, Context, Result};
+ use lazy_static::lazy_static;
+@@ -11,18 +11,18 @@ use syscare_common::{os, util::fs};
+ 
+ mod args;
+ mod build_params;
++mod build_root;
+ mod logger;
+ mod package;
+ mod patch;
+ mod util;
+-mod workdir;
+ 
+ use args::Arguments;
+ use build_params::{BuildEntry, BuildParameters};
++use build_root::BuildRoot;
+ use logger::Logger;
+ use package::{PackageBuildRoot, PackageBuilderFactory, PackageFormat, PackageImpl};
+ use patch::{PatchBuilderFactory, PatchHelper, PatchMetadata, PATCH_FILE_EXT};
+-use workdir::WorkDir;
+ 
+ use crate::package::{PackageSpecBuilderFactory, PackageSpecWriterFactory};
+ 
+@@ -37,7 +37,7 @@ lazy_static! {
+ 
+ pub struct SyscareBuilder {
+     args: Arguments,
+-    workdir: WorkDir,
++    build_root: BuildRoot,
+ }
+ 
+ impl SyscareBuilder {
+@@ -200,7 +200,7 @@ impl SyscareBuilder {
+     }
+ 
+     fn prepare_to_build(&mut self) -> Result<BuildParameters> {
+-        let pkg_root = &self.workdir.package;
++        let pkg_root = &self.build_root.package;
+ 
+         debug!("- Collecting patch file(s)");
+         let mut patch_files = PatchHelper::collect_patch_files(&self.args.patch)
+@@ -249,7 +249,8 @@ impl SyscareBuilder {
+ 
+         debug!("- Generating build parameters");
+         let build_params = BuildParameters {
+-            workdir: self.workdir.to_owned(),
++            work_dir: self.args.work_dir.to_owned(),
++            build_root: self.build_root.to_owned(),
+             pkg_build_root,
+             build_entry,
+             kernel_build_entry,
+@@ -271,10 +272,10 @@ impl SyscareBuilder {
+     }
+ 
+     fn build_patch_package(&self, patch_info: &PatchInfo) -> Result<()> {
+-        let pkg_build_root = &self.workdir.package.build_root;
++        let pkg_build_root = &self.build_root.package.build_root;
+         let pkg_source_dir = &pkg_build_root.sources;
+         let pkg_spec_dir = &pkg_build_root.specs;
+-        let patch_output_dir = &self.workdir.patch.output;
++        let patch_output_dir = &self.build_root.patch.output;
+ 
+         debug!("- Writing patch metadata");
+         let metadata_file = pkg_source_dir.join(PatchMetadata::metadata_file_name());
+@@ -359,23 +360,24 @@ impl SyscareBuilder {
+     }
+ 
+     fn clean_up(&mut self) {
+-        self.workdir.remove().ok();
++        self.build_root.remove().ok();
+     }
+ }
+ 
+ impl SyscareBuilder {
+     fn new() -> Result<Self> {
+-        let args = Arguments::new()?;
++        let mut args = Arguments::new()?;
+         Self::check_input_args(&args)?;
+ 
+         os::umask::set_umask(CLI_UMASK);
+-        let workdir = WorkDir::new(
+-            args.workdir
+-                .join(format!("syscare-build.{}", os::process::id())),
+-        )?;
++
++        args.build_root = args
++            .build_root
++            .join(format!("syscare-build.{}", os::process::id()));
++        let build_root = BuildRoot::new(&args.build_root)?;
+ 
+         Logger::initialize(
+-            workdir.deref(),
++            &args.build_root,
+             LevelFilter::Trace,
+             match &args.verbose {
+                 false => LevelFilter::Info,
+@@ -383,7 +385,7 @@ impl SyscareBuilder {
+             },
+         )?;
+ 
+-        Ok(SyscareBuilder { args, workdir })
++        Ok(SyscareBuilder { args, build_root })
+     }
+ 
+     fn check_input_args(args: &Arguments) -> Result<()> {
+@@ -407,7 +409,7 @@ impl SyscareBuilder {
+             }
+         }
+ 
+-        let workdir = &args.workdir;
++        let workdir = &args.work_dir;
+         if !workdir.exists() {
+             fs::create_dir_all(workdir)?;
+         }
+@@ -431,7 +433,7 @@ impl SyscareBuilder {
+     }
+ 
+     fn build_main(mut self, log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
+-        *log_file.lock() = self.workdir.log_file.clone();
++        *log_file.lock() = self.build_root.log_file.clone();
+ 
+         info!("==============================");
+         info!("{}", CLI_ABOUT);
+diff --git a/builder/src/patch/kernel_patch/kpatch_builder.rs b/builder/src/patch/kernel_patch/kpatch_builder.rs
+index 69c0cee..eec39a6 100644
+--- a/builder/src/patch/kernel_patch/kpatch_builder.rs
++++ b/builder/src/patch/kernel_patch/kpatch_builder.rs
+@@ -59,8 +59,8 @@ impl KernelPatchBuilder {
+ 
+         debug!("- Finding kernel directories");
+         let pkg_build_dir = build_params.pkg_build_root.build.clone();
+-        let patch_build_root = build_params.workdir.patch.build.clone();
+-        let patch_output_dir: PathBuf = build_params.workdir.patch.output.clone();
++        let patch_build_root = build_params.build_root.patch.build.clone();
++        let patch_output_dir: PathBuf = build_params.build_root.patch.output.clone();
+ 
+         let kernel_pkg = &kernel_entry.target_pkg;
+         let kernel_source_dir: PathBuf = PKG_IMPL
+@@ -72,7 +72,7 @@ impl KernelPatchBuilder {
+                 ),
+             )
+             .context("Cannot find kernel source directory")?;
+-        let kernel_debug_dir = &build_params.workdir.package.debuginfo;
++        let kernel_debug_dir = &build_params.build_root.package.debuginfo;
+         let oot_source_dir = oot_module_entry.map(|build_entry| build_entry.build_source.clone());
+ 
+         debug!("- Generating kernel default config");
+diff --git a/builder/src/patch/user_patch/upatch_builder.rs b/builder/src/patch/user_patch/upatch_builder.rs
+index 89166fa..5901656 100644
+--- a/builder/src/patch/user_patch/upatch_builder.rs
++++ b/builder/src/patch/user_patch/upatch_builder.rs
+@@ -26,6 +26,7 @@ lazy_static! {
+ }
+ 
+ struct UBuildParameters {
++    work_dir: PathBuf,
+     pkg_binary_dir: PathBuf,
+     pkg_output_dir: PathBuf,
+     patch_build_root: PathBuf,
+@@ -89,11 +90,11 @@ impl UserPatchBuilder {
+         let pkg_build_root = &build_params.pkg_build_root;
+         let pkg_binary_dir = pkg_build_root.buildroot.clone();
+         let pkg_output_dir = pkg_build_root.rpms.clone();
+-        let debuginfo_pkg_root = &build_params.workdir.package.debuginfo;
++        let debuginfo_pkg_root = &build_params.build_root.package.debuginfo;
+ 
+         let build_entry = &build_params.build_entry;
+-        let patch_build_root = build_params.workdir.patch.build.clone();
+-        let patch_output_dir = build_params.workdir.patch.output.clone();
++        let patch_build_root = build_params.build_root.patch.build.clone();
++        let patch_output_dir = build_params.build_root.patch.output.clone();
+         let patch_source_dir = build_entry.build_source.clone();
+ 
+         let patch_spec = &build_entry.build_spec;
+@@ -136,6 +137,7 @@ impl UserPatchBuilder {
+         }
+ 
+         let ubuild_params = UBuildParameters {
++            work_dir: build_params.work_dir.to_owned(),
+             pkg_binary_dir,
+             pkg_output_dir,
+             patch_build_root,
+@@ -163,6 +165,8 @@ impl UserPatchBuilder {
+     fn parse_ubuild_cmd_args(&self, ubuild_params: &UBuildParameters) -> ExternCommandArgs {
+         let mut cmd_args = ExternCommandArgs::new()
+             .arg("--work-dir")
++            .arg(&ubuild_params.work_dir)
++            .arg("--build-root")
+             .arg(&ubuild_params.patch_build_root)
+             .arg("--source-dir")
+             .arg(&ubuild_params.patch_source_dir)
+diff --git a/cli/src/args/matcher.rs b/cli/src/args/matcher.rs
+index de041a9..eb8cb97 100644
+--- a/cli/src/args/matcher.rs
++++ b/cli/src/args/matcher.rs
+@@ -1,6 +1,6 @@
+ use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
+ 
+-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
++const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+ 
+ pub struct ArgMatcher;
+ 
+@@ -21,7 +21,7 @@ impl ArgMatcher {
+                 AppSettings::VersionlessSubcommands,
+                 AppSettings::DisableHelpSubcommand,
+             ])
+-            (@arg socket_file: short("s") long("socket-file") value_name("SOCKET_FILE") +takes_value default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
++            (@arg work_dir: short("w") long("work-dir") value_name("WORK_DIR") +takes_value default_value(DEFAULT_WORK_DIR) "Path for working directory")
+             (@arg verbose: short("v") long("verbose") "Provide more detailed info")
+             (@subcommand build =>
+                 (about: "Build a patch")
+diff --git a/cli/src/args/mod.rs b/cli/src/args/mod.rs
+index 19ea65b..e0a2467 100644
+--- a/cli/src/args/mod.rs
++++ b/cli/src/args/mod.rs
+@@ -17,7 +17,7 @@ use syscare_common::util::fs;
+ #[derive(Debug)]
+ pub struct Arguments {
+     pub command: SubCommand,
+-    pub socket_file: PathBuf,
++    pub work_dir: PathBuf,
+     pub verbose: bool,
+ }
+ 
+@@ -30,7 +30,7 @@ impl Arguments {
+     }
+ 
+     fn normalize_pathes(mut self) -> Result<Self> {
+-        self.socket_file = fs::normalize(self.socket_file)?;
++        self.work_dir = fs::normalize(self.work_dir)?;
+         Ok(self)
+     }
+ }
+@@ -42,7 +42,7 @@ impl Parser<'_> for Arguments {
+     {
+         Ok(Self {
+             command: SubCommand::parse(matches)?,
+-            socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
++            work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+             verbose: ArgParserImpl::parse_arg(matches, "verbose")?,
+         })
+     }
+diff --git a/cli/src/executor/patch.rs b/cli/src/executor/patch.rs
+index 1c9711e..e61c1da 100644
+--- a/cli/src/executor/patch.rs
++++ b/cli/src/executor/patch.rs
+@@ -1,3 +1,5 @@
++use std::path::PathBuf;
++
+ use anyhow::{anyhow, ensure, Error, Result};
+ use log::info;
+ 
+@@ -7,15 +9,14 @@ use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::RpcProxy};
+ 
+ use super::CommandExecutor;
+ 
+-const PATCH_OP_LOCK_PATH: &str = "/tmp/syscare_patch_op.lock";
+-
+ pub struct PatchCommandExecutor {
+     proxy: RpcProxy,
++    lock_file: PathBuf,
+ }
+ 
+ impl PatchCommandExecutor {
+-    pub fn new(proxy: RpcProxy) -> Self {
+-        Self { proxy }
++    pub fn new(proxy: RpcProxy, lock_file: PathBuf) -> Self {
++        Self { proxy, lock_file }
+     }
+ }
+ 
+@@ -122,7 +123,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 Self::show_patch_list(self.proxy.get_patch_list()?);
+             }
+             SubCommand::Check { identifiers } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut error_list = vec![];
+                 for identifier in identifiers {
+@@ -134,7 +135,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Apply { identifiers, force } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut status_list = vec![];
+                 let mut error_list = vec![];
+@@ -149,7 +150,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Remove { identifiers } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut status_list = vec![];
+                 let mut error_list = vec![];
+@@ -164,7 +165,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Active { identifiers } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut status_list = vec![];
+                 let mut error_list = vec![];
+@@ -179,7 +180,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Deactive { identifiers } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut status_list = vec![];
+                 let mut error_list = vec![];
+@@ -194,7 +195,7 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Accept { identifiers } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 let mut status_list = vec![];
+                 let mut error_list = vec![];
+@@ -209,12 +210,12 @@ impl CommandExecutor for PatchCommandExecutor {
+                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
+             }
+             SubCommand::Save => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 self.proxy.save_patch_status()?;
+             }
+             SubCommand::Restore { accepted } => {
+-                let _flock_guard = ExclusiveFileLockGuard::new(PATCH_OP_LOCK_PATH)?;
++                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+ 
+                 self.proxy.restore_patch_status(*accepted)?;
+             }
+diff --git a/cli/src/main.rs b/cli/src/main.rs
+index ef0878f..d0ac5b9 100644
+--- a/cli/src/main.rs
++++ b/cli/src/main.rs
+@@ -13,6 +13,12 @@ use args::Arguments;
+ use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, CommandExecutor};
+ use logger::Logger;
+ use rpc::{RpcProxy, RpcRemote};
++use syscare_common::os;
++
++const CLI_UMASK: u32 = 0o077;
++
++const SOCKET_FILE_NAME: &str = "syscared.sock";
++const PATCH_OP_LOCK_NAME: &str = "patch_op.lock";
+ 
+ struct SyscareCLI {
+     args: Arguments,
+@@ -20,6 +26,8 @@ struct SyscareCLI {
+ 
+ impl SyscareCLI {
+     fn start_and_run() -> Result<()> {
++        os::umask::set_umask(CLI_UMASK);
++
+         let instance = Self {
+             args: Arguments::new()?,
+         };
+@@ -30,15 +38,18 @@ impl SyscareCLI {
+         debug!("Start with {:#?}", instance.args);
+ 
+         debug!("Initializing remote procedure call client...");
+-        let remote = Rc::new(RpcRemote::new(&instance.args.socket_file));
++        let socket_file = instance.args.work_dir.join(SOCKET_FILE_NAME);
++        let remote = Rc::new(RpcRemote::new(socket_file));
+ 
+         debug!("Initializing remote procedure calls...");
+         let patch_proxy = RpcProxy::new(remote);
+ 
+         debug!("Initializing command executors...");
++        let patch_lock_file = instance.args.work_dir.join(PATCH_OP_LOCK_NAME);
+         let executors = vec![
+             Box::new(BuildCommandExecutor) as Box<dyn CommandExecutor>,
+-            Box::new(PatchCommandExecutor::new(patch_proxy)) as Box<dyn CommandExecutor>,
++            Box::new(PatchCommandExecutor::new(patch_proxy, patch_lock_file))
++                as Box<dyn CommandExecutor>,
+         ];
+ 
+         let command = instance.args.command;
+diff --git a/daemon/src/args/matcher.rs b/daemon/src/args/matcher.rs
+index 2fbca35..d3d2203 100644
+--- a/daemon/src/args/matcher.rs
++++ b/daemon/src/args/matcher.rs
+@@ -1,7 +1,5 @@
+ use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
+ 
+-const DEFAULT_PID_FILE: &str = "/var/run/syscared.pid";
+-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
+ const DEFAULT_DATA_DIR: &str = "/usr/lib/syscare";
+ const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+ const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
+@@ -22,8 +20,6 @@ impl ArgMatcher {
+                 AppSettings::UnifiedHelpMessage,
+             ])
+             (@arg daemon: short("d") long("daemon") "Run as a daemon")
+-            (@arg pid_file: long("pid-file") +takes_value value_name("PID_FILE") default_value(DEFAULT_PID_FILE) "Path for daemon pid file")
+-            (@arg socket_file: long("socket-file") +takes_value value_name("SOCKET_FILE") default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
+             (@arg data_dir: long("data-dir") +takes_value value_name("DATA_DIR") default_value(DEFAULT_DATA_DIR) "Daemon data directory")
+             (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Daemon working directory")
+             (@arg log_dir: long("log-dir") +takes_value value_name("LOG_DIR") default_value(DEFAULT_LOG_DIR) "Daemon logging directory")
+diff --git a/daemon/src/args/mod.rs b/daemon/src/args/mod.rs
+index cdac224..5273609 100644
+--- a/daemon/src/args/mod.rs
++++ b/daemon/src/args/mod.rs
+@@ -17,12 +17,6 @@ pub struct Arguments {
+     /// Run as a daemon
+     pub daemon: bool,
+ 
+-    /// Path for daemon pid file
+-    pub pid_file: PathBuf,
+-
+-    /// Path for daemon unix socket
+-    pub socket_file: PathBuf,
+-
+     /// Daemon working directory
+     pub work_dir: PathBuf,
+ 
+@@ -43,8 +37,6 @@ impl Parser<'_> for Arguments {
+     {
+         Ok(Self {
+             daemon: ArgParserImpl::is_present(matches, "daemon"),
+-            pid_file: ArgParserImpl::parse_arg(matches, "pid_file")?,
+-            socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
+             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+             data_dir: ArgParserImpl::parse_arg(matches, "data_dir")?,
+             log_dir: ArgParserImpl::parse_arg(matches, "log_dir")?,
+@@ -62,8 +54,6 @@ impl Arguments {
+     }
+ 
+     fn normalize_pathes(mut self) -> Result<Self> {
+-        self.pid_file = fs::normalize(&self.pid_file)?;
+-        self.socket_file = fs::normalize(&self.socket_file)?;
+         self.work_dir = fs::normalize(self.work_dir)?;
+         self.data_dir = fs::normalize(&self.data_dir)?;
+         self.log_dir = fs::normalize(&self.log_dir)?;
+diff --git a/daemon/src/main.rs b/daemon/src/main.rs
+index 094c6fc..e926859 100644
+--- a/daemon/src/main.rs
++++ b/daemon/src/main.rs
+@@ -1,5 +1,6 @@
+ use std::{
+-    fs,
++    fs::{self, Permissions},
++    os::unix::fs::PermissionsExt,
+     path::Path,
+     process,
+     sync::{
+@@ -36,8 +37,12 @@ use rpc::{
+ use crate::patch::{PatchManager, PatchMonitor};
+ 
+ const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+-const DAEMON_UMASK: u32 = 0o027;
+-const DAEMON_SLEEP_TIME: u64 = 100;
++const DAEMON_UMASK: u32 = 0o077;
++const DAEMON_PARK_TIME: u64 = 100;
++
++const WORK_DIR_PERMISSION: u32 = 0o755;
++const PID_FILE_NAME: &str = "syscared.pid";
++const SOCKET_FILE_NAME: &str = "syscared.sock";
+ 
+ struct Daemon {
+     args: Arguments,
+@@ -75,6 +80,11 @@ impl Daemon {
+ 
+     fn prepare_environment(&self) -> Result<()> {
+         self.prepare_directory(&self.args.work_dir)?;
++        fs::set_permissions(
++            &self.args.work_dir,
++            Permissions::from_mode(WORK_DIR_PERMISSION),
++        )?;
++
+         self.prepare_directory(&self.args.data_dir)?;
+         self.prepare_directory(&self.args.log_dir)?;
+ 
+@@ -97,10 +107,11 @@ impl Daemon {
+             return Ok(());
+         }
+ 
++        let pid_file = self.args.work_dir.join(PID_FILE_NAME);
+         Daemonize::new()
+-            .pid_file(&self.args.pid_file)
+-            .working_directory(&self.args.work_dir)
+             .umask(DAEMON_UMASK)
++            .working_directory(&self.args.work_dir)
++            .pid_file(pid_file)
+             .start()
+             .context("Daemonize failed")
+     }
+@@ -124,15 +135,14 @@ impl Daemon {
+     }
+ 
+     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
+-        let socket_path = &self
+-            .args
+-            .socket_file
+-            .to_str()
+-            .context("Failed to convert socket path to string")?;
+-
++        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
+         let server = ServerBuilder::new(io_handler)
+             .set_client_buffer_size(1)
+-            .start(socket_path)?;
++            .start(
++                socket_file
++                    .to_str()
++                    .context("Failed to convert socket path to string")?,
++            )?;
+ 
+         Ok(server)
+     }
+@@ -177,7 +187,7 @@ impl Daemon {
+ 
+         info!("Daemon is running...");
+         while !instance.term_flag.load(Ordering::Relaxed) {
+-            std::thread::sleep(Duration::from_millis(DAEMON_SLEEP_TIME));
++            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIME));
+         }
+ 
+         info!("Shutting down...");
+diff --git a/daemon/src/patch/manager/entity/mod.rs b/daemon/src/patch/manager/entity/mod.rs
+index 2f17abe..f9c4130 100644
+--- a/daemon/src/patch/manager/entity/mod.rs
++++ b/daemon/src/patch/manager/entity/mod.rs
+@@ -110,7 +110,7 @@ impl std::cmp::Eq for Patch {}
+ 
+ impl std::cmp::PartialOrd for Patch {
+     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+-        self.entity_name.partial_cmp(&other.entity_name)
++        Some(self.entity_name.cmp(&other.entity_name))
+     }
+ }
+ impl std::cmp::Ord for Patch {
+diff --git a/upatch/upatch-build/src/upatch/args/matcher.rs b/upatch/upatch-build/src/upatch/args/matcher.rs
+index 11bdbf0..6e82837 100644
+--- a/upatch/upatch-build/src/upatch/args/matcher.rs
++++ b/upatch/upatch-build/src/upatch/args/matcher.rs
+@@ -1,6 +1,7 @@
+ use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
+ 
+-const DEFAULT_WORK_DIR: &str = "~/.upatch";
++const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
++const DEFAULT_BUILD_ROOT: &str = "~/.upatch";
+ const DEFAULT_BUILD_PATCH_CMD: &str = "";
+ const DEFAULT_COMPILERS: &str = "gcc";
+ const DEFAULT_OUTPUT_DIR: &str = "~/.upatch";
+@@ -21,7 +22,8 @@ impl ArgMatcher {
+                 AppSettings::UnifiedHelpMessage,
+             ])
+             (@arg name: short("n") long("name") +takes_value value_name("NAME") "Specify output name")
+-            (@arg work_dir: short("w") long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify working directory")
++            (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify working directory")
++            (@arg build_root: long("build-root") +takes_value value_name("BUILD_ROOT") default_value(DEFAULT_BUILD_ROOT) "Specify build temporary directory")
+             (@arg source_dir: short("s") long("source-dir") +required +takes_value value_name("SOURCE_DIR") "Specify source directory")
+             (@arg build_source_cmd: short("b") long("build-source-cmd") +required +takes_value value_name("BUILD_SOURCE_CMD") "Specify build source command")
+             (@arg build_patch_cmd: long("build-patch-cmd") +takes_value value_name("BUILD_PATCH_CMD") default_value(DEFAULT_BUILD_PATCH_CMD) +hide_default_value "Specify build patched source command [default: <BUILD_SOURCE_CMD>]")
+diff --git a/upatch/upatch-build/src/upatch/args/mod.rs b/upatch/upatch-build/src/upatch/args/mod.rs
+index c08f071..53c4c2a 100644
+--- a/upatch/upatch-build/src/upatch/args/mod.rs
++++ b/upatch/upatch-build/src/upatch/args/mod.rs
+@@ -21,6 +21,9 @@ pub struct Arguments {
+     /// Specify work directory
+     pub work_dir: PathBuf,
+ 
++    /// Specify build temporary directory
++    pub build_root: PathBuf,
++
+     /// Specify source directory
+     pub source_dir: PathBuf,
+ 
+@@ -66,6 +69,7 @@ impl Parser<'_> for Arguments {
+                 true => ArgParserImpl::parse_arg(matches, "name")?,
+             },
+             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
++            build_root: ArgParserImpl::parse_arg(matches, "build_root")?,
+             source_dir: ArgParserImpl::parse_arg(matches, "source_dir")?,
+             build_source_cmd: ArgParserImpl::parse_arg(matches, "build_source_cmd")?,
+             build_patch_cmd: ArgParserImpl::parse_arg(matches, "build_patch_cmd")?,
+@@ -95,13 +99,21 @@ impl Arguments {
+     }
+ 
+     fn check(mut self) -> anyhow::Result<Self> {
+-        if !self.work_dir.is_dir() {
++        if !self.build_root.is_dir() {
+             bail!(
+-                "Working directory \"{}\" should be a directory",
++                "Work directory \"{}\" should be a directory",
+                 self.work_dir.display()
+             );
+         }
+-        self.work_dir = real_arg(self.work_dir)?.join("upatch");
++        self.build_root = real_arg(&self.build_root)?;
++
++        if !self.build_root.is_dir() {
++            bail!(
++                "Build root directory \"{}\" should be a directory",
++                self.build_root.display()
++            );
++        }
++        self.build_root = real_arg(&self.build_root)?.join("upatch");
+ 
+         if !self.source_dir.is_dir() {
+             bail!(
+diff --git a/upatch/upatch-build/src/upatch/build.rs b/upatch/upatch-build/src/upatch/build.rs
+index 044e719..ac4bedb 100644
+--- a/upatch/upatch-build/src/upatch/build.rs
++++ b/upatch/upatch-build/src/upatch/build.rs
+@@ -11,17 +11,19 @@ use crate::tool::*;
+ use super::note;
+ use super::resolve;
+ use super::Arguments;
++use super::BuildRoot;
+ use super::Error;
+ use super::LinkMessages;
+ use super::Project;
+ use super::Result;
+ use super::Tool;
+-use super::WorkDir;
+ use super::{Compiler, CompilerHackGuard};
+ 
++const UPATCHD_SOCKET_NAME: &str = "upatchd.sock";
++
+ pub struct UpatchBuild {
+     args: Arguments,
+-    work_dir: WorkDir,
++    build_root: BuildRoot,
+     compiler: Compiler,
+     tool: Tool,
+     dwarf: Dwarf,
+@@ -35,7 +37,7 @@ impl UpatchBuild {
+     fn new() -> Result<Self> {
+         Ok(Self {
+             args: Arguments::new()?,
+-            work_dir: WorkDir::new(),
++            build_root: BuildRoot::new(),
+             compiler: Compiler::new(),
+             tool: Tool::new(),
+             dwarf: Dwarf::new(),
+@@ -54,7 +56,7 @@ impl UpatchBuild {
+     }
+ 
+     fn build_main(mut self) -> Result<()> {
+-        self.work_dir.create_dir(&self.args.work_dir)?;
++        self.build_root.create_dir(&self.args.build_root)?;
+         self.init_logger()?;
+ 
+         // find upatch-diff
+@@ -70,18 +72,19 @@ impl UpatchBuild {
+         self.compiler.analyze(&self.args.compiler)?;
+         if !self.args.skip_compiler_check {
+             self.compiler
+-                .check_version(self.work_dir.cache_dir(), &self.args.debuginfo)?;
++                .check_version(self.build_root.cache_dir(), &self.args.debuginfo)?;
+         }
+ 
+         // hack compiler
+-        info!("Hacking compiler");
+-        let compiler_hacker = CompilerHackGuard::new(self.compiler.clone())?;
++        info!("Hacking compilers");
++        let socket_file = self.args.work_dir.join(UPATCHD_SOCKET_NAME);
++        let compiler_hacker = CompilerHackGuard::new(&self.compiler, socket_file)?;
+         let project_name = self.args.source_dir.file_name().unwrap();
+ 
+         // build source
+         info!("Building original {:?}", project_name);
+         project.build(
+-            self.work_dir.source_dir(),
++            self.build_root.source_dir(),
+             self.args.build_source_cmd.clone(),
+         )?;
+ 
+@@ -92,12 +95,13 @@ impl UpatchBuild {
+ 
+         // collect source link message and object message
+         self.source_link_messages =
+-            LinkMessages::from(&self.args.elf_path, self.work_dir.source_dir())?;
+-        self.source_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.source_dir())?;
++            LinkMessages::from(&self.args.elf_path, self.build_root.source_dir())?;
++        self.source_obj =
++            self.correlate_obj(&self.args.source_dir, self.build_root.source_dir())?;
+         if self.source_obj.is_empty() {
+             return Err(Error::Build(format!(
+                 "no valid object in {:?}",
+-                self.work_dir.source_dir()
++                self.build_root.source_dir()
+             )));
+         }
+ 
+@@ -106,21 +110,24 @@ impl UpatchBuild {
+ 
+         // build patched
+         info!("Building patched {:?}", project_name);
+-        project.build(self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
++        project.build(
++            self.build_root.patch_dir(),
++            self.args.build_patch_cmd.clone(),
++        )?;
+ 
+         // collect patched link message and object message
+         self.patch_link_messages =
+-            LinkMessages::from(&self.args.elf_path, self.work_dir.patch_dir())?;
+-        self.patch_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.patch_dir())?;
++            LinkMessages::from(&self.args.elf_path, self.build_root.patch_dir())?;
++        self.patch_obj = self.correlate_obj(&self.args.source_dir, self.build_root.patch_dir())?;
+         if self.patch_obj.is_empty() {
+             return Err(Error::Build(format!(
+                 "no valid object in {:?}",
+-                self.work_dir.patch_dir()
++                self.build_root.patch_dir()
+             )));
+         }
+ 
+         // unhack compiler
+-        info!("Unhacking compiler");
++        info!("Unhacking compilers");
+         drop(compiler_hacker);
+ 
+         // detecting changed objects
+@@ -153,7 +160,7 @@ impl UpatchBuild {
+         };
+ 
+         logger.set_print_level(log_level);
+-        logger.set_log_file(LevelFilter::Trace, self.work_dir.log_file())?;
++        logger.set_log_file(LevelFilter::Trace, self.build_root.log_file())?;
+         Logger::init_logger(logger);
+ 
+         Ok(())
+@@ -228,7 +235,7 @@ impl UpatchBuild {
+                     patch_path,
+                     &output,
+                     &debug_info,
+-                    self.work_dir.log_file(),
++                    self.build_root.log_file(),
+                     self.args.verbose,
+                 )?,
+                 None => {
+@@ -312,11 +319,15 @@ impl UpatchBuild {
+             };
+ 
+             let binary_name = file_name(&self.args.elf_path[i])?;
+-            let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
++            let diff_dir = self
++                .build_root
++                .output_dir()
++                .to_path_buf()
++                .join(&binary_name);
+             fs::create_dir(&diff_dir)?;
+ 
+             let new_debug_info = self
+-                .work_dir
++                .build_root
+                 .debuginfo_dir()
+                 .join(file_name(&self.args.debuginfo[i])?);
+             debug!(
+diff --git a/upatch/upatch-build/src/upatch/workdir.rs b/upatch/upatch-build/src/upatch/build_root.rs
+similarity index 89%
+rename from upatch/upatch-build/src/upatch/workdir.rs
+rename to upatch/upatch-build/src/upatch/build_root.rs
+index 7d4a8fa..c6edcc5 100644
+--- a/upatch/upatch-build/src/upatch/workdir.rs
++++ b/upatch/upatch-build/src/upatch/build_root.rs
+@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
+ use super::Result;
+ use crate::tool::*;
+ 
+-pub struct WorkDir {
++pub struct BuildRoot {
+     cache_dir: PathBuf,
+     source_dir: PathBuf,
+     patch_dir: PathBuf,
+@@ -13,7 +13,7 @@ pub struct WorkDir {
+     log_file: PathBuf,
+ }
+ 
+-impl WorkDir {
++impl BuildRoot {
+     pub fn new() -> Self {
+         Self {
+             cache_dir: PathBuf::new(),
+@@ -25,8 +25,8 @@ impl WorkDir {
+         }
+     }
+ 
+-    pub fn create_dir<P: AsRef<Path>>(&mut self, work_dir: P) -> Result<()> {
+-        self.cache_dir = work_dir.as_ref().to_path_buf();
++    pub fn create_dir<P: AsRef<Path>>(&mut self, build_root: P) -> Result<()> {
++        self.cache_dir = build_root.as_ref().to_path_buf();
+         self.source_dir = self.cache_dir.join("source");
+         self.patch_dir = self.cache_dir.join("patch");
+         self.debuginfo_dir = self.cache_dir.join("debug_info");
+@@ -71,7 +71,7 @@ impl WorkDir {
+     }
+ }
+ 
+-impl Default for WorkDir {
++impl Default for BuildRoot {
+     fn default() -> Self {
+         Self::new()
+     }
+diff --git a/upatch/upatch-build/src/upatch/compiler.rs b/upatch/upatch-build/src/upatch/compiler.rs
+index 5baaa65..2f9df9f 100644
+--- a/upatch/upatch-build/src/upatch/compiler.rs
++++ b/upatch/upatch-build/src/upatch/compiler.rs
+@@ -1,4 +1,3 @@
+-use std::cmp;
+ use std::collections::HashSet;
+ use std::ffi::{OsStr, OsString};
+ use std::fs::File;
+@@ -16,24 +15,19 @@ use crate::rpc::*;
+ use super::Error;
+ use super::Result;
+ 
+-const UPATCHD_SOCKET: &str = "/var/run/upatchd.sock";
+-
+ #[derive(Clone)]
+ pub struct Compiler {
+     compiler: Vec<PathBuf>,
+     assembler: Vec<PathBuf>,
+     linker: Vec<PathBuf>,
+-    upatch_proxy: UpatchProxy,
+ }
+ 
+ impl Compiler {
+     pub fn new() -> Self {
+-        let remote = RpcRemote::new(UPATCHD_SOCKET);
+         Self {
+             compiler: Vec::new(),
+             assembler: Vec::new(),
+             linker: Vec::new(),
+-            upatch_proxy: UpatchProxy::new(Rc::new(remote)),
+         }
+     }
+ 
+@@ -94,14 +88,6 @@ impl Compiler {
+         Ok(())
+     }
+ 
+-    pub fn hack(&self) -> Result<()> {
+-        self.hijacker_register(self.compiler.len() + self.assembler.len())
+-    }
+-
+-    pub fn unhack(&self) -> Result<()> {
+-        self.hijacker_unregister(self.compiler.len() + self.assembler.len())
+-    }
+-
+     pub fn check_version<P, I, Q>(&self, cache_dir: P, debug_infoes: I) -> Result<()>
+     where
+         P: AsRef<Path>,
+@@ -188,89 +174,76 @@ impl Compiler {
+     }
+ }
+ 
+-impl Compiler {
+-    fn hijacker_register(&self, num: usize) -> Result<()> {
+-        for i in 0..cmp::min(num, self.compiler.len()) {
+-            trace!("hack {}", self.compiler[i].display());
+-            if let Err(e) = self.upatch_proxy.enable_hijack(self.compiler[i].clone()) {
+-                trace!("hack {:?} error {}, try to rollback", self.compiler[i], e);
+-                self.hijacker_unregister(i)?;
+-                return Err(Error::Mod(format!(
+-                    "hack {} error {}",
+-                    self.compiler[i].display(),
+-                    e
+-                )));
++pub struct CompilerHackGuard<'a> {
++    inner: &'a Compiler,
++    upatch_proxy: UpatchProxy,
++}
++
++impl<'a> CompilerHackGuard<'a> {
++    pub fn new<P: AsRef<Path>>(compiler: &'a Compiler, socket_file: P) -> Result<Self> {
++        let remote = RpcRemote::new(socket_file);
++        let instance = Self {
++            inner: compiler,
++            upatch_proxy: UpatchProxy::new(Rc::new(remote)),
++        };
++        instance.hack()?;
++
++        Ok(instance)
++    }
++}
++
++impl CompilerHackGuard<'_> {
++    pub fn hack(&self) -> Result<()> {
++        let mut hack_list = Vec::new();
++        hack_list.extend(&self.inner.compiler);
++        hack_list.extend(&self.inner.assembler);
++
++        let mut finished_list = Vec::new();
++        let mut need_rollback = false;
++
++        for exec_path in hack_list {
++            trace!("Hacking \"{}\"...", exec_path.display());
++            if let Err(e) = self.upatch_proxy.enable_hijack(exec_path.to_owned()) {
++                error!("Failed to hack \"{}\", {}", exec_path.display(), e);
++                need_rollback = true;
++                break;
+             }
++            finished_list.push(exec_path);
+         }
+-        for i in self.compiler.len()..num {
+-            let i = i - self.compiler.len();
+-            trace!("hack {}", self.assembler[i].display());
+-            if let Err(e) = self.upatch_proxy.enable_hijack(self.assembler[i].clone()) {
+-                trace!(
+-                    "hack {} error {}, try to rollback",
+-                    self.assembler[i].display(),
+-                    e
+-                );
+-                self.hijacker_unregister(i)?;
+-                return Err(Error::Mod(format!(
+-                    "hack {} error {}",
+-                    self.assembler[i].display(),
+-                    e
+-                )));
++
++        if need_rollback {
++            trace!("Rolling back...");
++            for exec_path in finished_list {
++                trace!("Unhacking \"{}\"...", exec_path.display());
++                self.upatch_proxy.disable_hijack(exec_path.to_owned()).ok();
+             }
++            return Err(Error::Mod(String::from("Failed to hack compilers")));
+         }
++
+         Ok(())
+     }
+ 
+-    fn hijacker_unregister(&self, num: usize) -> Result<()> {
+-        for i in (self.compiler.len()..num).rev() {
+-            let i = i - self.compiler.len();
+-            trace!("unhack {}", self.assembler[i].display());
+-            if let Err(e) = self.upatch_proxy.disable_hijack(self.assembler[i].clone()) {
+-                trace!("unhack {} error {}", self.assembler[i].display(), e);
+-                return Err(Error::Mod(format!(
+-                    "unhack {} error {}",
+-                    self.assembler[i].display(),
+-                    e
+-                )));
+-            }
+-        }
+-
+-        for i in (0..cmp::min(num, self.compiler.len())).rev() {
+-            trace!("unhack {}", self.compiler[i].display());
+-            if let Err(e) = self.upatch_proxy.disable_hijack(self.compiler[i].clone()) {
+-                trace!("unhack {} error {}", self.compiler[i].display(), e);
+-                return Err(Error::Mod(format!(
+-                    "unhack {} error {}",
+-                    self.compiler[i].display(),
+-                    e
+-                )));
++    pub fn unhack(&self) -> Result<()> {
++        let mut hack_list = Vec::new();
++        hack_list.extend(&self.inner.compiler);
++        hack_list.extend(&self.inner.assembler);
++        hack_list.reverse();
++
++        for exec_path in hack_list {
++            trace!("Unhacking \"{}\"...", exec_path.display());
++            if let Err(e) = self.upatch_proxy.disable_hijack(exec_path.to_owned()) {
++                error!("Failed to unhack \"{}\", {}", exec_path.display(), e);
++                return Err(Error::Mod(String::from("Failed to unhack compilers")));
+             }
+         }
+         Ok(())
+     }
+ }
+ 
+-pub struct CompilerHackGuard {
+-    compiler: Compiler,
+-}
+-
+-impl CompilerHackGuard {
+-    pub fn new(compiler: Compiler) -> Result<Self> {
+-        compiler.hack()?;
+-        Ok(CompilerHackGuard { compiler })
+-    }
+-}
+-impl Drop for CompilerHackGuard {
++impl Drop for CompilerHackGuard<'_> {
+     fn drop(&mut self) {
+-        if let Err(e) = self.compiler.unhack() {
++        if let Err(e) = self.unhack() {
+             trace!("{}", e);
+         }
+     }
+ }
+-
+-impl Default for Compiler {
+-    fn default() -> Self {
+-        Self::new()
+-    }
+-}
+diff --git a/upatch/upatch-build/src/upatch/mod.rs b/upatch/upatch-build/src/upatch/mod.rs
+index a359aa2..88c5f1c 100644
+--- a/upatch/upatch-build/src/upatch/mod.rs
++++ b/upatch/upatch-build/src/upatch/mod.rs
+@@ -1,5 +1,6 @@
+ mod args;
+ mod build;
++mod build_root;
+ mod compiler;
+ mod error;
+ mod link_message;
+@@ -7,10 +8,10 @@ mod note;
+ mod project;
+ mod resolve;
+ mod tools;
+-mod workdir;
+ 
+ pub use args::*;
+ pub use build::*;
++pub use build_root::*;
+ pub use compiler::*;
+ pub use error::*;
+ pub use link_message::*;
+@@ -18,4 +19,3 @@ pub use note::*;
+ pub use project::*;
+ pub use resolve::*;
+ pub use tools::*;
+-pub use workdir::*;
+diff --git a/upatch/upatch-daemon/src/args/matcher.rs b/upatch/upatch-daemon/src/args/matcher.rs
+index 0badaf6..e938e6e 100644
+--- a/upatch/upatch-daemon/src/args/matcher.rs
++++ b/upatch/upatch-daemon/src/args/matcher.rs
+@@ -1,7 +1,5 @@
+ use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
+ 
+-const DEFAULT_PID_FILE: &str = "/var/run/upatchd.pid";
+-const DEFAULT_SOCKET_FILE: &str = "/var/run/upatchd.sock";
+ const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+ const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
+ const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
+@@ -22,9 +20,7 @@ impl ArgMatcher {
+                 AppSettings::UnifiedHelpMessage,
+             ])
+             (@arg daemon: short("d") long("daemon") "Run as a daemon")
+-            (@arg pid_file: long("pid-file") +takes_value value_name("PID_FILE") default_value(DEFAULT_PID_FILE) "Path for daemon pid file")
+-            (@arg socket_file: long("socket-file") +takes_value value_name("SOCKET_FILE") default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
+-            (@arg config_file: long("config-dir") +takes_value value_name("CONFIG_DIR") default_value(DEFAULT_CONFIG_DIR) "Daemon config directory")
++            (@arg config_dir: long("config-dir") +takes_value value_name("CONFIG_DIR") default_value(DEFAULT_CONFIG_DIR) "Daemon config directory")
+             (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Daemon working directory")
+             (@arg log_dir: long("log-dir") +takes_value value_name("LOG_DIR") default_value(DEFAULT_LOG_DIR) "Daemon logging directory")
+             (@arg log_level: short("l") long("log-level") +takes_value value_name("LOG_LEVEL") default_value(DEFAULT_LOG_LEVEL) "Set the logging level (\"trace\"|\"debug\"|\"info\"|\"warn\"|\"error\")")
+diff --git a/upatch/upatch-daemon/src/args/mod.rs b/upatch/upatch-daemon/src/args/mod.rs
+index 318470e..bd6cb3c 100644
+--- a/upatch/upatch-daemon/src/args/mod.rs
++++ b/upatch/upatch-daemon/src/args/mod.rs
+@@ -17,12 +17,6 @@ pub struct Arguments {
+     /// Run as a daemon
+     pub daemon: bool,
+ 
+-    /// Path for daemon pid file
+-    pub pid_file: PathBuf,
+-
+-    /// Path for daemon unix socket
+-    pub socket_file: PathBuf,
+-
+     /// Daemon config directory
+     pub config_dir: PathBuf,
+ 
+@@ -43,8 +37,6 @@ impl Parser<'_> for Arguments {
+     {
+         Ok(Self {
+             daemon: ArgParserImpl::is_present(matches, "daemon"),
+-            pid_file: ArgParserImpl::parse_arg(matches, "pid_file")?,
+-            socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
+             config_dir: ArgParserImpl::parse_arg(matches, "config_dir")?,
+             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+             log_dir: ArgParserImpl::parse_arg(matches, "log_dir")?,
+@@ -62,8 +54,6 @@ impl Arguments {
+     }
+ 
+     fn normalize_pathes(mut self) -> Result<Self> {
+-        self.pid_file = fs::normalize(&self.pid_file)?;
+-        self.socket_file = fs::normalize(&self.socket_file)?;
+         self.config_dir = fs::normalize(&self.config_dir)?;
+         self.work_dir = fs::normalize(self.work_dir)?;
+         self.log_dir = fs::normalize(&self.log_dir)?;
+diff --git a/upatch/upatch-daemon/src/main.rs b/upatch/upatch-daemon/src/main.rs
+index 80c292f..a112c99 100644
+--- a/upatch/upatch-daemon/src/main.rs
++++ b/upatch/upatch-daemon/src/main.rs
+@@ -1,5 +1,5 @@
+ use std::{
+-    fs,
++    fs::{self, Permissions},
+     os::unix::fs::PermissionsExt,
+     path::Path,
+     process,
+@@ -31,8 +31,14 @@ use rpc::{Skeleton, SkeletonImpl};
+ const CONFIG_FILE_NAME: &str = "upatchd.yaml";
+ 
+ const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+-const DAEMON_UMASK: u32 = 0o027;
+-const DAEMON_PARK_TIMEOUT: u64 = 100;
++const DAEMON_UMASK: u32 = 0o077;
++const DAEMON_PARK_TIME: u64 = 100;
++
++const PID_FILE_NAME: &str = "upatchd.pid";
++const SOCKET_FILE_NAME: &str = "upatchd.sock";
++
++const WORK_DIR_PERMISSION: u32 = 0o755;
++const SOCKET_FILE_PERMISSION: u32 = 0o666;
+ 
+ struct Daemon {
+     args: Arguments,
+@@ -72,7 +78,13 @@ impl Daemon {
+         self.prepare_directory(&self.args.config_dir)?;
+ 
+         self.prepare_directory(&self.args.work_dir)?;
++        fs::set_permissions(
++            &self.args.work_dir,
++            Permissions::from_mode(WORK_DIR_PERMISSION),
++        )?;
++
+         self.prepare_directory(&self.args.log_dir)?;
++
+         Ok(())
+     }
+ 
+@@ -81,10 +93,11 @@ impl Daemon {
+             return Ok(());
+         }
+ 
++        let pid_file = self.args.work_dir.join(PID_FILE_NAME);
+         Daemonize::new()
+-            .pid_file(&self.args.pid_file)
+-            .working_directory(&self.args.work_dir)
+             .umask(DAEMON_UMASK)
++            .working_directory(&self.args.work_dir)
++            .pid_file(pid_file)
+             .start()
+             .context("Daemonize failed")
+     }
+@@ -119,9 +132,7 @@ impl Daemon {
+     }
+ 
+     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
+-        const SOCKET_FILE_PERMISSION: u32 = 0o666;
+-
+-        let socket_file = self.args.socket_file.as_path();
++        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
+         let builder = ServerBuilder::new(io_handler).set_client_buffer_size(1);
+         let server = builder.start(
+             socket_file
+@@ -129,10 +140,7 @@ impl Daemon {
+                 .context("Failed to convert socket path to string")?,
+         )?;
+ 
+-        let mut perm = socket_file.metadata()?.permissions();
+-        perm.set_mode(SOCKET_FILE_PERMISSION);
+-
+-        fs::set_permissions(socket_file, perm)?;
++        fs::set_permissions(socket_file, Permissions::from_mode(SOCKET_FILE_PERMISSION))?;
+ 
+         Ok(server)
+     }
+@@ -142,7 +150,7 @@ impl Daemon {
+         instance.initialize_logger()?;
+ 
+         info!("============================");
+-        info!("Syscare Builder Daemon - v{}", DAEMON_VERSION);
++        info!("Upatch Daemon - v{}", DAEMON_VERSION);
+         info!("============================");
+         info!("Preparing environment...");
+         instance.prepare_environment()?;
+@@ -167,7 +175,7 @@ impl Daemon {
+ 
+         info!("Daemon is running...");
+         while !instance.term_flag.load(Ordering::Relaxed) {
+-            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIMEOUT));
++            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIME));
+         }
+ 
+         info!("Shutting down...");
+-- 
+2.33.0
+

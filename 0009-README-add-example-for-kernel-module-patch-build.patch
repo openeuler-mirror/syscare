@@ -1,0 +1,38 @@
+From bbfe75e66815319360af6e3773d78862ee7e65cc Mon Sep 17 00:00:00 2001
+From: ningyu <ningyu9@huawei.com>
+Date: Fri, 22 Dec 2023 06:33:51 +0000
+Subject: [PATCH 09/15] README: add example for kernel module patch build
+
+---
+ README.md | 15 ++++++++++++++-
+ 1 file changed, 14 insertions(+), 1 deletion(-)
+
+diff --git a/README.md b/README.md
+index 6c3728b..e86d063 100644
+--- a/README.md
++++ b/README.md
+@@ -63,7 +63,20 @@ $ syscare build \
+    --source ./redis-6.2.5-1.src.rpm \
+    --debuginfo ./redis-debuginfo-6.2.5-1.x86_64.rpm \
+    --output ./output \
+-   ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
++   --patch ./0001-Prevent-unauthenticated-client-from-easily-consuming.patch
++```
++
++### 内核模块热补丁制作
++```
++$ syscare build \
++   --patch-name HP001 \
++   --source ./kernel-5.10.0-60.91.0.115.src.rpm \
++   --source ./testmod-1-1.src.rpm \
++   --debuginfo ./kernel-debuginfo-5.10.0-60.91.0.115.aarch64.rpm \
++   --output ./output \
++   --verbose \
++   --skip-cleanup \
++   --patch ./0001-test.patch
+ ```
+ 
+ 补丁制作详细使用说明请见[build/README.md](https://gitee.com/openeuler/syscare/blob/master/build/README.md)
+-- 
+2.33.0
+

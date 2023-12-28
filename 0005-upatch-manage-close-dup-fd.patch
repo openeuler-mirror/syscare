@@ -1,0 +1,32 @@
+From 532e5680087cc1a69f88692c31e523e2eab70145 Mon Sep 17 00:00:00 2001
+From: ningyu <405888464@qq.com>
+Date: Wed, 20 Dec 2023 15:34:13 +0800
+Subject: [PATCH 05/15] upatch-manage: close dup fd
+
+---
+ upatch/upatch-manage/upatch-process.c | 2 ++
+ 1 file changed, 2 insertions(+)
+
+diff --git a/upatch/upatch-manage/upatch-process.c b/upatch/upatch-manage/upatch-process.c
+index aeb5705..2216db2 100644
+--- a/upatch/upatch-manage/upatch-process.c
++++ b/upatch/upatch-manage/upatch-process.c
+@@ -518,6 +518,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ 
+ 	} while (1);
+ 	fclose(f);
++	close(fd);
+ 
+ 	log_debug("Found %d object file(s)\n", proc->num_objs);
+ 
+@@ -531,6 +532,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ 
+ error:
+ 	fclose(f);
++	close(fd);
+ 	return -1;
+ }
+ 
+-- 
+2.33.0
+

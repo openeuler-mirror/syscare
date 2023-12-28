@@ -1,0 +1,2203 @@
+From 205d718e13214f49c08c60d291e051dd67f1708a Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Tue, 19 Dec 2023 18:01:48 +0800
+Subject: [PATCH 02/15] upatch: fix upatch manage detach failure issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-manage/arch/aarch64/insn.c      |   4 +-
+ upatch/upatch-manage/arch/aarch64/resolve.c   |  16 +-
+ upatch/upatch-manage/arch/x86_64/resolve.c    |  14 +-
+ .../upatch-manage/ebpf/upatch-manager.bpf.c   |   2 +-
+ upatch/upatch-manage/ebpf/upatch-manager.c    |   2 +-
+ upatch/upatch-manage/upatch-elf.c             | 312 +++++++++---------
+ upatch/upatch-manage/upatch-elf.h             |   2 +
+ upatch/upatch-manage/upatch-manage.c          |  99 +++---
+ upatch/upatch-manage/upatch-patch.c           | 198 +++++------
+ upatch/upatch-manage/upatch-process.c         | 300 +++++++++--------
+ upatch/upatch-manage/upatch-process.h         |   6 +-
+ upatch/upatch-manage/upatch-ptrace.c          | 114 ++++---
+ upatch/upatch-manage/upatch-relocation.c      |   3 +-
+ upatch/upatch-manage/upatch-resolve.c         |  31 +-
+ 14 files changed, 545 insertions(+), 558 deletions(-)
+
+diff --git a/upatch/upatch-manage/arch/aarch64/insn.c b/upatch/upatch-manage/arch/aarch64/insn.c
+index 02faa3e..0a0004f 100644
+--- a/upatch/upatch-manage/arch/aarch64/insn.c
++++ b/upatch/upatch-manage/arch/aarch64/insn.c
+@@ -110,7 +110,7 @@ u64 extract_insn_imm(s64 sval, int len, int lsb)
+ 	imm_mask = (BIT(lsb + len) - 1) >> lsb;
+ 	imm = imm & imm_mask;
+ 
+-	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx \n", sval,
++	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n", sval,
+ 		  (len + lsb - 1), lsb, imm);
+ 	return imm;
+ }
+@@ -124,7 +124,7 @@ u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
+ 
+ 	log_debug(
+ 		"upatch: insert imm, P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, "
+-		"new_insn=0x%x \n",
++		"new_insn=0x%x\n",
+ 		(u64)place, insn, imm_type, imm, new_insn);
+ 	return new_insn;
+ }
+diff --git a/upatch/upatch-manage/arch/aarch64/resolve.c b/upatch/upatch-manage/arch/aarch64/resolve.c
+index a3ea30f..2c9c882 100644
+--- a/upatch/upatch-manage/arch/aarch64/resolve.c
++++ b/upatch/upatch-manage/arch/aarch64/resolve.c
+@@ -40,7 +40,7 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
+ 		uelf->core_layout.kbase + uelf->jmp_offs;
+ 	unsigned int index = uelf->jmp_cur_entry;
+ 	if (index >= uelf->jmp_max_entry) {
+-		log_error("jmp table overflow \n");
++		log_error("jmp table overflow\n");
+ 		return 0;
+ 	}
+ 
+@@ -62,7 +62,7 @@ static unsigned long setup_got_table(struct upatch_elf *uelf,
+ 	unsigned int index = uelf->jmp_cur_entry;
+ 
+ 	if (index >= uelf->jmp_max_entry) {
+-		log_error("got table overflow \n");
++		log_error("got table overflow\n");
+ 		return 0;
+ 	}
+ 
+@@ -84,14 +84,14 @@ unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
+ 
+ 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
+ 				    sizeof(jmp_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+ 	if (r_type == R_AARCH64_TLSDESC &&
+ 	    upatch_process_mem_read(obj->proc, addr + sizeof(unsigned long),
+ 				    &tls_addr, sizeof(tls_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+@@ -100,7 +100,7 @@ unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
+ 	else
+ 		elf_addr = setup_jmp_table(uelf, jmp_addr, (unsigned long)addr);
+ 
+-	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx \n", elf_addr,
++	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n", elf_addr,
+ 		  jmp_addr, tls_addr);
+ 
+ out:
+@@ -116,20 +116,20 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
+ 
+ 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
+ 				    sizeof(jmp_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+ 	if (r_type == R_AARCH64_TLSDESC &&
+ 	    upatch_process_mem_read(obj->proc, addr + sizeof(unsigned long),
+ 				    &tls_addr, sizeof(tls_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+ 	elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
+ 
+-	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx \n", elf_addr,
++	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n", elf_addr,
+ 		  jmp_addr, tls_addr);
+ 
+ out:
+diff --git a/upatch/upatch-manage/arch/x86_64/resolve.c b/upatch/upatch-manage/arch/x86_64/resolve.c
+index 9d3e539..e05d670 100644
+--- a/upatch/upatch-manage/arch/x86_64/resolve.c
++++ b/upatch/upatch-manage/arch/x86_64/resolve.c
+@@ -32,7 +32,7 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
+ 		uelf->core_layout.kbase + uelf->jmp_offs;
+ 	unsigned int index = uelf->jmp_cur_entry;
+ 	if (index >= uelf->jmp_max_entry) {
+-		log_error("jmp table overflow \n");
++		log_error("jmp table overflow\n");
+ 		return 0;
+ 	}
+ 
+@@ -57,7 +57,7 @@ static unsigned long setup_got_table(struct upatch_elf *uelf,
+ 		uelf->core_layout.kbase + uelf->jmp_offs;
+ 	unsigned int index = uelf->jmp_cur_entry;
+ 	if (index >= uelf->jmp_max_entry) {
+-		log_error("got table overflow \n");
++		log_error("got table overflow\n");
+ 		return 0;
+ 	}
+ 
+@@ -76,13 +76,13 @@ unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
+ 
+ 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
+ 				    sizeof(jmp_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+ 	elf_addr = setup_jmp_table(uelf, jmp_addr);
+ 
+-	log_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
++	log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
+ 
+ out:
+ 	return elf_addr;
+@@ -97,7 +97,7 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
+ 
+ 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
+ 				    sizeof(jmp_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+@@ -109,13 +109,13 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
+ 	if (r_type == R_X86_64_DTPMOD64 &&
+ 	    upatch_process_mem_read(obj->proc, addr + sizeof(unsigned long),
+ 				    &tls_addr, sizeof(tls_addr))) {
+-		log_error("copy address failed \n");
++		log_error("copy address failed\n");
+ 		goto out;
+ 	}
+ 
+ 	elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
+ 
+-	log_debug("0x%lx: jmp_addr=0x%lx \n", elf_addr, jmp_addr);
++	log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
+ 
+ out:
+ 	return elf_addr;
+diff --git a/upatch/upatch-manage/ebpf/upatch-manager.bpf.c b/upatch/upatch-manage/ebpf/upatch-manager.bpf.c
+index d91a446..eb9282c 100644
+--- a/upatch/upatch-manage/ebpf/upatch-manager.bpf.c
++++ b/upatch/upatch-manage/ebpf/upatch-manager.bpf.c
+@@ -36,6 +36,6 @@ int BPF_KPROBE(install_breakpoint, struct uprobe *uprobe, struct mm_struct *mm,
+ 	ep.ino = BPF_CORE_READ(uprobe, inode, i_ino);
+ 	ep.pid = BPF_CORE_READ(mm, owner, pid);
+ 	bpf_map_update_elem(&elf_process_maps, &ep, &initial_entry, BPF_ANY);
+-	bpf_printk("ino %lu works for pid %d in addr 0x%lx \n", ep.ino, ep.pid, vaddr);
++	bpf_printk("ino %lu works for pid %d in addr 0x%lx\n", ep.ino, ep.pid, vaddr);
+ 	return 0;
+ }
+\ No newline at end of file
+diff --git a/upatch/upatch-manage/ebpf/upatch-manager.c b/upatch/upatch-manage/ebpf/upatch-manager.c
+index f573d72..0215464 100644
+--- a/upatch/upatch-manage/ebpf/upatch-manager.c
++++ b/upatch/upatch-manage/ebpf/upatch-manager.c
+@@ -58,7 +58,7 @@ int main(int argc, char **argv)
+ 			skel->progs.install_breakpoint, false, "install_breakpoint");
+ 	if (!skel->links.install_breakpoint) {
+ 		err = -errno;
+-		fprintf(stderr, "Failed to attach kprobe for install_breakpoint: %d \n", err);
++		fprintf(stderr, "Failed to attach kprobe for install_breakpoint: %d\n", err);
+ 		goto cleanup;
+ 	}
+ 
+diff --git a/upatch/upatch-manage/upatch-elf.c b/upatch/upatch-manage/upatch-elf.c
+index edcafe0..2bd3175 100644
+--- a/upatch/upatch-manage/upatch-elf.c
++++ b/upatch/upatch-manage/upatch-elf.c
+@@ -21,204 +21,190 @@
+ 
+ static int read_from_offset(int fd, void **buf, int len, off_t offset)
+ {
+-	int ret = -1;
+-	size_t size;
++    *buf = malloc(len);
++    if (*buf == NULL) {
++        return -errno;
++    }
+ 
+-	*buf = malloc(len);
+-	if (*buf == NULL) {
+-		printf("malloc failed \n");
+-		goto out;
+-	}
+-
+-	size = pread(fd, *buf, len, offset);
+-	if (size == -1) {
+-		ret = -errno;
+-		printf("read file failed - %d \n", -ret);
+-		goto out;
+-	}
++    int size = pread(fd, *buf, len, offset);
++    if (size == -1) {
++        return -errno;
++    }
+ 
+-	ret = 0;
+-out:
+-	return ret;
++    return 0;
+ }
+ 
+ static int open_elf(struct elf_info *einfo, const char *name)
+ {
+-	int ret = 0, fd = -1, i;
+-	char *sec_name;
+-	struct stat st;
+-
+-	// TODO: check ELF
+-	fd = open(name, O_RDONLY);
+-	if (fd == -1)
+-		ERROR("open %s failed with errno %d \n", name, errno);
+-
+-	ret = stat(name, &st);
+-	if (ret)
+-		ERROR("get %s stat failed with errno %d \n", name, errno);
+-
+-	ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
+-	if (ret)
+-		goto out;
+-
+-	einfo->name = name;
+-	einfo->inode = st.st_ino;
+-	einfo->patch_size = st.st_size;
+-	einfo->hdr = (void *)einfo->patch_buff;
+-	einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
+-	einfo->shstrtab = (void *)einfo->hdr +
+-			  einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
+-
+-	for (i = 0; i < einfo->hdr->e_shnum; ++i) {
+-		sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
+-		if (streql(sec_name, BUILD_ID_NAME) &&
+-		    einfo->shdrs[i].sh_type == SHT_NOTE) {
+-			einfo->num_build_id = i;
+-			break;
+-		}
+-	}
+-
+-	if (einfo->num_build_id == 0) {
+-		ret = -EINVAL;
+-		log_error("no %s found \n", BUILD_ID_NAME);
+-		goto out;
+-	}
++    int ret = 0, fd = -1, i;
++    char *sec_name;
++    struct stat st;
++
++    fd = open(name, O_RDONLY);
++    if (fd == -1) {
++        ret = -errno;
++        log_error("Failed to open file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    ret = stat(name, &st);
++    if (ret != 0) {
++        ret = -errno;
++        log_error("Failed to stat file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
++    if (ret != 0) {
++        log_error("Failed to read file '%s', ret=%d\n", name, ret);
++        goto out;
++    }
++
++    einfo->name = name;
++    einfo->inode = st.st_ino;
++    einfo->patch_size = st.st_size;
++    einfo->hdr = (void *)einfo->patch_buff;
++    einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
++    einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
++
++    for (i = 0; i < einfo->hdr->e_shnum; ++i) {
++        sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
++        if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
++            einfo->num_build_id = i;
++            break;
++        }
++    }
++
++    if (einfo->num_build_id == 0) {
++        ret = -EINVAL;
++        log_error("Cannot find section '%s'\n", BUILD_ID_NAME);
++        goto out;
++    }
++
++    ret = 0;
+ 
+-	log_error("no %ld found \n", einfo->inode);
+-
+-	ret = 0;
+ out:
+-	if (fd != -1)
+-		close(fd);
+-	return ret;
++    if (fd > 0) {
++        close(fd);
++    }
++    return ret;
+ }
+ 
+ int upatch_init(struct upatch_elf *uelf, const char *name)
+ {
+-	int ret = 0, i;
+-	char *sec_name;
+-
+-	memset(uelf, 0, sizeof(struct upatch_elf));
+-
+-	ret = open_elf(&uelf->info, name);
+-	if (ret)
+-		goto out;
+-
+-	for (i = 1; i < uelf->info.hdr->e_shnum; ++i) {
+-		sec_name = uelf->info.shstrtab + uelf->info.shdrs[i].sh_name;
+-		if (uelf->info.shdrs[i].sh_type == SHT_SYMTAB) {
+-			uelf->num_syms =
+-				uelf->info.shdrs[i].sh_size / sizeof(GElf_Sym);
+-			uelf->index.sym = i;
+-			uelf->index.str = uelf->info.shdrs[i].sh_link;
+-			uelf->strtab =
+-				(char *)uelf->info.hdr +
+-				uelf->info.shdrs[uelf->info.shdrs[i].sh_link]
+-					.sh_offset;
+-		} else if (streql(sec_name, UPATCH_FUNC_NAME)) {
+-			uelf->index.upatch_funcs = i;
+-		}
+-	}
+-
+-	ret = 0;
+-
+-out:
+-	return ret;
++    int ret = open_elf(&uelf->info, name);
++    if (ret) {
++        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
++        return ret;
++    }
++
++    for (int i = 1; i < uelf->info.hdr->e_shnum; ++i) {
++        char *sec_name = uelf->info.shstrtab + uelf->info.shdrs[i].sh_name;
++        if (uelf->info.shdrs[i].sh_type == SHT_SYMTAB) {
++            uelf->num_syms = uelf->info.shdrs[i].sh_size / sizeof(GElf_Sym);
++            uelf->index.sym = i;
++            uelf->index.str = uelf->info.shdrs[i].sh_link;
++            uelf->strtab = (char *)uelf->info.hdr +
++                           uelf->info.shdrs[uelf->info.shdrs[i].sh_link].sh_offset;
++        } else if (streql(sec_name, UPATCH_FUNC_NAME)) {
++            uelf->index.upatch_funcs = i;
++        }
++    }
++
++    return 0;
+ }
+ 
+ int binary_init(struct running_elf *relf, const char *name)
+ {
+-	int ret = 0, i;
+-	char *sec_name;
+-
+-	memset(relf, 0, sizeof(struct running_elf));
+-
+-	ret = open_elf(&relf->info, name);
+-	if (ret)
+-		goto out;
+-
+-	relf->phdrs = (void *)relf->info.hdr + relf->info.hdr->e_phoff;
+-
+-	for (i = 1; i < relf->info.hdr->e_shnum; i++) {
+-		sec_name = relf->info.shstrtab + relf->info.shdrs[i].sh_name;
+-		if (relf->info.shdrs[i].sh_type == SHT_SYMTAB) {
+-			relf->num_syms =
+-				relf->info.shdrs[i].sh_size / sizeof(GElf_Sym);
+-			relf->index.sym = i;
+-			relf->index.str = relf->info.shdrs[i].sh_link;
+-			relf->strtab =
+-				(char *)relf->info.hdr +
+-				relf->info.shdrs[relf->info.shdrs[i].sh_link]
+-					.sh_offset;
+-		} else if (relf->info.shdrs[i].sh_type == SHT_DYNSYM) {
+-			relf->index.dynsym = i;
+-			relf->index.dynstr = relf->info.shdrs[i].sh_link;
+-			relf->dynstrtab =
+-				(char *)relf->info.hdr +
+-				relf->info.shdrs[relf->info.shdrs[i].sh_link]
+-					.sh_offset;
+-			log_debug("found dynsym with %d \n", i);
+-		} else if (relf->info.shdrs[i].sh_type == SHT_DYNAMIC) {
+-			/* Currently, we don't utilize it */
+-		} else if (streql(sec_name, PLT_RELA_NAME) &&
+-			   relf->info.shdrs[i].sh_type == SHT_RELA) {
+-			relf->index.rela_plt = i;
+-			log_debug("found %s with %d \n", PLT_RELA_NAME, i);
+-		} else if (streql(sec_name, GOT_RELA_NAME) &&
+-			   relf->info.shdrs[i].sh_type == SHT_RELA) {
+-			relf->index.rela_dyn = i;
+-			log_debug("found %s with %d \n", GOT_RELA_NAME, i);
+-		}
+-	}
+-
+-	for (i = 0; i < relf->info.hdr->e_phnum; i++) {
+-		if (relf->phdrs[i].p_type == PT_TLS) {
+-			relf->tls_size = relf->phdrs[i].p_memsz;
+-			relf->tls_align = relf->phdrs[i].p_align;
+-			log_debug("found TLS size = %ld, memsz = %ld \n",
+-				  relf->tls_size, relf->tls_align);
+-			break;
+-		}
+-	}
+-
+-	ret = 0;
+-
+-out:
+-	return ret;
++    int ret = open_elf(&relf->info, name);
++    if (ret) {
++        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
++        return ret;
++    }
++
++    for (int i = 1; i < relf->info.hdr->e_shnum; i++) {
++        char *sec_name = relf->info.shstrtab + relf->info.shdrs[i].sh_name;
++        if (relf->info.shdrs[i].sh_type == SHT_SYMTAB) {
++            log_debug("Found section '%s', idx=%d\n", SYMTAB_NAME, i);
++            relf->num_syms = relf->info.shdrs[i].sh_size / sizeof(GElf_Sym);
++            relf->index.sym = i;
++            relf->index.str = relf->info.shdrs[i].sh_link;
++            relf->strtab = (char *)relf->info.hdr +
++                           relf->info.shdrs[relf->info.shdrs[i].sh_link].sh_offset;
++        } else if (relf->info.shdrs[i].sh_type == SHT_DYNSYM) {
++            log_debug("Found section '%s', idx=%d\n", DYNSYM_NAME, i);
++            relf->index.dynsym = i;
++            relf->index.dynstr = relf->info.shdrs[i].sh_link;
++            relf->dynstrtab = (char *)relf->info.hdr +
++                              relf->info.shdrs[relf->info.shdrs[i].sh_link].sh_offset;
++        } else if (relf->info.shdrs[i].sh_type == SHT_DYNAMIC) {
++            /* Currently, we don't utilize it */
++        } else if (streql(sec_name, PLT_RELA_NAME) &&
++                   relf->info.shdrs[i].sh_type == SHT_RELA) {
++            log_debug("Found section '%s', idx=%d\n", PLT_RELA_NAME, i);
++            relf->index.rela_plt = i;
++        } else if (streql(sec_name, GOT_RELA_NAME) &&
++                   relf->info.shdrs[i].sh_type == SHT_RELA) {
++            log_debug("Found section '%s' idx=%d\n", GOT_RELA_NAME, i);
++            relf->index.rela_dyn = i;
++        }
++    }
++
++    relf->phdrs = (void *)relf->info.hdr + relf->info.hdr->e_phoff;
++    for (int i = 0; i < relf->info.hdr->e_phnum; i++) {
++        if (relf->phdrs[i].p_type == PT_TLS) {
++            relf->tls_size = relf->phdrs[i].p_memsz;
++            relf->tls_align = relf->phdrs[i].p_align;
++            log_debug("Found TLS size = %ld, align = %ld\n", relf->tls_size, relf->tls_align);
++            break;
++        }
++    }
++
++    return 0;
+ }
+ 
+ bool check_build_id(struct elf_info *uelf, struct elf_info *relf)
+ {
+-	return uelf->shdrs[uelf->num_build_id].sh_size ==
+-		       relf->shdrs[relf->num_build_id].sh_size &&
+-	       !memcmp(uelf->hdr + uelf->shdrs[uelf->num_build_id].sh_offset,
+-		       relf->hdr + relf->shdrs[relf->num_build_id].sh_offset,
+-		       uelf->shdrs[uelf->num_build_id].sh_size);
++	if (uelf->shdrs[uelf->num_build_id].sh_size != relf->shdrs[relf->num_build_id].sh_size) {
++		return false;
++	}
++
++	void* uelf_build_id = (void *)uelf->hdr + uelf->shdrs[uelf->num_build_id].sh_offset;
++	void* relf_build_id = (void *)relf->hdr + relf->shdrs[relf->num_build_id].sh_offset;
++	size_t build_id_len = uelf->shdrs[uelf->num_build_id].sh_size;
++
++	if (memcmp(uelf_build_id, relf_build_id, build_id_len) != 0) {
++		return false;
++	}
++	return true;
+ }
+ 
+ void binary_close(struct running_elf *relf)
+ {
+-	// TODO: free relf
+-	if (relf->info.patch_buff)
+-		free(relf->info.patch_buff);
++    // TODO: free relf
++    if (relf->info.patch_buff) {
++        free(relf->info.patch_buff);
++	}
+ }
+ 
+ void upatch_close(struct upatch_elf *uelf)
+ {
+-	// TODO: free uelf
+-	if (uelf->info.patch_buff)
+-		free(uelf->info.patch_buff);
++    // TODO: free uelf
++    if (uelf->info.patch_buff) {
++        free(uelf->info.patch_buff);
++	}
+ 
+-	if (uelf->core_layout.kbase)
+-		free(uelf->core_layout.kbase);
++    if (uelf->core_layout.kbase) {
++        free(uelf->core_layout.kbase);
++	}
+ }
+ 
+ bool is_upatch_section(const char *name)
+ {
+-	return !strncmp(name, ".upatch.", strlen(".upatch."));
++    return !strncmp(name, ".upatch.", strlen(".upatch."));
+ }
+ 
+ bool is_note_section(GElf_Word type)
+ {
+-	return type == SHT_NOTE;
++    return type == SHT_NOTE;
+ }
+diff --git a/upatch/upatch-manage/upatch-elf.h b/upatch/upatch-manage/upatch-elf.h
+index 438b573..b4d9b28 100644
+--- a/upatch/upatch-manage/upatch-elf.h
++++ b/upatch/upatch-manage/upatch-elf.h
+@@ -17,6 +17,8 @@
+ 
+ #include "list.h"
+ 
++#define SYMTAB_NAME ".symtab"
++#define DYNSYM_NAME ".dynsym"
+ #define GOT_RELA_NAME ".rela.dyn"
+ #define PLT_RELA_NAME ".rela.plt"
+ #define BUILD_ID_NAME ".note.gnu.build-id"
+diff --git a/upatch/upatch-manage/upatch-manage.c b/upatch/upatch-manage/upatch-manage.c
+index f827794..b36ff0d 100644
+--- a/upatch/upatch-manage/upatch-manage.c
++++ b/upatch/upatch-manage/upatch-manage.c
+@@ -124,55 +124,32 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
+ 
+ static struct argp argp = { options, parse_opt, args_doc, program_doc };
+ 
+-static void show_program_info(struct arguments *arguments)
+-{
+-	log_debug("pid: %d\n", arguments->pid);
+-	log_debug("upatch object: %s\n", arguments->upatch);
+-	log_debug("binary object: %s\n", arguments->binary);
+-	log_debug("uuid object: %s\n", arguments->uuid);
+-}
++FILE *upatch_manage_log_fd = NULL;
+ 
+ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
+ {
+-	int ret;
+ 	struct upatch_elf uelf;
+ 	struct running_elf relf;
+ 	memset(&uelf, 0, sizeof(struct upatch_elf));
+ 	memset(&relf, 0, sizeof(struct running_elf));
+ 
+-	ret = upatch_init(&uelf, upatch_path);
+-	if (ret) {
+-		log_error("upatch_init failed %d \n", ret);
+-		goto out;
+-	}
+-
+-	/*ret = binary_init(&relf, binary_path);
++	int ret = upatch_init(&uelf, upatch_path);
+ 	if (ret) {
+-		log_error("binary_init failed %d \n", ret);
++		log_error("Failed to initialize patch, ret=%d\n", ret);
+ 		goto out;
+ 	}
+ 
+-	uelf.relf = &relf;
+-*/
+-	// ret = check_build_id(&uelf.info, &relf.info);
+-	// if (ret) {
+-	//     log_error("check build id failed %d \n", ret);
+-	//     goto out;
+-	// }
+-
+ 	ret = process_patch(pid, &uelf, &relf, uuid, binary_path);
+ 	if (ret) {
+-		log_error("process patch failed %d \n", ret);
++		log_error("Failed to patch process, pid=%d ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
++	log_normal("SUCCESS\n");
+ 
+ out:
+ 	upatch_close(&uelf);
+ 	binary_close(&relf);
+-	if (ret)
+-		log_normal("FAIL\n");
+-	else
+-		log_normal("SUCCESS\n");
++
+ 	return ret;
+ }
+ 
+@@ -182,66 +159,64 @@ int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch
+ 
+ 	ret = process_unpatch(pid, uuid);
+ 	if (ret) {
+-		log_error("process patch failed %d \n", ret);
+-		goto out;
++		log_error("Failed to unpatch process, pid=%d, ret=%d\n", pid, ret);
++		return ret;
+ 	}
++	log_normal("SUCCESS\n");
+ 
+-out:
+-	if (ret)
+-		log_normal("FAIL\n");
+-	else
+-		log_normal("SUCCESS\n");
+-	return ret;
++	return 0;
+ }
+ 
+ int info_upatch(const char *binary_path, const char *upatch_path, int pid)
+ {
+-	int ret = 0;
+-
+-	ret = process_info(pid);
+-	if (ret) {
+-		log_error("process patch failed %d \n", ret);
+-		goto out;
++	int ret = process_info(pid);
++	if (ret != 0) {
++		log_error("Failed to get patch info, pid=%d, ret=%d\n", pid, ret);
++		return ret;
+ 	}
++	log_normal("SUCCESS\n");
+ 
+-out:
+-	return ret;
++	return 0;
+ }
+ 
+-FILE *upatch_manage_log_fd = NULL;
+ int main(int argc, char *argv[])
+ {
+-	struct arguments arguments;
++	struct arguments args;
+ 	int ret;
+-	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
+ 
+-	if (upatch_manage_log_fd < 0)
++	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
++	if (upatch_manage_log_fd < 0) {
+ 		return -1;
+-	memset(&arguments, 0, sizeof(arguments));
+-	argp_parse(&argp, argc, argv, 0, NULL, &arguments);
+-	if (arguments.verbose)
++	}
++
++	memset(&args, 0, sizeof(struct arguments));
++	argp_parse(&argp, argc, argv, 0, NULL, &args);
++	if (args.verbose) {
+ 		loglevel = DEBUG;
++	}
++
++	logprefix = basename(args.upatch);
++	log_debug("PID: %d\n", args.pid);
++	log_debug("UUID: %s\n", args.uuid);
++	log_debug("Patch: %s\n", args.upatch);
++	log_debug("Binary: %s\n", args.binary);
+ 
+-	logprefix = basename(arguments.upatch);
+-	show_program_info(&arguments);
+-	switch (arguments.cmd) {
++	switch (args.cmd) {
+ 	case PATCH:
+-		ret = patch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
+-				    arguments.pid);
++		ret = patch_upatch(args.uuid, args.binary, args.upatch, args.pid);
+ 		break;
+ 	case UNPATCH:
+-		ret = unpatch_upatch(arguments.uuid, arguments.binary, arguments.upatch,
+-				      arguments.pid);
++		ret = unpatch_upatch(args.uuid, args.binary, args.upatch, args.pid);
+ 		break;
+ 	case INFO:
+-		ret = info_upatch(arguments.binary, arguments.upatch,
+-				   arguments.pid);
++		ret = info_upatch(args.binary, args.upatch, args.pid);
+ 		break;
+ 	default:
+-		ERROR("unknown command");
++		ERROR("Unknown command");
+ 		ret = EINVAL;
+ 		break;
+ 	}
++
+ 	fclose(upatch_manage_log_fd);
+ 	return abs(ret);
+ }
+diff --git a/upatch/upatch-manage/upatch-patch.c b/upatch/upatch-manage/upatch-patch.c
+index bdb9631..762641c 100644
+--- a/upatch/upatch-manage/upatch-patch.c
++++ b/upatch/upatch-manage/upatch-patch.c
+@@ -18,6 +18,7 @@
+ #include "log.h"
+ #include "upatch-common.h"
+ #include "upatch-patch.h"
++#include "upatch-process.h"
+ #include "upatch-ptrace.h"
+ #include "upatch-relocation.h"
+ #include "upatch-resolve.h"
+@@ -101,7 +102,7 @@ static int rewrite_section_headers(struct upatch_elf *uelf)
+ 		/* Mark all sections sh_addr with their address in the
+ 		   temporary image. */
+ 		shdr->sh_addr = (size_t)uelf->info.hdr + shdr->sh_offset;
+-		log_debug("section %s at 0x%lx \n",
++		log_debug("section %s at 0x%lx\n",
+ 			  uelf->info.shstrtab + shdr->sh_name, shdr->sh_addr);
+ 	}
+ 
+@@ -165,7 +166,7 @@ static void layout_sections(struct upatch_elf *uelf)
+ 	for (i = 0; i < uelf->info.hdr->e_shnum; i++)
+ 		uelf->info.shdrs[i].sh_entsize = ~0UL;
+ 
+-	log_debug("upatch section allocation order: \n");
++	log_debug("upatch section allocation order:\n");
+ 	for (m = 0; m < ARRAY_SIZE(masks); ++m) {
+ 		for (i = 0; i < uelf->info.hdr->e_shnum; ++i) {
+ 			GElf_Shdr *s = &uelf->info.shdrs[i];
+@@ -279,18 +280,17 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
+ 				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
+ 				  0);
+ 	if (addr == 0) {
+-		log_error("remote alloc memory for patch failed\n");
++		log_error("Failed to alloc remote patch memory\n");
+ 		return NULL;
+ 	}
+ 
+-	log_debug("allocated 0x%lx bytes at 0x%lx for '%s' patch\n", sz, addr,
+-		  obj->name);
++	log_debug("Allocated 0x%lx bytes at 0x%lx of '%s'\n", sz, addr, obj->name);
+ 
+ 	// log_debug("Marking this space as busy\n");
+ 	ret = vm_hole_split(hole, addr, addr + sz);
+ 	if (ret) {
+ 		// TODO: clear
+-		log_error("vm_hole_split failed\n");
++		log_error("Failed to split vm hole\n");
+ 		return NULL;
+ 	}
+ 
+@@ -300,10 +300,9 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
+ static void __upatch_memfree(struct object_file *obj, void *base,
+ 			     unsigned int size)
+ {
+-	log_debug("munmap upatch memory at: %p\n", base);
+-	if (upatch_munmap_remote(proc2pctx(obj->proc), (unsigned long)base,
+-				 size)) {
+-		log_error("Failed to munmap upatch memory at: %p\n", base);
++	log_debug("Free patch memory %p\n", base);
++	if (upatch_munmap_remote(proc2pctx(obj->proc), (unsigned long)base, size)) {
++		log_error("Failed to free patch memory %p\n", base);
+ 	}
+ }
+ 
+@@ -313,8 +312,7 @@ static int __alloc_memory(struct object_file *obj_file,
+ 	/* Do the allocs. */
+ 	layout->base = upatch_alloc(obj_file, layout->size);
+ 	if (!layout->base) {
+-		log_error("alloc upatch core_layout memory failed: %p \n",
+-			  layout->base);
++		log_error("Failed to alloc patch core layout %p\n", layout->base);
+ 		return -ENOMEM;
+ 	}
+ 
+@@ -336,25 +334,28 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
+ 	/* Do the allocs. */
+ 	ret = __alloc_memory(obj, &uelf->core_layout);
+ 	if (ret) {
+-		log_error("alloc upatch module memory failed: %d \n", ret);
++		log_error("Failed to alloc patch memory, ret=%d\n", ret);
+ 		return ret;
+ 	}
+ 
+ 	/* Transfer each section which specifies SHF_ALLOC */
+-	log_debug("final section addresses:\n");
++	log_debug("Final section addresses:\n");
+ 	for (i = 0; i < uelf->info.hdr->e_shnum; i++) {
+ 		void *kdest;
+ 		void *dest;
+ 		GElf_Shdr *shdr = &uelf->info.shdrs[i];
+ 
+-		if (!(shdr->sh_flags & SHF_ALLOC))
++		if (!(shdr->sh_flags & SHF_ALLOC)) {
+ 			continue;
++		}
+ 
+ 		kdest = uelf->core_layout.kbase + shdr->sh_entsize;
+ 		dest = uelf->core_layout.base + shdr->sh_entsize;
+ 
+-		if (shdr->sh_type != SHT_NOBITS)
++		if (shdr->sh_type != SHT_NOBITS) {
+ 			memcpy(kdest, (void *)shdr->sh_addr, shdr->sh_size);
++		}
++
+ 		shdr->sh_addr = (unsigned long)kdest;
+ 		/* overuse this attr to record user address */
+ 		shdr->sh_addralign = (unsigned long)dest;
+@@ -369,7 +370,7 @@ static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
+ {
+ 	int ret = 0;
+ 
+-	log_debug("post kbase %lx(%x) to base %lx\n",
++	log_debug("Post kbase %lx(%x) to base %lx\n",
+ 		  (unsigned long)uelf->core_layout.kbase,
+ 		  uelf->core_layout.size,
+ 		  (unsigned long)uelf->core_layout.base);
+@@ -377,7 +378,7 @@ static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
+ 				       (unsigned long)uelf->core_layout.base,
+ 				       uelf->core_layout.size);
+ 	if (ret) {
+-		log_error("can't move kbase to base - %d\n", ret);
++		log_error("Failed to move kbase to base, ret=%d\n", ret);
+ 		goto out;
+ 	}
+ 
+@@ -404,7 +405,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
+ 		sizeof(struct upatch_patch_func);
+ 	memcpy(uinfo->id, uuid, strlen(uuid));
+ 
+-	log_debug("change insn:\n");
++	log_debug("Changed insn:\n");
+ 	for (i = 0; i < uinfo->changed_func_num; ++i) {
+ 		struct upatch_info_func *upatch_func =
+ 			(void *)uelf->core_layout.kbase +
+@@ -440,26 +441,21 @@ static int unapply_patch(struct object_file *obj,
+ 			 struct upatch_info_func *funcs,
+ 			 unsigned int changed_func_num)
+ {
+-	int ret = 0, i;
+-
+-	log_debug("change insn:\n");
+-	for (i = 0; i < changed_func_num; ++i) {
++	log_debug("Changed insn:\n");
++	for (int i = 0; i < changed_func_num; ++i) {
+ 		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
+ 			  funcs[i].new_insn, funcs[i].old_insn[0]);
+ 
+-		ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
+-					       (unsigned long)funcs[i].old_addr,
+-					       get_origin_insn_len());
++		int ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
++			(unsigned long)funcs[i].old_addr, get_origin_insn_len());
+ 
+ 		if (ret) {
+-			log_error("can't write old insn at 0x%lx - %d\n",
+-				  funcs[i].old_addr, ret);
+-			goto out;
++			log_error("Failed to write old insn at 0x%lx, ret=%d\n",
++				funcs[i].old_addr, ret);
++			return ret;
+ 		}
+ 	}
+-
+-out:
+-	return ret;
++	return 0;
+ }
+ 
+ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
+@@ -475,40 +471,37 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
+ 			sizeof(struct upatch_info) +
+ 			i * sizeof(struct upatch_info_func);
+ 
+-		// write jumper insn to first 8bytes
+-		ret = upatch_process_mem_write(
+-			obj->proc, &upatch_func->new_insn,
+-			(unsigned long)upatch_func->old_addr,
+-			get_upatch_insn_len());
++		// write jumper insn to first 8 bytes
++		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_insn,
++			(unsigned long)upatch_func->old_addr, get_upatch_insn_len());
+ 		if (ret) {
+ 			log_error(
+-				"can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
++				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
+ 				upatch_func->old_addr, upatch_func->new_insn,
+ 				ret);
+ 			goto out;
+ 		}
+-		// write 64bit new addr to second 8bytes
+-		ret = upatch_process_mem_write(
+-			obj->proc, &upatch_func->new_addr,
++		// write 64bit new addr to second 8 bytes
++		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_addr,
+ 			(unsigned long)upatch_func->old_addr + get_upatch_insn_len(),
+ 			get_upatch_addr_len());
+ 		if (ret) {
+-                        log_error(
+-                                "can't ptrace upatch func at 0x%lx(0x%lx) - %d\n",
+-                                upatch_func->old_addr + get_upatch_insn_len(),
++			log_error(
++				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
++				upatch_func->old_addr + get_upatch_insn_len(),
+ 				upatch_func->new_addr,
+-                                ret);
+-                        goto out;
+-                }
++				ret);
++			goto out;
++		}
+ 	}
+ 
+ out:
+ 	if (ret) {
+ 		unapply_patch(obj,
+-			      (void *)uelf->core_layout.kbase +
+-				      uelf->core_layout.info_size +
+-				      sizeof(struct upatch_info),
+-			      i);
++			(void *)uelf->core_layout.kbase +
++			uelf->core_layout.info_size +
++			sizeof(struct upatch_info),
++			i);
+ 	}
+ 	return ret;
+ }
+@@ -523,8 +516,7 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
+ 			(unsigned long)uelf->core_layout.base,
+ 			uelf->core_layout.text_size, PROT_READ | PROT_EXEC);
+ 		if (ret < 0) {
+-			log_error(
+-				"Failed to change upatch text protection to r-x");
++			log_error("Failed to change upatch text protection to r-x");
+ 			return ret;
+ 		}
+ 	}
+@@ -532,13 +524,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
+ 	if (uelf->core_layout.ro_size > uelf->core_layout.text_size) {
+ 		ret = upatch_mprotect_remote(
+ 			proc2pctx(obj->proc),
+-			(unsigned long)uelf->core_layout.base +
+-				uelf->core_layout.text_size,
++			(unsigned long)uelf->core_layout.base + uelf->core_layout.text_size,
+ 			uelf->core_layout.ro_size - uelf->core_layout.text_size,
+ 			PROT_READ);
+ 		if (ret < 0) {
+-			log_error(
+-				"Failed to change upatch ro protection to r--");
++			log_error("Failed to change upatch ro protection to r--");
+ 			return ret;
+ 		}
+ 	}
+@@ -546,14 +536,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
+ 	if (uelf->core_layout.ro_after_init_size > uelf->core_layout.ro_size) {
+ 		ret = upatch_mprotect_remote(
+ 			proc2pctx(obj->proc),
+-			(unsigned long)uelf->core_layout.base +
+-				uelf->core_layout.ro_size,
+-			uelf->core_layout.ro_after_init_size -
+-				uelf->core_layout.ro_size,
++			(unsigned long)uelf->core_layout.base + uelf->core_layout.ro_size,
++			uelf->core_layout.ro_after_init_size - uelf->core_layout.ro_size,
+ 			PROT_READ);
+ 		if (ret < 0) {
+-			log_error(
+-				"Failed to change upatch ro init protection to r--");
++			log_error("Failed to change upatch ro init protection to r--");
+ 			return ret;
+ 		}
+ 	}
+@@ -562,14 +549,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
+ 	    uelf->core_layout.ro_after_init_size) {
+ 		ret = upatch_mprotect_remote(
+ 			proc2pctx(obj->proc),
+-			(unsigned long)uelf->core_layout.base +
+-				uelf->core_layout.ro_after_init_size,
+-			uelf->core_layout.info_size -
+-				uelf->core_layout.ro_after_init_size,
++			(unsigned long)uelf->core_layout.base + uelf->core_layout.ro_after_init_size,
++			uelf->core_layout.info_size - uelf->core_layout.ro_after_init_size,
+ 			PROT_READ | PROT_WRITE);
+ 		if (ret < 0) {
+-			log_error(
+-				"Failed to change upatch rw protection to rw-");
++			log_error("Failed to change upatch rw protection to rw-");
+ 			return ret;
+ 		}
+ 	}
+@@ -577,13 +561,11 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
+ 	if (uelf->core_layout.size > uelf->core_layout.info_size) {
+ 		ret = upatch_mprotect_remote(
+ 			proc2pctx(obj->proc),
+-			(unsigned long)uelf->core_layout.base +
+-				uelf->core_layout.info_size,
++			(unsigned long)uelf->core_layout.base + uelf->core_layout.info_size,
+ 			uelf->core_layout.size - uelf->core_layout.info_size,
+ 			PROT_READ);
+ 		if (ret < 0) {
+-			log_error(
+-				"Failed to change upatch info protection to r--");
++			log_error("Failed to change upatch info protection to r--");
+ 			return ret;
+ 		}
+ 	}
+@@ -628,9 +610,9 @@ static int upatch_apply_patches(struct upatch_process *proc,
+ 	layout_symtab(uelf);
+ 	layout_upatch_info(uelf);
+ 
+-	log_debug("calculate core_layout = %x \n", uelf->core_layout.size);
++	log_debug("calculate core layout = %x\n", uelf->core_layout.size);
+ 	log_debug(
+-		"core_layout: text_size = %x, ro_size = %x, ro_after_init_size = "
++		"Core layout: text_size = %x, ro_size = %x, ro_after_init_size = "
+ 		"%x, info = %x, size = %x\n",
+ 		uelf->core_layout.text_size, uelf->core_layout.ro_size,
+ 		uelf->core_layout.ro_after_init_size,
+@@ -641,35 +623,42 @@ static int upatch_apply_patches(struct upatch_process *proc,
+ 	 * Otherwise we can't use 32-bit jumps.
+ 	 */
+ 	ret = alloc_memory(uelf, obj);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	ret = upatch_mprotect(uelf, obj);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	/* Fix up syms, so that st_value is a pointer to location. */
+ 	ret = simplify_symbols(uelf, obj);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	/* upatch new address will be updated */
+ 	ret = apply_relocations(uelf);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	/* upatch upatch info */
+ 	ret = complete_info(uelf, obj, uuid);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	ret = post_memory(uelf, obj);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	ret = apply_patch(uelf, obj);
+-	if (ret)
++	if (ret) {
+ 		goto free;
++	}
+ 
+ 	ret = 0;
+ 	goto out;
+@@ -686,12 +675,14 @@ int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
+ 	struct object_file *obj;
+ 	struct object_patch *patch;
+ 	list_for_each_entry(obj, &proc->objs, list) {
+-		if (!obj->is_patch)
++		if (!obj->is_patch) {
+ 			continue;
++		}
+ 		list_for_each_entry(patch, &obj->applied_patch, list) {
+-			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0)
++			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0) {
+ 				return -EEXIST;
+ 			}
++		}
+ 	}
+ 	return 0;
+ }
+@@ -707,15 +698,16 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("cannot init process %d\n", pid);
++		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+ 
+ 	upatch_process_print_short(&proc);
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		goto out_free;
++	}
+ 
+ 	// use uprobe to hack function. the program has been executed to the entry
+ 	// point
+@@ -736,7 +728,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 	}
+ 	ret = binary_init(relf, binary_path);
+     if (ret) {
+-        log_error("binary_init failed %d \n", ret);
++        log_error("Failed to load binary, ret=%d\n", ret);
+         goto out_free;
+     }
+ 
+@@ -759,7 +751,9 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 	ret = 0;
+ 
+ out_free:
+-	upatch_process_memfree(&proc);
++	upatch_process_detach(&proc);
++	upatch_process_destroy(&proc);
++
+ out:
+ 	if (is_calc_time) {
+ 		gettimeofday(&end_tv, NULL);
+@@ -856,18 +850,22 @@ int process_unpatch(int pid, const char *uuid)
+ 
+ 	/* Finally, attach to process */
+ 	ret = upatch_process_attach(&proc);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		goto out_free;
++	}
+ 
+ 	// 应用
+ 	ret = upatch_unapply_patches(&proc, uuid);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		goto out_free;
++	}
+ 
+ 	ret = 0;
+ 
+ out_free:
+-	upatch_process_memfree(&proc);
++	upatch_process_detach(&proc);
++	upatch_process_destroy(&proc);
++
+ out:
+ 	if (is_calc_time) {
+ 		gettimeofday(&end_tv, NULL);
+@@ -916,29 +914,33 @@ int process_info(int pid)
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("cannot init process %d\n", pid);
++		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		goto out_free;
++	}
+ 
+ 	ret = upatch_process_map_object_files(&proc, NULL);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		goto out_free;
++	}
+ 
+-	// 应用
+ 	ret = upatch_info(&proc);
+-	if (ret)
++	if (ret) {
+ 		status = "active";
+-	else
++	}
++	else {
+ 		status = "removed";
++	}
+ 
+ 	ret = 0;
+ 
+ out_free:
+-	upatch_process_memfree(&proc);
++	upatch_process_destroy(&proc);
++
+ out:
+ 	log_normal("%s\n", status);
+ 	return ret;
+diff --git a/upatch/upatch-manage/upatch-process.c b/upatch/upatch-manage/upatch-process.c
+index 2437ce1..aeb5705 100644
+--- a/upatch/upatch-manage/upatch-process.c
++++ b/upatch/upatch-manage/upatch-process.c
+@@ -19,6 +19,8 @@
+ #include "upatch-process.h"
+ #include "upatch-ptrace.h"
+ 
++static const int MAX_ATTACH_ATTEMPTS = 3;
++
+ /*
+  * Locks process by opening /proc/<pid>/maps
+  * This ensures that task_struct will not be
+@@ -32,17 +34,26 @@ static int lock_process(int pid)
+ 
+ 	log_debug("Locking PID %d...", pid);
+ 	snprintf(path, sizeof(path), "/proc/%d/maps", pid);
++
+ 	fd = open(path, O_RDONLY);
+ 	if (fd < 0) {
+-		log_error("cannot open '/proc/%d/maps'\n", pid);
++		log_error("Failed to open '%s'\n", path);
+ 		return -1;
+ 	}
+ 	log_debug("OK\n");
++
+ 	return fd;
+ }
+ 
++static void unlock_process(int pid, int fdmaps)
++{
++	int errsv = errno;
++	close(fdmaps);
++	errno = errsv;
++}
++
+ // TODO: get addr_space
+-int upatch_coroutines_init(struct upatch_process *proc)
++static int upatch_coroutines_init(struct upatch_process *proc)
+ {
+ 	INIT_LIST_HEAD(&proc->coro.coros);
+ 
+@@ -56,17 +67,20 @@ static int process_get_comm(struct upatch_process *proc)
+ 	char *bn, *c;
+ 	ssize_t ret;
+ 
+-	log_debug("process_get_comm %d...", proc->pid);
+ 	snprintf(path, sizeof(path), "/proc/%d/exe", proc->pid);
++	log_debug("Reading from '%s'...", path);
+ 
+ 	ret = readlink(path, realpath, sizeof(realpath));
+-	if (ret < 0)
++	if (ret < 0) {
+ 		return -1;
++	}
++
+ 	realpath[ret] = '\0';
+ 	bn = basename(realpath);
+ 	strncpy(path, bn, sizeof(path) - 1);
+-	if ((c = strstr(path, " (deleted)")))
++	if ((c = strstr(path, " (deleted)"))) {
+ 		*c = '\0';
++	}
+ 
+ 	proc->comm[sizeof(proc->comm) - 1] = '\0';
+ 	memcpy(proc->comm, path, sizeof(proc->comm) - 1);
+@@ -76,20 +90,14 @@ static int process_get_comm(struct upatch_process *proc)
+ 	return 0;
+ }
+ 
+-static void unlock_process(int pid, int fdmaps)
+-{
+-	int errsv = errno;
+-	close(fdmaps);
+-	errno = errsv;
+-}
+-
+ int upatch_process_init(struct upatch_process *proc, int pid)
+ {
+ 	int fdmaps;
+ 
+ 	fdmaps = lock_process(pid);
+-	if (fdmaps < 0)
++	if (fdmaps < 0) {
+ 		goto out_err;
++	}
+ 
+ 	memset(proc, 0, sizeof(*proc));
+ 
+@@ -102,10 +110,13 @@ int upatch_process_init(struct upatch_process *proc, int pid)
+ 	INIT_LIST_HEAD(&proc->vmaholes);
+ 	proc->num_objs = 0;
+ 
+-	if (upatch_coroutines_init(proc))
++	if (upatch_coroutines_init(proc)) {
+ 		goto out_unlock;
+-	if (process_get_comm(proc))
++	}
++
++	if (process_get_comm(proc)) {
+ 		goto out_unlock;
++	}
+ 
+ 	return 0;
+ 
+@@ -115,15 +126,63 @@ out_err:
+ 	return -1;
+ }
+ 
++static void upatch_object_memfree(struct object_file *obj)
++{
++	struct object_patch *opatch, *opatch_safe;
++	struct obj_vm_area *ovma, *ovma_safe;
++
++	if (obj->name) {
++		free(obj->name);
++	}
++
++	list_for_each_entry_safe(opatch, opatch_safe, &obj->applied_patch, list) {
++		if (opatch->uinfo) {
++			free(opatch->uinfo);
++		}
++		if (opatch->funcs) {
++			free(opatch->funcs);
++		}
++		free(opatch);
++	}
++
++	list_for_each_entry_safe(ovma, ovma_safe, &obj->vma, list) {
++		free(ovma);
++	}
++}
++
++static void upatch_process_memfree(struct upatch_process *proc)
++{
++	struct upatch_ptrace_ctx *p, *p_safe;
++	struct object_file *obj, *obj_safe;
++	struct vm_hole *hole, *hole_safe;
++
++	list_for_each_entry_safe(p, p_safe, &proc->ptrace.pctxs, list) {
++		free(p);
++	}
++
++	list_for_each_entry_safe(hole, hole_safe, &proc->vmaholes, list) {
++		free(hole);
++	}
++
++	list_for_each_entry_safe(obj, obj_safe, &proc->objs, list) {
++		upatch_object_memfree(obj);
++		free(obj);
++	}
++}
++
++void upatch_process_destroy(struct upatch_process *proc)
++{
++	unlock_process(proc->pid, proc->fdmaps);
++	upatch_process_memfree(proc);
++}
++
+ static void process_print_cmdline(struct upatch_process *proc)
+ {
+-	char buf[1024];
+-	int fd;
++	char buf[PATH_MAX];
+ 	ssize_t i, rv;
+ 
+-	snprintf(buf, sizeof("/proc/0123456789/cmdline"), "/proc/%d/cmdline",
+-		 proc->pid);
+-	fd = open(buf, O_RDONLY);
++	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
++	int fd = open(buf, O_RDONLY);
+ 	if (fd == -1) {
+ 		log_error("open\n");
+ 		return;
+@@ -144,10 +203,12 @@ static void process_print_cmdline(struct upatch_process *proc)
+ 			break;
+ 
+ 		for (i = 0; i < rv; i++) {
+-			if (buf[i] != '\n' && isprint(buf[i]))
++			if (buf[i] != '\n' && isprint(buf[i])) {
+ 				putchar(buf[i]);
+-			else
++			}
++			else {
+ 				printf("\\x%02x", (unsigned char)buf[i]);
++			}
+ 		}
+ 	}
+ 
+@@ -164,7 +225,7 @@ void upatch_process_print_short(struct upatch_process *proc)
+ 
+ int upatch_process_mem_open(struct upatch_process *proc, int mode)
+ {
+-	char path[sizeof("/proc/0123456789/mem")];
++	char path[PATH_MAX];
+ 
+ 	if (proc->memfd >= 0) {
+ 		close(proc->memfd);
+@@ -272,7 +333,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
+ 
+ 	o = malloc(sizeof(*o));
+ 	if (!o) {
+-		log_error("FAIL\n");
++		log_error("FAILED\n");
+ 		return NULL;
+ 	}
+ 	memset(o, 0, sizeof(struct object_file));
+@@ -288,7 +349,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
+ 
+ 	o->previous_hole = hole;
+ 	if (object_add_vm_area(o, vma, hole) < 0) {
+-		log_error("can't add vm_area for %s\n", name);
++		log_error("Cannot add vm area for %s\n", name);
+ 		free(o);
+ 		return NULL;
+ 	}
+@@ -298,6 +359,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
+ 
+ 	list_add(&o->list, &proc->objs);
+ 	proc->num_objs++;
++
+ 	log_debug("OK\n");
+ 	return o;
+ }
+@@ -332,19 +394,22 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
+ 	}
+ 
+ 	o = process_new_object(proc, dev, inode, name, vma, hole);
+-	if (o == NULL)
++	if (o == NULL) {
+ 		return -1;
++	}
+ 
+ 	if (object_type == OBJECT_UPATCH) {
+ 		struct object_patch *opatch;
+ 
+ 		opatch = malloc(sizeof(struct object_patch));
+-		if (opatch == NULL)
++		if (opatch == NULL) {
+ 			return -1;
++		}
+ 
+ 		opatch->uinfo = malloc(sizeof(struct upatch_info));
+-		if (opatch->uinfo == NULL)
++		if (opatch->uinfo == NULL) {
+ 			return -1;
++		}
+ 
+ 		memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
+ 		opatch->funcs = malloc(opatch->uinfo->changed_func_num *
+@@ -372,7 +437,7 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
+ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ {
+ 	FILE *f;
+-	int ret, fd, is_libc_base_set = 0;
++	int ret, is_libc_base_set = 0;
+ 	unsigned long hole_start = 0;
+ 	struct vm_hole *hole = NULL;
+ 
+@@ -383,7 +448,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ 	 *    of the object (we might have references to them
+ 	 *    in the patch).
+ 	 */
+-	fd = dup(proc->fdmaps);
++	int fd = dup(proc->fdmaps);
+ 	if (fd < 0) {
+ 		log_error("unable to dup fd %d", proc->fdmaps);
+ 		return -1;
+@@ -405,17 +470,20 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ 		char perms[5], name_[256], *name = name_;
+ 		int r;
+ 
+-		if (!fgets(line, sizeof(line), f))
++		if (!fgets(line, sizeof(line), f)) {
+ 			break;
++		}
++
+ 		r = sscanf(line, "%lx-%lx %s %lx %x:%x %d %255s", &start, &end,
+ 			   perms, &offset, &maj, &min, &inode, name_);
+-
+ 		if (r == EOF) {
+-			log_error("sscanf failed: end of file");
++			log_error("Failed to read maps: unexpected EOF");
+ 			goto error;
+ 		}
+-		if (r != 8)
++
++		if (r != 8) {
+ 			strcpy(name, "[anonymous]");
++		}
+ 
+ 		vma.start = start;
+ 		vma.end = end;
+@@ -451,7 +519,7 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
+ 	} while (1);
+ 	fclose(f);
+ 
+-	log_debug("Found %d object file(s) \n", proc->num_objs);
++	log_debug("Found %d object file(s)\n", proc->num_objs);
+ 
+ 	if (!is_libc_base_set) {
+ 		log_error("Can't find libc_base required for manipulations: %d",
+@@ -497,29 +565,30 @@ static int process_list_threads(struct upatch_process *proc, int **ppids,
+ {
+ 	DIR *dir = NULL;
+ 	struct dirent *de;
+-	char path[128];
++	char path[PATH_MAX];
+ 	int *pids = *ppids;
+ 
+ 	snprintf(path, sizeof(path), "/proc/%d/task", proc->pid);
++
+ 	dir = opendir(path);
+ 	if (!dir) {
+-		log_error("can't open '%s' directory\n", path);
++		log_error("Failed to open directory '%s'\n", path);
+ 		goto dealloc;
+ 	}
+ 
+ 	*npids = 0;
+ 	while ((de = readdir(dir))) {
+ 		int *t;
+-		if (de->d_name[0] == '.')
++		if (de->d_name[0] == '.') {
+ 			continue;
++		}
+ 
+ 		if (*npids >= *alloc) {
+ 			*alloc = *alloc ? *alloc * 2 : 1;
+ 
+ 			t = realloc(pids, *alloc * sizeof(*pids));
+ 			if (t == NULL) {
+-				log_error(
+-					"Failed to (re)allocate memory for pids\n");
++				log_error("Failed to (re)allocate memory for pids\n");
+ 				goto dealloc;
+ 			}
+ 
+@@ -536,62 +605,25 @@ static int process_list_threads(struct upatch_process *proc, int **ppids,
+ 	return *npids;
+ 
+ dealloc:
+-	if (dir)
++	if (dir) {
+ 		closedir(dir);
++	}
+ 	free(pids);
+ 	*ppids = NULL;
+ 	*alloc = *npids = 0;
+ 	return -1;
+ }
+ 
+-static void process_detach(struct upatch_process *proc)
+-{
+-	struct upatch_ptrace_ctx *p, *ptmp;
+-	int status;
+-	pid_t pid;
+-
+-	if (proc->memfd >= 0 && close(proc->memfd) < 0)
+-		log_error("can't close memfd");
+-	proc->memfd = -1;
+-
+-	list_for_each_entry_safe(p, ptmp, &proc->ptrace.pctxs, list) {
+-		/**
+-		 * If upatch_ptrace_detach(p) return -ESRCH, there are two situations,
+-		 * as described below:
+-		 * 1. the specified thread does not exist, it means the thread dead
+-		 *    during the attach processing, so we need to wait for the thread
+-		 *    to exit;
+-		 * 2. the specified thread is not currently being traced by us,
+-		 *    or is not stopped, so we just ignore it;
+-		 *
+-		 * We using the running variable of the struct upatch_ptrace_ctx to
+-		 * distinguish them:
+-		 * 1. if pctx->running = 0, it means the thread is traced by us, we
+-		 *    will wait for the thread to exit;
+-		 * 2. if pctx->running = 1, it means we can not sure about the status of
+-		 *    the thread, we just ignore it;
+-		 */
+-		if (upatch_ptrace_detach(p) == -ESRCH && !p->running) {
+-			do {
+-				pid = waitpid(p->pid, &status, __WALL);
+-			} while (pid > 0 && !WIFEXITED(status));
+-		}
+-		// upatch_ptrace_ctx_destroy(p);
+-	}
+-	log_debug("Finished ptrace detaching.\n");
+-}
+-
+-static const int max_attach_attempts = 3;
+-
+ int upatch_process_attach(struct upatch_process *proc)
+ {
+ 	int *pids = NULL, ret;
+ 	size_t i, npids = 0, alloc = 0, prevnpids = 0, nattempts;
+ 
+-	if (upatch_process_mem_open(proc, MEM_WRITE) < 0)
++	if (upatch_process_mem_open(proc, MEM_WRITE) < 0) {
+ 		return -1;
++	}
+ 
+-	for (nattempts = 0; nattempts < max_attach_attempts; nattempts++) {
++	for (nattempts = 0; nattempts < MAX_ATTACH_ATTEMPTS; nattempts++) {
+ 		ret = process_list_threads(proc, &pids, &npids, &alloc);
+ 		if (ret == -1)
+ 			goto detach;
+@@ -627,25 +659,64 @@ int upatch_process_attach(struct upatch_process *proc)
+ 		prevnpids = npids;
+ 	}
+ 
+-	if (nattempts == max_attach_attempts) {
+-		log_error("unable to catch up with process, bailing\n");
++	if (nattempts == MAX_ATTACH_ATTEMPTS) {
++		log_error("Unable to catch up with process, bailing\n");
+ 		goto detach;
+ 	}
+ 
+-	log_debug("attached to %lu thread(s): %d", npids, pids[0]);
+-	for (i = 1; i < npids; i++)
++	log_debug("Attached to %lu thread(s): %d", npids, pids[0]);
++	for (i = 1; i < npids; i++) {
+ 		log_debug(", %d", pids[i]);
++	}
+ 	log_debug("\n");
+ 
+ 	free(pids);
+ 	return 0;
+ 
+ detach:
+-	process_detach(proc);
++	upatch_process_detach(proc);
+ 	free(pids);
+ 	return -1;
+ }
+ 
++void upatch_process_detach(struct upatch_process *proc)
++{
++	struct upatch_ptrace_ctx *p, *ptmp;
++	int status;
++	pid_t pid;
++
++	if (proc->memfd >= 0 && close(proc->memfd) < 0) {
++		log_error("Failed to close memfd");
++	}
++	proc->memfd = -1;
++
++	list_for_each_entry_safe(p, ptmp, &proc->ptrace.pctxs, list) {
++		/**
++		 * If upatch_ptrace_detach(p) return -ESRCH, there are two situations,
++		 * as described below:
++		 * 1. the specified thread does not exist, it means the thread dead
++		 *    during the attach processing, so we need to wait for the thread
++		 *    to exit;
++		 * 2. the specified thread is not currently being traced by us,
++		 *    or is not stopped, so we just ignore it;
++		 *
++		 * We using the running variable of the struct upatch_ptrace_ctx to
++		 * distinguish them:
++		 * 1. if pctx->running = 0, it means the thread is traced by us, we
++		 *    will wait for the thread to exit;
++		 * 2. if pctx->running = 1, it means we can not sure about the status of
++		 *    the thread, we just ignore it;
++		 */
++		if (upatch_ptrace_detach(p) == -ESRCH && !p->running) {
++			do {
++				pid = waitpid(p->pid, &status, __WALL);
++			} while (pid > 0 && !WIFEXITED(status));
++		}
++		// upatch_ptrace_ctx_destroy(p);
++	}
++	log_debug("Process detached\n");
++}
++
+ static inline struct vm_hole *next_hole(struct vm_hole *hole,
+ 					struct list_head *head)
+ {
+@@ -765,13 +836,12 @@ unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
+ 	}
+ 
+ 	if (region_start == region_end) {
+-		log_error("can't find suitable region for patch on '%s'\n",
+-			  obj->name);
++		log_error("Cannot find suitable region for patch '%s'\n", obj->name);
+ 		return -1UL;
+ 	}
+ 
+ 	region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
+-	log_debug("Found patch region for '%s' at %lx\n", obj->name,
++	log_debug("Found patch region for '%s' at 0x%lx\n", obj->name,
+ 		  region_start);
+ 
+ 	return region_start;
+@@ -801,58 +871,12 @@ unsigned long object_find_patch_region_nolimit(struct object_file *obj, size_t m
+ 			left_hole = prev_hole(left_hole, head);
+ 	}
+ 
+-	log_error("can't find suitable region for patch on '%s'\n",
+-			obj->name);
++	log_error("Cannot find suitable region for patch '%s'\n", obj->name);
+ 	return -1UL;
+ found:
+ 	region_start = ((*hole)->start >> PAGE_SHIFT) << PAGE_SHIFT;
+-	log_debug("Found patch region for '%s' at %lx\n", obj->name,
++	log_debug("Found patch region for '%s' 0xat %lx\n", obj->name,
+ 		  region_start);
+ 
+ 	return region_start;
+ }
+-
+-static void upatch_object_memfree(struct object_file *obj)
+-{
+-	struct object_patch *opatch, *opatch_safe;
+-	struct obj_vm_area *ovma, *ovma_safe;
+-
+-	if (obj->name)
+-		free(obj->name);
+-
+-	list_for_each_entry_safe(opatch, opatch_safe, &obj->applied_patch,
+-				 list) {
+-		if (opatch->uinfo)
+-			free(opatch->uinfo);
+-		if (opatch->funcs)
+-			free(opatch->funcs);
+-		free(opatch);
+-	}
+-
+-	list_for_each_entry_safe(ovma, ovma_safe, &obj->vma, list) {
+-		free(ovma);
+-	}
+-}
+-
+-void upatch_process_memfree(struct upatch_process *proc)
+-{
+-	struct upatch_ptrace_ctx *p, *p_safe;
+-	struct object_file *obj, *obj_safe;
+-	struct vm_hole *hole, *hole_safe;
+-
+-	list_for_each_entry_safe(p, p_safe, &proc->ptrace.pctxs, list) {
+-		free(p);
+-	}
+-
+-	list_for_each_entry_safe(hole, hole_safe, &proc->vmaholes, list) {
+-		free(hole);
+-	}
+-
+-	list_for_each_entry_safe(obj, obj_safe, &proc->objs, list) {
+-		upatch_object_memfree(obj);
+-		free(obj);
+-	}
+-
+-	unlock_process(proc->pid, proc->fdmaps);
+-	process_detach(proc);
+-}
+diff --git a/upatch/upatch-manage/upatch-process.h b/upatch/upatch-manage/upatch-process.h
+index 9c3aecc..2a212fa 100644
+--- a/upatch/upatch-manage/upatch-process.h
++++ b/upatch/upatch-manage/upatch-process.h
+@@ -107,6 +107,8 @@ struct upatch_process {
+ 
+ int upatch_process_init(struct upatch_process *, int);
+ 
++void upatch_process_destroy(struct upatch_process *);
++
+ void upatch_process_print_short(struct upatch_process *);
+ 
+ int upatch_process_mem_open(struct upatch_process *, int);
+@@ -115,6 +117,8 @@ int upatch_process_map_object_files(struct upatch_process *, const char *);
+ 
+ int upatch_process_attach(struct upatch_process *);
+ 
++void upatch_process_detach(struct upatch_process *proc);
++
+ int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
+ 
+ unsigned long object_find_patch_region(struct object_file *, size_t,
+@@ -122,6 +126,4 @@ unsigned long object_find_patch_region(struct object_file *, size_t,
+ unsigned long object_find_patch_region_nolimit(struct object_file *, size_t,
+ 				       struct vm_hole **);
+ 
+-void upatch_process_memfree(struct upatch_process *);
+-
+ #endif
+diff --git a/upatch/upatch-manage/upatch-ptrace.c b/upatch/upatch-manage/upatch-ptrace.c
+index 4144fbe..4c9944a 100644
+--- a/upatch/upatch-manage/upatch-ptrace.c
++++ b/upatch/upatch-manage/upatch-ptrace.c
+@@ -12,27 +12,23 @@
+ 
+ /* process's memory access */
+ int upatch_process_mem_read(struct upatch_process *proc, unsigned long src,
+-			    void *dst, size_t size)
++	void *dst, size_t size)
+ {
+-	ssize_t r;
+-
+-	r = pread(proc->memfd, dst, size, (off_t)src);
++	ssize_t r = pread(proc->memfd, dst, size, (off_t)src);
+ 
+ 	return r != size ? -1 : 0;
+ }
+ 
+ static int upatch_process_mem_write_ptrace(struct upatch_process *proc,
+-					   void *src, unsigned long dst,
+-					   size_t size)
++	void *src, unsigned long dst, size_t size)
+ {
+ 	int ret;
+ 
+ 	while (ROUND_DOWN(size, sizeof(long)) != 0) {
+-		ret = ptrace(PTRACE_POKEDATA, proc->pid, dst,
+-			     *(unsigned long *)src);
+-		if (ret)
++		ret = ptrace(PTRACE_POKEDATA, proc->pid, dst, *(unsigned long *)src);
++		if (ret) {
+ 			return -1;
+-
++		}
+ 		dst += sizeof(long);
+ 		src += sizeof(long);
+ 		size -= sizeof(long);
+@@ -42,26 +38,29 @@ static int upatch_process_mem_write_ptrace(struct upatch_process *proc,
+ 		unsigned long tmp;
+ 
+ 		tmp = ptrace(PTRACE_PEEKDATA, proc->pid, dst, NULL);
+-		if (tmp == (unsigned long)-1 && errno)
++		if (tmp == (unsigned long)-1 && errno) {
+ 			return -1;
++		}
+ 		memcpy(&tmp, src, size);
+ 
+ 		ret = ptrace(PTRACE_POKEDATA, proc->pid, dst, tmp);
+-		if (ret)
++		if (ret) {
+ 			return -1;
++		}
+ 	}
+ 
+ 	return 0;
+ }
+ 
+ int upatch_process_mem_write(struct upatch_process *proc, void *src,
+-			     unsigned long dst, size_t size)
++	unsigned long dst, size_t size)
+ {
+ 	static int use_pwrite = 1;
+ 	ssize_t w;
+ 
+-	if (use_pwrite)
++	if (use_pwrite) {
+ 		w = pwrite(proc->memfd, src, size, (off_t)dst);
++	}
+ 	if (!use_pwrite || (w == -1 && errno == EINVAL)) {
+ 		use_pwrite = 0;
+ 		return upatch_process_mem_write_ptrace(proc, src, dst, size);
+@@ -70,14 +69,16 @@ int upatch_process_mem_write(struct upatch_process *proc, void *src,
+ 	return w != size ? -1 : 0;
+ }
+ 
+-static struct upatch_ptrace_ctx *
+-upatch_ptrace_ctx_alloc(struct upatch_process *proc)
++static struct upatch_ptrace_ctx* upatch_ptrace_ctx_alloc(
++	struct upatch_process *proc)
+ {
+ 	struct upatch_ptrace_ctx *p;
+ 
+ 	p = malloc(sizeof(*p));
+-	if (!p)
++	if (!p) {
+ 		return NULL;
++	}
++
+ 	memset(p, 0, sizeof(*p));
+ 
+ 	p->execute_until = 0UL;
+@@ -86,56 +87,54 @@ upatch_ptrace_ctx_alloc(struct upatch_process *proc)
+ 
+ 	INIT_LIST_HEAD(&p->list);
+ 	list_add(&p->list, &proc->ptrace.pctxs);
++
+ 	return p;
+ }
+ 
+ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
+ {
+-	long ret;
+-	int status;
+-	struct upatch_ptrace_ctx *pctx;
+-
+-	pctx = upatch_ptrace_ctx_alloc(proc);
++	struct upatch_ptrace_ctx *pctx = upatch_ptrace_ctx_alloc(proc);
+ 	if (pctx == NULL) {
+-		log_error("Can't alloc upatch_ptrace_ctx");
++		log_error("Failed to alloc ptrace context");
+ 		return -1;
+ 	}
+ 
+ 	pctx->pid = tid;
+-	log_debug("Attaching to %d...", pctx->pid);
++	log_debug("Attaching to %d...", tid);
+ 
+-	ret = ptrace(PTRACE_ATTACH, pctx->pid, NULL, NULL);
++	long ret = ptrace(PTRACE_ATTACH, tid, NULL, NULL);
+ 	if (ret < 0) {
+-		log_error("can't attach to %d\n", pctx->pid);
++		log_error("Failed to attach thread, pid=%d, ret=%ld\n", tid, ret);
+ 		return -1;
+ 	}
+ 
+ 	do {
++		int status = 0;
++
+ 		ret = waitpid(tid, &status, __WALL);
+ 		if (ret < 0) {
+-			log_error("can't wait for thread\n");
++			log_error("Failed to wait thread, tid=%d, ret=%ld\n", tid, ret);
+ 			return -1;
+ 		}
+ 
+ 		/* We are expecting SIGSTOP */
+-		if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP)
++		if (WIFSTOPPED(status) && WSTOPSIG(status) == SIGSTOP) {
+ 			break;
++		}
+ 
+ 		/* If we got SIGTRAP because we just got out of execve, wait
+ 		 * for the SIGSTOP
+ 		 */
+-		if (WIFSTOPPED(status))
+-			status = (WSTOPSIG(status) == SIGTRAP) ?
+-					 0 :
+-					 WSTOPSIG(status);
+-		else if (WIFSIGNALED(status))
++		if (WIFSTOPPED(status)) {
++			status = (WSTOPSIG(status) == SIGTRAP) ? 0 : WSTOPSIG(status);
++		} else if (WIFSIGNALED(status)) {
+ 			/* Resend signal */
+ 			status = WTERMSIG(status);
++		}
+ 
+-		ret = ptrace(PTRACE_CONT, pctx->pid, NULL,
+-			     (void *)(uintptr_t)status);
++		ret = ptrace(PTRACE_CONT, tid, NULL, (void *)(uintptr_t)status);
+ 		if (ret < 0) {
+-			log_error("can't cont tracee\n");
++			log_error("Failed to continue thread, tid=%d, ret=%ld\n", tid, ret);
+ 			return -1;
+ 		}
+ 	} while (1);
+@@ -152,23 +151,22 @@ int wait_for_stop(struct upatch_ptrace_ctx *pctx, const void *data)
+ 	log_debug("wait_for_stop(pctx->pid=%d, pid=%d)\n", pctx->pid, pid);
+ 
+ 	while (1) {
+-		ret = ptrace(PTRACE_CONT, pctx->pid, NULL,
+-			     (void *)(uintptr_t)status);
++		ret = ptrace(PTRACE_CONT, pctx->pid, NULL, (void *)(uintptr_t)status);
+ 		if (ret < 0) {
+-			log_error("can't start tracee %d\n", pctx->pid);
++			log_error("Cannot start tracee %d, ret=%d\n", pctx->pid, ret);
+ 			return -1;
+ 		}
+ 
+ 		ret = waitpid(pid, &status, __WALL);
+ 		if (ret < 0) {
+-			log_error("can't wait tracee %d\n", pid);
++			log_error("Cannot wait tracee %d, ret=%d\n", pid, ret);
+ 			return -1;
+ 		}
+ 
+ 		if (WIFSTOPPED(status)) {
+-			if (WSTOPSIG(status) == SIGSTOP ||
+-			    WSTOPSIG(status) == SIGTRAP)
++			if (WSTOPSIG(status) == SIGSTOP || WSTOPSIG(status) == SIGTRAP) {
+ 				break;
++			}
+ 			status = WSTOPSIG(status);
+ 			continue;
+ 		}
+@@ -181,17 +179,16 @@ int wait_for_stop(struct upatch_ptrace_ctx *pctx, const void *data)
+ 
+ int upatch_ptrace_detach(struct upatch_ptrace_ctx *pctx)
+ {
+-	long ret;
+-
+-	if (!pctx->pid)
++	if (!pctx->pid) {
+ 		return 0;
+-	log_debug("Detaching from %d...\n", pctx->pid);
+-	ret = ptrace(PTRACE_DETACH, pctx->pid, NULL, NULL);
++	}
++
++	log_debug("Detaching from %d...", pctx->pid);
++	long ret = ptrace(PTRACE_DETACH, pctx->pid, NULL, NULL);
+ 	if (ret < 0) {
+-		log_error("can't detach from %d\n", pctx->pid);
++		log_error("Failed to detach from process, pid=%d, ret=%ld\n", pctx->pid, ret);
+ 		return -errno;
+ 	}
+-
+ 	log_debug("OK\n");
+ 
+ 	pctx->running = 1;
+@@ -200,16 +197,16 @@ int upatch_ptrace_detach(struct upatch_ptrace_ctx *pctx)
+ }
+ 
+ int upatch_execute_remote(struct upatch_ptrace_ctx *pctx,
+-			  const unsigned char *code, size_t codelen,
+-			  struct user_regs_struct *pregs)
++	const unsigned char *code, size_t codelen,
++	struct user_regs_struct *pregs)
+ {
+-	return upatch_arch_execute_remote_func(pctx, code, codelen, pregs,
+-					       wait_for_stop, NULL);
++	return upatch_arch_execute_remote_func(
++		pctx, code, codelen, pregs, wait_for_stop, NULL);
+ }
+ 
+ unsigned long upatch_mmap_remote(struct upatch_ptrace_ctx *pctx,
+-				 unsigned long addr, size_t length, int prot,
+-				 int flags, int fd, off_t offset)
++	unsigned long addr, size_t length, int prot,
++	int flags, int fd, off_t offset)
+ {
+ 	int ret;
+ 	unsigned long res = 0;
+@@ -218,8 +215,9 @@ unsigned long upatch_mmap_remote(struct upatch_ptrace_ctx *pctx,
+ 		  prot, flags, fd, offset);
+ 	ret = upatch_arch_syscall_remote(pctx, __NR_mmap, (unsigned long)addr,
+ 					 length, prot, flags, fd, offset, &res);
+-	if (ret < 0)
++	if (ret < 0) {
+ 		return 0;
++	}
+ 	if (ret == 0 && res >= (unsigned long)-MAX_ERRNO) {
+ 		errno = -(long)res;
+ 		return 0;
+@@ -228,7 +226,7 @@ unsigned long upatch_mmap_remote(struct upatch_ptrace_ctx *pctx,
+ }
+ 
+ int upatch_mprotect_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
+-			   size_t length, int prot)
++	size_t length, int prot)
+ {
+ 	int ret;
+ 	unsigned long res;
+@@ -248,7 +246,7 @@ int upatch_mprotect_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
+ }
+ 
+ int upatch_munmap_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
+-			 size_t length)
++	size_t length)
+ {
+ 	int ret;
+ 	unsigned long res;
+diff --git a/upatch/upatch-manage/upatch-relocation.c b/upatch/upatch-manage/upatch-relocation.c
+index 4c9c360..1baeecf 100644
+--- a/upatch/upatch-manage/upatch-relocation.c
++++ b/upatch/upatch-manage/upatch-relocation.c
+@@ -31,11 +31,10 @@ int apply_relocations(struct upatch_elf *uelf)
+ 		if (!(uelf->info.shdrs[infosec].sh_flags & SHF_ALLOC))
+ 			continue;
+ 
++		log_debug("Relocate '%s'\n", name);
+ 		if (uelf->info.shdrs[i].sh_type == SHT_REL) {
+-			log_error("do rel relocations for %s \n", name);
+ 			return -EPERM;
+ 		} else if (uelf->info.shdrs[i].sh_type == SHT_RELA) {
+-			log_debug("do rela relocations for %s \n", name);
+ 			err = apply_relocate_add(uelf, uelf->index.sym, i);
+ 		}
+ 
+diff --git a/upatch/upatch-manage/upatch-resolve.c b/upatch/upatch-manage/upatch-resolve.c
+index 9c140fe..1a462d9 100644
+--- a/upatch/upatch-manage/upatch-resolve.c
++++ b/upatch/upatch-manage/upatch-resolve.c
+@@ -121,7 +121,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
+         unsigned long sym_addr = relf->load_bias + rela_plt[i].r_offset;
+         elf_addr = insert_plt_table(uelf, obj, GELF_R_TYPE(rela_plt[i].r_info), sym_addr);
+ 
+-        log_debug("resolved %s from .rela_plt at 0x%lx\n", name, elf_addr);
++        log_debug("Resolved '%s' from '.rela_plt' at 0x%lx\n", name, elf_addr);
+         break;
+     }
+ 
+@@ -160,7 +160,7 @@ static unsigned long resolve_dynsym(struct upatch_elf *uelf,
+         unsigned long sym_addr = relf->load_bias + dynsym[i].st_value;
+         elf_addr = insert_got_table(uelf, obj, 0, sym_addr);
+ 
+-        log_debug("resolved %s from .dynsym at 0x%lx\n", name, elf_addr);
++        log_debug("Resolved '%s' from '.dynsym' at 0x%lx\n", name, elf_addr);
+         break;
+     }
+ 
+@@ -198,7 +198,7 @@ static unsigned long resolve_sym(struct upatch_elf *uelf,
+ 
+         elf_addr = relf->load_bias + sym[i].st_value;
+ 
+-        log_debug("resolved %s from .sym at 0x%lx\n", name, elf_addr);
++        log_debug("Resolved '%s' from '.sym' at 0x%lx\n", name, elf_addr);
+         break;
+     }
+ 
+@@ -220,7 +220,7 @@ static unsigned long resolve_patch_sym(struct upatch_elf *uelf,
+     }
+ 
+     elf_addr = relf->load_bias + patch_sym->st_value;
+-    log_debug("resolved %s from patch .sym at 0x%lx\n", name, elf_addr);
++    log_debug("Resolved '%s' from patch '.sym' at 0x%lx\n", name, elf_addr);
+ 
+     return elf_addr;
+ }
+@@ -268,7 +268,7 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
+     }
+ 
+     if (!elf_addr) {
+-        log_error("Cannot resolve symbol %s\n", name);
++        log_error("Cannot resolve symbol '%s'\n", name);
+     }
+     return elf_addr;
+ }
+@@ -286,38 +286,37 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
+ 
+         if (GELF_ST_TYPE(sym[i].st_info) == STT_SECTION &&
+             sym[i].st_shndx < uelf->info.hdr->e_shnum)
+-            name = uelf->info.shstrtab +
+-                   uelf->info.shdrs[sym[i].st_shndx].sh_name;
++            name = uelf->info.shstrtab + uelf->info.shdrs[sym[i].st_shndx].sh_name;
+         else
+             name = uelf->strtab + sym[i].st_name;
+ 
+         switch (sym[i].st_shndx) {
+         case SHN_COMMON:
+-            log_debug("unsupported Common symbol: %s\n", name);
++            log_debug("Unsupported common symbol '%s'\n", name);
+             ret = -ENOEXEC;
+             break;
+         case SHN_ABS:
+             break;
+         case SHN_UNDEF:
+             elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
+-            if (!elf_addr)
++            if (!elf_addr) {
+                 ret = -ENOEXEC;
++            }
+             sym[i].st_value = elf_addr;
+-            log_debug("resolved symbol %s at 0x%lx\n", name,
+-                  (unsigned long)sym[i].st_value);
++            log_debug("Resolved symbol '%s' at 0x%lx\n",
++                name, (unsigned long)sym[i].st_value);
+             break;
+         case SHN_LIVEPATCH:
+             sym[i].st_value += uelf->relf->load_bias;
+-            log_debug("resolved livepatch symbol %s at 0x%lx\n",
++            log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
+                   name, (unsigned long)sym[i].st_value);
+             break;
+         default:
+             /* use real address to calculate secbase */
+-            secbase =
+-                uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
++            secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
+             sym[i].st_value += secbase;
+-            log_debug("normal symbol %s at 0x%lx\n", name,
+-                  (unsigned long)sym[i].st_value);
++            log_debug("Symbol '%s' at 0x%lx\n",
++                name, (unsigned long)sym[i].st_value);
+             break;
+         }
+     }
+-- 
+2.33.0
+

@@ -1,0 +1,40 @@
+From b4a11e983c78d7f856a551e058b84c0ea4bde8c7 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Mon, 18 Dec 2023 20:20:19 +0800
+Subject: [PATCH 11/15] upatch-diff: fix a nullptr issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-diff/elf-correlate.c | 8 +++++---
+ 1 file changed, 5 insertions(+), 3 deletions(-)
+
+diff --git a/upatch/upatch-diff/elf-correlate.c b/upatch/upatch-diff/elf-correlate.c
+index 2dd665c..0773016 100644
+--- a/upatch/upatch-diff/elf-correlate.c
++++ b/upatch/upatch-diff/elf-correlate.c
+@@ -116,11 +116,13 @@ static void correlate_section(struct section *sec_orig, struct section *sec_patc
+ 		__correlate_section(sec_orig->rela, sec_patched->rela);
+ 	}
+ 
+-	if (sec_orig->secsym)
++	if (sec_orig->secsym && sec_patched->secsym) {
+ 		correlate_symbol(sec_orig->secsym, sec_patched->secsym);
++	}
+ 
+-	if (sec_orig->sym)
++	if (sec_orig->sym) {
+ 		correlate_symbol(sec_orig->sym, sec_patched->sym);
++	}
+ }
+ 
+ void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
+@@ -397,4 +399,4 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
+     }
+ 
+     return check_static_variable_correlate(uelf_source, uelf_patched);
+-}
+\ No newline at end of file
++}
+-- 
+2.33.0
+

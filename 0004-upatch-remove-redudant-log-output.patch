@@ -1,0 +1,25 @@
+From 295f6f406b86b70142bed9b17abc56b72962ac3d Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 20 Dec 2023 12:18:11 +0800
+Subject: [PATCH 04/15] upatch: remove redudant log output
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-tool/upatch-meta.c | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/upatch/upatch-tool/upatch-meta.c b/upatch/upatch-tool/upatch-meta.c
+index cf60cff..c625115 100644
+--- a/upatch/upatch-tool/upatch-meta.c
++++ b/upatch/upatch-tool/upatch-meta.c
+@@ -573,7 +573,6 @@ patch_status_e meta_get_patch_status(const char *uuid)
+ 	}
+ 	patch = find_patch_by_uuid(uuid);
+ 	if (patch == NULL) {
+-		log_warn("can't find patch uuid:%s failed to get status\n", uuid);
+ 		return UPATCH_PATCH_STATUS_NOT_APPLIED;
+ 	}
+ 	return patch->status;
+-- 
+2.33.0
+
