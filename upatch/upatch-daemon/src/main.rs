@@ -149,14 +149,14 @@ impl Daemon {
 
     fn start_and_run() -> Result<()> {
         let instance = Self::new()?;
+
+        info!("Preparing environment...");
+        instance.prepare_environment()?;
         instance.initialize_logger()?;
 
         info!("============================");
         info!("Upatch Daemon - v{}", DAEMON_VERSION);
         info!("============================");
-        info!("Preparing environment...");
-        instance.prepare_environment()?;
-
         info!("Start with {:#?}", instance.args);
         instance.daemonize()?;
 
