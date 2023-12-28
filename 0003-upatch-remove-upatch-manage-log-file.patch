@@ -1,0 +1,70 @@
+From bad9504ed575d86dd93ffcfdd466827cc3b3dadb Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 20 Dec 2023 10:46:44 +0800
+Subject: [PATCH 03/15] upatch: remove upatch manage log file
+
+1. remove /tmp/upatch-manage.log
+2. print log to stdout
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-manage/log.h           | 3 +--
+ upatch/upatch-manage/upatch-manage.c | 8 --------
+ 2 files changed, 1 insertion(+), 10 deletions(-)
+
+diff --git a/upatch/upatch-manage/log.h b/upatch/upatch-manage/log.h
+index 4d1fd7a..80fed3a 100644
+--- a/upatch/upatch-manage/log.h
++++ b/upatch/upatch-manage/log.h
+@@ -30,7 +30,6 @@
+ /* Files that include log.h must define loglevel and logprefix */
+ extern enum loglevel loglevel;
+ extern char *logprefix;
+-extern FILE *upatch_manage_log_fd;
+ 
+ enum exit_status {
+ 	EXIT_STATUS_SUCCESS = 0,
+@@ -58,7 +57,7 @@ enum exit_status {
+ #define log(level, format, ...)                        \
+ 	({                                             \
+ 		if (loglevel <= (level))               \
+-			fprintf(upatch_manage_log_fd, format, ##__VA_ARGS__); \
++			printf(format, ##__VA_ARGS__); \
+ 	})
+ 
+ #define REQUIRE(COND, message)          \
+diff --git a/upatch/upatch-manage/upatch-manage.c b/upatch/upatch-manage/upatch-manage.c
+index b36ff0d..a109db7 100644
+--- a/upatch/upatch-manage/upatch-manage.c
++++ b/upatch/upatch-manage/upatch-manage.c
+@@ -124,8 +124,6 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
+ 
+ static struct argp argp = { options, parse_opt, args_doc, program_doc };
+ 
+-FILE *upatch_manage_log_fd = NULL;
+-
+ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
+ {
+ 	struct upatch_elf uelf;
+@@ -184,11 +182,6 @@ int main(int argc, char *argv[])
+ 	struct arguments args;
+ 	int ret;
+ 
+-	upatch_manage_log_fd = fopen("/tmp/upatch-manage.log", "w");
+-	if (upatch_manage_log_fd < 0) {
+-		return -1;
+-	}
+-
+ 	memset(&args, 0, sizeof(struct arguments));
+ 	argp_parse(&argp, argc, argv, 0, NULL, &args);
+ 	if (args.verbose) {
+@@ -217,6 +210,5 @@ int main(int argc, char *argv[])
+ 		break;
+ 	}
+ 
+-	fclose(upatch_manage_log_fd);
+ 	return abs(ret);
+ }
+-- 
+2.33.0
+

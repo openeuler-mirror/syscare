@@ -1,0 +1,31 @@
+From 92f5334a547ddd7c1a8f787cdde7373965942835 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 8 Dec 2023 17:33:00 +0800
+Subject: [PATCH 01/15] builder: fix 'enabling multiple kpatch may lead
+ soft-lockup' issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ builder/src/patch/kernel_patch/kpatch_builder.rs | 6 +++---
+ 1 file changed, 3 insertions(+), 3 deletions(-)
+
+diff --git a/builder/src/patch/kernel_patch/kpatch_builder.rs b/builder/src/patch/kernel_patch/kpatch_builder.rs
+index d0f58b4..69c0cee 100644
+--- a/builder/src/patch/kernel_patch/kpatch_builder.rs
++++ b/builder/src/patch/kernel_patch/kpatch_builder.rs
+@@ -212,9 +212,9 @@ impl KernelPatchBuilder {
+     fn parse_kbuild_cmd_envs(&self, build_root: &Path) -> ExternCommandEnvs {
+         ExternCommandEnvs::new()
+             .env("CACHEDIR", build_root)
+-            .env("NO_PROFILING_CALLS", "1")
+-            .env("DISABLE_AFTER_LOAD", "1")
+-            .env("KEEP_JUMP_LABEL", "1")
++            .env("NO_PROFILING_CALLS", "yes")
++            .env("DISABLE_AFTER_LOAD", "yes")
++            .env("KEEP_JUMP_LABEL", "yes")
+     }
+ 
+     fn invoke_kpatch_build(
+-- 
+2.33.0
+

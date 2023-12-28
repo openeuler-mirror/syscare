@@ -1,0 +1,106 @@
+From 5feeef470d6088cc03e04e4a8f750b6f3ae816ba Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 27 Dec 2023 17:17:16 +0800
+Subject: [PATCH 13/15] upatchd: create config dir at startup
+
+1. rename arg '--config-file' to '--config-dir'
+2. try to create config directory at startup
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch/upatch-daemon/src/args/matcher.rs | 4 ++--
+ upatch/upatch-daemon/src/args/mod.rs     | 8 ++++----
+ upatch/upatch-daemon/src/main.rs         | 7 ++++++-
+ 3 files changed, 12 insertions(+), 7 deletions(-)
+
+diff --git a/upatch/upatch-daemon/src/args/matcher.rs b/upatch/upatch-daemon/src/args/matcher.rs
+index 66cf316..0badaf6 100644
+--- a/upatch/upatch-daemon/src/args/matcher.rs
++++ b/upatch/upatch-daemon/src/args/matcher.rs
+@@ -2,8 +2,8 @@ use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings,
+ 
+ const DEFAULT_PID_FILE: &str = "/var/run/upatchd.pid";
+ const DEFAULT_SOCKET_FILE: &str = "/var/run/upatchd.sock";
+-const DEFAULT_CONFIG_FILE: &str = "/etc/syscare/upatchd.yaml";
+ const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
++const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
+ const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
+ const DEFAULT_LOG_LEVEL: &str = "info";
+ 
+@@ -24,7 +24,7 @@ impl ArgMatcher {
+             (@arg daemon: short("d") long("daemon") "Run as a daemon")
+             (@arg pid_file: long("pid-file") +takes_value value_name("PID_FILE") default_value(DEFAULT_PID_FILE) "Path for daemon pid file")
+             (@arg socket_file: long("socket-file") +takes_value value_name("SOCKET_FILE") default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
+-            (@arg config_file: long("config-file") +takes_value value_name("CONFIG_FILE") default_value(DEFAULT_CONFIG_FILE) "Path for daemon config file")
++            (@arg config_file: long("config-dir") +takes_value value_name("CONFIG_DIR") default_value(DEFAULT_CONFIG_DIR) "Daemon config directory")
+             (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Daemon working directory")
+             (@arg log_dir: long("log-dir") +takes_value value_name("LOG_DIR") default_value(DEFAULT_LOG_DIR) "Daemon logging directory")
+             (@arg log_level: short("l") long("log-level") +takes_value value_name("LOG_LEVEL") default_value(DEFAULT_LOG_LEVEL) "Set the logging level (\"trace\"|\"debug\"|\"info\"|\"warn\"|\"error\")")
+diff --git a/upatch/upatch-daemon/src/args/mod.rs b/upatch/upatch-daemon/src/args/mod.rs
+index e20d66b..318470e 100644
+--- a/upatch/upatch-daemon/src/args/mod.rs
++++ b/upatch/upatch-daemon/src/args/mod.rs
+@@ -23,8 +23,8 @@ pub struct Arguments {
+     /// Path for daemon unix socket
+     pub socket_file: PathBuf,
+ 
+-    /// Path for daemon configuration file
+-    pub config_file: PathBuf,
++    /// Daemon config directory
++    pub config_dir: PathBuf,
+ 
+     /// Daemon working directory
+     pub work_dir: PathBuf,
+@@ -45,7 +45,7 @@ impl Parser<'_> for Arguments {
+             daemon: ArgParserImpl::is_present(matches, "daemon"),
+             pid_file: ArgParserImpl::parse_arg(matches, "pid_file")?,
+             socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
+-            config_file: ArgParserImpl::parse_arg(matches, "config_file")?,
++            config_dir: ArgParserImpl::parse_arg(matches, "config_dir")?,
+             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+             log_dir: ArgParserImpl::parse_arg(matches, "log_dir")?,
+             log_level: ArgParserImpl::parse_arg(matches, "log_level")?,
+@@ -64,7 +64,7 @@ impl Arguments {
+     fn normalize_pathes(mut self) -> Result<Self> {
+         self.pid_file = fs::normalize(&self.pid_file)?;
+         self.socket_file = fs::normalize(&self.socket_file)?;
+-        self.config_file = fs::normalize(&self.config_file)?;
++        self.config_dir = fs::normalize(&self.config_dir)?;
+         self.work_dir = fs::normalize(self.work_dir)?;
+         self.log_dir = fs::normalize(&self.log_dir)?;
+ 
+diff --git a/upatch/upatch-daemon/src/main.rs b/upatch/upatch-daemon/src/main.rs
+index cda98b2..80c292f 100644
+--- a/upatch/upatch-daemon/src/main.rs
++++ b/upatch/upatch-daemon/src/main.rs
+@@ -28,6 +28,8 @@ use args::Arguments;
+ use logger::Logger;
+ use rpc::{Skeleton, SkeletonImpl};
+ 
++const CONFIG_FILE_NAME: &str = "upatchd.yaml";
++
+ const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+ const DAEMON_UMASK: u32 = 0o027;
+ const DAEMON_PARK_TIMEOUT: u64 = 100;
+@@ -67,6 +69,8 @@ impl Daemon {
+     }
+ 
+     fn prepare_environment(&self) -> Result<()> {
++        self.prepare_directory(&self.args.config_dir)?;
++
+         self.prepare_directory(&self.args.work_dir)?;
+         self.prepare_directory(&self.args.log_dir)?;
+         Ok(())
+@@ -99,7 +103,8 @@ impl Daemon {
+     fn initialize_skeleton(&self) -> Result<IoHandler> {
+         let mut io_handler = IoHandler::new();
+ 
+-        io_handler.extend_with(SkeletonImpl::new(&self.args.config_file)?.to_delegate());
++        let config_file = self.args.config_dir.join(CONFIG_FILE_NAME);
++        io_handler.extend_with(SkeletonImpl::new(config_file)?.to_delegate());
+ 
+         Ok(io_handler)
+     }
+-- 
+2.33.0
+
