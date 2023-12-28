@@ -6,7 +6,8 @@ use syscare_common::os;
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
-const DEFAULT_WORK_DIR: &str = ".";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
 lazy_static! {
@@ -38,7 +39,8 @@ impl ArgMatcher {
             (@arg source: short("s") long("source") +required +takes_value +multiple value_name("SOURCE") "Source package(s)")
             (@arg debuginfo: short("d") long("debuginfo") +required +takes_value +multiple value_name("DEBUGINFO") "Debuginfo package(s)")
             (@arg patch: short("p") long("patch") +required +takes_value +multiple value_name("PATCH") "Patch file(s)")
-            (@arg workdir: long("workdir") +takes_value value_name("WORKDIR") default_value(DEFAULT_WORK_DIR) "Working directory")
+            (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Working directory")
+            (@arg build_root: long("build-root") +takes_value value_name("BUILD_ROOT") default_value(DEFAULT_BUILD_ROOT) "Build temporary directory")
             (@arg output: short("o") long("output") +takes_value value_name("OUTPUT") default_value(DEFAULT_OUTPUT_DIR) "Output directory")
             (@arg jobs: short("j") long("jobs") +takes_value value_name("JOBS") default_value(&DEFAULT_BUILD_JOBS) "Parallel build jobs")
             (@arg skip_compiler_check: long("skip-compiler-check") "Skip compiler version check (not recommended)")

@@ -17,12 +17,6 @@ pub struct Arguments {
     /// Run as a daemon
     pub daemon: bool,
 
-    /// Path for daemon pid file
-    pub pid_file: PathBuf,
-
-    /// Path for daemon unix socket
-    pub socket_file: PathBuf,
-
     /// Daemon working directory
     pub work_dir: PathBuf,
 
@@ -43,8 +37,6 @@ impl Parser<'_> for Arguments {
     {
         Ok(Self {
             daemon: ArgParserImpl::is_present(matches, "daemon"),
-            pid_file: ArgParserImpl::parse_arg(matches, "pid_file")?,
-            socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
             data_dir: ArgParserImpl::parse_arg(matches, "data_dir")?,
             log_dir: ArgParserImpl::parse_arg(matches, "log_dir")?,
@@ -62,8 +54,6 @@ impl Arguments {
     }
 
     fn normalize_pathes(mut self) -> Result<Self> {
-        self.pid_file = fs::normalize(&self.pid_file)?;
-        self.socket_file = fs::normalize(&self.socket_file)?;
         self.work_dir = fs::normalize(self.work_dir)?;
         self.data_dir = fs::normalize(&self.data_dir)?;
         self.log_dir = fs::normalize(&self.log_dir)?;

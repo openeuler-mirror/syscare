@@ -21,6 +21,9 @@ pub struct Arguments {
     /// Specify work directory
     pub work_dir: PathBuf,
 
+    /// Specify build temporary directory
+    pub build_root: PathBuf,
+
     /// Specify source directory
     pub source_dir: PathBuf,
 
@@ -66,6 +69,7 @@ impl Parser<'_> for Arguments {
                 true => ArgParserImpl::parse_arg(matches, "name")?,
             },
             work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+            build_root: ArgParserImpl::parse_arg(matches, "build_root")?,
             source_dir: ArgParserImpl::parse_arg(matches, "source_dir")?,
             build_source_cmd: ArgParserImpl::parse_arg(matches, "build_source_cmd")?,
             build_patch_cmd: ArgParserImpl::parse_arg(matches, "build_patch_cmd")?,
@@ -95,13 +99,21 @@ impl Arguments {
     }
 
     fn check(mut self) -> anyhow::Result<Self> {
-        if !self.work_dir.is_dir() {
+        if !self.build_root.is_dir() {
             bail!(
-                "Working directory \"{}\" should be a directory",
+                "Work directory \"{}\" should be a directory",
                 self.work_dir.display()
             );
         }
-        self.work_dir = real_arg(self.work_dir)?.join("upatch");
+        self.build_root = real_arg(&self.build_root)?;
+
+        if !self.build_root.is_dir() {
+            bail!(
+                "Build root directory \"{}\" should be a directory",
+                self.build_root.display()
+            );
+        }
+        self.build_root = real_arg(&self.build_root)?.join("upatch");
 
         if !self.source_dir.is_dir() {
             bail!(

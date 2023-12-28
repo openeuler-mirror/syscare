@@ -17,7 +17,7 @@ use syscare_common::util::fs;
 #[derive(Debug)]
 pub struct Arguments {
     pub command: SubCommand,
-    pub socket_file: PathBuf,
+    pub work_dir: PathBuf,
     pub verbose: bool,
 }
 
@@ -30,7 +30,7 @@ impl Arguments {
     }
 
     fn normalize_pathes(mut self) -> Result<Self> {
-        self.socket_file = fs::normalize(self.socket_file)?;
+        self.work_dir = fs::normalize(self.work_dir)?;
         Ok(self)
     }
 }
@@ -42,7 +42,7 @@ impl Parser<'_> for Arguments {
     {
         Ok(Self {
             command: SubCommand::parse(matches)?,
-            socket_file: ArgParserImpl::parse_arg(matches, "socket_file")?,
+            work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
             verbose: ArgParserImpl::parse_arg(matches, "verbose")?,
         })
     }

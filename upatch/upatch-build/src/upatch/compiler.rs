@@ -1,4 +1,3 @@
-use std::cmp;
 use std::collections::HashSet;
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
@@ -16,24 +15,19 @@ use crate::rpc::*;
 use super::Error;
 use super::Result;
 
-const UPATCHD_SOCKET: &str = "/var/run/upatchd.sock";
-
 #[derive(Clone)]
 pub struct Compiler {
     compiler: Vec<PathBuf>,
     assembler: Vec<PathBuf>,
     linker: Vec<PathBuf>,
-    upatch_proxy: UpatchProxy,
 }
 
 impl Compiler {
     pub fn new() -> Self {
-        let remote = RpcRemote::new(UPATCHD_SOCKET);
         Self {
             compiler: Vec::new(),
             assembler: Vec::new(),
             linker: Vec::new(),
-            upatch_proxy: UpatchProxy::new(Rc::new(remote)),
         }
     }
 
@@ -92,14 +86,6 @@ impl Compiler {
             return Err(Error::Compiler("can't find linker in compiler".to_string()));
         }
         Ok(())
-    }
-
-    pub fn hack(&self) -> Result<()> {
-        self.hijacker_register(self.compiler.len() + self.assembler.len())
-    }
-
-    pub fn unhack(&self) -> Result<()> {
-        self.hijacker_unregister(self.compiler.len() + self.assembler.len())
     }
 
     pub fn check_version<P, I, Q>(&self, cache_dir: P, debug_infoes: I) -> Result<()>
@@ -188,89 +174,76 @@ impl Compiler {
     }
 }
 
-impl Compiler {
-    fn hijacker_register(&self, num: usize) -> Result<()> {
-        for i in 0..cmp::min(num, self.compiler.len()) {
-            trace!("hack {}", self.compiler[i].display());
-            if let Err(e) = self.upatch_proxy.enable_hijack(self.compiler[i].clone()) {
-                trace!("hack {:?} error {}, try to rollback", self.compiler[i], e);
-                self.hijacker_unregister(i)?;
-                return Err(Error::Mod(format!(
-                    "hack {} error {}",
-                    self.compiler[i].display(),
-                    e
-                )));
+pub struct CompilerHackGuard<'a> {
+    inner: &'a Compiler,
+    upatch_proxy: UpatchProxy,
+}
+
+impl<'a> CompilerHackGuard<'a> {
+    pub fn new<P: AsRef<Path>>(compiler: &'a Compiler, socket_file: P) -> Result<Self> {
+        let remote = RpcRemote::new(socket_file);
+        let instance = Self {
+            inner: compiler,
+            upatch_proxy: UpatchProxy::new(Rc::new(remote)),
+        };
+        instance.hack()?;
+
+        Ok(instance)
+    }
+}
+
+impl CompilerHackGuard<'_> {
+    pub fn hack(&self) -> Result<()> {
+        let mut hack_list = Vec::new();
+        hack_list.extend(&self.inner.compiler);
+        hack_list.extend(&self.inner.assembler);
+
+        let mut finished_list = Vec::new();
+        let mut need_rollback = false;
+
+        for exec_path in hack_list {
+            trace!("Hacking \"{}\"...", exec_path.display());
+            if let Err(e) = self.upatch_proxy.enable_hijack(exec_path.to_owned()) {
+                error!("Failed to hack \"{}\", {}", exec_path.display(), e);
+                need_rollback = true;
+                break;
             }
+            finished_list.push(exec_path);
         }
-        for i in self.compiler.len()..num {
-            let i = i - self.compiler.len();
-            trace!("hack {}", self.assembler[i].display());
-            if let Err(e) = self.upatch_proxy.enable_hijack(self.assembler[i].clone()) {
-                trace!(
-                    "hack {} error {}, try to rollback",
-                    self.assembler[i].display(),
-                    e
-                );
-                self.hijacker_unregister(i)?;
-                return Err(Error::Mod(format!(
-                    "hack {} error {}",
-                    self.assembler[i].display(),
-                    e
-                )));
+
+        if need_rollback {
+            trace!("Rolling back...");
+            for exec_path in finished_list {
+                trace!("Unhacking \"{}\"...", exec_path.display());
+                self.upatch_proxy.disable_hijack(exec_path.to_owned()).ok();
+            }
+            return Err(Error::Mod(String::from("Failed to hack compilers")));
+        }
+
+        Ok(())
+    }
+
+    pub fn unhack(&self) -> Result<()> {
+        let mut hack_list = Vec::new();
+        hack_list.extend(&self.inner.compiler);
+        hack_list.extend(&self.inner.assembler);
+        hack_list.reverse();
+
+        for exec_path in hack_list {
+            trace!("Unhacking \"{}\"...", exec_path.display());
+            if let Err(e) = self.upatch_proxy.disable_hijack(exec_path.to_owned()) {
+                error!("Failed to unhack \"{}\", {}", exec_path.display(), e);
+                return Err(Error::Mod(String::from("Failed to unhack compilers")));
             }
         }
         Ok(())
     }
-
-    fn hijacker_unregister(&self, num: usize) -> Result<()> {
-        for i in (self.compiler.len()..num).rev() {
-            let i = i - self.compiler.len();
-            trace!("unhack {}", self.assembler[i].display());
-            if let Err(e) = self.upatch_proxy.disable_hijack(self.assembler[i].clone()) {
-                trace!("unhack {} error {}", self.assembler[i].display(), e);
-                return Err(Error::Mod(format!(
-                    "unhack {} error {}",
-                    self.assembler[i].display(),
-                    e
-                )));
-            }
-        }
-
-        for i in (0..cmp::min(num, self.compiler.len())).rev() {
-            trace!("unhack {}", self.compiler[i].display());
-            if let Err(e) = self.upatch_proxy.disable_hijack(self.compiler[i].clone()) {
-                trace!("unhack {} error {}", self.compiler[i].display(), e);
-                return Err(Error::Mod(format!(
-                    "unhack {} error {}",
-                    self.compiler[i].display(),
-                    e
-                )));
-            }
-        }
-        Ok(())
-    }
 }
 
-pub struct CompilerHackGuard {
-    compiler: Compiler,
-}
-
-impl CompilerHackGuard {
-    pub fn new(compiler: Compiler) -> Result<Self> {
-        compiler.hack()?;
-        Ok(CompilerHackGuard { compiler })
-    }
-}
-impl Drop for CompilerHackGuard {
+impl Drop for CompilerHackGuard<'_> {
     fn drop(&mut self) {
-        if let Err(e) = self.compiler.unhack() {
+        if let Err(e) = self.unhack() {
             trace!("{}", e);
         }
-    }
-}
-
-impl Default for Compiler {
-    fn default() -> Self {
-        Self::new()
     }
 }

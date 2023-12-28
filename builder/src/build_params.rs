@@ -2,7 +2,7 @@ use std::path::PathBuf;
 
 use syscare_abi::{PackageInfo, PatchFile, PatchType};
 
-use crate::{package::PackageBuildRoot, workdir::WorkDir};
+use crate::{build_root::BuildRoot, package::PackageBuildRoot};
 
 #[derive(Debug, Clone)]
 pub struct BuildEntry {
@@ -12,7 +12,8 @@ pub struct BuildEntry {
 }
 
 pub struct BuildParameters {
-    pub workdir: WorkDir,
+    pub work_dir: PathBuf,
+    pub build_root: BuildRoot,
     pub pkg_build_root: PackageBuildRoot,
     pub build_entry: BuildEntry,
     pub kernel_build_entry: Option<BuildEntry>,

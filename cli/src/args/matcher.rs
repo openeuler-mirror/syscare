@@ -1,6 +1,6 @@
 use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
 
-const DEFAULT_SOCKET_FILE: &str = "/var/run/syscared.sock";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 
 pub struct ArgMatcher;
 
@@ -21,7 +21,7 @@ impl ArgMatcher {
                 AppSettings::VersionlessSubcommands,
                 AppSettings::DisableHelpSubcommand,
             ])
-            (@arg socket_file: short("s") long("socket-file") value_name("SOCKET_FILE") +takes_value default_value(DEFAULT_SOCKET_FILE) "Path for daemon unix socket")
+            (@arg work_dir: short("w") long("work-dir") value_name("WORK_DIR") +takes_value default_value(DEFAULT_WORK_DIR) "Path for working directory")
             (@arg verbose: short("v") long("verbose") "Provide more detailed info")
             (@subcommand build =>
                 (about: "Build a patch")

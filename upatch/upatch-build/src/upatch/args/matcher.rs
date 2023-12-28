@@ -1,6 +1,7 @@
 use clap::{clap_app, crate_description, crate_name, crate_version, AppSettings, ArgMatches};
 
-const DEFAULT_WORK_DIR: &str = "~/.upatch";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+const DEFAULT_BUILD_ROOT: &str = "~/.upatch";
 const DEFAULT_BUILD_PATCH_CMD: &str = "";
 const DEFAULT_COMPILERS: &str = "gcc";
 const DEFAULT_OUTPUT_DIR: &str = "~/.upatch";
@@ -21,7 +22,8 @@ impl ArgMatcher {
                 AppSettings::UnifiedHelpMessage,
             ])
             (@arg name: short("n") long("name") +takes_value value_name("NAME") "Specify output name")
-            (@arg work_dir: short("w") long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify working directory")
+            (@arg work_dir: long("work-dir") +takes_value value_name("WORK_DIR") default_value(DEFAULT_WORK_DIR) "Specify working directory")
+            (@arg build_root: long("build-root") +takes_value value_name("BUILD_ROOT") default_value(DEFAULT_BUILD_ROOT) "Specify build temporary directory")
             (@arg source_dir: short("s") long("source-dir") +required +takes_value value_name("SOURCE_DIR") "Specify source directory")
             (@arg build_source_cmd: short("b") long("build-source-cmd") +required +takes_value value_name("BUILD_SOURCE_CMD") "Specify build source command")
             (@arg build_patch_cmd: long("build-patch-cmd") +takes_value value_name("BUILD_PATCH_CMD") default_value(DEFAULT_BUILD_PATCH_CMD) +hide_default_value "Specify build patched source command [default: <BUILD_SOURCE_CMD>]")

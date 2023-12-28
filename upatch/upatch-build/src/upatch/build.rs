@@ -11,17 +11,19 @@ use crate::tool::*;
 use super::note;
 use super::resolve;
 use super::Arguments;
+use super::BuildRoot;
 use super::Error;
 use super::LinkMessages;
 use super::Project;
 use super::Result;
 use super::Tool;
-use super::WorkDir;
 use super::{Compiler, CompilerHackGuard};
+
+const UPATCHD_SOCKET_NAME: &str = "upatchd.sock";
 
 pub struct UpatchBuild {
     args: Arguments,
-    work_dir: WorkDir,
+    build_root: BuildRoot,
     compiler: Compiler,
     tool: Tool,
     dwarf: Dwarf,
@@ -35,7 +37,7 @@ impl UpatchBuild {
     fn new() -> Result<Self> {
         Ok(Self {
             args: Arguments::new()?,
-            work_dir: WorkDir::new(),
+            build_root: BuildRoot::new(),
             compiler: Compiler::new(),
             tool: Tool::new(),
             dwarf: Dwarf::new(),
@@ -54,7 +56,7 @@ impl UpatchBuild {
     }
 
     fn build_main(mut self) -> Result<()> {
-        self.work_dir.create_dir(&self.args.work_dir)?;
+        self.build_root.create_dir(&self.args.build_root)?;
         self.init_logger()?;
 
         // find upatch-diff
@@ -70,18 +72,19 @@ impl UpatchBuild {
         self.compiler.analyze(&self.args.compiler)?;
         if !self.args.skip_compiler_check {
             self.compiler
-                .check_version(self.work_dir.cache_dir(), &self.args.debuginfo)?;
+                .check_version(self.build_root.cache_dir(), &self.args.debuginfo)?;
         }
 
         // hack compiler
-        info!("Hacking compiler");
-        let compiler_hacker = CompilerHackGuard::new(self.compiler.clone())?;
+        info!("Hacking compilers");
+        let socket_file = self.args.work_dir.join(UPATCHD_SOCKET_NAME);
+        let compiler_hacker = CompilerHackGuard::new(&self.compiler, socket_file)?;
         let project_name = self.args.source_dir.file_name().unwrap();
 
         // build source
         info!("Building original {:?}", project_name);
         project.build(
-            self.work_dir.source_dir(),
+            self.build_root.source_dir(),
             self.args.build_source_cmd.clone(),
         )?;
 
@@ -92,12 +95,13 @@ impl UpatchBuild {
 
         // collect source link message and object message
         self.source_link_messages =
-            LinkMessages::from(&self.args.elf_path, self.work_dir.source_dir())?;
-        self.source_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.source_dir())?;
+            LinkMessages::from(&self.args.elf_path, self.build_root.source_dir())?;
+        self.source_obj =
+            self.correlate_obj(&self.args.source_dir, self.build_root.source_dir())?;
         if self.source_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                self.work_dir.source_dir()
+                self.build_root.source_dir()
             )));
         }
 
@@ -106,21 +110,24 @@ impl UpatchBuild {
 
         // build patched
         info!("Building patched {:?}", project_name);
-        project.build(self.work_dir.patch_dir(), self.args.build_patch_cmd.clone())?;
+        project.build(
+            self.build_root.patch_dir(),
+            self.args.build_patch_cmd.clone(),
+        )?;
 
         // collect patched link message and object message
         self.patch_link_messages =
-            LinkMessages::from(&self.args.elf_path, self.work_dir.patch_dir())?;
-        self.patch_obj = self.correlate_obj(&self.args.source_dir, self.work_dir.patch_dir())?;
+            LinkMessages::from(&self.args.elf_path, self.build_root.patch_dir())?;
+        self.patch_obj = self.correlate_obj(&self.args.source_dir, self.build_root.patch_dir())?;
         if self.patch_obj.is_empty() {
             return Err(Error::Build(format!(
                 "no valid object in {:?}",
-                self.work_dir.patch_dir()
+                self.build_root.patch_dir()
             )));
         }
 
         // unhack compiler
-        info!("Unhacking compiler");
+        info!("Unhacking compilers");
         drop(compiler_hacker);
 
         // detecting changed objects
@@ -153,7 +160,7 @@ impl UpatchBuild {
         };
 
         logger.set_print_level(log_level);
-        logger.set_log_file(LevelFilter::Trace, self.work_dir.log_file())?;
+        logger.set_log_file(LevelFilter::Trace, self.build_root.log_file())?;
         Logger::init_logger(logger);
 
         Ok(())
@@ -228,7 +235,7 @@ impl UpatchBuild {
                     patch_path,
                     &output,
                     &debug_info,
-                    self.work_dir.log_file(),
+                    self.build_root.log_file(),
                     self.args.verbose,
                 )?,
                 None => {
@@ -312,11 +319,15 @@ impl UpatchBuild {
             };
 
             let binary_name = file_name(&self.args.elf_path[i])?;
-            let diff_dir = self.work_dir.output_dir().to_path_buf().join(&binary_name);
+            let diff_dir = self
+                .build_root
+                .output_dir()
+                .to_path_buf()
+                .join(&binary_name);
             fs::create_dir(&diff_dir)?;
 
             let new_debug_info = self
-                .work_dir
+                .build_root
                 .debuginfo_dir()
                 .join(file_name(&self.args.debuginfo[i])?);
             debug!(

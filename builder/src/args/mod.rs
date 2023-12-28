@@ -41,7 +41,10 @@ pub struct Arguments {
     pub patch: Vec<PathBuf>,
 
     /// Working directory
-    pub workdir: PathBuf,
+    pub work_dir: PathBuf,
+
+    /// Build temporary directory
+    pub build_root: PathBuf,
 
     /// Generated patch output directory
     pub output: PathBuf,
@@ -74,7 +77,8 @@ impl Parser<'_> for Arguments {
             source: ArgParserImpl::parse_args(matches, "source")?,
             debuginfo: ArgParserImpl::parse_args(matches, "debuginfo")?,
             patch: ArgParserImpl::parse_args(matches, "patch")?,
-            workdir: ArgParserImpl::parse_arg(matches, "workdir")?,
+            work_dir: ArgParserImpl::parse_arg(matches, "work_dir")?,
+            build_root: ArgParserImpl::parse_arg(matches, "build_root")?,
             output: ArgParserImpl::parse_arg(matches, "output")?,
             jobs: ArgParserImpl::parse_arg(matches, "jobs")?,
             skip_compiler_check: ArgParserImpl::is_present(matches, "skip_compiler_check"),
@@ -102,7 +106,7 @@ impl Arguments {
         for patch_file in &mut self.patch {
             *patch_file = fs::normalize(&patch_file)?;
         }
-        self.workdir = fs::normalize(&self.workdir)?;
+        self.build_root = fs::normalize(&self.build_root)?;
         self.output = fs::normalize(&self.output)?;
 
         Ok(self)

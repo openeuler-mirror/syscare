@@ -19,14 +19,14 @@ const PATCH_ROOT_NAME: &str = "patch";
 const BUILD_LOG_NAME: &str = "build.log";
 
 #[derive(Debug, Clone)]
-pub struct WorkDir {
+pub struct BuildRoot {
     pub path: PathBuf,
     pub package: PackageRoot,
     pub patch: PatchRoot,
     pub log_file: PathBuf,
 }
 
-impl WorkDir {
+impl BuildRoot {
     pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
         let path = path.as_ref().to_path_buf();
         let package = PackageRoot::new(path.join(PACKAGE_ROOT_NAME))?;
@@ -46,7 +46,7 @@ impl WorkDir {
     }
 }
 
-impl Deref for WorkDir {
+impl Deref for BuildRoot {
     type Target = Path;
 
     fn deref(&self) -> &Self::Target {
@@ -54,7 +54,7 @@ impl Deref for WorkDir {
     }
 }
 
-impl AsRef<OsStr> for WorkDir {
+impl AsRef<OsStr> for BuildRoot {
     fn as_ref(&self) -> &OsStr {
         self.as_os_str()
     }
