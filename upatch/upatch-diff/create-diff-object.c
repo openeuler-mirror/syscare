@@ -59,6 +59,8 @@
 //#include "upatch-manage.h"
 #include "upatch-patch.h"
 
+#define PROG_VERSION "upatch-diff "BUILD_VERSION
+
 enum loglevel loglevel = NORMAL;
 char *logprefix;
 char *upatch_elf_name;
@@ -85,7 +87,7 @@ static char program_doc[] =
 
 static char args_doc[] = "-s source_obj -p patched_obj -r elf_file -o output_obj";
 
-const char *argp_program_version = UPATCH_VERSION;
+const char *argp_program_version = PROG_VERSION;
 
 static error_t check_opt(struct argp_state *state)
 {

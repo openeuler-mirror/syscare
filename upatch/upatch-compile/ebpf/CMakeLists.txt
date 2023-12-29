@@ -2,9 +2,6 @@
 set(UPATCH_HIJACKER_EBPF "upatch-hijacker")
 set(UPATCH_HIJACKER_EBPF_EXE "upatch_hijacker")
 
-find_program(BASH bash HINTS /bin)
-find_package(ZLIB)
-
 if(NOT DEFINED BPFTOOL_PATH)
     set(BPFTOOL_PATH "bpftool")
 endif()
@@ -63,7 +60,7 @@ function(generate_bpf_skel bpf_source bpf_headers bpf_object skel_output)
         DEPENDS ${bpf_headers}
     )
     add_custom_command(OUTPUT ${skel_output}
-        COMMAND ${CMAKE_COMMAND} -E env ${BASH} -c
+        COMMAND ${CMAKE_COMMAND} -E env sh -c
             "${BPFTOOL_PATH} gen skeleton ${bpf_object} > ${skel_output}"
             VERBATIM
             MAIN_DEPENDENCY ${bpf_object}
@@ -82,9 +79,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/../common)
 add_executable(${UPATCH_HIJACKER_EBPF_EXE} ${UPATCH_HIJACKER_EBPF}.c ${_skel_output})
 if(BTF_PATH STREQUAL "/sys/kernel/btf/vmlinux")
-	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE libbpf.a elf ZLIB::ZLIB)
+	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE libbpf.a elf z)
 else()
-	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../lib/${ARCH}/libbpf.a elf ZLIB::ZLIB)
+	target_link_libraries(${UPATCH_HIJACKER_EBPF_EXE} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../../../lib/${ARCH}/libbpf.a elf z)
 endif()
 
 install(

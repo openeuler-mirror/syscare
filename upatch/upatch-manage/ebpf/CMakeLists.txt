@@ -2,9 +2,6 @@
 cmake_minimum_required(VERSION 3.22)
 project(upatch-manager)
 
-find_program(BASH bash HINTS /bin)
-find_package(ZLIB)
-
 if(NOT DEFINED BPFTOOL_PATH)
     set(BPFTOOL_PATH "bpftool")
 endif()
@@ -48,7 +45,7 @@ function(generate_bpf_skel bpf_source bpf_headers bpf_object skel_output)
         DEPENDS ${bpf_headers}
     )
     add_custom_command(OUTPUT ${skel_output}
-        COMMAND ${CMAKE_COMMAND} -E env ${BASH} -c
+        COMMAND ${CMAKE_COMMAND} -E env sh -c
             "${BPFTOOL_PATH} gen skeleton ${bpf_object} > ${skel_output}"
             VERBATIM
             MAIN_DEPENDENCY ${bpf_object}
@@ -65,4 +62,4 @@ generate_bpf_skel(
 add_compile_options(-g -Wall)
 include_directories(${CMAKE_CURRENT_BINARY_DIR})
 add_executable(${CMAKE_PROJECT_NAME} ${CMAKE_PROJECT_NAME}.c ${_skel_output})
-target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE libbpf.a elf ZLIB::ZLIB)
+target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE libbpf.a elf z)
