@@ -1,17 +1,22 @@
 # SPDX-License-Identifier: MulanPSL-2.0
 
 cmake_minimum_required(VERSION 3.14)
-find_package(Git QUIET)
 
 project(syscare)
 
-# Variables
-if(NOT DEFINED BUILD_VERSION)
-    set(BUILD_VERSION "dev")
-endif()
+# Includes
+include(GNUInstallDirs)
+find_package(Git QUIET)
 
-if(NOT DEFINED _BUILD_UPATCH)
-    set(_BUILD_UPATCH 1)
+# Version
+if(NOT DEFINED BUILD_VERSION)
+    execute_process(
+        COMMAND sh -c "cat abi/Cargo.toml | grep -F 'version' | head -n 1 | awk -F '\"' '{print $2}'"
+        OUTPUT_VARIABLE BUILD_VERSION
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+        WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
+    )
 endif()
 
 if(GIT_FOUND)
@@ -22,29 +27,41 @@ if(GIT_FOUND)
         ERROR_QUIET
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
-endif()
-
-if(DEFINED GIT_VERSION)
-    set(SYSCARE_VERSION "${BUILD_VERSION}-${GIT_VERSION}")
+    set(BUILD_VERSION "v${BUILD_VERSION}-g${GIT_VERSION}")
 else()
-    set(SYSCARE_VERSION "${BUILD_VERSION}")
+    set(BUILD_VERSION "v${BUILD_VERSION}")
 endif()
 
-set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_PREFIX}/bin")
-set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_PREFIX}/libexec/syscare")
+# Build switch
+if(NOT DEFINED _BUILD_UPATCH)
+    set(_BUILD_UPATCH 1)
+endif()
+
+# Set install directories
+set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_FULL_BINDIR}")
+set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/syscare")
 set(SYSCARE_SERVICE_DIR "${CMAKE_INSTALL_PREFIX}/lib/systemd/system")
 
-message("-- Syscare verion: ${SYSCARE_VERSION}")
-message("-- Syscare binary  directory: ${SYSCARE_BINARY_DIR}")
-message("-- Syscare libexec directory: ${SYSCARE_LIBEXEC_DIR}")
-message("-- Syscare service directory: ${SYSCARE_SERVICE_DIR}")
+# Print build info
+message("---------------------------------------------------------")
+message("███████╗██╗   ██╗███████╗ ██████╗ █████╗ ██████╗ ███████╗")
+message("██╔════╝╚██╗ ██╔╝██╔════╝██╔════╝██╔══██╗██╔══██╗██╔════╝")
+message("███████╗ ╚████╔╝ ███████╗██║     ███████║██████╔╝█████╗  ")
+message("╚════██║  ╚██╔╝  ╚════██║██║     ██╔══██║██╔══██╗██╔══╝  ")
+message("███████║   ██║   ███████║╚██████╗██║  ██║██║  ██║███████╗")
+message("╚══════╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
+message("---------------------------------------------------------")
+message("-- Verion: ${BUILD_VERSION}")
+message("-- Binary  directory: ${SYSCARE_BINARY_DIR}")
+message("-- Libexec directory: ${SYSCARE_LIBEXEC_DIR}")
+message("-- Service directory: ${SYSCARE_SERVICE_DIR}")
+message("---------------------------------------------------------")
 
 # Build syscare
 add_custom_target(syscare ALL
     COMMENT "Compiling syscare..."
     COMMAND ${CMAKE_COMMAND} -E env
-        "SYSCARE_VERSION=${SYSCARE_VERSION}"
-        "UPATCH_VERSION=${SYSCARE_VERSION}"
+        "BUILD_VERSION=${BUILD_VERSION}"
         "RUSTFLAGS=--cfg unsound_local_offset"
         cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}

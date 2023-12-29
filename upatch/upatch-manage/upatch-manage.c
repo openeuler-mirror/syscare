@@ -19,10 +19,12 @@
 #include "upatch-elf.h"
 #include "upatch-patch.h"
 
+#define PROG_VERSION "upatch-manage "BUILD_VERSION
+#define COMMAND_SIZE 4
+
 enum loglevel loglevel = NORMAL;
 char *logprefix;
 
-#define COMMAND_SIZE 4
 char *command[COMMAND_SIZE] = { "", "patch", "unpatch", "info" };
 enum Command {
 	DEFAULT,
@@ -57,7 +59,7 @@ static char program_doc[] = "Operate a upatch file on the user-space process";
 static char args_doc[] =
 	"<cmd> --pid <Pid> --upatch <Upatch path> --binary <Binary path> --uuid <Uuid>";
 
-const char *argp_program_version = "UPATCH_VERSION";
+const char *argp_program_version = PROG_VERSION;
 
 static error_t check_opt(struct argp_state *state)
 {

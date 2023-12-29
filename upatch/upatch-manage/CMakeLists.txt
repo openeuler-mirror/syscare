@@ -18,8 +18,6 @@ file(GLOB HOST_SRC_FILES
     *.c
 )
 
-add_compile_options(-g -Wall)
-add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
 add_executable(${UPATCH_MANAGE} ${HOST_SRC_FILES})
 target_link_libraries(${UPATCH_MANAGE} elf)
 

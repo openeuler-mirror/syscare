@@ -4,9 +4,9 @@ set(UPATCH_HIJACKER_KMOD "upatch_hijacker.ko")
 
 if (DEFINED KERNEL_VERSION)
     set(KERNEL_BUILD /lib/modules/${KERNEL_VERSION}/build)
-    set(UPATCH_HIJACKER_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION} kernel=${KERNEL_BUILD})
+    set(UPATCH_HIJACKER_KMOD_CMD make kernel=${KERNEL_BUILD})
 else()
-    set(UPATCH_HIJACKER_KMOD_CMD make UPATCH_VERSION=${SYSCARE_VERSION})
+    set(UPATCH_HIJACKER_KMOD_CMD make)
 endif()
 
 add_custom_target(upatch-hijacker-kmod ALL

@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: GPL-2.0
 
-add_compile_options(-DUPATCH_VERSION="${SYSCARE_VERSION}")
+# Compile options
+add_compile_options(-DBUILD_VERSION="${BUILD_VERSION}")
 add_compile_options(-g -Wall -O2)
 
 # Build upatch
 add_custom_target(upatch ALL
     COMMENT "Compiling upatch..."
     COMMAND ${CMAKE_COMMAND} -E env
-        "SYSCARE_VERSION=${SYSCARE_VERSION}"
-        "UPATCH_VERSION=${SYSCARE_VERSION}"
+        "BUILD_VERSION=${BUILD_VERSION}"
         "RUSTFLAGS=--cfg unsound_local_offset"
         cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
