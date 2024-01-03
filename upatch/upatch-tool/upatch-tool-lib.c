@@ -60,6 +60,7 @@ int upatch_check(const char *target_elf, const char *patch_file, char *err_msg, 
         max_len -= offset;
         offset = snprintf(err_msg, max_len, "\"%s\" ", collision->uuid);
     }
+    ret = EEXIST;
 
 out:
     if (patch_syms != NULL) {
