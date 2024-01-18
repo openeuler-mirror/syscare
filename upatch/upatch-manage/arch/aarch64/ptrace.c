@@ -163,7 +163,7 @@ unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
                            unsigned long new_addr)
 {
 	unsigned int insn0 = 0x58000051; // ldr x17, #8
-	unsigned int insn4 = 0xd61f0220; // ldr x17, [x16]
+	unsigned int insn4 = 0xd61f0220; // br x17
 	return (unsigned long)(insn0 | ((unsigned long)insn4 << 32));
 }
 
