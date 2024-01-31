@@ -1,22 +1,21 @@
-# SPDX-License-Identifier: GPL-2.0
-
 # Compile options
 add_compile_options(-DBUILD_VERSION="${BUILD_VERSION}")
-add_compile_options(-g -Wall -O2)
+add_compile_options(-g -Wall -O2 -fPIE)
+
+add_subdirectory(upatch-diff)
+add_subdirectory(upatch-manage)
+add_subdirectory(upatch-compile)
 
 # Build upatch
-add_custom_target(upatch ALL
-    COMMENT "Compiling upatch..."
+add_custom_target(upatch-rust ALL
+    COMMENT "Building upatch executables..."
     COMMAND ${CMAKE_COMMAND} -E env
         "BUILD_VERSION=${BUILD_VERSION}"
         "RUSTFLAGS=--cfg unsound_local_offset"
         cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    DEPENDS upatch-compile
 )
-
-add_subdirectory(upatch-diff)
-add_subdirectory(upatch-manage)
-add_subdirectory(upatch-compile)
 
 # Install binaries
 install(
