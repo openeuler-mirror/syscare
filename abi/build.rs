@@ -12,8 +12,8 @@ fn rewrite_version() {
             .map(|output| String::from_utf8(output.stdout).expect("Failed to fetch git version"));
 
         match git_output {
-            Ok(git_version) => format!("v{}-g{}", pkg_version, git_version),
-            Err(_) => format!("v{}", pkg_version),
+            Ok(git_version) => format!("{}-g{}", pkg_version, git_version),
+            Err(_) => pkg_version,
         }
     });
 
