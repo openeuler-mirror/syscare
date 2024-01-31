@@ -155,7 +155,7 @@ impl Daemon {
         instance.initialize_logger()?;
 
         info!("============================");
-        info!("Syscare Daemon - v{}", DAEMON_VERSION);
+        info!("Syscare Daemon - {}", DAEMON_VERSION);
         info!("============================");
         info!("Start with {:#?}", instance.args);
         instance.daemonize()?;

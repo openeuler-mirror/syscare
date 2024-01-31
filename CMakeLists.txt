@@ -27,9 +27,9 @@ if(GIT_FOUND)
         ERROR_QUIET
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
-    set(BUILD_VERSION "v${BUILD_VERSION}-g${GIT_VERSION}")
+    set(BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
 else()
-    set(BUILD_VERSION "v${BUILD_VERSION}")
+    set(BUILD_VERSION "${BUILD_VERSION}")
 endif()
 
 # Build switch

@@ -153,7 +153,7 @@ impl Daemon {
         instance.initialize_logger()?;
 
         info!("============================");
-        info!("Upatch Daemon - v{}", DAEMON_VERSION);
+        info!("Upatch Daemon - {}", DAEMON_VERSION);
         info!("============================");
         info!("Start with {:#?}", instance.args);
         instance.daemonize()?;
