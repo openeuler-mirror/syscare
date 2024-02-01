@@ -7,7 +7,7 @@ fn rewrite_version() {
     let version = env::var(ENV_VERSION_NAME).unwrap_or_else(|_| {
         let pkg_version = env::var(PKG_VERSION_NAME).expect("Failed to fetch package version");
         let git_output = Command::new("git")
-            .args(["rev-parse", "--short", "HEAD"])
+            .args(&["rev-parse", "--short", "HEAD"])
             .output()
             .map(|output| String::from_utf8(output.stdout).expect("Failed to fetch git version"));
 
