@@ -6,6 +6,5 @@ pub mod mounts;
 pub mod platform;
 pub mod process;
 pub mod selinux;
-pub mod signal;
 pub mod umask;
 pub mod user;
