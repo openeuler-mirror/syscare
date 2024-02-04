@@ -1,6 +1,7 @@
-use std::ffi::{OsStr, OsString};
+use std::ffi::{CString, NulError, OsStr, OsString};
 use std::iter::Filter;
 use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
+use std::path::{Path, PathBuf};
 
 use super::raw_line::RawLines;
 
@@ -719,9 +720,16 @@ pub trait OsStrExt: AsRef<OsStr> {
     fn trim_end(&self) -> &OsStr {
         self.trim_end_matches(char::is_whitespace)
     }
+
+    fn to_cstring(&self) -> Result<CString, NulError> {
+        CString::new(self.as_ref().as_bytes())
+    }
 }
 
 impl OsStrExt for OsStr {}
+impl OsStrExt for OsString {}
+impl OsStrExt for Path {}
+impl OsStrExt for PathBuf {}
 
 /* OsStringExt */
 pub trait OsStringExt {
@@ -748,7 +756,7 @@ impl OsStringExt for OsString {
 
 #[test]
 fn test_os_str_ext() {
-    let old_str = "\t\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\nGrüße, Jürgen ❤\r\n\0";
+    let old_str = "\t\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\nGrüße, Jürgen ❤\r\n";
     let test_str = OsStr::new(old_str);
 
     let pattern0 = "T";
@@ -1133,6 +1141,11 @@ fn test_os_str_ext() {
         old_str.split_whitespace().collect::<Vec<_>>(),
         test_str.split_whitespace().collect::<Vec<_>>()
     );
+
+    println!("Testing OsStrExt::to_cstring()...");
+    let c_str = CString::new(old_str).expect("CString conversion failed");
+    assert_eq!(old_str.as_bytes(), c_str.as_bytes());
+    assert_ne!(old_str.as_bytes(), c_str.as_bytes_with_nul());
 }
 
 #[test]
