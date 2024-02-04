@@ -24,7 +24,7 @@ impl KernelPatchExt {
             .patch_name
             .strip_suffix(KPATCH_SUFFIX)
             .map(OsStr::to_string_lossy)
-            .unwrap_or(patch_entity.patch_name.to_string_lossy());
+            .unwrap_or_else(|| patch_entity.patch_name.to_string_lossy());
         let patch_sys_name = patch_name.replace('-', "_").replace('.', "_");
         let patch_file_name = format!("{}{}", patch_name, KPATCH_SUFFIX);
 
