@@ -140,13 +140,7 @@ impl UpatchBuild {
 
     pub fn start_and_run() -> Result<()> {
         Self::setup_signal_handlers()?;
-
-        let build_thread = std::thread::spawn(|| -> Result<()> { Self::new()?.build_main() });
-
-        match build_thread.join() {
-            Ok(build_result) => build_result,
-            Err(_) => Err(Error::Mod("Failed to join build thread".to_string())),
-        }
+        Self::new()?.build_main()
     }
 }
 
