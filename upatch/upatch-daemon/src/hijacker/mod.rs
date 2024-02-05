@@ -1,21 +1,32 @@
-use std::os::unix::prelude::MetadataExt;
-use std::{
-    collections::HashMap,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
+use std::{ffi::OsStr, os::unix::prelude::MetadataExt};
 
 use anyhow::{bail, Context, Result};
-use log::{debug, info};
+use log::{debug, error, info};
+
+use syscare_common::os;
+use syscare_common::util::mapped_file::MappedFile;
 
 mod config;
-mod lib;
+mod elf_resolver;
+mod ioctl;
+mod kmod;
 
 use config::HijackerConfig;
-use lib::HijackLibrary;
+use elf_resolver::ElfResolver;
+use ioctl::HijackerIoctl;
+use kmod::HijackerKmodGuard;
+
+const KMOD_NAME: &str = "upatch_hijacker";
+const KMOD_DEV_PATH: &str = "/dev/upatch-hijacker";
+const KMOD_FILE_PATH: &str = "/usr/libexec/syscare/upatch_hijacker.ko";
+
+const HIJACK_SYMBOL_NAME: &str = "execve";
 
 pub struct Hijacker {
-    lib: HijackLibrary,
-    elf_map: HashMap<PathBuf, PathBuf>,
+    config: HijackerConfig,
+    ioctl: HijackerIoctl,
+    _kmod: HijackerKmodGuard, // need to ensure this drops last
 }
 
 impl Hijacker {
@@ -33,7 +44,7 @@ impl Hijacker {
             }
         };
 
-        for hijacker in config.0.values() {
+        for hijacker in config.values() {
             let is_executable_file = hijacker
                 .symlink_metadata()
                 .map(|m| m.is_file() && (m.mode() & MODE_EXEC_MASK != 0))
@@ -48,44 +59,101 @@ impl Hijacker {
 
         Ok(config)
     }
+
+    fn find_library<S: AsRef<OsStr>>(lib_name: S) -> Option<PathBuf> {
+        let lib_path = Path::new("/usr/lib64").join(lib_name.as_ref());
+        match lib_path.exists() {
+            true => Some(lib_path),
+            false => None,
+        }
+    }
+
+    fn find_symbol_addr(symbol_name: &str) -> Result<(PathBuf, u64)> {
+        let exec_file = MappedFile::new(os::process::path())?;
+        let exec_resolver = ElfResolver::new(&exec_file)?;
+
+        for lib_name in exec_resolver.dependencies()? {
+            if let Some(lib_path) = Self::find_library(lib_name) {
+                let lib_file = MappedFile::new(&lib_path)?;
+                let lib_resolver = ElfResolver::new(&lib_file)?;
+
+                if let Ok(Some(addr)) = lib_resolver.find_symbol_addr(symbol_name) {
+                    return Ok((lib_path, addr));
+                }
+            }
+        }
+
+        bail!("Failed to find symbol '{}'", symbol_name);
+    }
 }
 
 impl Hijacker {
-    fn get_hijacker_path<P: AsRef<Path>>(&self, target: P) -> Result<&Path> {
+    pub fn new<P: AsRef<Path>>(config_path: P) -> Result<Self> {
+        debug!("Initializing hijacker configuation...");
+        let config = Self::initialize_config(config_path)
+            .context("Failed to initialize hijacker configuration")?;
+        info!("Using elf mapping: {}", config);
+
+        debug!("Initializing hijacker kernel module...");
+        let kmod_name = KMOD_NAME.to_string();
+        let kmod_path = KMOD_FILE_PATH.to_string();
+        let kmod = HijackerKmodGuard::new(kmod_name, kmod_path)?;
+
+        debug!("Initializing hijacker ioctl channel...");
+        let ioctl = HijackerIoctl::new(KMOD_DEV_PATH)?;
+
+        debug!("Initializing hijacker hooks...");
+        let (lib_path, offset) = Self::find_symbol_addr(HIJACK_SYMBOL_NAME)?;
+        info!(
+            "Hooking library: {}, offset: {:#x}",
+            lib_path.display(),
+            offset
+        );
+        ioctl.enable_hijacker(lib_path, offset)?;
+
+        Ok(Self {
+            _kmod: kmod,
+            ioctl,
+            config,
+        })
+    }
+}
+
+impl Hijacker {
+    fn get_hijacker<P: AsRef<Path>>(&self, exec_path: P) -> Result<&Path> {
         let hijacker = self
-            .elf_map
-            .get(target.as_ref())
-            .with_context(|| format!("Cannot find hijacker for \"{}\"", target.as_ref().display()))?
+            .config
+            .get(exec_path.as_ref())
+            .with_context(|| {
+                format!(
+                    "Cannot find hijacker for \"{}\"",
+                    exec_path.as_ref().display()
+                )
+            })?
             .as_path();
 
         Ok(hijacker)
     }
 
     pub fn hijack<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
-        let target = elf_path.as_ref();
-        let hijacker = self.get_hijacker_path(target)?;
+        let exec_path = elf_path.as_ref();
+        let jump_path = self.get_hijacker(exec_path)?;
 
-        self.lib.hijacker_register(target, hijacker)
+        self.ioctl.register_hijacker(exec_path, jump_path)
     }
 
     pub fn release<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
-        let target = elf_path.as_ref();
-        let hijacker = self.get_hijacker_path(target)?;
+        let exec_path = elf_path.as_ref();
+        let jump_path = self.get_hijacker(exec_path)?;
 
-        self.lib.hijacker_unregister(target, hijacker)
+        self.ioctl.unregister_hijacker(exec_path, jump_path)
     }
 }
 
-impl Hijacker {
-    pub fn new<P: AsRef<Path>>(config_path: P) -> Result<Self> {
-        let lib = HijackLibrary::new()?;
-
-        debug!("Initializing hijacker configuation...");
-        let elf_map = Self::initialize_config(config_path)
-            .context("Failed to initialize hijacker configuration")?
-            .0;
-
-        info!("Using elf mapping: {:#?}", elf_map);
-        Ok(Self { lib, elf_map })
+impl Drop for Hijacker {
+    fn drop(&mut self) {
+        if let Err(e) = self.ioctl.disable_hijacker() {
+            error!("{:?}", e);
+        }
     }
 }

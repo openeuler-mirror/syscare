@@ -1,4 +1,4 @@
-use std::{env, process::Command, path::Path};
+use std::{env, process::Command};
 
 fn rewrite_version() {
     const ENV_VERSION_NAME: &str = "BUILD_VERSION";
@@ -20,17 +20,6 @@ fn rewrite_version() {
     println!("cargo:rustc-env={}={}", PKG_VERSION_NAME, version);
 }
 
-fn build_ffi_library() {
-    const UPATCH_LIB: &str = "../upatch-compile/lib";
-    const UPATCH_COMMON: &str = "../upatch-compile/common";
-
-    cc::Build::new()
-        .file(Path::new(UPATCH_LIB).join("upatch.c"))
-        .includes(&[UPATCH_COMMON, UPATCH_LIB])
-        .compile("libupatch.a");
-}
-
 fn main() {
     rewrite_version();
-    build_ffi_library();
 }
