@@ -1,7 +1,7 @@
 use std::path::{Path, PathBuf};
 use std::{process::exit, sync::Arc};
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use lazy_static::lazy_static;
 use log::{debug, error, info, LevelFilter};
 
@@ -487,14 +487,7 @@ impl SyscareBuilder {
 
     fn start_and_run(log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
         Self::setup_signal_handlers()?;
-
-        let build_thread =
-            std::thread::spawn(move || -> Result<()> { Self::new()?.build_main(log_file) });
-
-        match build_thread.join() {
-            Ok(build_result) => build_result,
-            Err(_) => Err(anyhow!("Failed to join build thread")),
-        }
+        Self::new()?.build_main(log_file)
     }
 }
 
