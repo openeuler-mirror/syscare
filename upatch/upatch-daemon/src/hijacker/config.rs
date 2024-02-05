@@ -1,11 +1,12 @@
 use std::{
     collections::HashMap,
-    fs::File,
+    ops::Deref,
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
+use syscare_common::util::fs;
 
 const CC_BINARY: &str = "/usr/bin/cc";
 const CXX_BINARY: &str = "/usr/bin/c++";
@@ -20,13 +21,12 @@ const GXX_HIJACKER: &str = "/usr/libexec/syscare/g++-hijacker";
 const AS_HIJACKER: &str = "/usr/libexec/syscare/as-hijacker";
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HijackerConfig(pub HashMap<PathBuf, PathBuf>);
+pub struct HijackerConfig(HashMap<PathBuf, PathBuf>);
 
 impl HijackerConfig {
     pub fn parse_from<P: AsRef<Path>>(path: P) -> Result<Self> {
         let config_path = path.as_ref();
-        let config_file = File::open(config_path)
-            .with_context(|| format!("Failed to open config \"{}\"", config_path.display()))?;
+        let config_file = fs::open_file(config_path)?;
         let instance: Self = serde_yaml::from_reader(config_file)
             .map_err(|_| anyhow!("Failed to parse config \"{}\"", config_path.display()))?;
 
@@ -35,12 +35,19 @@ impl HijackerConfig {
 
     pub fn write_to<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let config_path = path.as_ref();
-        let config_file = File::create(config_path)
-            .with_context(|| format!("Failed to create config \"{}\"", config_path.display()))?;
+        let config_file = fs::create_file(config_path)?;
         serde_yaml::to_writer(config_file, self)
             .map_err(|_| anyhow!("Failed to write config \"{}\"", config_path.display()))?;
 
         Ok(())
+    }
+}
+
+impl Deref for HijackerConfig {
+    type Target = HashMap<PathBuf, PathBuf>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.0
     }
 }
 
@@ -65,7 +72,7 @@ impl std::fmt::Display for HijackerConfig {
 
 #[test]
 fn test() -> Result<()> {
-    use anyhow::ensure;
+    use anyhow::{ensure, Context};
 
     let tmp_file = PathBuf::from("/tmp/upatch_hijacker_config.yaml");
 
