@@ -6,7 +6,7 @@ use std::{
 
 use anyhow::Result;
 
-use syscare_common::util::{fs, os_str::OsStrExt, raw_line::RawLines};
+use crate::util::{fs, os_str::OsStrExt, raw_line::RawLines};
 
 #[derive(Debug)]
 pub struct ProcMapping {

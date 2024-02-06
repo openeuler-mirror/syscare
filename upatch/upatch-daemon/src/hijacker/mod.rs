@@ -5,7 +5,11 @@ use anyhow::{bail, Context, Result};
 use log::{debug, error, info};
 
 use syscare_common::os;
-use syscare_common::util::mapped_file::MappedFile;
+use syscare_common::util::{
+    mapped_file::MappedFile,
+    os_str::OsStrExt
+};
+
 
 mod config;
 mod elf_resolver;
@@ -61,11 +65,14 @@ impl Hijacker {
     }
 
     fn find_library<S: AsRef<OsStr>>(lib_name: S) -> Option<PathBuf> {
-        let lib_path = Path::new("/usr/lib64").join(lib_name.as_ref());
-        match lib_path.exists() {
-            true => Some(lib_path),
-            false => None,
+        if let Ok(maps) = os::proc::ProcMappingReader::new(std::process::id() as i32) {
+            for map in maps {
+                if map.path_name.contains(lib_name.as_ref()) {
+                    return Some(PathBuf::from(map.path_name));
+                }
+            }
         }
+        None
     }
 
     fn find_symbol_addr(symbol_name: &str) -> Result<(PathBuf, u64)> {

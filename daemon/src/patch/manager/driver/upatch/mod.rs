@@ -17,7 +17,6 @@ use super::{Patch, PatchDriver, PatchOpFlag, UserPatchExt};
 mod ffi;
 mod helper;
 mod monitor;
-mod proc;
 
 use ffi::ToCString;
 

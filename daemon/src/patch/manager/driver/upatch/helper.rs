@@ -7,7 +7,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use syscare_common::util::{fs, os_str::OsStrExt};
 
-use super::proc::ProcMappingReader;
+use syscare_common::os::proc::ProcMappingReader;
 
 pub struct UPatchDriverHelper;
 
