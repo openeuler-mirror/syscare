@@ -12,6 +12,7 @@
 #include <linux/namei.h>
 #include <linux/uprobes.h>
 #include <linux/slab.h>
+#include <linux/uaccess.h>
 
 #include "log.h"
 #include "map.h"
@@ -47,12 +48,12 @@ static inline const char __user *new_user_str(const char *src, size_t len)
         PROT_READ | PROT_WRITE, MAP_ANONYMOUS | MAP_PRIVATE, 0);
 
     if (addr == 0) {
-        pr_err_ratelimited("failed to alloc in userspace\n");
+        pr_err("failed to alloc in userspace\n");
         return NULL;
     }
 
     if (copy_to_user((void *)addr, src, len) != 0) {
-        pr_err_ratelimited("failed to write to userspace\n");
+        pr_err("failed to write to userspace\n");
         (void)vm_munmap(addr, len);
         return NULL;
     }
@@ -98,13 +99,13 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
 
     path_buff = path_buf_alloc();
     if (path_buff == NULL) {
-        pr_err_ratelimited("failed to alloc path cache\n");
+        pr_err("failed to alloc path cache\n");
         return 0;
     }
 
     elf_path = read_user_str(path_buff, argv0, PATH_MAX);
     if (elf_path == NULL) {
-        pr_err_ratelimited("failed to read execve argument from userspace\n");
+        pr_err("failed to read execve argument from userspace\n");
         path_buf_free(path_buff);
         return 0;
     }
@@ -124,7 +125,7 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
 
     jump_path = select_jump_path(record, inode);
     if (jump_path == NULL) {
-        pr_err_ratelimited("failed to find jump path, elf_path=%s\n", elf_path);
+        pr_err("failed to find jump path, elf_path=%s\n", elf_path);
         path_buf_free(path_buff);
         return 0;
     }
@@ -133,7 +134,7 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
 
     new_argv0 = new_user_str(jump_path, path_len);
     if (new_argv0 == NULL) {
-        pr_err_ratelimited("failed to write new execve argument\n");
+        pr_err("failed to write new execve argument\n");
         path_buf_free(path_buff);
         return 0;
     }

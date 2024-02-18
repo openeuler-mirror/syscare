@@ -18,7 +18,7 @@ static inline struct inode* path_inode(const char *path)
 {
     struct path kpath;
 
-    if (kern_path(path, LOOKUP_NO_SYMLINKS, &kpath) != 0) {
+    if (kern_path(path, 0, &kpath) != 0) {
         return NULL;
     }
     return kpath.dentry->d_inode;

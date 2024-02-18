@@ -7,6 +7,7 @@
 #include "cache.h"
 
 #include <linux/slab.h>
+#include <linux/limits.h>
 
 #include "log.h"
 

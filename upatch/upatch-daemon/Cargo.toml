@@ -26,3 +26,5 @@ serde_yaml         = { version = "0.7" }
 jsonrpc-core       = { version = "15.1" }
 jsonrpc-derive     = { version = "15.1" }
 jsonrpc-ipc-server = { version = "15.1" }
+object             = { version = "0.28" }
+nix                = { version = "0.25" }
