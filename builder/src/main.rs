@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::{process::exit, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
@@ -6,7 +6,7 @@ use lazy_static::lazy_static;
 use log::{debug, error, info, LevelFilter};
 
 use parking_lot::Mutex;
-use syscare_abi::{PackageInfo, PackageType, PatchFile, PatchInfo, PatchType};
+use syscare_abi::{PackageInfo, PackageType, PatchInfo, PatchType};
 use syscare_common::{os, util::fs};
 
 mod args;
@@ -153,54 +153,6 @@ impl SyscareBuilder {
         }
     }
 
-    fn apply_patch_metadata(
-        &mut self,
-        metadata_root_dir: &Path,
-        patch_target: &mut PackageInfo,
-        patch_files: &mut Vec<PatchFile>,
-    ) -> Result<()> {
-        let metadata_dir = PatchMetadata::metadata_dir(metadata_root_dir);
-        let metadata_file = PatchMetadata::metadata_file(metadata_root_dir);
-
-        match PatchMetadata::read_from_file(metadata_file) {
-            Ok(saved_patch_info) => {
-                let patch_version = &self.args.patch_version;
-                let patch_release = &mut self.args.patch_release;
-
-                // Override target package
-                *patch_target = saved_patch_info.target;
-                patch_target.arch = self.args.patch_arch.clone();
-
-                // Override patch release
-                if patch_version == &saved_patch_info.version {
-                    *patch_release = u32::max(*patch_release, saved_patch_info.release + 1);
-                }
-
-                // Overide patch list
-                let mut new_patches = PatchHelper::collect_patch_files(
-                    fs::list_files_by_ext(
-                        metadata_dir,
-                        PATCH_FILE_EXT,
-                        fs::TraverseOptions { recursive: false },
-                    )
-                    .context("Failed to find patch files")?,
-                )
-                .context("Failed to collect patch file from metadata directory")?;
-
-                if new_patches.is_empty() {
-                    bail!("Cannot find any patch file from metadata");
-                }
-                new_patches.append(patch_files);
-
-                *patch_files = new_patches;
-            }
-            Err(ref e) if e.kind() == std::io::ErrorKind::NotFound => {}
-            Err(e) => return Err(e).context("Failed to read metadata"),
-        }
-
-        Ok(())
-    }
-
     fn prepare_to_build(&mut self) -> Result<BuildParameters> {
         let pkg_root = &self.build_root.package;
 
@@ -239,15 +191,32 @@ impl SyscareBuilder {
         let (patch_type, mut build_entry, kernel_build_entry) = self
             .parse_build_entry(&build_entries)
             .context("Failed to parse build entry")?;
-        let patch_target = &mut build_entry.target_pkg;
 
         debug!("- Extracting patch metadata");
-        let metadata_root_dir = &pkg_build_root.sources;
-        if PatchMetadata::decompress_tar_pkg(metadata_root_dir).is_ok() {
+        let patch_metadata = PatchMetadata::new(&pkg_build_root.sources);
+        if let Ok(saved_patch_info) = patch_metadata.extract() {
             debug!("- Applying patch metadata");
-            self.apply_patch_metadata(metadata_root_dir, patch_target, &mut patch_files)
-                .context("Failed to apply patch metadata")?;
-        };
+            build_entry.target_pkg = saved_patch_info.target;
+
+            // Override package arch
+            build_entry.target_pkg.arch = self.args.patch_arch.clone();
+
+            // Override package release
+            if self.args.patch_version == saved_patch_info.version {
+                self.args.patch_release = self.args.patch_release.max(saved_patch_info.release + 1);
+            }
+
+            // Override patch list
+            let mut new_patch_files = PatchHelper::collect_patch_files(fs::list_files_by_ext(
+                &patch_metadata.metadata_dir,
+                PATCH_FILE_EXT,
+                fs::TraverseOptions { recursive: false },
+            )?)
+            .context("Failed to collect patch file from metadata directory")?;
+
+            new_patch_files.extend(patch_files);
+            patch_files = new_patch_files;
+        }
 
         debug!("- Generating build parameters");
         let build_params = BuildParameters {
@@ -278,15 +247,16 @@ impl SyscareBuilder {
         let pkg_source_dir = &pkg_build_root.sources;
         let pkg_spec_dir = &pkg_build_root.specs;
         let patch_output_dir = &self.build_root.patch.output;
-
-        debug!("- Writing patch metadata");
-        let metadata_file = pkg_source_dir.join(PatchMetadata::metadata_file_name());
-        PatchMetadata::write_to_file(patch_info, metadata_file)
-            .context("Failed to write patch metadata")?;
+        let patch_metadata = PatchMetadata::new(pkg_source_dir);
 
         debug!("- Copying patch outputs");
         fs::copy_dir_contents(patch_output_dir, pkg_source_dir)
             .context("Failed to copy patch outputs")?;
+
+        debug!("- Writing patch metadata");
+        patch_metadata
+            .write(patch_info, pkg_source_dir)
+            .context("Failed to write patch metadata")?;
 
         debug!("- Generating spec file");
         let new_spec_file = PackageSpecBuilderFactory::get_builder(PKG_IMPL.format())
@@ -308,24 +278,10 @@ impl SyscareBuilder {
         let pkg_build_root = &build_params.pkg_build_root;
         let pkg_source_dir = &pkg_build_root.sources;
         let spec_file = &build_params.build_entry.build_spec;
-
-        debug!("- Creating patch metadata directory");
-        let metadata_dir = PatchMetadata::metadata_dir(pkg_source_dir);
-        if !metadata_dir.exists() {
-            fs::create_dir(&metadata_dir)?;
-        }
-
-        debug!("- Copying patch file(s)");
-        for patch in &build_params.patch_files {
-            let src_path = &patch.path;
-            let dst_path = metadata_dir.join(&patch.name);
-            if src_path != &dst_path {
-                fs::copy(src_path, dst_path).context("Failed to copy patch files")?;
-            }
-        }
+        let patch_metadata = PatchMetadata::new(pkg_source_dir);
 
         debug!("- Modifying package spec file");
-        let metadata_pkg = PatchMetadata::metadata_pkg(pkg_source_dir);
+        let metadata_pkg = patch_metadata.package_path.clone();
         if !metadata_pkg.exists() {
             // Lacking of metadata means that the package is not patched
             // Thus, we should add a 'Source' tag into spec file
@@ -335,23 +291,10 @@ impl SyscareBuilder {
                 .context("Failed to modify spec file")?;
         }
 
-        debug!("- Writing patch metadata");
-        let metadata_file = PatchMetadata::metadata_file(pkg_source_dir);
-        let patch_info = PatchInfo {
-            uuid: String::default(),
-            name: build_params.patch_name.to_owned(),
-            version: build_params.patch_version.to_owned(),
-            release: build_params.patch_release.to_owned(),
-            arch: build_params.patch_arch.to_owned(),
-            kind: build_params.patch_type,
-            target: build_params.build_entry.target_pkg.to_owned(),
-            entities: Vec::default(),
-            description: build_params.patch_description.to_owned(),
-            patches: build_params.patch_files.to_owned(),
-        };
-        PatchMetadata::write_to_file(&patch_info, metadata_file)
-            .context("Failed to write patch metadata")?;
-        PatchMetadata::compress_tar_pkg(pkg_source_dir).context("Failed to compress metadata")?;
+        debug!("- Creating patch metadata");
+        patch_metadata
+            .create(build_params)
+            .context("Failed to create patch metadata")?;
 
         debug!("- Building package");
         PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root).build_source_package(
