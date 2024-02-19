@@ -1,15 +1,11 @@
+use std::os::unix::prelude::MetadataExt;
 use std::path::{Path, PathBuf};
-use std::{ffi::OsStr, os::unix::prelude::MetadataExt};
 
 use anyhow::{bail, Context, Result};
 use log::{debug, error, info};
 
 use syscare_common::os;
-use syscare_common::util::{
-    mapped_file::MappedFile,
-    os_str::OsStrExt
-};
-
+use syscare_common::util::mapped_file::MappedFile;
 
 mod config;
 mod elf_resolver;
@@ -64,29 +60,16 @@ impl Hijacker {
         Ok(config)
     }
 
-    fn find_library<S: AsRef<OsStr>>(lib_name: S) -> Option<PathBuf> {
-        if let Ok(maps) = os::proc::ProcMappingReader::new(std::process::id() as i32) {
-            for map in maps {
-                if map.path_name.contains(lib_name.as_ref()) {
-                    return Some(PathBuf::from(map.path_name));
-                }
-            }
-        }
-        None
-    }
-
     fn find_symbol_addr(symbol_name: &str) -> Result<(PathBuf, u64)> {
         let exec_file = MappedFile::new(os::process::path())?;
         let exec_resolver = ElfResolver::new(&exec_file)?;
 
-        for lib_name in exec_resolver.dependencies()? {
-            if let Some(lib_path) = Self::find_library(lib_name) {
-                let lib_file = MappedFile::new(&lib_path)?;
-                let lib_resolver = ElfResolver::new(&lib_file)?;
+        for lib_path in exec_resolver.dependencies()? {
+            let lib_file = MappedFile::new(&lib_path)?;
+            let lib_resolver = ElfResolver::new(&lib_file)?;
 
-                if let Ok(Some(addr)) = lib_resolver.find_symbol_addr(symbol_name) {
-                    return Ok((lib_path, addr));
-                }
+            if let Ok(Some(addr)) = lib_resolver.find_symbol_addr(symbol_name) {
+                return Ok((lib_path, addr));
             }
         }
 

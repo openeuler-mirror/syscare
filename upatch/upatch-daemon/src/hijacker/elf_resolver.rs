@@ -1,7 +1,14 @@
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
+use std::{fs, path::PathBuf};
 
 use anyhow::Result;
-use object::{elf, read::elf::FileHeader, NativeFile, Object, ObjectSymbol};
+use object::{NativeFile, Object, ObjectSymbol};
+use syscare_common::{
+    os,
+    util::{
+        ext_cmd::{ExternCommand, ExternCommandArgs},
+        os_str::OsStrExt,
+    },
+};
 
 pub struct ElfResolver<'a> {
     elf: NativeFile<'a, &'a [u8]>,
@@ -16,35 +23,22 @@ impl<'a> ElfResolver<'a> {
 }
 
 impl ElfResolver<'_> {
-    pub fn dependencies(&self) -> Result<Vec<&OsStr>> {
-        let endian = self.elf.endian();
-        let data = self.elf.data();
+    pub fn dependencies(&self) -> Result<Vec<PathBuf>> {
+        let mut paths = Vec::new();
+        let args_list = ExternCommandArgs::new().arg(os::process::path());
+        let output = ExternCommand::new("ldd").execvp(args_list)?;
+        let lines = output.stdout().lines().filter_map(|s| s.ok());
 
-        let header = self.elf.raw_header();
-        let sections = header.sections(endian, data)?;
-
-        if let Some((section, index)) = sections.dynamic(endian, data)? {
-            let strtab = sections.strings(endian, data, index)?;
-            let libs = section
-                .iter()
-                .filter_map(|entry| {
-                    let tag = entry.d_tag.get(endian) as u32;
-                    if tag != elf::DT_NEEDED {
-                        return None;
-                    }
-
-                    let value = entry.d_val.get(endian) as u32;
-                    if let Ok(lib_name) = strtab.get(value).map(OsStr::from_bytes) {
-                        return Some(lib_name);
-                    }
-                    None
-                })
-                .collect::<Vec<_>>();
-
-            return Ok(libs);
+        for line in lines {
+            let words = line.split_whitespace().collect::<Vec<_>>();
+            if let Some(path) = words.get(2) {
+                if let Ok(path) = fs::canonicalize(path) {
+                    paths.push(path);
+                }
+            }
         }
 
-        Ok(vec![])
+        Ok(paths)
     }
 
     pub fn find_symbol_addr(&self, symbol_name: &str) -> Result<Option<u64>> {
