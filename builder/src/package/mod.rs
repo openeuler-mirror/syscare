@@ -7,18 +7,18 @@ use syscare_abi::PackageInfo;
 mod build_root;
 mod elf_relation;
 mod pkg_builder;
-mod rpm;
 mod spec_builder;
 mod spec_writer;
+
+mod rpm;
 mod tar;
 
-pub use build_root::PackageBuildRoot;
-pub use elf_relation::ElfRelation;
-pub use pkg_builder::{PackageBuilder, PackageBuilderFactory};
-use rpm::RpmPackage;
-pub use spec_builder::{PackageSpecBuilder, PackageSpecBuilderFactory};
-pub use spec_writer::{PackageSpecWriter, PackageSpecWriterFactory};
-pub use tar::TarPackage;
+pub use build_root::*;
+pub use elf_relation::*;
+pub use pkg_builder::*;
+pub use spec_builder::*;
+pub use spec_writer::*;
+pub use tar::*;
 
 const DEBUGINFO_FILE_EXT: &str = "debug";
 const DEBUGINFO_INSTALL_DIR: &str = "usr/lib/debug";
@@ -53,7 +53,7 @@ impl PackageImpl {
         match pkg_format {
             PackageFormat::RpmPackage => Self {
                 format: pkg_format,
-                inner: Box::new(RpmPackage),
+                inner: Box::new(rpm::RpmPackage),
             },
         }
     }
