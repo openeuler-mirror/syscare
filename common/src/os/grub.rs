@@ -9,10 +9,10 @@ use log::debug;
 use regex::bytes::Regex;
 
 use crate::util::fs;
+use crate::util::os_line::{BufReadOsLines, OsLines};
 use crate::util::os_str::OsStrExt;
-use crate::util::raw_line::RawLines;
 
-use super::{disk, mounts};
+use super::{disk, proc_mounts};
 
 #[derive(Debug, Clone, Copy)]
 enum BootType {
@@ -49,7 +49,7 @@ impl GrubMenuEntry {
 }
 
 struct GrubConfigParser<R> {
-    lines: RawLines<R>,
+    lines: OsLines<R>,
     is_matching: bool,
     entry_name: Option<OsString>,
     entry_root: Option<PathBuf>,
@@ -58,9 +58,9 @@ struct GrubConfigParser<R> {
 }
 
 impl<R: BufRead> GrubConfigParser<R> {
-    pub fn new(reader: R) -> Self {
+    pub fn new(buf: R) -> Self {
         Self {
-            lines: RawLines::from(reader),
+            lines: buf.os_lines(),
             is_matching: false,
             entry_name: None,
             entry_root: None,
@@ -104,9 +104,9 @@ impl<R: BufRead> GrubConfigParser<R> {
     #[inline(always)]
     fn parse_mount_point(str: &OsStr) -> Option<PathBuf> {
         let find_dev = Self::parse_uuid(str).and_then(|uuid| disk::find_by_uuid(uuid).ok());
-        if let (Some(dev_name), Ok(mounts)) = (find_dev, mounts::enumerate()) {
+        if let (Some(dev_name), Ok(mounts)) = (find_dev, proc_mounts::Mounts::new()) {
             for mount in mounts {
-                if mount.source == dev_name {
+                if mount.mount_source == dev_name {
                     return Some(mount.mount_point);
                 }
             }
@@ -171,13 +171,13 @@ impl<R: BufRead> Iterator for GrubConfigParser<R> {
 }
 
 struct GrubEnvParser<R> {
-    lines: RawLines<R>,
+    lines: OsLines<R>,
 }
 
 impl<R: BufRead> GrubEnvParser<R> {
-    pub fn new(reader: R) -> Self {
+    pub fn new(buf: R) -> Self {
         Self {
-            lines: RawLines::from(reader),
+            lines: buf.os_lines(),
         }
     }
 }

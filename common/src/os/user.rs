@@ -1,79 +1,68 @@
-use std::ffi::CStr;
-use std::ffi::{OsStr, OsString};
-use std::os::unix::prelude::OsStringExt;
-use std::path::{Path, PathBuf};
+use std::ffi::OsStr;
+use std::path::Path;
 
 use lazy_static::*;
+use nix::unistd::{getuid, User};
 
-struct UserInfo {
-    name: OsString,
-    passwd: OsString,
-    uid: u32,
-    gid: u32,
-    gecos: OsString,
-    home: PathBuf,
-    shell: PathBuf,
-}
+use crate::util::c_str::CStrExt;
 
 #[inline(always)]
-fn info() -> &'static UserInfo {
+fn info() -> &'static User {
     lazy_static! {
-        static ref USER_INFO: UserInfo = unsafe {
-            let uid = libc::getuid();
-            let mut pwd = std::mem::MaybeUninit::zeroed().assume_init();
-            let mut buf = Vec::with_capacity(match libc::sysconf(libc::_SC_GETPW_R_SIZE_MAX) {
-                n if n < 0 => 16384_usize,
-                n => n as usize,
-            });
-            let buflen = buf.capacity();
-            let mut result = std::ptr::null_mut();
-
-            let ret = libc::getpwuid_r(uid, &mut pwd, buf.as_mut_ptr(), buflen, &mut result);
-            assert_eq!(ret, 0);
-            assert!(!result.is_null());
-
-            UserInfo {
-                name: OsString::from_vec(CStr::from_ptr(pwd.pw_name).to_bytes().to_vec()),
-                passwd: OsString::from_vec(CStr::from_ptr(pwd.pw_passwd).to_bytes().to_vec()),
-                uid: pwd.pw_uid,
-                gid: pwd.pw_gid,
-                gecos: OsString::from_vec(CStr::from_ptr(pwd.pw_gecos).to_bytes().to_vec()),
-                home: PathBuf::from(OsString::from_vec(
-                    CStr::from_ptr(pwd.pw_dir).to_bytes().to_vec(),
-                )),
-                shell: PathBuf::from(OsString::from_vec(
-                    CStr::from_ptr(pwd.pw_shell).to_bytes().to_vec(),
-                )),
-            }
-        };
+        static ref USER: User = User::from_uid(getuid())
+            .expect("Failed to read user info")
+            .unwrap();
     }
-    &USER_INFO
+    &USER
 }
 
-pub fn name() -> &'static OsStr {
-    &info().name
+pub fn name() -> &'static str {
+    info().name.as_str()
 }
 
 pub fn passwd() -> &'static OsStr {
-    &info().passwd
+    info().passwd.as_os_str()
 }
 
 pub fn id() -> u32 {
-    info().uid
+    info().uid.as_raw()
 }
 
 pub fn gid() -> u32 {
-    info().gid
+    info().gid.as_raw()
 }
 
 pub fn gecos() -> &'static OsStr {
-    &info().gecos
+    info().gecos.as_os_str()
 }
 
 pub fn home() -> &'static Path {
-    &info().home
+    info().dir.as_path()
 }
 
 pub fn shell() -> &'static Path {
-    &info().shell
+    info().shell.as_path()
+}
+
+#[test]
+fn test() {
+    println!("name:   {}", name());
+    assert!(!name().is_empty());
+
+    println!("passwd: {}", passwd().to_string_lossy());
+    assert!(!passwd().is_empty());
+
+    println!("id:     {}", id());
+    assert!(id() > 0);
+
+    println!("gid:    {}", gid());
+    assert!(gid() > 0);
+
+    println!("gecos:  {}", gecos().to_string_lossy());
+
+    println!("home:   {}", home().display());
+    assert!(home().exists());
+
+    println!("shell:  {}", shell().display());
+    assert!(shell().exists());
 }

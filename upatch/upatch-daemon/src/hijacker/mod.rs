@@ -61,12 +61,12 @@ impl Hijacker {
     }
 
     fn find_symbol_addr(symbol_name: &str) -> Result<(PathBuf, u64)> {
-        let exec_file = MappedFile::new(os::process::path())?;
-        let exec_resolver = ElfResolver::new(&exec_file)?;
+        let exec_file = MappedFile::open(os::process::path())?;
+        let exec_resolver = ElfResolver::new(exec_file.as_bytes())?;
 
         for lib_path in exec_resolver.dependencies()? {
-            let lib_file = MappedFile::new(&lib_path)?;
-            let lib_resolver = ElfResolver::new(&lib_file)?;
+            let lib_file = MappedFile::open(&lib_path)?;
+            let lib_resolver = ElfResolver::new(lib_file.as_bytes())?;
 
             if let Ok(Some(addr)) = lib_resolver.find_symbol_addr(symbol_name) {
                 return Ok((lib_path, addr));

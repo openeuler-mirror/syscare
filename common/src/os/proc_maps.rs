@@ -2,14 +2,19 @@ use std::{
     convert::TryFrom,
     ffi::{OsStr, OsString},
     fs::File,
+    io::BufReader,
 };
 
 use anyhow::Result;
 
-use crate::util::{fs, os_str::OsStrExt, raw_line::RawLines};
+use crate::util::{
+    fs,
+    os_line::{BufReadOsLines, OsLines},
+    os_str::OsStrExt,
+};
 
 #[derive(Debug)]
-pub struct ProcMapping {
+pub struct ProcMap {
     pub address: OsString,
     pub permission: OsString,
     pub offset: OsString,
@@ -18,7 +23,7 @@ pub struct ProcMapping {
     pub path_name: OsString,
 }
 
-impl TryFrom<OsString> for ProcMapping {
+impl TryFrom<OsString> for ProcMap {
     type Error = anyhow::Error;
 
     fn try_from(value: OsString) -> std::result::Result<Self, Self::Error> {
@@ -38,34 +43,36 @@ impl TryFrom<OsString> for ProcMapping {
     }
 }
 
-pub struct ProcMappingReader {
-    lines: RawLines<File>,
+pub struct ProcMaps {
+    lines: OsLines<BufReader<File>>,
 }
 
-impl ProcMappingReader {
+impl ProcMaps {
     pub fn new(pid: i32) -> Result<Self> {
         let file_path = format!("/proc/{}/maps", pid);
-        let lines = RawLines::from(fs::open_file(file_path)?);
+        let lines = BufReader::new(fs::open_file(file_path)?).os_lines();
 
         Ok(Self { lines })
     }
 }
 
-impl Iterator for ProcMappingReader {
-    type Item = ProcMapping;
+impl Iterator for ProcMaps {
+    type Item = ProcMap;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.lines
             .next()
             .and_then(Result::ok)
-            .map(ProcMapping::try_from)
+            .map(ProcMap::try_from)
             .and_then(Result::ok)
     }
 }
 
 #[test]
 fn test() {
-    for mapping in ProcMappingReader::new(1).unwrap() {
-        println!("{:#?}", mapping);
+    use super::process;
+
+    for map in ProcMaps::new(process::id()).expect("Failed to read proc maps") {
+        println!("{:#?}", map);
     }
 }

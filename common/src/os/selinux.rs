@@ -5,6 +5,7 @@ use std::path::Path;
 use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
 
 use log::{error, trace};
+use nix::libc::{c_void, getxattr, setxattr, PATH_MAX};
 
 use crate::util::fs;
 use crate::util::os_str::OsStrExt;
@@ -75,18 +76,18 @@ pub fn read_security_context<P>(path: P) -> std::io::Result<OsString>
 where
     P: AsRef<Path>,
 {
-    let mut buf = [0u8; libc::PATH_MAX as usize];
+    let mut buf = [0u8; PATH_MAX as usize];
 
     let sec_cxt_path = CString::new(path.as_ref().as_os_str().as_bytes()).unwrap();
     let sec_cxt_name = CString::new(SELINUX_SECURITY_CONTEXT).unwrap();
     let sec_cxt_value = buf.as_mut_ptr();
-    let sec_cxt_size = libc::PATH_MAX as usize;
+    let sec_cxt_size = PATH_MAX as usize;
 
     let result = unsafe {
-        let len = libc::getxattr(
+        let len = getxattr(
             sec_cxt_path.as_ptr(),
             sec_cxt_name.as_ptr(),
-            sec_cxt_value as *mut libc::c_void,
+            sec_cxt_value as *mut c_void,
             sec_cxt_size,
         );
         if len <= 0 {
@@ -124,10 +125,10 @@ where
     trace!("write security context: {:?}", sec_cxt_value);
 
     unsafe {
-        let ret = libc::setxattr(
+        let ret = setxattr(
             sec_cxt_path.as_ptr(),
             sec_cxt_name.as_ptr(),
-            sec_cxt_value.as_ptr() as *const libc::c_void,
+            sec_cxt_value.as_ptr() as *const c_void,
             sec_cxt_size,
             0,
         );

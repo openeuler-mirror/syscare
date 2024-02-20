@@ -17,7 +17,6 @@ function_name  = { version = "0.3" }
 gimli          = { version = "0.26" }
 jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 lazy_static    = { version = "1.0" }
-libc           = { version = "0.2" }
 log            = { version = "0.4" }
 memmap2        = { version = "0.9" }
 memoffset      = { version = "0.7" }

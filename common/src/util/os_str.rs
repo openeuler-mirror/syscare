@@ -3,7 +3,7 @@ use std::iter::Filter;
 use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
 use std::path::{Path, PathBuf};
 
-use super::raw_line::RawLines;
+use super::os_line::{BufReadOsLines, OsLines};
 
 const REPLACEMENT_CHARACTER: char = '\u{FFFD}';
 
@@ -585,8 +585,8 @@ pub trait OsStrExt: AsRef<OsStr> {
         CharByteIndices::from(self.as_ref().as_bytes())
     }
 
-    fn lines(&self) -> RawLines<&[u8]> {
-        RawLines::from(self.as_ref().as_bytes())
+    fn lines(&self) -> OsLines<&[u8]> {
+        self.as_ref().as_bytes().os_lines()
     }
 
     fn find<'a, P: Pattern<'a>>(&'a self, pat: P) -> Option<usize> {

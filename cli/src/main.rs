@@ -5,7 +5,6 @@ use log::{debug, error, LevelFilter};
 
 mod args;
 mod executor;
-mod flock;
 mod logger;
 mod rpc;
 

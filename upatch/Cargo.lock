@@ -1111,9 +1111,9 @@ version = "1.2.0"
 dependencies = [
  "anyhow",
  "lazy_static",
- "libc",
  "log",
  "memmap2",
+ "nix",
  "regex",
  "serde",
  "serde_cbor",
@@ -1250,7 +1250,6 @@ dependencies = [
  "gimli",
  "jsonrpc",
  "lazy_static",
- "libc",
  "log",
  "memmap2",
  "memoffset",

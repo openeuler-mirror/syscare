@@ -2,12 +2,13 @@ use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 use lazy_static::lazy_static;
+use nix::unistd::getpid;
 
 use crate::util::fs;
 
 pub fn id() -> i32 {
     lazy_static! {
-        static ref PROCESS_ID: i32 = unsafe { libc::getpid() };
+        static ref PROCESS_ID: i32 = getpid().as_raw();
     }
     *PROCESS_ID
 }
