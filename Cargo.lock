@@ -236,9 +236,9 @@ dependencies = [
 
 [[package]]
 name = "ctrlc"
-version = "3.1.10"
+version = "3.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "531ca85436bc182c0b20b5bd3dd93ad47bdc4a6b6b5168a7d48f64cf0f9abdd0"
+checksum = "1d91974fbbe88ec1df0c24a4f00f99583667a7e2e6272b2b92d294d81e462173"
 dependencies = [
  "nix",
  "winapi 0.3.9",
@@ -700,15 +700,16 @@ dependencies = [
 
 [[package]]
 name = "nix"
-version = "0.22.3"
+version = "0.25.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e4916f159ed8e5de0082076562152a76b7a1f64a01fd9d1e0fea002c37624faf"
+checksum = "f346ff70e7dbfd675fe90590b92d59ef2de15a8779ae305ebcbfd3f0caf59be4"
 dependencies = [
+ "autocfg",
  "bitflags",
- "cc",
  "cfg-if 1.0.0",
  "libc",
  "memoffset 0.6.5",
+ "pin-utils",
 ]
 
 [[package]]
@@ -826,6 +827,12 @@ name = "pin-project-lite"
 version = "0.1.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "257b64915a082f7811703966789728173279bdebb956b143dbcd23f6f970a777"
+
+[[package]]
+name = "pin-utils"
+version = "0.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
 name = "ppv-lite86"
@@ -1099,7 +1106,6 @@ dependencies = [
  "function_name",
  "jsonrpc",
  "lazy_static",
- "libc",
  "log",
  "once_cell",
  "parking_lot 0.10.2",
@@ -1126,6 +1132,7 @@ dependencies = [
  "flexi_logger",
  "lazy_static",
  "log",
+ "nix",
  "once_cell",
  "parking_lot 0.10.2",
  "serde",
@@ -1141,9 +1148,9 @@ version = "1.2.0"
 dependencies = [
  "anyhow",
  "lazy_static",
- "libc",
  "log",
  "memmap2",
+ "nix",
  "regex",
  "serde",
  "serde_cbor",
@@ -1166,8 +1173,8 @@ dependencies = [
  "jsonrpc-derive",
  "jsonrpc-ipc-server",
  "lazy_static",
- "libc",
  "log",
+ "nix",
  "once_cell",
  "parking_lot 0.10.2",
  "serde",

@@ -4,8 +4,8 @@ use anyhow::{anyhow, bail, ensure, Result};
 
 use indexmap::IndexMap;
 use lazy_static::lazy_static;
-use libc::{c_char, EEXIST, EFAULT, ENOENT, ENOEXEC, EPERM};
 use log::{debug, info};
+use nix::libc::{c_char, EEXIST, EFAULT, ENOENT, ENOEXEC, EPERM};
 use parking_lot::Mutex;
 use syscare_abi::PatchStatus;
 use syscare_common::util::digest;

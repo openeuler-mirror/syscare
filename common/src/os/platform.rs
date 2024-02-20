@@ -1,70 +1,56 @@
-use std::ffi::CStr;
-use std::ffi::{OsStr, OsString};
-use std::os::unix::prelude::OsStringExt;
+use std::ffi::OsStr;
 
 use lazy_static::lazy_static;
-
-struct PlatformInfo {
-    sysname: OsString,
-    hostname: OsString,
-    release: OsString,
-    version: OsString,
-    arch: OsString,
-    domain: OsString,
-}
+use nix::sys::utsname::{uname, UtsName};
 
 #[inline(always)]
-fn info() -> &'static PlatformInfo {
+fn info() -> &'static UtsName {
     lazy_static! {
-        static ref PLATFORM_INFO: PlatformInfo = unsafe {
-            let mut buf = std::mem::MaybeUninit::zeroed().assume_init();
-
-            let ret = libc::uname(&mut buf);
-            assert_eq!(ret, 0);
-
-            PlatformInfo {
-                sysname: OsString::from_vec(
-                    CStr::from_ptr(buf.sysname.as_ptr()).to_bytes().to_vec(),
-                ),
-                hostname: OsString::from_vec(
-                    CStr::from_ptr(buf.nodename.as_ptr()).to_bytes().to_vec(),
-                ),
-                release: OsString::from_vec(
-                    CStr::from_ptr(buf.release.as_ptr()).to_bytes().to_vec(),
-                ),
-                version: OsString::from_vec(
-                    CStr::from_ptr(buf.version.as_ptr()).to_bytes().to_vec(),
-                ),
-                arch: OsString::from_vec(CStr::from_ptr(buf.machine.as_ptr()).to_bytes().to_vec()),
-                domain: OsString::from_vec(
-                    CStr::from_ptr(buf.domainname.as_ptr()).to_bytes().to_vec(),
-                ),
-            }
-        };
+        static ref PLATFORM_INFO: UtsName = uname().expect("Failed to get uname");
     }
     &PLATFORM_INFO
 }
 
-pub fn sysname() -> &'static OsStr {
-    &info().sysname
+pub fn hostname() -> &'static OsStr {
+    info().nodename()
 }
 
-pub fn hostname() -> &'static OsStr {
-    &info().hostname
+pub fn sysname() -> &'static OsStr {
+    info().sysname()
 }
 
 pub fn release() -> &'static OsStr {
-    &info().release
+    info().release()
 }
 
 pub fn version() -> &'static OsStr {
-    &info().version
+    info().version()
 }
 
 pub fn arch() -> &'static OsStr {
-    &info().arch
+    info().machine()
 }
 
-pub fn domain() -> &'static OsStr {
-    &info().domain
+#[test]
+fn test() {
+    let sysname = sysname();
+    let hostname = hostname();
+    let release = release();
+    let version = version();
+    let arch = arch();
+
+    println!("sysname:  {}", sysname.to_string_lossy());
+    assert!(!sysname.is_empty());
+
+    println!("hostname: {}", hostname.to_string_lossy());
+    assert!(!hostname.is_empty());
+
+    println!("release:  {}", release.to_string_lossy());
+    assert!(!release.is_empty());
+
+    println!("version:  {}", version.to_string_lossy());
+    assert!(!version.is_empty());
+
+    println!("arch:     {}", arch.to_string_lossy());
+    assert!(!arch.is_empty());
 }

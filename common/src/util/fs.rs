@@ -481,5 +481,5 @@ pub fn copy_dir_contents<P: AsRef<Path>, Q: AsRef<Path>>(
 }
 
 pub fn sync() {
-    unsafe { libc::sync() }
+    nix::unistd::sync()
 }

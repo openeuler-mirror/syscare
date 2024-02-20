@@ -4,8 +4,9 @@ use anyhow::{anyhow, ensure, Error, Result};
 use log::info;
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
+use syscare_common::util::flock::{FileLock, FileLockType};
 
-use crate::{args::SubCommand, flock::ExclusiveFileLockGuard, rpc::RpcProxy};
+use crate::{args::SubCommand, rpc::RpcProxy};
 
 use super::CommandExecutor;
 
@@ -123,7 +124,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 Self::show_patch_list(self.proxy.get_patch_list()?);
             }
             SubCommand::Check { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut error_list = vec![];
                 for identifier in identifiers {
@@ -135,7 +136,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Apply { identifiers, force } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -150,7 +151,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Remove { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -165,7 +166,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Active { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -180,7 +181,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Deactive { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -195,7 +196,7 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Accept { identifiers } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 let mut status_list = vec![];
                 let mut error_list = vec![];
@@ -210,12 +211,12 @@ impl CommandExecutor for PatchCommandExecutor {
                 ensure!(error_list.is_empty(), Self::build_error_msg(error_list));
             }
             SubCommand::Save => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 self.proxy.save_patch_status()?;
             }
             SubCommand::Restore { accepted } => {
-                let _flock_guard = ExclusiveFileLockGuard::new(&self.lock_file)?;
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
 
                 self.proxy.restore_patch_status(*accepted)?;
             }

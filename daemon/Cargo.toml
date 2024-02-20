@@ -15,7 +15,6 @@ anyhow             = { version = "1.0" }
 once_cell          = { version = "1.14" }
 signal-hook        = { version = "0.3" }
 lazy_static        = { version = "1.0" }
-libc               = { version = "0.2" }
 parking_lot        = { version = "0.10" }
 indexmap           = { version = "1.8" }
 log                = { version = "0.4" }
@@ -28,6 +27,7 @@ inotify            = { version = "0.8" }
 jsonrpc-core       = { version = "15.1" }
 jsonrpc-derive     = { version = "15.1" }
 jsonrpc-ipc-server = { version = "15.1" }
+nix                = { version = "0.25" }
 
 [build-dependencies]
 cc = { version = "1.0" }

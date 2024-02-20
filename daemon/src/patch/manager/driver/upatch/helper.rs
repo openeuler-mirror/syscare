@@ -7,7 +7,7 @@ use anyhow::Result;
 use lazy_static::lazy_static;
 use syscare_common::util::{fs, os_str::OsStrExt};
 
-use syscare_common::os::proc::ProcMappingReader;
+use syscare_common::os::proc_maps::ProcMaps;
 
 pub struct UPatchDriverHelper;
 
@@ -54,9 +54,9 @@ impl UPatchDriverHelper {
             .filter_map(Self::parse_proc_pid)
             .filter(Self::proc_black_list_filter)
             .filter(|pid| {
-                if let Ok(reader) = ProcMappingReader::new(*pid) {
+                if let Ok(mappings) = ProcMaps::new(*pid) {
                     let elf_path = fs::canonicalize(target_elf.as_ref()).unwrap_or_default();
-                    for mapping in reader {
+                    for mapping in mappings {
                         let mapped_elf = mapping.path_name;
                         if mapped_elf == elf_path && !mapped_elf.contains("(deleted)") {
                             return true;

@@ -1,8 +1,8 @@
 use std::{ffi::CString, os::unix::prelude::OsStrExt, path::Path};
 
 use anyhow::{Context, Result};
-use libc::{c_char, c_int, pid_t, size_t};
 
+use nix::libc::{c_char, c_int, pid_t, size_t};
 use syscare_abi::PatchStatus;
 
 pub trait ToCString {
