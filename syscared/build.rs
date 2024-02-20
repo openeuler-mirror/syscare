@@ -35,19 +35,19 @@ fn rewrite_version() {
 }
 
 fn build_ffi_library() {
-    const UPATCH_TOOL_LIB: &str = "../upatch/upatch-tool";
+    const UPATCH_LIB: &str = "../upatch-lib";
 
     cc::Build::new()
         .files(&[
-            Path::new(UPATCH_TOOL_LIB).join("upatch-common.c"),
-            Path::new(UPATCH_TOOL_LIB).join("upatch-elf.c"),
-            Path::new(UPATCH_TOOL_LIB).join("upatch-ioctl.c"),
-            Path::new(UPATCH_TOOL_LIB).join("upatch-meta.c"),
-            Path::new(UPATCH_TOOL_LIB).join("upatch-resolve.c"),
-            Path::new(UPATCH_TOOL_LIB).join("upatch-tool-lib.c"),
+            Path::new(UPATCH_LIB).join("upatch-common.c"),
+            Path::new(UPATCH_LIB).join("upatch-elf.c"),
+            Path::new(UPATCH_LIB).join("upatch-ioctl.c"),
+            Path::new(UPATCH_LIB).join("upatch-meta.c"),
+            Path::new(UPATCH_LIB).join("upatch-resolve.c"),
+            Path::new(UPATCH_LIB).join("upatch-tool-lib.c"),
         ])
-        .includes(&[UPATCH_TOOL_LIB])
-        .compile("libupatch-tool.a");
+        .includes(&[UPATCH_LIB])
+        .compile("libupatch.a");
 }
 
 fn main() {

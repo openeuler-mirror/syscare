@@ -16,7 +16,7 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::path::PathBuf;
 
-use common::util::os_str::OsStrExt;
+use syscare_common::util::os_str::OsStrExt;
 
 use crate::elf::read;
 

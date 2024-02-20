@@ -9,15 +9,15 @@ rust-version = "1.51"
 build        = "build.rs"
 
 [dependencies]
-syscare-common = { package = "syscare-common", path = "../common" }
-syscare-abi    = { package = "syscare-abi", path = "../abi" }
+syscare-abi    = { package = "syscare-abi", path = "../syscare-abi" }
+syscare-common = { package = "syscare-common", path = "../syscare-common" }
 anyhow         = { version = "1.0" }
 clap           = { version = "2.34" }
 flexi_logger   = { version = "0.21" }
 function_name  = { version = "0.3" }
-jsonrpc        = { version = "0.13", features = ["simple_uds"] }
+jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
 once_cell      = { version = "1.14" }
-parking_lot    = { version = "0.10" }
+parking_lot    = { version = "0.11" }
 serde          = { version = "1.0", features = ["derive"] }

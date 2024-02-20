@@ -1,10 +1,12 @@
 [workspace]
 members = [
-    "abi",
-    "common",
-    "builder",
-    "cli",
-    "daemon",
+    "syscare-abi",
+    "syscare-common",
+    "syscare",
+    "syscare-build",
+    "syscared",
+    "upatch-build",
+    "upatchd"
 ]
 
 [profile.release]
