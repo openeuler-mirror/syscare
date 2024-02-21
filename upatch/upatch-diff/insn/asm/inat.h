@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 #ifndef _ASM_X86_INAT_H
 #define _ASM_X86_INAT_H
 /*
@@ -20,6 +21,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  */
+
 #include <asm/inat-types.h>
 
 /*

@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * upatch-elf.c
  *
@@ -62,11 +63,11 @@ static void create_section_list(struct upatch_elf *uelf)
 
         if (!gelf_getshdr(scn, &sec->sh))
             ERROR("gelf_getshdr with error %s", elf_errmsg(0));
-        
+
         sec->name = elf_strptr(uelf->elf, shstrndx, sec->sh.sh_name);
         if (!sec->name)
             ERROR("elf_strptr with error %s", elf_errmsg(0));
-        
+
         sec->data = elf_getdata(scn, NULL);
         if (!sec->data)
             ERROR("elf_getdata with error %s", elf_errmsg(0));
@@ -113,7 +114,7 @@ static void create_symbol_list(struct upatch_elf *uelf)
         sym->name = elf_strptr(uelf->elf, symtab->sh.sh_link, sym->sym.st_name);
         if (!sym->name)
             ERROR("elf_strptr with error %s", elf_errmsg(0));
-        
+
         sym->type = GELF_ST_TYPE(sym->sym.st_info);
         sym->bind = GELF_ST_BIND(sym->sym.st_info);
 
@@ -126,11 +127,11 @@ static void create_symbol_list(struct upatch_elf *uelf)
 
         if ((sym->sym.st_shndx > SHN_UNDEF && sym->sym.st_shndx < SHN_LORESERVE) ||
             sym->sym.st_shndx == SHN_XINDEX) {
-            
+
             sym->sec = find_section_by_index(&uelf->sections, shndx);
             if (!sym->sec)
                 ERROR("no releated section found for symbol %s \n", sym->name);
-            
+
             /* this symbol is releated with a section */
             if (sym->type == STT_SECTION) {
                 /* secsym must be the bundleable symbol */
@@ -184,7 +185,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
         if (!gelf_getrela(relasec->data, index, &rela->rela))
             ERROR("gelf_getrela with error %s", elf_errmsg(0));
         index++;
-        
+
         rela->type = GELF_R_TYPE(rela->rela.r_info);
         rela->addend = rela->rela.r_addend;
         rela->offset = (unsigned int)rela->rela.r_offset;
@@ -192,7 +193,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
         rela->sym = find_symbol_by_index(&uelf->symbols, symndx);
         if (!rela->sym)
             ERROR("no rela entry symbol found \n");
-        
+
         if (rela->sym->sec && is_string_section(rela->sym->sec)) {
             rela->string = rela->sym->sec->data->d_buf +
                 rela->sym->sym.st_value +
@@ -204,7 +205,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
 
         if (skip)
             continue;
-        
+
         log_debug("offset %d, type %d, %s %s %ld \n", rela->offset,
             rela->type, rela->sym->name,
             (rela->addend < 0) ? "-" : "+", labs(rela->addend));
@@ -308,17 +309,3 @@ void upatch_elf_free(struct upatch_elf *uelf)
     close(uelf->fd);
     memset(uelf, 0, sizeof(*uelf));
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
