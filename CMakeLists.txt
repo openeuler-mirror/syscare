@@ -11,7 +11,7 @@ find_package(Git QUIET)
 # Version
 if(NOT DEFINED BUILD_VERSION)
     execute_process(
-        COMMAND sh -c "cat abi/Cargo.toml | grep -F 'version' | head -n 1 | awk -F '\"' '{print $2}'"
+        COMMAND sh -c "cat syscare/Cargo.toml | grep -F 'version' | head -n 1 | awk -F '\"' '{print $2}'"
         OUTPUT_VARIABLE BUILD_VERSION
         OUTPUT_STRIP_TRAILING_WHITESPACE
         ERROR_QUIET
@@ -30,11 +30,6 @@ if(GIT_FOUND)
     set(BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
 else()
     set(BUILD_VERSION "${BUILD_VERSION}")
-endif()
-
-# Build switch
-if(NOT DEFINED _BUILD_UPATCH)
-    set(_BUILD_UPATCH 1)
 endif()
 
 # Set install directories
@@ -57,9 +52,19 @@ message("-- Libexec directory: ${SYSCARE_LIBEXEC_DIR}")
 message("-- Service directory: ${SYSCARE_SERVICE_DIR}")
 message("---------------------------------------------------------")
 
-# Build syscare
-add_custom_target(syscare ALL
-    COMMENT "Compiling syscare..."
+# Compile options
+add_compile_options(-DBUILD_VERSION="${BUILD_VERSION}")
+add_compile_options(-g -Wall -O2 -fPIE)
+
+# Subdirectories
+add_subdirectory(upatch-diff)
+add_subdirectory(upatch-manage)
+add_subdirectory(upatch-hijacker)
+add_subdirectory(misc)
+
+# Build rust executables
+add_custom_target(rust-executables ALL
+    COMMENT "Building rust executables..."
     COMMAND ${CMAKE_COMMAND} -E env
         "BUILD_VERSION=${BUILD_VERSION}"
         "RUSTFLAGS=--cfg unsound_local_offset"
@@ -67,16 +72,12 @@ add_custom_target(syscare ALL
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
-# Build upatch
-if(${_BUILD_UPATCH})
-    add_subdirectory(upatch)
-endif()
-
-# Install binaries
+# Install rust binaries
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
+        ${CMAKE_CURRENT_BINARY_DIR}/release/upatchd
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscared
+        ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
         GROUP_EXECUTE GROUP_READ
@@ -87,6 +88,7 @@ install(
 
 install(
     PROGRAMS
+        ${CMAKE_CURRENT_BINARY_DIR}/release/upatch-build
         ${CMAKE_CURRENT_BINARY_DIR}/release/syscare-build
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
@@ -94,16 +96,4 @@ install(
         WORLD_READ WORLD_EXECUTE
     DESTINATION
         ${SYSCARE_LIBEXEC_DIR}
-)
-
-# Install service
-install(
-    FILES
-        ${CMAKE_CURRENT_LIST_DIR}/misc/syscare.service
-    PERMISSIONS
-        OWNER_EXECUTE OWNER_WRITE OWNER_READ
-        GROUP_EXECUTE GROUP_READ
-        WORLD_READ WORLD_EXECUTE
-    DESTINATION
-        ${SYSCARE_SERVICE_DIR}
 )

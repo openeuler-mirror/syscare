@@ -9,7 +9,7 @@ rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
-syscare-common     = { package = "syscare-common", path = "../../common" }
+syscare-common     = { package = "syscare-common", path = "../syscare-common" }
 anyhow             = { version = "1.0" }
 clap               = { version = "3.2", features = ["cargo", "derive"] }
 daemonize          = { version = "0.5" }

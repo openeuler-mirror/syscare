@@ -9,8 +9,8 @@ rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
-syscare-abi    = { package = "syscare-abi", path = "../abi" }
-syscare-common = { package = "syscare-common", path = "../common" }
+syscare-abi    = { package = "syscare-abi", path = "../syscare-abi" }
+syscare-common = { package = "syscare-common", path = "../syscare-common" }
 anyhow         = { version = "1.0" }
 clap           = { version = "3.2", features = ["derive"] }
 chrono         = { version = "0.4" }
