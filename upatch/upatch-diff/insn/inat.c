@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * x86 instruction attribute tables
  *
@@ -18,6 +19,7 @@
  * Foundation, Inc., 59 Temple Place - Suite 330, Boston, MA 02111-1307, USA.
  *
  */
+
 #include <asm/insn.h>
 
 /* Attribute tables are generated from opcode map */

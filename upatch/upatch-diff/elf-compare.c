@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * elf-compare.c
  *
@@ -44,7 +45,7 @@ static void compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin
     if (sym->type == STT_OBJECT && sym->sym.st_size != symtwin->sym.st_size)
 		DIFF_FATAL("object size mismatch: %s", sym->name);
 
-	if (sym->sym.st_shndx == SHN_UNDEF || 
+	if (sym->sym.st_shndx == SHN_UNDEF ||
         sym->sym.st_shndx == SHN_ABS)
 		sym->status = SAME;
 

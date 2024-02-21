@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * running-elf.c
  *
@@ -59,7 +60,7 @@ void relf_init(char *elf_name, struct running_elf *relf)
     Elf_Data *data;
     GElf_Sym sym;
     unsigned int i;
-    
+
     relf->fd = open(elf_name, O_RDONLY);
     if (relf->fd == -1)
         ERROR("open with errno = %d", errno);
@@ -67,13 +68,13 @@ void relf_init(char *elf_name, struct running_elf *relf)
     relf->elf = elf_begin(relf->fd, ELF_C_READ, NULL);
     if (!relf->elf)
         ERROR("elf_begin with error %s", elf_errmsg(0));
-    
+
     relf->is_exec = is_exec(relf->elf);
 
     while ((scn = elf_nextscn(relf->elf, scn)) != NULL) {
         if (!gelf_getshdr(scn, &shdr))
             ERROR("gelf_getshdr with error %s", elf_errmsg(0));
-        
+
         if (shdr.sh_type == SHT_SYMTAB)
             break;
     }
@@ -126,7 +127,7 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
         sym = &relf->obj_syms[i];
         if (sym->bind == STB_LOCAL && !strcmp(sym->name, lookup_sym->name))
             sympos ++;
-        
+
         if (lookup_sym->lookup_running_file_sym == sym) {
             in_file = true;
             continue;
@@ -134,10 +135,10 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
 
         if (!in_file)
             continue;
-        
+
         if (sym->type == STT_FILE)
             break;
-        
+
         if (sym->bind == STB_LOCAL && !strcmp(sym->name, lookup_sym->name)) {
             if (result->symbol)
                 ERROR("duplicate local symbol found for %s", lookup_sym->name);
@@ -150,7 +151,7 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
 
     if (!!result->symbol)
         return !!result->symbol;
-    
+
     for (i = 0; i < relf->obj_nr; i ++) {
         sym = &relf->obj_syms[i];
         if ((sym->bind == STB_GLOBAL || sym->bind == STB_WEAK) &&
@@ -164,27 +165,3 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
 
     return !!result->symbol;
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

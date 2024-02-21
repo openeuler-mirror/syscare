@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * elf-correlate.c
  *
@@ -66,7 +67,7 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf 
 			 * in include_standard_elements().
 			 * Clang creates similar .Ltmp%d symbols in .rodata.str
 			 */
-			if (sym_orig->type == STT_NOTYPE && 
+			if (sym_orig->type == STT_NOTYPE &&
 				(!strncmp(sym_orig->name, ".LC", 3) || !strncmp(sym_orig->name, ".Ltmp", 5)))
 				continue;
 
@@ -158,7 +159,7 @@ void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf
 			correlate_section(sec_orig, sec_patched);
 			break;
 		}
-	} 
+	}
 }
 
 /* TODO: need handle .toc section */
@@ -243,7 +244,7 @@ static void check_static_variable_correlate(struct upatch_elf *uelf_source, stru
 			if (!sym->twin || !relasec->twin)
 				DIFF_FATAL("reference to static local variable %s in %s was removed",
                     sym->name, section_function_name(relasec));
-                
+
             if(!find_static_twin_ref(relasec->twin, sym))
 				DIFF_FATAL("static local %s has been correlated with %s, but patched %s is missing a reference to it",
                     sym->name, sym->twin->name, section_function_name(relasec->twin));
@@ -321,7 +322,7 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
 	int bundled, patched_bundled;
 
 	/*
-	 * undo the correlations for all static locals.  Two static locals can have the same numbered suffix in the orig 
+	 * undo the correlations for all static locals.  Two static locals can have the same numbered suffix in the orig
      * and patchedobjects by coincidence.
 	 */
     list_for_each_entry(sym, &uelf_source->symbols, list) {
@@ -364,14 +365,14 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
 
 			if (!is_normal_static_local(sym))
 				continue;
-                
+
 			if (sym->twin)
 				continue;
 
 			bundled = (sym == sym->sec->sym) ? 1 : 0;
 			if (bundled && sym->sec == relasec->base) {
 				/*
-				 * TODO: A rare case where a static local data structure references itself.  
+				 * TODO: A rare case where a static local data structure references itself.
                  * There's no reliable way to correlate this.  Hopefully
                  * to the symbol somewhere that can be used.
 				 */

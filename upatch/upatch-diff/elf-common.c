@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * elf-common.c
  *
@@ -28,7 +29,7 @@
 int mangled_strcmp(char *str1, char *str2)
 {
     /*
-    * ELF string sections aren't mangled, though they look that way. 
+    * ELF string sections aren't mangled, though they look that way.
     */
 	if (strstr(str1, ".str1."))
 		return strcmp(str1, str2);

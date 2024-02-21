@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * elf-insn.c
  *
@@ -90,7 +91,7 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
 unsigned int insn_length(struct upatch_elf *uelf, void *addr)
 {
     struct insn decoded_insn;
-    
+
     switch(uelf->arch) {
     case AARCH64:
         return ARM64_INSTR_LEN;

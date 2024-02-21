@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: Mulan PSL v2
 /*
- * The whole part:
- * 1. Someone called execve() to run a compiler (inode).
- * 2. If the inode was registered, under layer would rewrite argv[0] to hijacker path.
- * 3. Hijacker would add some arguments and calls execve() again.
- * 4. Under layer redirects argv[0] to original path.
- * Pid would keep same.
+ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+ * gnu-compiler-hijacker is licensed under Mulan PSL v2.
+ * You can use this software according to the terms and conditions of the Mulan PSL v2.
+ * You may obtain a copy of Mulan PSL v2 at:
+ *         http://license.coscl.org.cn/MulanPSL2
  *
- * Authors:
- *   Longjun Luo <luolongjuna@gmail.com>
- *   RenoSeven <dev@renoseven.net>
+ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+ * See the Mulan PSL v2 for more details.
  */
 
 #include <stdio.h>
@@ -24,6 +24,14 @@ static const char* APPEND_ARGS[] = {
 };
 static const int APPEND_ARG_LEN = (int)(sizeof(APPEND_ARGS) / sizeof(char *));
 
+/*
+ * The whole part:
+ * 1. Someone called execve() to run a compiler (inode).
+ * 2. If the inode was registered, under layer would rewrite argv[0] to hijacker path.
+ * 3. Hijacker would add some arguments and calls execve() again.
+ * 4. Under layer redirects argv[0] to original path.
+ * Pid would keep same.
+ */
 int main(int argc, char *argv[], char *envp[])
 {
     // Try to get executable path

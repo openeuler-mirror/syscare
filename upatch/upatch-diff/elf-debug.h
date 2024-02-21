@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0
 /*
  * elf-debug.h
  *
@@ -33,5 +34,3 @@ void upatch_dump_kelf(struct upatch_elf *);
 void upatch_rebuild_eh_frame(struct section *);
 
 #endif /* __UPATCH_ELF_DEBUG_H_ */
-
-
