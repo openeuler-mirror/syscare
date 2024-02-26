@@ -966,6 +966,10 @@ int main(int argc, char*argv[])
 
     num_changed = include_changed_functions(&uelf_patched);
     new_globals_exist = include_new_globals(&uelf_patched);
+    if (!num_changed && !new_globals_exist) {
+        log_normal("Cannot find any changed functions\n");
+        return 0;
+    }
 
     include_debug_sections(&uelf_patched);
 
@@ -978,11 +982,6 @@ int main(int argc, char*argv[])
     verify_patchability(&uelf_patched);
 
     include_special_local_section(&uelf_patched);
-
-    if (!num_changed && !new_globals_exist) {
-        log_normal("Cannot find any changed functions\n");
-        return 0;
-    }
 
     migrate_included_elements(&uelf_patched, &uelf_out);
 
