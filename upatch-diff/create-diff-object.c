@@ -538,7 +538,9 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 /* text section refer other sections */
                 if (is_text_section(relasec->base) &&
                     !is_text_section(sym->sec) &&
-                    (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 || rela->type == R_AARCH64_ABS64) &&
+                    (((uelf->arch == X86_64) && (rela->type == R_X86_64_32S || rela->type == R_X86_64_32)) ||
+                     ((uelf->arch == AARCH64) && (rela->type == R_AARCH64_ABS64)) ||
+                     ((uelf->arch == RISCV64) && (rela->type == R_RISCV_64))) &&
                     rela->addend == (long)sym->sec->sh.sh_size &&
                     end == (long)sym->sec->sh.sh_size)
                     ERROR("Relocation refer end of data sections.");

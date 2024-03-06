@@ -100,6 +100,7 @@ int offset_of_string(struct list_head *list, char *name)
 bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
 {
 	switch(uelf->arch) {
+	case RISCV64:
 	case AARCH64:
 		return false;
 	case X86_64:
@@ -112,7 +113,7 @@ bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
 
 bool is_mapping_symbol(struct upatch_elf *uelf, struct symbol *sym)
 {
-	if (uelf->arch != AARCH64)
+	if ((uelf->arch != AARCH64) && (uelf->arch != RISCV64))
 		return false;
 
 	if (sym->name && sym->name[0] == '$'

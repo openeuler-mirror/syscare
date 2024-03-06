@@ -330,6 +330,9 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 		return _line_macro_change_only_aarch64(uelf, sec);
 	case X86_64:
 		return _line_macro_change_only(uelf, sec);
+	case RISCV64:
+		/* TODO: not support*/
+		break;
 	default:
 		ERROR("unsupported arch");
 	}
