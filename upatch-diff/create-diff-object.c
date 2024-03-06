@@ -678,6 +678,11 @@ static void include_symbol(struct symbol *sym)
      */
     if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME))
         include_section(sym->sec);
+#ifdef __riscv
+    /* .L symbols not exist in EXE. If they are included, so are their sections. */
+    else if (sym->sec && !sym->sec->include && !strncmp(sym->name, ".L", 2))
+        include_section(sym->sec);
+#endif
 }
 
 static void include_section(struct section *sec)

@@ -79,6 +79,11 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf 
 			    sym_orig->sec->twin != sym_patched->sec)
 				continue;
 
+			/* .L symbols should not change section */
+			if (uelf_source->arch == RISCV64 && !strncmp(sym_orig->name, ".L", 2) &&
+			    sym_orig->sec && sym_orig->sec->twin != sym_patched->sec)
+				continue;
+
 			correlate_symbol(sym_orig, sym_patched);
 			break;
 		}
