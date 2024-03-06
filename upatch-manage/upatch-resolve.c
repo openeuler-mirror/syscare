@@ -50,7 +50,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
              * some rela don't have the symbol index, use the symbol's value and
              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
              */
-            if (rela_dyn[i].r_addend != patch_sym->st_value) {
+            if ((rela_dyn[i].r_addend != patch_sym->st_value) || !patch_sym->st_value){
                 continue;
             }
         }
