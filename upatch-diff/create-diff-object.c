@@ -843,6 +843,23 @@ static void verify_patchability(struct upatch_elf *uelf)
         DIFF_FATAL("%d, Unsupported section changes", errs);
 }
 
+/*
+ * These types are for linker optimization and memory layout.
+ * They have no associated symbols and their names are empty
+ * string which would mismatch running-elf symbols in later
+ * lookup_relf(). Drop these useless items now.
+ */
+static void rv_drop_useless_rela(struct section *relasec)
+{
+    struct rela *rela, *saferela;
+    list_for_each_entry_safe(rela, saferela, &relasec->relas, list)
+        if (rela->type == R_RISCV_RELAX || rela->type == R_RISCV_ALIGN) {
+            list_del(&rela->list);
+            memset(rela, 0, sizeof(*rela));
+            free(rela);
+        }
+}
+
 static void migrate_included_elements(struct upatch_elf *uelf_patched, struct upatch_elf *uelf_out)
 {
     struct section *sec, *safesec;
@@ -863,8 +880,12 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched, struct up
         list_del(&sec->list);
         list_add_tail(&sec->list, &uelf_out->sections);
         sec->index = 0;
-        if (!is_rela_section(sec) && sec->secsym && !sec->secsym->include)
-            sec->secsym = NULL; // break link to non-included section symbol
+        if (!is_rela_section(sec)) {
+            if  (sec->secsym && !sec->secsym->include)
+                sec->secsym = NULL; // break link to non-included section symbol
+		} else if (uelf_patched->arch == RISCV64) {
+            rv_drop_useless_rela(sec);
+		}
     }
 
     /* migrate included symbols from kelf to out */
