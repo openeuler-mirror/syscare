@@ -26,6 +26,10 @@
 #include <asm/unistd.h>
 #include <sys/ptrace.h>
 #include <sys/wait.h>
+#ifdef __riscv
+/* user_regs_struct defined here */
+#include <asm/ptrace.h>
+#endif
 
 #include "upatch-common.h"
 #include "upatch-ptrace.h"
