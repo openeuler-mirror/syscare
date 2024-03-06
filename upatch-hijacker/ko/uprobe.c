@@ -42,6 +42,10 @@
 #define _reg_argv0 regs->regs[0]
 #endif
 
+#ifdef __riscv
+#define _reg_argv0 regs->a0
+#endif
+
 /* Uprobe private interface */
 static inline char* read_user_str(char *dst, const char __user *src, size_t count)
 {
