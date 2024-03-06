@@ -388,7 +388,8 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
 			patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
 			if (bundled != patched_bundled)
 				ERROR("bundle mismatch for symbol %s", sym->name);
-			if (!bundled && sym->sec->twin != patched_sym->sec)
+			/* ignore unmatched, gcc generated CSWTCH... symbols */
+			if (!bundled && sym->sec->twin != patched_sym->sec && strncmp(sym->name, "CSWTCH.", 7))
 				ERROR("sections %s and %s aren't correlated for symbol %s",
 				      sym->sec->name, patched_sym->sec->name, sym->name);
 
