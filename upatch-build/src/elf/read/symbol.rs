@@ -37,7 +37,7 @@ impl<'a> SymbolHeader<'a> {
         }
     }
 
-    pub fn get_st_name(&mut self) -> &'a OsStr {
+    pub fn get_st_name(&self) -> &'a OsStr {
         let name_offset = self.get_st_name_offset() as usize;
         self.read_to_os_string(name_offset)
     }

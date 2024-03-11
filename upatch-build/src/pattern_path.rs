@@ -12,11 +12,13 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::{OsStr, OsString};
-use std::os::unix::prelude::OsStrExt;
-use std::path::{Component, Path, PathBuf};
+use std::{
+    ffi::{OsStr, OsString},
+    os::unix::prelude::OsStrExt,
+    path::{Component, Path, PathBuf},
+};
 
-use super::{file_name, list_all_dirs, list_all_files};
+use syscare_common::fs;
 
 pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
     let components = Path::new(path.as_ref()).components().collect::<Vec<_>>();
@@ -42,8 +44,12 @@ pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
                         true => path_clone.push(tmp),
                         false => {
                             let all_pathes = match i == (components.len() - 1) {
-                                true => list_all_files(&p, false),
-                                false => list_all_dirs(&p, false),
+                                true => {
+                                    fs::list_files(&p, fs::TraverseOptions { recursive: false })
+                                }
+                                false => {
+                                    fs::list_dirs(&p, fs::TraverseOptions { recursive: false })
+                                }
                             }?;
                             for name in find_name(components[i].as_os_str(), all_pathes)? {
                                 path_clone.push(p.join(name));
@@ -66,12 +72,15 @@ fn push_path<O: AsRef<OsStr>>(name: O, pathes: &mut Vec<PathBuf>) {
 
 fn find_name(name: &OsStr, all_pathes: Vec<PathBuf>) -> std::io::Result<Vec<OsString>> {
     let mut result = Vec::new();
+
     for dir in all_pathes {
-        let path_name = file_name(dir)?;
-        if pattern_match(path_name.as_bytes(), name.as_bytes()) {
-            result.push(path_name);
+        if let Some(path_name) = dir.file_name() {
+            if pattern_match(path_name.as_bytes(), name.as_bytes()) {
+                result.push(path_name.to_os_string());
+            }
         }
     }
+
     Ok(result)
 }
 

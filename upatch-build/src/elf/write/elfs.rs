@@ -15,49 +15,39 @@
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 
+use anyhow::{bail, Result};
 use memmap2::{Mmap, MmapOptions};
 
 use super::super::*;
-use super::header::*;
-use super::section::*;
-use super::symbol::*;
+use super::{Header, SectionHeader, SymbolHeaderTable};
 
 #[derive(Debug)]
 pub struct Elf {
     file: File,
-    _class: u8,
     endian: Endian,
     strtab: Option<Mmap>,
 }
 
 impl Elf {
-    pub fn parse<P: AsRef<Path>>(path: P) -> std::io::Result<Self> {
+    pub fn parse<P: AsRef<Path>>(path: P) -> Result<Self> {
         let file = OpenOptions::new().read(true).write(true).open(&path)?;
-        match check_elf(&file) {
-            Ok(true) => (),
-            _ => {
-                return Err(std::io::Error::new(
-                    std::io::ErrorKind::AddrNotAvailable,
-                    format!("{:?} is not elf format", path.as_ref()),
-                ))
-            }
-        };
-        let (_class, endian) = check_header(&file)?;
+        check_elf(&file)?;
+
+        let endian = check_header(&file)?;
 
         Ok(Self {
             file,
-            _class,
             endian,
             strtab: None,
         })
     }
 
-    pub fn header(&mut self) -> std::io::Result<Header> {
+    pub fn header(&mut self) -> Result<Header> {
         let mmap = unsafe { MmapOptions::new().offset(0).len(64).map_mut(&self.file)? };
         Ok(Header::from(mmap, self.endian))
     }
 
-    pub fn sections(&mut self) -> std::io::Result<Vec<SectionHeader>> {
+    pub fn sections(&mut self) -> Result<Vec<SectionHeader>> {
         let mut res = Vec::new();
         let header = self.header()?;
         let offset = header.get_e_shoff() as usize;
@@ -78,7 +68,7 @@ impl Elf {
         Ok(res)
     }
 
-    pub fn symbols(&mut self) -> std::io::Result<SymbolHeaderTable> {
+    pub fn symbols(&mut self) -> Result<SymbolHeaderTable> {
         let sections = &self.sections()?;
         for section in sections {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
@@ -105,9 +95,6 @@ impl Elf {
                 ));
             }
         }
-        Err(std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "symtab segment not found in elf(write)".to_string(),
-        ))
+        bail!("Cannot find symtab");
     }
 }

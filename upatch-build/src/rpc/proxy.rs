@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{path::PathBuf, rc::Rc};
+use std::{path::Path, rc::Rc};
 
 use anyhow::Result;
 use function_name::named;
@@ -30,14 +30,18 @@ impl UpatchProxy {
     }
 
     #[named]
-    pub fn enable_hijack(&self, exec_path: PathBuf) -> Result<()> {
-        self.remote
-            .call_with_args(function_name!(), RpcArguments::new().arg(exec_path))
+    pub fn enable_hijack<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
+        self.remote.call_with_args(
+            function_name!(),
+            RpcArguments::new().arg(exec_path.as_ref().to_path_buf()),
+        )
     }
 
     #[named]
-    pub fn disable_hijack(&self, exec_path: PathBuf) -> Result<()> {
-        self.remote
-            .call_with_args(function_name!(), RpcArguments::new().arg(exec_path))
+    pub fn disable_hijack<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
+        self.remote.call_with_args(
+            function_name!(),
+            RpcArguments::new().arg(exec_path.as_ref().to_path_buf()),
+        )
     }
 }
