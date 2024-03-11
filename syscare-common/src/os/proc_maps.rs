@@ -12,19 +12,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    convert::TryFrom,
-    ffi::{OsStr, OsString},
-    fs::File,
-    io::BufReader,
-};
+use std::{convert::TryFrom, ffi::OsString, fs::File, io::BufReader};
 
-use anyhow::Result;
+use anyhow::{ensure, Result};
 
-use crate::util::{
+use crate::{
+    ffi::OsStrExt,
     fs,
-    os_line::{BufReadOsLines, OsLines},
-    os_str::OsStrExt,
+    io::{BufReadOsLines, OsLines},
 };
 
 #[derive(Debug)]
@@ -41,18 +36,21 @@ impl TryFrom<OsString> for ProcMap {
     type Error = anyhow::Error;
 
     fn try_from(value: OsString) -> std::result::Result<Self, Self::Error> {
-        let values = value.split_whitespace().collect::<Vec<_>>();
-        let parse_value = |value: Option<&&OsStr>| -> OsString {
-            value.map(|s| s.to_os_string()).unwrap_or_default()
-        };
+        const MAP_FIELD_NUM: usize = 6;
+
+        let fields = value.split_whitespace().collect::<Vec<_>>();
+        ensure!(
+            fields.len() == MAP_FIELD_NUM,
+            "Failed to parse process mapping"
+        );
 
         Ok(Self {
-            address: parse_value(values.get(0)),
-            permission: parse_value(values.get(1)),
-            offset: parse_value(values.get(2)),
-            dev: parse_value(values.get(3)),
-            inode: parse_value(values.get(4)),
-            path_name: parse_value(values.get(5)),
+            address: fields[0].to_owned(),
+            permission: fields[1].to_owned(),
+            offset: fields[2].to_owned(),
+            dev: fields[3].to_owned(),
+            inode: fields[4].to_owned(),
+            path_name: fields[5].to_owned(),
         })
     }
 }

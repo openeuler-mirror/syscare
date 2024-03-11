@@ -18,7 +18,7 @@ use std::path::Path;
 use lazy_static::*;
 use nix::unistd::{getuid, User};
 
-use crate::util::c_str::CStrExt;
+use crate::ffi::CStrExt;
 
 #[inline(always)]
 fn info() -> &'static User {

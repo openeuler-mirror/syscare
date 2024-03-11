@@ -18,7 +18,9 @@ use log::debug;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 use serde_cbor::{de, ser};
 
-use super::{digest, fs};
+use crate::fs;
+
+use super::digest;
 
 const DEFAULT_PACK_MAGIC: &str = "481898650EF59B7D5"; // SysCare!
 

@@ -12,9 +12,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-pub mod ffi;
-pub mod fs;
-pub mod io;
-pub mod os;
-pub mod process;
-pub mod util;
+mod os_lines;
+mod select;
+
+pub use os_lines::*;
+pub use select::*;

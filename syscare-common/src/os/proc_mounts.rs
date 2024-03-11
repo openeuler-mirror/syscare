@@ -15,14 +15,16 @@
 use std::ffi::{OsStr, OsString};
 use std::fs::File;
 use std::io::BufReader;
-use std::os::unix::ffi::{OsStrExt, OsStringExt};
+use std::os::unix::ffi::{OsStrExt as StdOsStrExt, OsStringExt};
 use std::path::PathBuf;
 
 use anyhow::Result;
 
-use crate::util::fs;
-use crate::util::os_line::{BufReadOsLines, OsLines};
-use crate::util::os_str::OsStrExt as OsStrUtil;
+use crate::{
+    ffi::OsStrExt,
+    fs,
+    io::{BufReadOsLines, OsLines},
+};
 
 #[derive(Debug)]
 pub struct MountInfo {
@@ -119,7 +121,7 @@ impl Mounts {
             mount_opts: iter
                 .next()?
                 .split(VALUE_SPLITTER)
-                .map(OsStrUtil::trim)
+                .map(OsStrExt::trim)
                 .map(OsString::from)
                 .collect::<Vec<_>>(),
             optional: iter
@@ -132,7 +134,7 @@ impl Mounts {
             super_opts: iter
                 .next()?
                 .split(VALUE_SPLITTER)
-                .map(OsStrUtil::trim)
+                .map(OsStrExt::trim)
                 .map(OsString::from)
                 .collect::<Vec<_>>(),
         })

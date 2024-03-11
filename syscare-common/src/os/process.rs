@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use lazy_static::lazy_static;
 use nix::unistd::getpid;
 
-use crate::util::fs;
+use crate::fs;
 
 pub fn id() -> i32 {
     lazy_static! {

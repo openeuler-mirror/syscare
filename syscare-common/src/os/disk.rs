@@ -15,7 +15,7 @@
 use std::ffi::OsStr;
 use std::path::{Path, PathBuf};
 
-use crate::util::fs;
+use crate::fs;
 
 #[inline(always)]
 fn find_disk<P: AsRef<Path>, S: AsRef<OsStr>>(directory: P, name: S) -> std::io::Result<PathBuf> {
