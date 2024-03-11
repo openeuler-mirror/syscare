@@ -39,9 +39,9 @@ void upatch_print_changes(struct upatch_elf *uelf)
         if (!sym->include || !sym->sec || sym->type != STT_FUNC || sym->parent)
             continue;
         if (sym->status == NEW)
-            log_normal("new function: %s\n", sym->name);
+            log_normal("New function: %s\n", sym->name);
         else if (sym->status == CHANGED)
-            log_normal("changed function: %s\n", sym->name);
+            log_normal("Changed function: %s\n", sym->name);
     }
 }
 
