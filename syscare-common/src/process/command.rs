@@ -108,8 +108,6 @@ impl Command {
         trace!("Executing {:?}", self.inner);
         let child = self
             .inner
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
             .spawn()
             .with_context(|| format!("Failed to start {}", name))?;
 
@@ -122,10 +120,14 @@ impl Command {
     }
 
     pub fn run(&mut self) -> Result<ExitStatus> {
+        self.inner.stdout(Stdio::null()).stderr(Stdio::null());
+
         self.spawn()?.wait()
     }
 
     pub fn run_with_output(&mut self) -> Result<Output> {
+        self.inner.stdout(Stdio::piped()).stderr(Stdio::piped());
+
         self.spawn()?.wait_with_output()
     }
 }
