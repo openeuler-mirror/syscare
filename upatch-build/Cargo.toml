@@ -2,7 +2,7 @@
 name         = "upatch-build"
 version      = "1.2.0"
 authors      = ["lizongwu@huawei.com"]
-description  = "upatch-build tool"
+description  = "Upatch build utility"
 license      = "MulanPSL-2.0"
 edition      = "2018"
 rust-version = "1.60"
@@ -13,8 +13,10 @@ syscare-common = { package = "syscare-common", path = "../syscare-common" }
 anyhow         = { version = "1.0" }
 clap           = { version = "3.2", features = ["cargo", "derive"] }
 ctrlc          = { version = "3.3" }
+flexi_logger   = { version = "0.24" }
 function_name  = { version = "0.3" }
 gimli          = { version = "0.26" }
+indexmap       = { version = "1.9" }
 jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }

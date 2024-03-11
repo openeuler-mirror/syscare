@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{anyhow, Result};
 use jsonrpc::{simple_uds::UdsTransport, Client, Error};
-use log::debug;
+use log::{debug, trace};
 use serde::Deserialize;
 
 use super::args::RpcArguments;
@@ -39,13 +39,13 @@ impl RpcRemote {
         T: for<'a> Deserialize<'a>,
     {
         let request = self.client.build_request(cmd, &args);
-        debug!("{:?}", request);
+        trace!("{:?}", request);
 
         let response = self
             .client
             .send_request(request)
             .map_err(|e| self.parse_error(e))?;
-        debug!("{:?}", response);
+        trace!("{:?}", response);
 
         response.result().map_err(|e| self.parse_error(e))
     }

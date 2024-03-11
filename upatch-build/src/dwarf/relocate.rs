@@ -12,13 +12,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{borrow::Cow, collections::HashMap};
+use std::borrow::Cow;
 
-type RelocationMap = HashMap<usize, object::Relocation>;
+use indexmap::IndexMap;
+use object::Relocation;
 
 #[derive(Debug, Clone)]
 pub struct Relocate<'a, R: gimli::Reader<Offset = usize>> {
-    pub relocations: &'a RelocationMap,
+    pub relocations: &'a IndexMap<usize, Relocation>,
     pub section: R,
     pub reader: R,
 }

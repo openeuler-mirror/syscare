@@ -12,6 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
+use anyhow::{ensure, Result};
 use memmap2::Mmap;
 
 use super::super::{Endian, OperateRead, ReadInteger, SectionRead};
@@ -65,17 +66,19 @@ impl<'a> SectionHeaderTable<'a> {
         }
     }
 
-    pub fn get(&self, index: usize) -> std::io::Result<SectionHeader<'a>> {
-        match index < self.num {
-            true => {
-                let offset = index * self.size + self.offset;
-                Ok(SectionHeader::from(self.mmap, self.endian, offset))
-            }
-            false => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("the index is {}, but the len is {}", index, self.num),
-            )),
-        }
+    pub fn get(&self, index: usize) -> Result<SectionHeader<'a>> {
+        ensure!(
+            index < self.num,
+            "The index is {}, but the len is {}",
+            index,
+            self.num
+        );
+
+        Ok(SectionHeader::from(
+            self.mmap,
+            self.endian,
+            index * self.size + self.offset,
+        ))
     }
 }
 
