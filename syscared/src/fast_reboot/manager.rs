@@ -18,10 +18,10 @@ use anyhow::{Context, Result};
 use lazy_static::lazy_static;
 use log::{error, info};
 
-use syscare_common::os;
-use syscare_common::util::fs;
-
-use super::kexec;
+use syscare_common::{
+    fs,
+    os::{grub, kernel},
+};
 
 lazy_static! {
     static ref BOOT_DIRECTORY: PathBuf = PathBuf::from("/boot");
@@ -75,7 +75,7 @@ impl KExecManager {
 
     fn find_kernel_by_grub() -> Result<LoadKernelOption> {
         info!("Parsing grub configuration...");
-        let entry = os::grub::get_boot_entry().context("Failed to read grub boot entry")?;
+        let entry = grub::get_boot_entry().context("Failed to read grub boot entry")?;
         let entry_name = entry
             .get_name()
             .to_str()
@@ -93,7 +93,7 @@ impl KExecManager {
             Some(version) => Self::find_kernel(&version),
             None => Self::find_kernel_by_grub().or_else(|e| {
                 error!("{:?}", e);
-                let version: &str = os::kernel::version()
+                let version: &str = kernel::version()
                     .to_str()
                     .context("Failed to parse current kernel version")?;
 
@@ -101,7 +101,7 @@ impl KExecManager {
             }),
         }?;
 
-        kexec::unload().context("Failed to unload kernel")?;
+        kernel::unload().context("Failed to unload kernel")?;
 
         let name = load_option.name;
         let kernel = load_option.kernel;
@@ -110,13 +110,13 @@ impl KExecManager {
         info!("Using kernel: {:?}", kernel);
         info!("Using initrd: {:?}", initramfs);
 
-        kexec::load(&kernel, &initramfs).context("Failed to load kernel")
+        kernel::load(&kernel, &initramfs).context("Failed to load kernel")
     }
 
     pub fn execute(option: RebootOption) -> Result<()> {
         match option {
-            RebootOption::Normal => kexec::systemd_exec(),
-            RebootOption::Forced => kexec::force_exec(),
+            RebootOption::Normal => kernel::systemd_exec(),
+            RebootOption::Forced => kernel::force_exec(),
         }
         .context("Failed to execute kernel")
     }

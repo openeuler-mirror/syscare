@@ -18,7 +18,7 @@ use anyhow::Result;
 use clap::{AppSettings, ColorChoice, Parser};
 use log::LevelFilter;
 
-use syscare_common::util::fs;
+use syscare_common::fs;
 
 use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
 

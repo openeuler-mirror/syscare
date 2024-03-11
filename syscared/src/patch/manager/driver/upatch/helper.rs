@@ -19,7 +19,7 @@ use std::{
 
 use anyhow::Result;
 use lazy_static::lazy_static;
-use syscare_common::util::{fs, os_str::OsStrExt};
+use syscare_common::{ffi::OsStrExt, fs};
 
 use syscare_common::os::proc_maps::ProcMaps;
 
