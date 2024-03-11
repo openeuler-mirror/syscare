@@ -16,7 +16,7 @@ use std::{fs::File, io::Write, os::unix::io::AsRawFd, path::Path};
 
 use anyhow::{anyhow, Result};
 use nix::{ioctl_none, ioctl_write_ptr, libc::PATH_MAX};
-use syscare_common::util::{fs, os_str::OsStrExt};
+use syscare_common::{ffi::OsStrExt, fs};
 
 const KMOD_IOCTL_MAGIC: u16 = 0xE5;
 
@@ -109,7 +109,7 @@ impl HijackerIoctl {
 
         unsafe {
             ioctl_register_hijacker(self.dev.as_raw_fd(), &msg)
-                .map_err(|e| anyhow!("Ioctl error, ret={}", e))?
+                .map_err(|e| anyhow!("Ioctl error, {}", e.desc()))?
         };
 
         Ok(())
@@ -134,7 +134,7 @@ impl HijackerIoctl {
 
         unsafe {
             ioctl_unregister_hijacker(self.dev.as_raw_fd(), &msg)
-                .map_err(|e| anyhow!("Ioctl error, ret={}", e))?
+                .map_err(|e| anyhow!("Ioctl error, {}", e.desc()))?
         };
 
         Ok(())

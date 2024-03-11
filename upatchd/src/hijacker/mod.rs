@@ -18,8 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, Context, Result};
 use log::{debug, error, info};
 
-use syscare_common::os;
-use syscare_common::util::mapped_file::MappedFile;
+use syscare_common::{fs::MappedFile, os};
 
 mod config;
 mod elf_resolver;
@@ -62,10 +61,10 @@ impl Hijacker {
             let is_executable_file = hijacker
                 .symlink_metadata()
                 .map(|m| m.is_file() && (m.mode() & MODE_EXEC_MASK != 0))
-                .with_context(|| format!("Failed to read \"{}\" metadata", hijacker.display()))?;
+                .with_context(|| format!("Failed to read {} metadata", hijacker.display()))?;
             if !is_executable_file {
                 bail!(
-                    "Hijack program \"{}\" is not an executable file",
+                    "Hijack program {} is not an executable file",
                     hijacker.display()
                 );
             }
@@ -128,25 +127,20 @@ impl Hijacker {
         let hijacker = self
             .config
             .get(exec_path.as_ref())
-            .with_context(|| {
-                format!(
-                    "Cannot find hijacker for \"{}\"",
-                    exec_path.as_ref().display()
-                )
-            })?
+            .with_context(|| format!("Cannot find hijacker for {}", exec_path.as_ref().display()))?
             .as_path();
 
         Ok(hijacker)
     }
 
-    pub fn hijack<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
+    pub fn register<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
         let exec_path = elf_path.as_ref();
         let jump_path = self.get_hijacker(exec_path)?;
 
         self.ioctl.register_hijacker(exec_path, jump_path)
     }
 
-    pub fn release<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
+    pub fn unregister<P: AsRef<Path>>(&self, elf_path: P) -> Result<()> {
         let exec_path = elf_path.as_ref();
         let jump_path = self.get_hijacker(exec_path)?;
 
