@@ -12,42 +12,32 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    fs::{self, Permissions},
-    os::unix::fs::PermissionsExt,
-    path::Path,
-    process,
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        Arc,
-    },
-    time::Duration,
-};
+use std::{fs::Permissions, os::unix::fs::PermissionsExt, panic, process};
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
+use flexi_logger::{
+    Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, LogSpecification, Logger,
+    LoggerHandle, Naming, WriteMode,
+};
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
-use log::{error, info, LevelFilter};
-use signal_hook::consts::TERM_SIGNALS;
+use log::{error, info, LevelFilter, Record};
+use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
 
-use syscare_common::os;
+use syscare_common::{fs, os};
 
 mod args;
 mod hijacker;
-mod logger;
 mod rpc;
 
 use args::Arguments;
-use logger::Logger;
 use rpc::{Skeleton, SkeletonImpl};
 
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
-
 const DAEMON_UMASK: u32 = 0o077;
-const DAEMON_PARK_TIME: u64 = 100;
 
 const CONFIG_FILE_NAME: &str = "upatchd.yaml";
 const PID_FILE_NAME: &str = "upatchd.pid";
@@ -56,54 +46,97 @@ const SOCKET_FILE_NAME: &str = "upatchd.sock";
 const WORK_DIR_PERMISSION: u32 = 0o755;
 const SOCKET_FILE_PERMISSION: u32 = 0o666;
 
-struct Daemon {
+const MAIN_THREAD_NAME: &str = "main";
+const UNNAMED_THREAD_NAME: &str = "<unnamed>";
+const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+
+struct UpatchDaemon {
     args: Arguments,
-    term_flag: Arc<AtomicBool>,
+    logger: LoggerHandle,
 }
 
-impl Daemon {
+impl UpatchDaemon {
+    fn format_log(
+        w: &mut dyn std::io::Write,
+        now: &mut DeferredNow,
+        record: &Record,
+    ) -> std::io::Result<()> {
+        thread_local! {
+            static THREAD_NAME: String = std::thread::current().name().and_then(|name| {
+                if name == MAIN_THREAD_NAME {
+                    return os::process::name().to_str();
+                }
+                Some(name)
+            })
+            .unwrap_or(UNNAMED_THREAD_NAME)
+            .to_string();
+        }
+
+        THREAD_NAME.with(|thread_name| {
+            write!(
+                w,
+                "[{}] [{}] [{}] {}",
+                now.format(LOG_FORMAT),
+                record.level(),
+                thread_name,
+                &record.args()
+            )
+        })
+    }
+
     fn new() -> Result<Self> {
-        const ROOT_UID: u32 = 0;
-
-        os::umask::set_umask(DAEMON_UMASK);
-
-        let instance = Self {
-            args: Arguments::new()?,
-            term_flag: Arc::new(AtomicBool::new(false)),
-        };
-
+        // Check root permission
         ensure!(
-            os::user::id() == ROOT_UID,
+            os::user::id() == 0,
             "This command has to be run with superuser privileges (under the root user on most systems)."
         );
 
-        Ok(instance)
+        // Initialize arguments & prepare environments
+        os::umask::set_umask(DAEMON_UMASK);
+
+        let args = Arguments::new()?;
+        fs::create_dir_all(&args.config_dir)?;
+        fs::create_dir_all(&args.work_dir)?;
+        fs::create_dir_all(&args.log_dir)?;
+        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERMISSION))?;
+        std::env::set_current_dir(&args.work_dir).with_context(|| {
+            format!(
+                "Failed to change current directory to {}",
+                args.work_dir.display()
+            )
+        })?;
+
+        // Initialize logger
+        let max_level = args.log_level;
+        let stdout_level = match args.daemon {
+            true => LevelFilter::Off,
+            false => max_level,
+        };
+        let log_spec = LogSpecification::builder().default(max_level).build();
+        let file_spec = FileSpec::default()
+            .directory(&args.log_dir)
+            .use_timestamp(false);
+        let logger = Logger::with(log_spec)
+            .log_to_file(file_spec)
+            .format(Self::format_log)
+            .duplicate_to_stdout(Duplicate::from(stdout_level))
+            .rotate(
+                Criterion::Age(Age::Day),
+                Naming::Timestamps,
+                Cleanup::KeepCompressedFiles(30),
+            )
+            .write_mode(WriteMode::Direct)
+            .start()
+            .context("Failed to initialize logger")?;
+
+        // Print panic to log incase it really happens
+        panic::set_hook(Box::new(|info| error!("{}", info)));
+
+        Ok(Self { args, logger })
     }
+}
 
-    fn prepare_directory<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let dir_path = path.as_ref();
-        if !dir_path.exists() {
-            fs::create_dir_all(dir_path).with_context(|| {
-                format!("Failed to create directory \"{}\"", dir_path.display())
-            })?;
-        }
-        Ok(())
-    }
-
-    fn prepare_environment(&self) -> Result<()> {
-        self.prepare_directory(&self.args.config_dir)?;
-
-        self.prepare_directory(&self.args.work_dir)?;
-        fs::set_permissions(
-            &self.args.work_dir,
-            Permissions::from_mode(WORK_DIR_PERMISSION),
-        )?;
-
-        self.prepare_directory(&self.args.log_dir)?;
-
-        Ok(())
-    }
-
+impl UpatchDaemon {
     fn daemonize(&self) -> Result<()> {
         if !self.args.daemon {
             return Ok(());
@@ -118,17 +151,6 @@ impl Daemon {
             .context("Daemonize failed")
     }
 
-    fn initialize_logger(&self) -> Result<()> {
-        let max_level = self.args.log_level;
-        let stdout_level = match self.args.daemon {
-            true => LevelFilter::Off,
-            false => max_level,
-        };
-        Logger::initialize(&self.args.log_dir, max_level, stdout_level)?;
-
-        Ok(())
-    }
-
     fn initialize_skeleton(&self) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
@@ -136,15 +158,6 @@ impl Daemon {
         io_handler.extend_with(SkeletonImpl::new(config_file)?.to_delegate());
 
         Ok(io_handler)
-    }
-
-    fn initialize_signal_handler(&self) -> Result<()> {
-        for signal in TERM_SIGNALS {
-            signal_hook::flag::register(*signal, self.term_flag.clone())
-                .with_context(|| format!("Failed to register handler for signal {}", signal))?;
-        }
-
-        Ok(())
     }
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
@@ -161,37 +174,31 @@ impl Daemon {
         Ok(server)
     }
 
-    fn start_and_run() -> Result<()> {
-        let instance = Self::new()?;
-
-        info!("Preparing environment...");
-        instance.prepare_environment()?;
-        instance.initialize_logger()?;
-
-        info!("============================");
+    fn run(&self) -> Result<()> {
+        info!("================================");
         info!("Upatch Daemon - {}", DAEMON_VERSION);
-        info!("============================");
-        info!("Start with {:#?}", instance.args);
-        instance.daemonize()?;
-
-        info!("Initializing signal handler...");
-        instance
-            .initialize_signal_handler()
-            .context("Failed to initialize signal handler")?;
+        info!("================================");
+        info!("Start with {:#?}", self.args);
+        self.daemonize()?;
 
         info!("Initializing skeleton...");
-        let io_handler = instance
+        let io_handler = self
             .initialize_skeleton()
             .context("Failed to initialize skeleton")?;
 
         info!("Starting remote procedure call server...");
-        let server = instance
+        let server = self
             .start_rpc_server(io_handler)
             .context("Failed to create remote procedure call server")?;
 
         info!("Daemon is running...");
-        while !instance.term_flag.load(Ordering::Relaxed) {
-            std::thread::park_timeout(Duration::from_millis(DAEMON_PARK_TIME));
+        let mut signals =
+            Signals::new(TERM_SIGNALS).context("Failed to initialize signal handler")?;
+        if let Some(signal) = signals.forever().next() {
+            info!(
+                "Received {} signal",
+                signal_name(signal).unwrap_or("UNKNOWN")
+            );
         }
 
         info!("Shutting down...");
@@ -201,24 +208,29 @@ impl Daemon {
     }
 }
 
-pub fn main() {
-    let exit_code = match Daemon::start_and_run() {
-        Ok(_) => {
-            info!("Daemon exited");
-            0
-        }
+impl Drop for UpatchDaemon {
+    fn drop(&mut self) {
+        self.logger.flush();
+        self.logger.shutdown();
+    }
+}
+
+fn main() {
+    let daemon = match UpatchDaemon::new() {
+        Ok(instance) => instance,
         Err(e) => {
-            match Logger::is_inited() {
-                false => {
-                    eprintln!("Error: {:?}", e)
-                }
-                true => {
-                    error!("{:?}", e);
-                    error!("Daemon exited unsuccessfully");
-                }
-            }
-            -1
+            eprintln!("Error: {:?}", e);
+            process::exit(-1);
         }
     };
-    process::exit(exit_code);
+
+    if let Err(e) = daemon.run() {
+        error!("Error: {:?}", e);
+        error!("Daemon exited unsuccessfully");
+
+        drop(daemon);
+        process::exit(-1);
+    }
+
+    info!("Daemon exited");
 }

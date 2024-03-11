@@ -16,13 +16,9 @@ use std::{fs, path::PathBuf};
 
 use anyhow::Result;
 use object::{NativeFile, Object, ObjectSymbol};
-use syscare_common::{
-    os,
-    util::{
-        ext_cmd::{ExternCommand, ExternCommandArgs},
-        os_str::OsStrExt,
-    },
-};
+use syscare_common::{ffi::OsStrExt, os, process::Command};
+
+const LDD_BIN: &str = "ldd";
 
 pub struct ElfResolver<'a> {
     elf: NativeFile<'a, &'a [u8]>,
@@ -39,10 +35,13 @@ impl<'a> ElfResolver<'a> {
 impl ElfResolver<'_> {
     pub fn dependencies(&self) -> Result<Vec<PathBuf>> {
         let mut paths = Vec::new();
-        let args_list = ExternCommandArgs::new().arg(os::process::path());
-        let output = ExternCommand::new("ldd").execvp(args_list)?;
-        let lines = output.stdout().lines().filter_map(|s| s.ok());
+        let output = Command::new(LDD_BIN)
+            .arg(os::process::path())
+            .run_with_output()?;
 
+        output.exit_ok()?;
+
+        let lines = output.stdout.lines().filter_map(|s| s.ok());
         for line in lines {
             let words = line.split_whitespace().collect::<Vec<_>>();
             if let Some(path) = words.get(2) {

@@ -20,7 +20,7 @@ use std::{
 use anyhow::{Context, Result};
 use log::{error, info};
 use nix::kmod;
-use syscare_common::util::fs;
+use syscare_common::fs;
 
 const KMOD_SYS_PATH: &str = "/sys/module";
 

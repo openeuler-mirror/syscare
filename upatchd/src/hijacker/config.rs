@@ -20,7 +20,7 @@ use std::{
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
-use syscare_common::util::fs;
+use syscare_common::fs;
 
 const CC_BINARY: &str = "/usr/bin/cc";
 const CXX_BINARY: &str = "/usr/bin/c++";
@@ -42,7 +42,7 @@ impl HijackerConfig {
         let config_path = path.as_ref();
         let config_file = fs::open_file(config_path)?;
         let instance: Self = serde_yaml::from_reader(config_file)
-            .map_err(|_| anyhow!("Failed to parse config \"{}\"", config_path.display()))?;
+            .map_err(|_| anyhow!("Failed to parse config {}", config_path.display()))?;
 
         Ok(instance)
     }
@@ -51,7 +51,7 @@ impl HijackerConfig {
         let config_path = path.as_ref();
         let config_file = fs::create_file(config_path)?;
         serde_yaml::to_writer(config_file, self)
-            .map_err(|_| anyhow!("Failed to write config \"{}\"", config_path.display()))?;
+            .map_err(|_| anyhow!("Failed to write config {}", config_path.display()))?;
 
         Ok(())
     }
