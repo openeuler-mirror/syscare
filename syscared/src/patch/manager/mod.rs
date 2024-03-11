@@ -25,7 +25,7 @@ use indexmap::IndexMap;
 use log::{debug, error, info, trace, warn};
 
 use syscare_abi::{PatchStatus, PatchType};
-use syscare_common::util::{fs, serde};
+use syscare_common::{fs, util::serde};
 
 mod driver;
 mod entity;

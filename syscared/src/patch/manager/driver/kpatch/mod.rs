@@ -14,27 +14,22 @@
 
 use std::{ffi::OsString, os::unix::prelude::OsStrExt, path::Path};
 
-use anyhow::{anyhow, bail, ensure, Context, Result};
-use lazy_static::lazy_static;
+use anyhow::{bail, ensure, Context, Result};
 use log::debug;
 
 use syscare_abi::PatchStatus;
 use syscare_common::{
-    os,
-    util::{
-        digest,
-        ext_cmd::{ExternCommand, ExternCommandArgs},
-        fs,
-        os_str::OsStringExt,
-    },
+    ffi::OsStringExt,
+    fs,
+    os::{self, selinux},
+    process::Command,
+    util::digest,
 };
 
 use super::{KernelPatchExt, Patch, PatchDriver, PatchOpFlag};
 
-lazy_static! {
-    static ref INSMOD: ExternCommand = ExternCommand::new("insmod");
-    static ref RMMOD: ExternCommand = ExternCommand::new("rmmod");
-}
+const INSMOD_BIN: &str = "insmod";
+const RMMOD_BIN: &str = "rmmod";
 
 const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
 const KPATCH_STATUS_DISABLED: &str = "0";
@@ -44,15 +39,18 @@ pub struct KernelPatchDriver;
 
 impl KernelPatchDriver {
     fn set_patch_security_context<P: AsRef<Path>>(patch_file: P) -> Result<()> {
-        if os::selinux::get_enforce()? != os::selinux::SELinuxStatus::Enforcing {
+        if selinux::get_status()? != selinux::Status::Enforcing {
             debug!("SELinux is disabled");
             return Ok(());
         }
         debug!("SELinux is enforcing");
 
         let file_path = patch_file.as_ref();
-        if os::selinux::get_security_context_type(file_path)? != KPATCH_PATCH_SEC_TYPE {
-            os::selinux::set_security_context_type(file_path, KPATCH_PATCH_SEC_TYPE)?;
+        let mut sec_context = selinux::get_security_context(file_path)?;
+
+        if sec_context.kind != KPATCH_PATCH_SEC_TYPE {
+            sec_context.kind = OsString::from(KPATCH_PATCH_SEC_TYPE);
+            selinux::set_security_context(file_path, sec_context)?;
         }
 
         Ok(())
@@ -106,7 +104,7 @@ impl KernelPatchDriver {
         const KERNEL_NAME_PREFIX: &str = "kernel-";
 
         let kernel_version = os::kernel::version();
-        let current_kernel = OsString::from(KERNEL_NAME_PREFIX).concat(kernel_version);
+        let current_kernel = OsString::from(KERNEL_NAME_PREFIX).join(kernel_version);
 
         let patch_target = patch.target_pkg_name.clone();
         debug!("Patch target:   \"{}\"", patch_target);
@@ -169,13 +167,11 @@ impl PatchDriver for KernelPatchDriver {
         Self::set_patch_security_context(patch_file)
             .context("Kpatch: Failed to set patch security context")?;
 
-        let exit_status = INSMOD.execvp(ExternCommandArgs::new().arg(patch_file))?;
-        exit_status.check_exit_code().map_err(|_| {
-            anyhow!(
-                "Kpatch: Failed to insert patch module, exit_code={}",
-                exit_status.exit_code()
-            )
-        })?;
+        Command::new(INSMOD_BIN)
+            .arg(patch_file)
+            .run()?
+            .exit_ok()
+            .context("Kpatch: Failed to insert patch module")?;
 
         Ok(())
     }
@@ -184,13 +180,11 @@ impl PatchDriver for KernelPatchDriver {
         let patch_ext: &KernelPatchExt = (&patch.info_ext).into();
         let patch_file = patch_ext.patch_file.as_path();
 
-        let exit_status = RMMOD.execvp(ExternCommandArgs::new().arg(patch_file))?;
-        exit_status.check_exit_code().map_err(|_| {
-            anyhow!(
-                "Kpatch: Failed to remove patch module, exit_code={}",
-                exit_status.exit_code()
-            )
-        })?;
+        Command::new(RMMOD_BIN)
+            .arg(patch_file)
+            .run()?
+            .exit_ok()
+            .context("Kpatch: Failed to remove patch module")?;
 
         Ok(())
     }

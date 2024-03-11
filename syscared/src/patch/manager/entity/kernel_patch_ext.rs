@@ -18,7 +18,7 @@ use std::{
 };
 
 use syscare_abi::PatchEntity;
-use syscare_common::util::os_str::OsStrExt;
+use syscare_common::ffi::OsStrExt;
 
 use super::PatchInfoExt;
 

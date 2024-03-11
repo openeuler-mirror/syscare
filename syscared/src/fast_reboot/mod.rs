@@ -12,7 +12,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-mod kexec;
 mod manager;
 
 pub use manager::*;

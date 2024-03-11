@@ -37,6 +37,7 @@ use ffi::ToCString;
 lazy_static! {
     static ref ACTIVE_PATCH_MAP: Mutex<IndexMap<PathBuf, Vec<String>>> =
         Mutex::new(IndexMap::new());
+    static ref ELF_PID_MAP: Mutex<IndexMap<PathBuf, Vec<i32>>> = Mutex::new(IndexMap::new());
 }
 
 pub struct UserPatchDriver {
@@ -45,11 +46,6 @@ pub struct UserPatchDriver {
 
 impl UserPatchDriver {
     fn on_new_process_created(target_elf: &Path) -> Result<()> {
-        lazy_static! {
-            static ref ELF_PID_MAP: Mutex<IndexMap<PathBuf, Vec<i32>>> =
-                Mutex::new(IndexMap::new());
-        }
-
         let active_patch_map = ACTIVE_PATCH_MAP.lock();
 
         if let Some(patch_list) = active_patch_map.get(target_elf) {

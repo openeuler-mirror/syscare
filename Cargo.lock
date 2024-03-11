@@ -1185,7 +1185,6 @@ dependencies = [
  "lazy_static",
  "log",
  "nix",
- "once_cell",
  "parking_lot",
  "serde",
  "signal-hook",
