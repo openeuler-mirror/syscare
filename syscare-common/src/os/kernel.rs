@@ -12,22 +12,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::{OsStr, OsString};
-use std::path::Path;
+use std::{
+    ffi::{OsStr, OsString},
+    path::Path,
+};
 
 use anyhow::Result;
-use lazy_static::lazy_static;
 
-lazy_static! {
-    static ref KEXEC: ExternCommand = ExternCommand::new("kexec");
-    static ref SYSTEMCTL: ExternCommand = ExternCommand::new("systemcl");
-}
+const KEXEC_PATH: &str = "kexec";
+const SYSTEMCTL_PATH: &str = "systemctl";
 
 use super::platform;
-use crate::util::{
-    ext_cmd::{ExternCommand, ExternCommandArgs},
-    os_str::OsStringExt,
-};
+use crate::{ffi::OsStringExt, process::Command};
 
 pub fn version() -> &'static OsStr {
     platform::release()
@@ -38,24 +34,32 @@ where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
-    let exit_status = KEXEC.execvp(
-        ExternCommandArgs::new()
-            .arg("--load")
-            .arg(kernel.as_ref())
-            .arg(OsString::from("--initrd=").concat(initramfs.as_ref()))
-            .arg("--reuse-cmdline"),
-    )?;
-    exit_status.check_exit_code()
+    Command::new(KEXEC_PATH)
+        .arg("--load")
+        .arg(kernel.as_ref())
+        .arg(OsString::from("--initrd=").join(initramfs.as_ref()))
+        .arg("--reuse-cmdline")
+        .run_with_output()?
+        .exit_ok()
+}
+
+pub fn unload() -> Result<()> {
+    Command::new(KEXEC_PATH)
+        .arg("--unload")
+        .run_with_output()?
+        .exit_ok()
 }
 
 pub fn systemd_exec() -> Result<()> {
-    SYSTEMCTL
-        .execvp(ExternCommandArgs::new().arg("kexec"))?
-        .check_exit_code()
+    Command::new(SYSTEMCTL_PATH)
+        .arg("kexec")
+        .run_with_output()?
+        .exit_ok()
 }
 
-pub fn direct_exec() -> Result<()> {
-    KEXEC
-        .execvp(ExternCommandArgs::new().arg("--exec"))?
-        .check_exit_code()
+pub fn force_exec() -> Result<()> {
+    Command::new(KEXEC_PATH)
+        .arg("--exec")
+        .run_with_output()?
+        .exit_ok()
 }

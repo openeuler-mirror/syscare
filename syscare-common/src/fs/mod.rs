@@ -12,9 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-pub mod ffi;
-pub mod fs;
-pub mod io;
-pub mod os;
-pub mod process;
-pub mod util;
+mod flock;
+mod fs_impl;
+mod mapped_file;
+
+pub use flock::*;
+pub use fs_impl::*;
+pub use mapped_file::*;

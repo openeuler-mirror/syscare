@@ -15,18 +15,19 @@
 use std::collections::HashMap;
 use std::ffi::{OsStr, OsString};
 use std::io::{BufRead, BufReader};
-use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
+use std::os::unix::prelude::OsStrExt as StdOsStrExt;
 use std::path::{Path, PathBuf};
 
 use lazy_static::lazy_static;
 use log::debug;
 use regex::bytes::Regex;
 
-use crate::util::fs;
-use crate::util::os_line::{BufReadOsLines, OsLines};
-use crate::util::os_str::OsStrExt;
-
 use super::{disk, proc_mounts};
+use crate::{
+    ffi::OsStrExt,
+    fs,
+    io::{BufReadOsLines, OsLines},
+};
 
 #[derive(Debug, Clone, Copy)]
 enum BootType {

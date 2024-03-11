@@ -12,44 +12,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::{CString, NulError, OsStr, OsString};
-use std::iter::Filter;
-use std::os::unix::prelude::OsStrExt as UnixOsStrExt;
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::{CString, NulError, OsStr, OsString},
+    iter::Filter,
+    os::unix::prelude::OsStrExt as UnixOsStrExt,
+    path::{Path, PathBuf},
+};
 
-use super::os_line::{BufReadOsLines, OsLines};
+use crate::io::{BufReadOsLines, OsLines};
+
+use super::utf8;
 
 const REPLACEMENT_CHARACTER: char = '\u{FFFD}';
-
-/* UTF-8 */
-mod utf8 {
-    pub const CHAR_MAX_WIDTH: usize = std::mem::size_of::<char>();
-
-    #[inline]
-    pub const fn char_width(b: u8) -> usize {
-        // https://tools.ietf.org/html/rfc3629
-        const UTF8_CHAR_WIDTH: &[usize; 256] = &[
-            // 1  2  3  4  5  6  7  8  9  A  B  C  D  E  F
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 0
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 1
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 2
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 3
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 4
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 5
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 6
-            1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, // 7
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 8
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // 9
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // A
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // B
-            0, 0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // C
-            2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, // D
-            3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, // E
-            4, 4, 4, 4, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, // F
-        ];
-        UTF8_CHAR_WIDTH[b as usize]
-    }
-}
 
 /* OsStrCharIndices */
 #[derive(PartialEq, Eq, Clone, Debug)]
@@ -676,7 +650,7 @@ pub trait OsStrExt: AsRef<OsStr> {
 
     fn split_whitespace(&self) -> Filter<Split<SplitFn>, FilterFn> {
         self.split(char::is_whitespace as SplitFn)
-            .filter(|s: &&OsStr| !s.is_empty())
+            .filter(|s| !s.is_empty())
     }
 
     fn trim_start_matches<'a, P: Pattern<'a>>(&'a self, pat: P) -> &'a OsStr {
@@ -747,13 +721,13 @@ impl OsStrExt for PathBuf {}
 
 /* OsStringExt */
 pub trait OsStringExt {
-    fn concat<S: AsRef<OsStr>>(self, s: S) -> Self;
+    fn join<S: AsRef<OsStr>>(self, s: S) -> Self;
     fn append<S: AsRef<OsStr>>(self, s: S) -> Self;
 }
 
 impl OsStringExt for OsString {
     #[inline]
-    fn concat<S: AsRef<OsStr>>(mut self, s: S) -> Self {
+    fn join<S: AsRef<OsStr>>(mut self, s: S) -> Self {
         self.push(s);
         self
     }
@@ -1167,10 +1141,10 @@ fn test_os_string_ext() {
     let orig_str0 = "\t\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\tGrüße, Jürgen ❤\r\n\0";
     let orig_str1 = "The quick brown fox jumps over a lazy dog";
 
-    println!("Testing OsStringExt::concat()...");
+    println!("Testing OsStringExt::join()...");
     let mut test_str = OsString::new();
     for s in orig_str0.split("") {
-        test_str = test_str.concat(s)
+        test_str = test_str.join(s)
     }
     assert_eq!(orig_str0, test_str);
 

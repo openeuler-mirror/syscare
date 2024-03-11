@@ -17,7 +17,7 @@ use std::path::Path;
 use sha2::Digest;
 use sha2::Sha256;
 
-use super::fs;
+use crate::fs;
 
 pub fn bytes<S: AsRef<[u8]>>(bytes: S) -> String {
     let mut hasher = Sha256::new();

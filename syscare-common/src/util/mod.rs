@@ -12,12 +12,5 @@
  * See the Mulan PSL v2 for more details.
  */
 
-pub mod c_str;
 pub mod digest;
-pub mod ext_cmd;
-pub mod flock;
-pub mod fs;
-pub mod mapped_file;
-pub mod os_line;
-pub mod os_str;
 pub mod serde;
