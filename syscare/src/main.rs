@@ -12,19 +12,18 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{process::exit, rc::Rc};
+use std::{process, rc::Rc};
 
-use anyhow::Result;
-use log::{debug, error, LevelFilter};
+use anyhow::{Context, Result};
+use flexi_logger::{DeferredNow, LogSpecification, Logger, LoggerHandle, WriteMode};
+use log::{debug, error, LevelFilter, Record};
 
 mod args;
 mod executor;
-mod logger;
 mod rpc;
 
 use args::Arguments;
 use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, CommandExecutor};
-use logger::Logger;
 use rpc::{RpcProxy, RpcRemote};
 use syscare_common::os;
 
@@ -38,61 +37,98 @@ const PATCH_OP_LOCK_NAME: &str = "patch_op.lock";
 
 struct SyscareCLI {
     args: Arguments,
+    logger: LoggerHandle,
 }
 
 impl SyscareCLI {
-    fn start_and_run() -> Result<()> {
+    fn format_log(
+        w: &mut dyn std::io::Write,
+        _now: &mut DeferredNow,
+        record: &Record,
+    ) -> std::io::Result<()> {
+        write!(w, "{}", &record.args())
+    }
+
+    fn new() -> Result<Self> {
+        // Initialize arguments & prepare environments
         os::umask::set_umask(CLI_UMASK);
 
-        let instance = Self {
-            args: Arguments::new()?,
-        };
-        Logger::initialize(match instance.args.verbose {
-            true => LevelFilter::Debug,
+        let args = Arguments::new()?;
+
+        // Initialize logger
+        let log_level_max = match args.verbose {
             false => LevelFilter::Info,
-        })?;
-        debug!("Start with {:#?}", instance.args);
+            true => LevelFilter::Trace,
+        };
+        let log_spec = LogSpecification::builder().default(log_level_max).build();
+        let logger = Logger::with(log_spec)
+            .log_to_stdout()
+            .format(Self::format_log)
+            .write_mode(WriteMode::Direct)
+            .start()
+            .context("Failed to initialize logger")?;
+
+        Ok(Self { args, logger })
+    }
+}
+
+impl SyscareCLI {
+    fn run(&self) -> Result<i32> {
+        debug!("Start with {:#?}", self.args);
 
         debug!("Initializing remote procedure call client...");
-        let socket_file = instance.args.work_dir.join(SOCKET_FILE_NAME);
+        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
         let remote = Rc::new(RpcRemote::new(socket_file));
 
         debug!("Initializing remote procedure calls...");
         let patch_proxy = RpcProxy::new(remote);
 
         debug!("Initializing command executors...");
-        let patch_lock_file = instance.args.work_dir.join(PATCH_OP_LOCK_NAME);
+        let patch_lock_file = self.args.work_dir.join(PATCH_OP_LOCK_NAME);
         let executors = vec![
             Box::new(BuildCommandExecutor) as Box<dyn CommandExecutor>,
             Box::new(PatchCommandExecutor::new(patch_proxy, patch_lock_file))
                 as Box<dyn CommandExecutor>,
         ];
 
-        let command = instance.args.command;
+        let command = &self.args.command;
         debug!("Invoking command: {:#?}", command);
         for executor in &executors {
-            executor.invoke(&command)?;
+            if let Some(exit_code) = executor.invoke(command)? {
+                debug!("Done");
+                return Ok(exit_code);
+            }
         }
-        debug!("Done");
 
-        Ok(())
+        Ok(0)
+    }
+}
+
+impl Drop for SyscareCLI {
+    fn drop(&mut self) {
+        self.logger.flush();
+        self.logger.shutdown();
     }
 }
 
 fn main() {
-    let exit_code = match SyscareCLI::start_and_run() {
-        Ok(_) => 0,
+    let cli = match SyscareCLI::new() {
+        Ok(instance) => instance,
         Err(e) => {
-            match Logger::is_inited() {
-                false => {
-                    eprintln!("Error: {:?}", e)
-                }
-                true => {
-                    error!("Error: {:?}", e);
-                }
-            }
-            1
+            eprintln!("Error: {:?}", e);
+            process::exit(-1);
         }
     };
-    exit(exit_code);
+
+    match cli.run() {
+        Ok(exit_code) => {
+            process::exit(exit_code);
+        }
+        Err(e) => {
+            error!("Error: {:?}", e);
+
+            drop(cli);
+            process::exit(-1);
+        }
+    }
 }
