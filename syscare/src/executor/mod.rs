@@ -21,7 +21,7 @@ pub mod build;
 pub mod patch;
 
 pub trait CommandExecutor {
-    fn invoke(&self, command: &SubCommand) -> Result<()>;
+    fn invoke(&self, command: &SubCommand) -> Result<Option<i32>>;
 
     fn check_root_permission(&self) -> Result<()> {
         const ROOT_UID: u32 = 0;

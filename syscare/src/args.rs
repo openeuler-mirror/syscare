@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use anyhow::{ensure, Result};
 use clap::{AppSettings, ColorChoice, Parser, Subcommand};
 
-use syscare_common::util::fs;
+use syscare_common::fs;
 
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
@@ -141,7 +141,7 @@ impl Arguments {
         let work_dir = &self.work_dir;
         ensure!(
             work_dir.is_dir(),
-            format!("Cannot find directory \"{}\"", work_dir.display())
+            format!("Cannot find directory {}", work_dir.display())
         );
 
         Ok(self)

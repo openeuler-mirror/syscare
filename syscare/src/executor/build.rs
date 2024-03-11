@@ -12,44 +12,33 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use anyhow::{anyhow, Context, Result};
+use std::{os::unix::process::CommandExt, process::Command};
 
-use std::process::{exit, Command};
+use anyhow::{bail, Context, Result};
 
 use super::CommandExecutor;
 use crate::args::SubCommand;
 
-const SYSCARE_BUILD_NAME: &str = "syscare-build";
 const SYSCARE_BUILD_PATH: &str = "/usr/libexec/syscare/syscare-build";
 
 pub struct BuildCommandExecutor;
 
-impl BuildCommandExecutor {
-    fn exec_patch_build_cmd(args: &[String]) -> std::io::Result<i32> {
-        Ok(Command::new(SYSCARE_BUILD_PATH)
-            .args(args)
-            .spawn()?
-            .wait()?
-            .code()
-            .expect("Failed to get process exit code"))
-    }
-}
-
 impl CommandExecutor for BuildCommandExecutor {
-    fn invoke(&self, command: &SubCommand) -> Result<()> {
+    fn invoke(&self, command: &SubCommand) -> Result<Option<i32>> {
         if let SubCommand::Build { args } = command {
-            let exit_code = Self::exec_patch_build_cmd(args)
-                .map_err(|e| match e.kind() {
-                    std::io::ErrorKind::NotFound => {
-                        anyhow!("Command \"{}\" is not installed", SYSCARE_BUILD_NAME)
-                    }
-                    _ => e.into(),
-                })
-                .with_context(|| format!("Failed to start \"{}\" process", SYSCARE_BUILD_NAME))?;
+            let e = Command::new(SYSCARE_BUILD_PATH).args(args).exec();
 
-            exit(exit_code);
+            match e.kind() {
+                std::io::ErrorKind::NotFound => {
+                    bail!("Package syscare-build is not installed");
+                }
+                _ => {
+                    return Err(e)
+                        .with_context(|| format!("Failed to start {}", SYSCARE_BUILD_PATH))
+                }
+            }
         }
 
-        Ok(())
+        Ok(None)
     }
 }
