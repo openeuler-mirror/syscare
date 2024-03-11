@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use syscare_abi::{PatchInfo, PATCH_INFO_MAGIC};
-use syscare_common::util::{fs, serde};
+use syscare_common::{fs, util::serde};
 
 use crate::{build_params::BuildParameters, package::TarPackage};
 
@@ -49,7 +49,7 @@ impl PatchMetadata {
 
     pub fn create(&self, build_params: &BuildParameters) -> Result<&Path> {
         if !self.metadata_dir.exists() {
-            fs::create_dir(&self.metadata_dir)?;
+            fs::create_dir_all(&self.metadata_dir)?;
         }
 
         for patch in &build_params.patch_files {

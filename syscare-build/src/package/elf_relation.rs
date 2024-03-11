@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, Result};
 
 use syscare_abi::PackageInfo;
-use syscare_common::util::os_str::OsStrExt;
+use syscare_common::ffi::OsStrExt;
 
 use super::{DEBUGINFO_FILE_EXT, DEBUGINFO_INSTALL_DIR};
 
@@ -28,7 +28,7 @@ pub struct ElfRelation {
 }
 
 impl ElfRelation {
-    pub fn parse_from<P, Q>(root: P, package: &PackageInfo, debuginfo: Q) -> Result<ElfRelation>
+    pub fn parse<P, Q>(root: P, package: &PackageInfo, debuginfo: Q) -> Result<ElfRelation>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -56,7 +56,7 @@ impl ElfRelation {
             .map(PathBuf::from)
             .with_context(|| {
                 format!(
-                    "Cannot parse elf path from \"{}\", suffix mismatched",
+                    "Cannot parse elf path from {}, suffix mismatched",
                     debuginfo_path.display()
                 )
             })?;
@@ -70,10 +70,11 @@ impl ElfRelation {
 
 impl std::fmt::Display for ElfRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!(
-            "{} -> {}",
-            self.debuginfo.display(),
-            self.elf.display()
-        ))
+        write!(
+            f,
+            "Elf: {}, debuginfo: {}",
+            self.elf.display(),
+            self.debuginfo.display()
+        )
     }
 }

@@ -15,18 +15,13 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-use lazy_static::lazy_static;
-use syscare_common::util::{
-    ext_cmd::{ExternCommand, ExternCommandArgs},
-    fs,
-};
+use log::Level;
+use syscare_common::{fs, process::Command};
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 pub const KPATCH_SUFFIX: &str = "ko";
 
-lazy_static! {
-    static ref MAKE: ExternCommand = ExternCommand::new("make");
-}
+const MAKE_BIN: &str = "make";
 
 pub struct KernelPatchHelper;
 
@@ -34,13 +29,13 @@ impl KernelPatchHelper {
     pub fn generate_defconfig<P: AsRef<Path>>(source_dir: P) -> Result<()> {
         const DEFCONFIG_FILE_NAME: &str = "openeuler_defconfig";
 
-        MAKE.execvp(
-            ExternCommandArgs::new()
-                .arg("-C")
-                .arg(source_dir.as_ref())
-                .arg(DEFCONFIG_FILE_NAME),
-        )?
-        .check_exit_code()
+        Command::new(MAKE_BIN)
+            .arg("-C")
+            .arg(source_dir.as_ref())
+            .arg(DEFCONFIG_FILE_NAME)
+            .stdout(Level::Debug)
+            .run_with_output()?
+            .exit_ok()
     }
 
     pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> Result<PathBuf> {

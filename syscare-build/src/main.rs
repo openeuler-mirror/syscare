@@ -12,51 +12,115 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::PathBuf;
-use std::{process::exit, sync::Arc};
+use std::{process, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
+use flexi_logger::{
+    DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
+};
 use lazy_static::lazy_static;
-use log::{debug, error, info, LevelFilter};
+use log::{error, info, LevelFilter, Record};
 
-use parking_lot::Mutex;
 use syscare_abi::{PackageInfo, PackageType, PatchInfo, PatchType};
-use syscare_common::{os, util::fs};
+use syscare_common::{fs, os};
 
 mod args;
 mod build_params;
 mod build_root;
-mod logger;
 mod package;
 mod patch;
-mod util;
 
 use args::Arguments;
 use build_params::{BuildEntry, BuildParameters};
 use build_root::BuildRoot;
-use logger::Logger;
-use package::{PackageBuildRoot, PackageBuilderFactory, PackageFormat, PackageImpl};
+use package::{
+    PackageBuildRoot, PackageBuilderFactory, PackageFormat, PackageImpl, PackageSpecBuilderFactory,
+    PackageSpecWriterFactory,
+};
 use patch::{PatchBuilderFactory, PatchHelper, PatchMetadata, PATCH_FILE_EXT};
-
-use crate::package::{PackageSpecBuilderFactory, PackageSpecWriterFactory};
 
 const CLI_NAME: &str = "syscare build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
+const LOG_FILE_NAME: &str = "build";
 const KERNEL_PKG_NAME: &str = "kernel";
 
 lazy_static! {
     static ref PKG_IMPL: Arc<PackageImpl> = Arc::new(PackageImpl::new(PackageFormat::RpmPackage));
 }
 
-pub struct SyscareBuilder {
+struct SyscareBuild {
     args: Arguments,
+    logger: LoggerHandle,
     build_root: BuildRoot,
 }
 
-impl SyscareBuilder {
+/* Initialization */
+impl SyscareBuild {
+    fn format_log(
+        w: &mut dyn std::io::Write,
+        _now: &mut DeferredNow,
+        record: &Record,
+    ) -> std::io::Result<()> {
+        write!(w, "{}", &record.args())
+    }
+
+    fn new() -> Result<Self> {
+        // Initialize arguments & prepare environments
+        os::umask::set_umask(CLI_UMASK);
+
+        let args = Arguments::new()?;
+        let build_root = BuildRoot::new(&args.build_root)?;
+        fs::create_dir_all(&args.output)?;
+
+        // Initialize logger
+        let log_level_max = LevelFilter::Trace;
+        let log_level_stdout = match &args.verbose {
+            false => LevelFilter::Info,
+            true => LevelFilter::Debug,
+        };
+
+        let log_spec = LogSpecification::builder().default(log_level_max).build();
+        let file_spec = FileSpec::default()
+            .directory(&args.build_root)
+            .basename(LOG_FILE_NAME)
+            .use_timestamp(false);
+
+        let logger = Logger::with(log_spec)
+            .log_to_file(file_spec)
+            .duplicate_to_stdout(Duplicate::from(log_level_stdout))
+            .format(Self::format_log)
+            .write_mode(WriteMode::Direct)
+            .start()
+            .context("Failed to initialize logger")?;
+
+        // Initialize signal handler
+        ctrlc::set_handler(|| {
+            eprintln!("Interrupt");
+        })
+        .context("Failed to initialize signal handler")?;
+
+        Ok(Self {
+            args,
+            logger,
+            build_root,
+        })
+    }
+}
+
+/* Tool functions */
+impl SyscareBuild {
+    fn check_input_args(&self) -> Result<()> {
+        ensure!(
+            self.args.patch_arch.as_str() == os::cpu::arch(),
+            "Cross compilation is unsupported"
+        );
+
+        Ok(())
+    }
+
     fn collect_package_info(&self) -> Result<Vec<PackageInfo>> {
         let mut pkg_list = Vec::new();
 
@@ -72,10 +136,7 @@ impl SyscareBuilder {
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::SourcePackage {
-                bail!(
-                    "Package \"{}\" is not a source package",
-                    pkg_info.short_name()
-                );
+                bail!("File {} is not a source package", pkg_info.short_name());
             }
 
             pkg_list.push(pkg_info);
@@ -90,10 +151,7 @@ impl SyscareBuilder {
             info!("{}", pkg_info);
 
             if pkg_info.kind != PackageType::BinaryPackage {
-                bail!(
-                    "Package \"{}\" is not a debuginfo package",
-                    pkg_info.short_name()
-                );
+                bail!("File {} is not a debuginfo package", pkg_info.short_name());
             }
             if pkg_info.arch != self.args.patch_arch {
                 bail!(
@@ -123,16 +181,14 @@ impl SyscareBuilder {
 
             let spec_file = PKG_IMPL
                 .find_spec_file(pkg_spec_dir, pkg_name)
-                .with_context(|| format!("Cannot find spec file of package \"{}\"", pkg_name))?;
+                .with_context(|| format!("Cannot find spec file of package {}", pkg_name))?;
 
             PackageBuilderFactory::get_builder(pkg_format, pkg_build_root)
                 .build_prepare(&spec_file)?;
 
             let source_dir = PKG_IMPL
                 .find_source_directory(pkg_build_dir, pkg_name)
-                .with_context(|| {
-                    format!("Cannot find source directory of package \"{}\"", pkg_name)
-                })?;
+                .with_context(|| format!("Cannot find source directory of package {}", pkg_name))?;
 
             build_entries.push(BuildEntry {
                 target_pkg,
@@ -166,50 +222,53 @@ impl SyscareBuilder {
             (None, None) => bail!("Cannot find any build entry"),
         }
     }
+}
 
+/* Main process */
+impl SyscareBuild {
     fn prepare_to_build(&mut self) -> Result<BuildParameters> {
         let pkg_root = &self.build_root.package;
 
-        debug!("- Collecting patch file(s)");
+        info!("- Collecting patch file(s)");
         let mut patch_files = PatchHelper::collect_patch_files(&self.args.patch)
             .context("Failed to collect patch files")?;
 
-        debug!("- Collecting package info");
+        info!("- Collecting package info");
         let pkg_info_list = self.collect_package_info()?;
 
-        debug!("- Extracting source package(s)");
+        info!("- Extracting source package(s)");
         for pkg_path in &self.args.source {
             PKG_IMPL
                 .extract_package(pkg_path, &pkg_root.source)
-                .with_context(|| format!("Failed to extract package \"{}\"", pkg_path.display()))?;
+                .with_context(|| format!("Failed to extract package {}", pkg_path.display()))?;
         }
 
-        debug!("- Extracting debuginfo package(s)");
+        info!("- Extracting debuginfo package(s)");
         for pkg_path in &self.args.debuginfo {
             PKG_IMPL
                 .extract_package(pkg_path, &pkg_root.debuginfo)
-                .with_context(|| format!("Failed to extract package \"{}\"", pkg_path.display()))?;
+                .with_context(|| format!("Failed to extract package {}", pkg_path.display()))?;
         }
 
-        debug!("- Finding package build root");
+        info!("- Finding package build root");
         let pkg_build_root = PKG_IMPL
             .find_build_root(&pkg_root.source)
             .context("Failed to find package build root")?;
 
-        debug!("- Preparing source code");
+        info!("- Preparing source code");
         let build_entries = self
             .prepare_source_code(&pkg_build_root, pkg_info_list)
             .context("Failed to prepare source code")?;
 
-        debug!("- Parsing build entry");
+        info!("- Parsing build entry");
         let (patch_type, mut build_entry, kernel_build_entry) = self
             .parse_build_entry(&build_entries)
             .context("Failed to parse build entry")?;
 
-        debug!("- Extracting patch metadata");
+        info!("- Extracting patch metadata");
         let patch_metadata = PatchMetadata::new(&pkg_build_root.sources);
         if let Ok(saved_patch_info) = patch_metadata.extract() {
-            debug!("- Applying patch metadata");
+            info!("- Applying patch metadata");
             build_entry.target_pkg = saved_patch_info.target;
 
             // Override package arch
@@ -232,7 +291,7 @@ impl SyscareBuilder {
             patch_files = new_patch_files;
         }
 
-        debug!("- Generating build parameters");
+        info!("- Generating build parameters");
         let build_params = BuildParameters {
             work_dir: self.args.work_dir.to_owned(),
             build_root: self.build_root.to_owned(),
@@ -263,16 +322,16 @@ impl SyscareBuilder {
         let patch_output_dir = &self.build_root.patch.output;
         let patch_metadata = PatchMetadata::new(pkg_source_dir);
 
-        debug!("- Copying patch outputs");
+        info!("- Copying patch outputs");
         fs::copy_dir_contents(patch_output_dir, pkg_source_dir)
             .context("Failed to copy patch outputs")?;
 
-        debug!("- Writing patch metadata");
+        info!("- Writing patch metadata");
         patch_metadata
             .write(patch_info, pkg_source_dir)
             .context("Failed to write patch metadata")?;
 
-        debug!("- Generating spec file");
+        info!("- Generating spec file");
         let new_spec_file = PackageSpecBuilderFactory::get_builder(PKG_IMPL.format())
             .build(
                 patch_info,
@@ -282,19 +341,19 @@ impl SyscareBuilder {
             )
             .context("Failed to generate spec file")?;
 
-        debug!("- Building package");
+        info!("- Building package");
         PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root)
             .build_binary_package(&new_spec_file, &self.args.output)
     }
 
     fn build_source_package(&self, build_params: &BuildParameters) -> Result<()> {
-        debug!("- Preparing build requirements");
+        info!("- Preparing build requirements");
         let pkg_build_root = &build_params.pkg_build_root;
         let pkg_source_dir = &pkg_build_root.sources;
         let spec_file = &build_params.build_entry.build_spec;
         let patch_metadata = PatchMetadata::new(pkg_source_dir);
 
-        debug!("- Modifying package spec file");
+        info!("- Modifying package spec file");
         let metadata_pkg = patch_metadata.package_path.clone();
         if !metadata_pkg.exists() {
             // Lacking of metadata means that the package is not patched
@@ -305,12 +364,12 @@ impl SyscareBuilder {
                 .context("Failed to modify spec file")?;
         }
 
-        debug!("- Creating patch metadata");
+        info!("- Creating patch metadata");
         patch_metadata
             .create(build_params)
             .context("Failed to create patch metadata")?;
 
-        debug!("- Building package");
+        info!("- Building package");
         PackageBuilderFactory::get_builder(PKG_IMPL.format(), pkg_build_root).build_source_package(
             build_params,
             spec_file,
@@ -318,81 +377,8 @@ impl SyscareBuilder {
         )
     }
 
-    fn clean_up(&mut self) {
-        self.build_root.remove().ok();
-    }
-}
-
-impl SyscareBuilder {
-    fn new() -> Result<Self> {
-        let mut args = Arguments::new()?;
-        Self::check_input_args(&args)?;
-
-        os::umask::set_umask(CLI_UMASK);
-
-        args.build_root = args
-            .build_root
-            .join(format!("syscare-build.{}", os::process::id()));
-        let build_root = BuildRoot::new(&args.build_root)?;
-
-        Logger::initialize(
-            &args.build_root,
-            LevelFilter::Trace,
-            match &args.verbose {
-                false => LevelFilter::Info,
-                true => LevelFilter::Debug,
-            },
-        )?;
-
-        Ok(SyscareBuilder { args, build_root })
-    }
-
-    fn check_input_args(args: &Arguments) -> Result<()> {
-        let pkg_file_ext = PKG_IMPL.extension();
-
-        for source_pkg in &args.source {
-            if !source_pkg.is_file() || fs::file_ext(source_pkg) != pkg_file_ext {
-                bail!("File \"{}\" is not a rpm package", source_pkg.display());
-            }
-        }
-
-        for debug_pkg in &args.debuginfo {
-            if !debug_pkg.is_file() || fs::file_ext(debug_pkg) != pkg_file_ext {
-                bail!("File \"{}\" is not a rpm package", debug_pkg.display());
-            }
-        }
-
-        for patch_file in &args.patch {
-            if !patch_file.is_file() || fs::file_ext(patch_file) != PATCH_FILE_EXT {
-                bail!("File \"{}\" is not a patch file", patch_file.display());
-            }
-        }
-
-        let workdir = &args.work_dir;
-        if !workdir.exists() {
-            fs::create_dir_all(workdir)?;
-        }
-        if !workdir.is_dir() {
-            bail!("Path \"{}\" is not a directory", workdir.display());
-        }
-
-        let output = &args.output;
-        if !output.exists() {
-            fs::create_dir_all(output)?;
-        }
-        if !output.is_dir() {
-            bail!("Path \"{}\" is not a directory", output.display());
-        }
-
-        if args.jobs == 0 {
-            bail!("Parallel build job number cannot be zero");
-        }
-
-        Ok(())
-    }
-
-    fn build_main(mut self, log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
-        *log_file.lock() = self.build_root.log_file.clone();
+    fn run(&mut self) -> Result<()> {
+        self.check_input_args()?;
 
         info!("==============================");
         info!("{}", CLI_ABOUT);
@@ -401,17 +387,14 @@ impl SyscareBuilder {
         let build_params = self.prepare_to_build()?;
 
         info!("Building patch, this may take a while");
-        let patch_type = build_params.patch_type;
-        let patch_info_list = PatchBuilderFactory::get_builder(patch_type)
-            .build_patch(&build_params)
-            .with_context(|| format!("{}Builder: Failed to build patch", patch_type))?;
-
-        info!("Building patch package(s)");
+        let patch_info_list =
+            PatchBuilderFactory::get_builder(build_params.patch_type).build_patch(&build_params)?;
         ensure!(
             !patch_info_list.is_empty(),
             "Cannot find any patch metadata"
         );
 
+        info!("Building patch package(s)");
         for patch_info in &patch_info_list {
             info!("------------------------------");
             info!("Syscare Patch");
@@ -426,47 +409,36 @@ impl SyscareBuilder {
 
         if !self.args.skip_cleanup {
             info!("Cleaning up");
-            self.clean_up();
+            self.build_root.remove().ok();
         }
 
         info!("Done");
         Ok(())
     }
+}
 
-    fn setup_signal_handlers() -> Result<()> {
-        ctrlc::set_handler(|| {
-            error!("Received termination signal");
-        })
-        .context("Failed to setup signal handler")?;
-
-        Ok(())
-    }
-
-    fn start_and_run(log_file: Arc<Mutex<PathBuf>>) -> Result<()> {
-        Self::setup_signal_handlers()?;
-        Self::new()?.build_main(log_file)
+impl Drop for SyscareBuild {
+    fn drop(&mut self) {
+        self.logger.flush();
+        self.logger.shutdown();
     }
 }
 
 fn main() {
-    let log_file = Arc::new(Mutex::new(PathBuf::new()));
-    let exit_code = match SyscareBuilder::start_and_run(log_file.clone()) {
-        Ok(_) => 0,
+    let mut builder = match SyscareBuild::new() {
+        Ok(instance) => instance,
         Err(e) => {
-            match Logger::is_inited() {
-                false => {
-                    eprintln!("Error: {}", e);
-                }
-                true => {
-                    error!("Error: {:?}", e);
-                    eprintln!(
-                        "For more information, please check \"{}\"",
-                        log_file.lock().display()
-                    );
-                }
-            }
-            1
+            eprintln!("Error: {:?}", e);
+            process::exit(-1);
         }
     };
-    exit(exit_code);
+
+    let log_file = builder.build_root.log_file.clone();
+    if let Err(e) = builder.run() {
+        error!("Error: {:?}", e);
+        error!("For more information, please check {}", log_file.display());
+
+        drop(builder);
+        process::exit(-1);
+    }
 }

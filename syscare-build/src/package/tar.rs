@@ -18,13 +18,9 @@ use std::{
 };
 
 use anyhow::{bail, Result};
+use syscare_common::process::Command;
 
-use lazy_static::lazy_static;
-use syscare_common::util::ext_cmd::{ExternCommand, ExternCommandArgs};
-
-lazy_static! {
-    static ref TAR: ExternCommand = ExternCommand::new("tar");
-}
+const TAR_BIN: &str = "tar";
 
 pub struct TarPackage {
     path: PathBuf,
@@ -42,18 +38,15 @@ impl TarPackage {
         P: AsRef<Path>,
         S: AsRef<OsStr>,
     {
-        TAR.execvp(
-            ExternCommandArgs::new()
-                .arg("-czf")
-                .arg(self.path.as_path())
-                .arg("-C")
-                .arg(root_dir.as_ref())
-                .arg(target)
-                .arg("--restrict"),
-        )?
-        .check_exit_code()?;
-
-        Ok(())
+        Command::new(TAR_BIN)
+            .arg("-czf")
+            .arg(self.path.as_path())
+            .arg("-C")
+            .arg(root_dir.as_ref())
+            .arg(target)
+            .arg("--restrict")
+            .run()?
+            .exit_ok()
     }
 
     pub fn decompress<P>(&self, output_dir: P) -> Result<()>
@@ -64,18 +57,15 @@ impl TarPackage {
             bail!("File {} is not exist", self.path.display());
         }
 
-        TAR.execvp(
-            ExternCommandArgs::new()
-                .arg("-xf")
-                .arg(self.path.as_path())
-                .arg("-C")
-                .arg(output_dir.as_ref())
-                .arg("--no-same-owner")
-                .arg("--no-same-permissions")
-                .arg("--restrict"),
-        )?
-        .check_exit_code()?;
-
-        Ok(())
+        Command::new(TAR_BIN)
+            .arg("-xf")
+            .arg(self.path.as_path())
+            .arg("-C")
+            .arg(output_dir.as_ref())
+            .arg("--no-same-owner")
+            .arg("--no-same-permissions")
+            .arg("--restrict")
+            .run()?
+            .exit_ok()
     }
 }

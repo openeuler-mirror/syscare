@@ -16,12 +16,7 @@ use std::{ffi::OsString, path::Path};
 
 use anyhow::{Context, Result};
 
-use lazy_static::lazy_static;
-use syscare_common::util::{
-    ext_cmd::{ExternCommand, ExternCommandArgs},
-    fs,
-    os_str::OsStringExt,
-};
+use syscare_common::{ffi::OsStringExt, fs, process::Command};
 
 use super::PKG_FILE_EXT;
 use crate::{
@@ -29,9 +24,7 @@ use crate::{
     package::{PackageBuildRoot, PackageBuilder},
 };
 
-lazy_static! {
-    static ref RPM_BUILD: ExternCommand = ExternCommand::new("rpmbuild");
-}
+const RPM_BUILD_BIN: &str = "rpmbuild";
 
 pub struct RpmPackageBuilder<'a> {
     build_root: &'a PackageBuildRoot,
@@ -45,15 +38,13 @@ impl<'a> RpmPackageBuilder<'a> {
 
 impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_prepare(&self, spec_file: &Path) -> Result<()> {
-        RPM_BUILD
-            .execvp(
-                ExternCommandArgs::new()
-                    .arg("--define")
-                    .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
-                    .arg("-bp")
-                    .arg(spec_file),
-            )?
-            .check_exit_code()
+        Command::new(RPM_BUILD_BIN)
+            .arg("--define")
+            .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+            .arg("-bp")
+            .arg(spec_file)
+            .run()?
+            .exit_ok()
     }
 
     fn build_source_package(
@@ -62,15 +53,13 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
         spec_file: &Path,
         output_dir: &Path,
     ) -> Result<()> {
-        RPM_BUILD
-            .execvp(
-                ExternCommandArgs::new()
-                    .arg("--define")
-                    .arg(OsString::from("_topdir ").concat(self.build_root.as_ref()))
-                    .arg("-bs")
-                    .arg(spec_file),
-            )?
-            .check_exit_code()?;
+        Command::new(RPM_BUILD_BIN)
+            .arg("--define")
+            .arg(OsString::from("_topdir ").join(self.build_root.as_ref()))
+            .arg("-bs")
+            .arg(spec_file)
+            .run()?
+            .exit_ok()?;
 
         let srpms_dir = &self.build_root.srpms;
         let src_pkg_file = fs::find_file_by_ext(
@@ -81,12 +70,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
                 recursive: false,
             },
         )
-        .with_context(|| {
-            format!(
-                "Cannot find source package from \"{}\"",
-                srpms_dir.display()
-            )
-        })?;
+        .with_context(|| format!("Cannot find source package from {}", srpms_dir.display()))?;
 
         let dst_pkg_name = format!(
             "{}-{}-{}-{}.src.{}",
@@ -105,20 +89,18 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
     }
 
     fn build_binary_package(&self, spec_file: &Path, output_dir: &Path) -> Result<()> {
-        RPM_BUILD
-            .execvp(
-                ExternCommandArgs::new()
-                    .arg("--define")
-                    .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
-                    .arg("--define")
-                    .arg("debug_package %{nil}")
-                    .arg("--define")
-                    .arg("__spec_install_post %{__arch_install_post}")
-                    .arg("--nocheck")
-                    .arg("-bb")
-                    .arg(spec_file),
-            )?
-            .check_exit_code()?;
+        Command::new(RPM_BUILD_BIN)
+            .arg("--define")
+            .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+            .arg("--define")
+            .arg("debug_package %{nil}")
+            .arg("--define")
+            .arg("__spec_install_post %{__arch_install_post}")
+            .arg("--nocheck")
+            .arg("-bb")
+            .arg(spec_file)
+            .run()?
+            .exit_ok()?;
 
         fs::copy_dir_contents(&self.build_root.rpms, output_dir)
             .context("Failed to copy package to output directory")?;

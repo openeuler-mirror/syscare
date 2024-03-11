@@ -14,11 +14,11 @@
 
 use std::path::PathBuf;
 
-use anyhow::{bail, ensure, Result};
+use anyhow::{ensure, Result};
 use clap::{AppSettings, ColorChoice, Parser};
 use lazy_static::lazy_static;
 
-use syscare_common::{os, util::fs};
+use syscare_common::{fs, os};
 
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
@@ -50,7 +50,7 @@ pub struct Arguments {
     pub patch_name: String,
 
     /// Patch architecture
-    #[clap(long, default_value = DEFAULT_PATCH_ARCH.as_str())]
+    #[clap(long, default_value = &DEFAULT_PATCH_ARCH)]
     pub patch_arch: String,
 
     /// Patch version
@@ -94,7 +94,7 @@ pub struct Arguments {
     pub output: PathBuf,
 
     /// Parallel build jobs
-    #[clap(short, long, default_value = DEFAULT_BUILD_JOBS.as_str())]
+    #[clap(short, long, default_value = &DEFAULT_BUILD_JOBS)]
     pub jobs: usize,
 
     /// Skip compiler version check (not recommended)
@@ -112,18 +112,24 @@ pub struct Arguments {
 
 impl Arguments {
     pub fn new() -> Result<Self> {
-        Self::parse().normalize_path().and_then(Self::check)
+        let mut args = Self::parse().normalize_path().and_then(Self::check)?;
+
+        args.build_root = args
+            .build_root
+            .join(format!("syscare-build.{}", os::process::id()));
+
+        Ok(args)
     }
 
     fn normalize_path(mut self) -> Result<Self> {
-        for source_file in &mut self.source {
-            *source_file = fs::normalize(&source_file)?;
+        for source in &mut self.source {
+            *source = fs::normalize(&source)?;
         }
-        for debuginfo_file in &mut self.debuginfo {
-            *debuginfo_file = fs::normalize(&debuginfo_file)?;
+        for debuginfo in &mut self.debuginfo {
+            *debuginfo = fs::normalize(&debuginfo)?;
         }
-        for patch_file in &mut self.patch {
-            *patch_file = fs::normalize(&patch_file)?;
+        for patch in &mut self.patch {
+            *patch = fs::normalize(&patch)?;
         }
         self.work_dir = fs::normalize(&self.work_dir)?;
         self.build_root = fs::normalize(&self.build_root)?;
@@ -133,27 +139,45 @@ impl Arguments {
     }
 
     fn check(self) -> Result<Self> {
-        for source_file in &self.source {
+        for source in &self.source {
             ensure!(
-                source_file.is_file(),
-                format!("Cannot find file \"{}\"", source_file.display())
+                source.is_file(),
+                format!("Cannot find file {}", source.display())
             );
-        }
-        for debuginfo_file in &self.debuginfo {
             ensure!(
-                debuginfo_file.is_file(),
-                format!("Cannot find file \"{}\"", debuginfo_file.display())
-            );
+                fs::file_ext(source) == "rpm",
+                format!("File {} is not a rpm package", source.display())
+            )
         }
-        for patch_file in &self.patch {
+
+        for debuginfo in &self.debuginfo {
             ensure!(
-                patch_file.is_file(),
-                format!("Cannot find file \"{}\"", patch_file.display())
+                debuginfo.is_file(),
+                format!("Cannot find file {}", debuginfo.display())
             );
+            ensure!(
+                fs::file_ext(debuginfo) == "rpm",
+                format!("File {} is not a rpm package", debuginfo.display())
+            )
         }
-        if self.patch_arch.as_str() != os::cpu::arch() {
-            bail!("Cross compilation is unsupported");
+
+        for patch in &self.patch {
+            ensure!(
+                patch.is_file(),
+                format!("Cannot find file {}", patch.display())
+            );
+            ensure!(
+                fs::file_ext(patch) == "patch",
+                format!("File {} is not a patch file", patch.display())
+            )
         }
+
+        ensure!(
+            self.work_dir.is_dir(),
+            format!("Cannot find directory {}", self.work_dir.display())
+        );
+
+        ensure!(self.jobs != 0, "Parallel build job number cannot be zero");
 
         Ok(self)
     }

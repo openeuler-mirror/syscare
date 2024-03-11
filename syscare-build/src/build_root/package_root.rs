@@ -12,15 +12,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::OsStr,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
+use syscare_common::fs;
 
-use crate::{package::PackageBuildRoot, util};
+use crate::package::PackageBuildRoot;
 
 const SOURCE_DIR_NAME: &str = "source";
 const DEBUGINFO_DIR_NAME: &str = "debuginfo";
@@ -41,9 +38,9 @@ impl PackageRoot {
         let debuginfo = path.join(DEBUGINFO_DIR_NAME);
         let build_root = PackageBuildRoot::new(path.join(BUILD_ROOT_DIR_NAME))?;
 
-        util::create_dir_all(&path)?;
-        util::create_dir_all(&source)?;
-        util::create_dir_all(&debuginfo)?;
+        fs::create_dir_all(&path)?;
+        fs::create_dir_all(&source)?;
+        fs::create_dir_all(&debuginfo)?;
 
         Ok(Self {
             path,
@@ -54,16 +51,8 @@ impl PackageRoot {
     }
 }
 
-impl Deref for PackageRoot {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<Path> for PackageRoot {
+    fn as_ref(&self) -> &Path {
         &self.path
-    }
-}
-
-impl AsRef<OsStr> for PackageRoot {
-    fn as_ref(&self) -> &OsStr {
-        self.as_os_str()
     }
 }

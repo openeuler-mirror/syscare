@@ -19,7 +19,7 @@ use anyhow::{Context, Result};
 use chrono::Local;
 
 use syscare_abi::PatchInfo;
-use syscare_common::util::fs;
+use syscare_common::fs;
 
 use crate::package::spec_builder::PackageSpecBuilder;
 
@@ -92,7 +92,7 @@ impl RpmSpecBuilder {
 
     fn parse_summary(patch_info: &PatchInfo) -> String {
         format!(
-            "Syscare patch \"{}\" for {}",
+            "Syscare patch {} for {}",
             patch_info.name,
             patch_info.target.short_name()
         )
