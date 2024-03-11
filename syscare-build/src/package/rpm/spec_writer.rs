@@ -19,7 +19,7 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use syscare_common::util::{fs, os_str::OsStrExt};
+use syscare_common::{ffi::OsStrExt, fs};
 
 use crate::package::PackageSpecWriter;
 

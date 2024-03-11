@@ -18,7 +18,7 @@ use anyhow::{bail, Result};
 use lazy_static::lazy_static;
 use parking_lot::Mutex;
 use syscare_abi::PatchFile;
-use syscare_common::util::{digest, fs};
+use syscare_common::{fs, util::digest};
 
 pub struct PatchHelper;
 
@@ -39,7 +39,7 @@ impl PatchHelper {
             let file_digest = digest::file(&file_path)?;
 
             if !FILE_DIGESTS.lock().insert(file_digest.clone()) {
-                bail!("Patch \"{}\" is duplicated", file_path.display());
+                bail!("Patch {} is duplicated", file_path.display());
             }
             patch_list.push(PatchFile {
                 name: file_name,

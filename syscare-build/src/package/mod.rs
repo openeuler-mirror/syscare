@@ -76,10 +76,6 @@ impl PackageImpl {
         self.format
     }
 
-    pub fn extension(&self) -> &'static str {
-        self.inner.extension()
-    }
-
     pub fn parse_package_info<P: AsRef<Path>>(&self, pkg_path: P) -> Result<PackageInfo> {
         self.inner.parse_package_info(pkg_path.as_ref())
     }

@@ -19,8 +19,7 @@ use std::{
 };
 
 use anyhow::Result;
-
-use crate::util;
+use syscare_common::fs;
 
 mod package_root;
 mod patch_root;
@@ -46,6 +45,7 @@ impl BuildRoot {
         let package = PackageRoot::new(path.join(PACKAGE_ROOT_NAME))?;
         let patch = PatchRoot::new(path.join(PATCH_ROOT_NAME))?;
         let log_file = path.join(BUILD_LOG_NAME);
+        fs::create_dir_all(&path)?;
 
         Ok(Self {
             path,
@@ -56,7 +56,9 @@ impl BuildRoot {
     }
 
     pub fn remove(&self) -> Result<()> {
-        util::remove_dir_all(&self.path)
+        fs::remove_dir_all(&self.path)?;
+
+        Ok(())
     }
 }
 

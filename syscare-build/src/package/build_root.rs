@@ -12,15 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::OsStr,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-
-use crate::util;
+use syscare_common::fs;
 
 const BUILD_DIR_NAME: &str = "BUILD";
 const BUILDROOT_DIR_NAME: &str = "BUILDROOT";
@@ -50,13 +45,13 @@ impl PackageBuildRoot {
         let specs = path.join(SPECS_DIR_NAME);
         let srpms = path.join(SRPMS_DIR_NAME);
 
-        util::create_dir_all(&path)?;
-        util::create_dir_all(&build)?;
-        util::create_dir_all(&buildroot)?;
-        util::create_dir_all(&rpms)?;
-        util::create_dir_all(&sources)?;
-        util::create_dir_all(&specs)?;
-        util::create_dir_all(&srpms)?;
+        fs::create_dir_all(&path)?;
+        fs::create_dir_all(&build)?;
+        fs::create_dir_all(&buildroot)?;
+        fs::create_dir_all(&rpms)?;
+        fs::create_dir_all(&sources)?;
+        fs::create_dir_all(&specs)?;
+        fs::create_dir_all(&srpms)?;
 
         Ok(Self {
             path,
@@ -70,16 +65,8 @@ impl PackageBuildRoot {
     }
 }
 
-impl Deref for PackageBuildRoot {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<Path> for PackageBuildRoot {
+    fn as_ref(&self) -> &Path {
         &self.path
-    }
-}
-
-impl AsRef<OsStr> for PackageBuildRoot {
-    fn as_ref(&self) -> &OsStr {
-        self.as_os_str()
     }
 }

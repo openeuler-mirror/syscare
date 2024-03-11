@@ -1145,7 +1145,6 @@ dependencies = [
  "flexi_logger",
  "lazy_static",
  "log",
- "once_cell",
  "parking_lot",
  "serde",
  "syscare-abi",

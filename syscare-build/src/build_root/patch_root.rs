@@ -12,15 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::OsStr,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
-
-use super::util;
+use syscare_common::fs;
 
 const BUILD_DIR_NAME: &str = "build";
 const OUTPUT_DIR_NAME: &str = "output";
@@ -38,9 +33,9 @@ impl PatchRoot {
         let build = path.join(BUILD_DIR_NAME);
         let output = path.join(OUTPUT_DIR_NAME);
 
-        util::create_dir_all(&path)?;
-        util::create_dir_all(&build)?;
-        util::create_dir_all(&output)?;
+        fs::create_dir_all(&path)?;
+        fs::create_dir_all(&build)?;
+        fs::create_dir_all(&output)?;
 
         Ok(Self {
             path,
@@ -50,16 +45,8 @@ impl PatchRoot {
     }
 }
 
-impl Deref for PatchRoot {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
+impl AsRef<Path> for PatchRoot {
+    fn as_ref(&self) -> &Path {
         &self.path
-    }
-}
-
-impl AsRef<OsStr> for PatchRoot {
-    fn as_ref(&self) -> &OsStr {
-        self.as_os_str()
     }
 }
