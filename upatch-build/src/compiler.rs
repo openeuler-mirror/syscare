@@ -149,13 +149,13 @@ impl Compiler {
         fs::write(&source_file, "int main() { return 0; }")
             .context("Failed to write source file")?;
 
-        let mut objects = vec![self
+        let mut objects = self
+            .run_compiler_test(&source_file, &output_dir)
+            .context("Compiler test failed")?;
+        let asm_object = self
             .run_assembler_test(&source_file, &output_dir)
-            .context("Assembler test failed")?];
-        objects.extend(
-            self.run_compiler_test(&source_file, &output_dir)
-                .context("Compiler test failed")?,
-        );
+            .context("Assembler test failed")?;
+        objects.push(asm_object);
 
         for object in objects {
             let versions = Dwarf::parse_compiler_versions(&object).with_context(|| {
