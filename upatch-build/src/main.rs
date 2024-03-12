@@ -24,7 +24,7 @@ use anyhow::{ensure, Context, Result};
 use flexi_logger::{
     DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
 };
-use indexmap::IndexMap;
+use indexmap::IndexSet;
 use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
 use object::{write, Object, ObjectSection, SectionKind};
 use syscare_common::{ffi::OsStringExt, fs, os, process::Command};
@@ -32,10 +32,10 @@ use syscare_common::{ffi::OsStringExt, fs, os, process::Command};
 mod args;
 mod build_root;
 mod compiler;
-mod compiler_hacker;
 mod dwarf;
 mod elf;
-mod file_relations;
+mod file_relation;
+mod hijacker;
 mod pattern_path;
 mod project;
 mod resolve;
@@ -44,9 +44,9 @@ mod rpc;
 use args::Arguments;
 use build_root::BuildRoot;
 use compiler::Compiler;
-use compiler_hacker::CompilerHacker;
 use dwarf::Dwarf;
-use file_relations::{BinaryRelation, ObjectRelation};
+use file_relation::{BinaryRelation, ObjectRelation};
+use hijacker::Hijacker;
 use project::Project;
 
 const CLI_NAME: &str = "syscare build";
@@ -55,12 +55,11 @@ const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
 const LOG_FILE_NAME: &str = "build";
-const UPATCHD_SOCKET_NAME: &str = "upatchd.sock";
 
-struct BuildInfo<'a> {
-    compiler_map: IndexMap<&'a OsStr, &'a Compiler>,
+struct BuildInfo {
     binaries: Vec<BinaryRelation>,
-    temp_dir: PathBuf,
+    linker: PathBuf,
+    build_dir: PathBuf,
     output_dir: PathBuf,
     verbose: bool,
 }
@@ -126,18 +125,29 @@ impl UpatchBuild {
 
 /* Tool functions */
 impl UpatchBuild {
-    fn check_debuginfo(
-        compiler_map: &IndexMap<&OsStr, &Compiler>,
-        debuginfos: &[PathBuf],
-    ) -> Result<()> {
+    fn check_debuginfo(compilers: &[Compiler], debuginfos: &[PathBuf]) -> Result<()> {
+        let supported_versions = compilers
+            .iter()
+            .flat_map(|c| c.versions.iter().map(|s| s.as_os_str()))
+            .collect::<IndexSet<_>>();
+
+        debug!("Supported versions:");
+        for version in &supported_versions {
+            debug!("- {}", version.to_string_lossy());
+        }
+
         for debuginfo in debuginfos {
-            let compiler_name = Dwarf::parse_compiler_name(debuginfo)?;
-            ensure!(
-                compiler_map.contains_key(compiler_name.as_os_str()),
-                "{} version mismatched, version={}",
-                debuginfo.display(),
-                compiler_name.to_string_lossy()
-            );
+            let versions = Dwarf::parse_compiler_versions(debuginfo).with_context(|| {
+                format!("Failed to parse compiler name of {}", debuginfo.display())
+            })?;
+            for version in versions {
+                ensure!(
+                    supported_versions.contains(version.as_os_str()),
+                    "{} version mismatched, version={}",
+                    debuginfo.display(),
+                    version.to_string_lossy()
+                );
+            }
         }
         Ok(())
     }
@@ -220,6 +230,21 @@ impl UpatchBuild {
 
         Ok(())
     }
+
+    fn link_objects<P, I, S, Q>(linker: P, objects: I, output: Q) -> Result<()>
+    where
+        P: AsRef<Path>,
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+        Q: AsRef<Path>,
+    {
+        Command::new(linker.as_ref())
+            .args(["-r", "-o"])
+            .arg(output.as_ref())
+            .args(objects)
+            .run()?
+            .exit_ok()
+    }
 }
 
 /* Main process */
@@ -241,7 +266,7 @@ impl UpatchBuild {
             .debuginfo
             .file_name()
             .context("Failed to parse debuginfo name")?;
-        let output_dir = build_info.temp_dir.join(binary_name);
+        let output_dir = build_info.build_dir.join(binary_name);
         let debuginfo = output_dir.join(debuginfo_name);
 
         debug!("- Preparing to build patch");
@@ -254,7 +279,7 @@ impl UpatchBuild {
 
         debug!("- Creating diff objects");
         self.create_diff_objs(&binary.objects, &debuginfo, &output_dir, build_info.verbose)
-            .with_context(|| format!("Failed to create diff objects {}", binary.path.display()))?;
+            .with_context(|| format!("Failed to create diff objects for {}", binary.path.display()))?;
 
         debug!("- Collecting changes");
         let mut changed_objects = fs::list_files_by_ext(
@@ -273,13 +298,7 @@ impl UpatchBuild {
         changed_objects.push(notes_object);
 
         debug!("- Linking patch objects");
-        let compiler_name = &binary.compiler;
-        let compiler = build_info
-            .compiler_map
-            .get(compiler_name.as_os_str())
-            .with_context(|| format!("Cannot find compiler {}", compiler_name.to_string_lossy()))?;
-        compiler
-            .link_objects(&changed_objects, output_file)
+        Self::link_objects(&build_info.linker, &changed_objects, output_file)
             .context("Failed to link patch objects")?;
 
         debug!("- Resolving patch");
@@ -312,7 +331,7 @@ impl UpatchBuild {
     }
 
     fn run(&mut self) -> Result<()> {
-        let socket_file = self.args.work_dir.join(UPATCHD_SOCKET_NAME);
+        let work_dir = self.args.work_dir.as_path();
         let name = self.args.name.as_os_str();
         let source_dir = self.args.source_dir.as_path();
         let output_dir = self.args.output_dir.as_path();
@@ -320,7 +339,7 @@ impl UpatchBuild {
         let debuginfos = self.args.debuginfo.as_slice();
         let verbose = self.args.verbose;
 
-        let temp_dir = self.build_root.output_dir.as_path();
+        let build_dir = self.build_root.output_dir.as_path();
         let original_dir = self.build_root.original_dir.as_path();
         let patched_dir = self.build_root.patched_dir.as_path();
 
@@ -328,11 +347,15 @@ impl UpatchBuild {
         info!("{}", CLI_ABOUT);
         info!("==============================");
         info!("Checking compiler(s)");
-        let compilers = Compiler::parse(&self.args.compiler, temp_dir)?;
-        let compiler_map = compilers
+
+        let compilers = Compiler::parse(&self.args.compiler, build_dir)?;
+        let linker = compilers
             .iter()
-            .map(|compiler| (compiler.name.as_os_str(), compiler))
-            .collect::<IndexMap<_, _>>();
+            .map(|c| c.linker.clone())
+            .collect::<IndexSet<_>>()
+            .pop()
+            .context("Failed to find any linker")?;
+
         debug!("------------------------------");
         debug!("Compiler");
         debug!("------------------------------");
@@ -340,8 +363,8 @@ impl UpatchBuild {
             debug!("{}", compiler);
         }
         debug!("------------------------------");
-        let hacker_guard =
-            CompilerHacker::new(&compilers, socket_file).context("Failed to hack compilers")?;
+
+        let hijacker = Hijacker::new(&compilers, work_dir).context("Failed to hack compilers")?;
 
         let project = Project::new(source_dir);
         info!("------------------------------");
@@ -355,8 +378,7 @@ impl UpatchBuild {
         info!("Checking debuginfo version(s)");
         match self.args.skip_compiler_check {
             false => {
-                Self::check_debuginfo(&compiler_map, debuginfos)
-                    .context("Debuginfo check failed")?;
+                Self::check_debuginfo(&compilers, debuginfos).context("Debuginfo check failed")?;
             }
             true => warn!("Warning: Skipped compiler version check!"),
         }
@@ -380,7 +402,7 @@ impl UpatchBuild {
             .with_context(|| format!("Failed to rebuild {}", project.name()))?;
 
         // Unhack compilers
-        drop(hacker_guard);
+        drop(hijacker);
 
         info!("Parsing file relations");
         let binaries = BinaryRelation::parse(binaries, debuginfos, original_dir, patched_dir)
@@ -390,13 +412,12 @@ impl UpatchBuild {
         }
 
         let build_info = BuildInfo {
-            compiler_map,
+            linker,
             binaries,
-            temp_dir: temp_dir.to_path_buf(),
+            build_dir: build_dir.to_path_buf(),
             output_dir: output_dir.to_path_buf(),
             verbose,
         };
-
         self.build_patches(build_info, name)?;
 
         if !self.args.skip_cleanup {

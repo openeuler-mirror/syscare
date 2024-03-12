@@ -13,11 +13,12 @@
  */
 
 use std::{
-    ffi::{OsStr, OsString},
+    ffi::OsString,
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
+use indexmap::IndexSet;
 use log::debug;
 use which::which;
 
@@ -25,20 +26,64 @@ use syscare_common::{ffi::OsStrExt, fs, process::Command};
 
 use super::dwarf::Dwarf;
 
+const COMPILER_STANDARDS: [&str; 42] = [
+    "c89",
+    "c90",
+    "iso9899:1990",
+    "iso9899:199409",
+    "c99",
+    "c9x",
+    "iso9899:1999",
+    "iso9899:199x",
+    "c11",
+    "c1x",
+    "iso9899:2011",
+    "c17",
+    "c18",
+    "iso9899:2017",
+    "iso9899:2018",
+    "gnu89",
+    "gnu90",
+    "gnu99",
+    "gnu9x",
+    "gnu11",
+    "gnu1x",
+    "gnu17",
+    "gnu18",
+    "gnu2x",
+    "c++98",
+    "c++03",
+    "c++11",
+    "c++0x",
+    "gnu++11",
+    "gnu++0x",
+    "c++14",
+    "c++1y",
+    "gnu++14",
+    "gnu++1y",
+    "c++17",
+    "c++1z",
+    "gnu++17",
+    "gnu++1z",
+    "c++20",
+    "c++2a",
+    "gnu++20",
+    "gnu++2a",
+];
 const ASSEMBLER_NAME: &str = "as";
 const LINKER_NAME: &str = "ld";
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Clone)]
 pub struct Compiler {
-    pub name: OsString,
     pub path: PathBuf,
     pub assembler: PathBuf,
     pub linker: PathBuf,
+    pub versions: IndexSet<OsString>,
 }
 
 impl Compiler {
-    fn get_component_name<P: AsRef<Path>>(compiler_path: P, name: &str) -> Result<OsString> {
-        let output = Command::new(compiler_path.as_ref())
+    fn get_component_name<P: AsRef<Path>>(compiler: P, name: &str) -> Result<OsString> {
+        let output = Command::new(compiler.as_ref())
             .arg(format!("-print-prog-name={}", name))
             .run_with_output()?;
 
@@ -46,106 +91,131 @@ impl Compiler {
         Ok(output.stdout)
     }
 
-    fn run_test_build<P, Q>(compiler_path: P, temp_dir: Q) -> Result<PathBuf>
+    fn run_assembler_test<P, Q>(&self, source_file: P, output_dir: Q) -> Result<PathBuf>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let temp_dir = temp_dir.as_ref();
-        let source_file = temp_dir.join("test.c");
-        let output_file = temp_dir.join("test.o");
+        let assembler_file = output_dir.as_ref().join("test.s");
+        let object_file = output_dir.as_ref().join("test.o");
 
-        fs::write(&source_file, "int main() { return 0; }")
-            .context("Failed to write source file")?;
-
-        Command::new(compiler_path.as_ref())
-            .args(["-gdwarf", "-ffunction-sections", "-fdata-sections", "-c"])
-            .arg(&source_file)
+        Command::new(&self.path)
+            .arg("-S")
+            .arg(source_file.as_ref())
             .arg("-o")
-            .arg(&output_file)
+            .arg(assembler_file.as_path())
             .run()?
             .exit_ok()?;
 
-        Ok(output_file)
+        Command::new(&self.assembler)
+            .arg("-g")
+            .arg(assembler_file)
+            .arg("-o")
+            .arg(object_file.as_path())
+            .run()?
+            .exit_ok()?;
+
+        Ok(object_file)
     }
 
-    fn get_compiler_name<P, Q>(compiler_path: P, temp_dir: Q) -> Result<OsString>
+    fn run_compiler_test<P, Q>(&self, source_file: P, output_dir: Q) -> Result<Vec<PathBuf>>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let test_object =
-            Self::run_test_build(compiler_path, temp_dir).context("Compiler test build failed")?;
+        let mut object_files = Vec::new();
 
-        Dwarf::parse_compiler_name(&test_object)
-            .with_context(|| format!("Failed to parse compiler name of {}", test_object.display()))
+        for std_name in COMPILER_STANDARDS {
+            let object_file = output_dir.as_ref().join(format!("test_{}.o", std_name));
+            let build_success = Command::new(&self.path)
+                .arg(format!("-std={}", std_name))
+                .args(["-g", "-c"])
+                .arg(source_file.as_ref())
+                .arg("-o")
+                .arg(object_file.as_path())
+                .run()?
+                .success();
+
+            if build_success {
+                object_files.push(object_file);
+            }
+        }
+
+        Ok(object_files)
+    }
+
+    fn fetch_versions<P: AsRef<Path>>(&mut self, output_dir: P) -> Result<()> {
+        let source_file = output_dir.as_ref().join("test.c");
+        fs::write(&source_file, "int main() { return 0; }")
+            .context("Failed to write source file")?;
+
+        let mut objects = vec![self
+            .run_assembler_test(&source_file, &output_dir)
+            .context("Assembler test failed")?];
+        objects.extend(
+            self.run_compiler_test(&source_file, &output_dir)
+                .context("Compiler test failed")?,
+        );
+
+        for object in objects {
+            let versions = Dwarf::parse_compiler_versions(&object).with_context(|| {
+                format!("Failed to parse compiler name of {}", object.display())
+            })?;
+            self.versions.extend(versions);
+        }
+
+        Ok(())
     }
 }
 
 impl Compiler {
-    pub fn parse<I, P, Q>(compilers: I, temp_dir: Q) -> Result<Vec<Compiler>>
+    pub fn parse<I, P, Q>(compilers: I, build_dir: Q) -> Result<Vec<Compiler>>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let mut compiler_list = Vec::new();
+        let mut result = Vec::new();
 
         for compiler in compilers {
-            let compiler_path = compiler.as_ref();
-            let compiler_name = compiler_path
+            let compiler = compiler.as_ref();
+            let compiler_name = compiler
                 .file_name()
                 .context("Failed to parse compiler name")?;
-            let temp_dir = temp_dir.as_ref().join(compiler_name);
-            fs::create_dir_all(&temp_dir)?;
 
-            debug!("- Checking {}", compiler_path.display());
-            let assembler_name = Self::get_component_name(compiler_path, ASSEMBLER_NAME)
-                .with_context(|| {
-                    format!(
-                        "Failed to get assembler name of {}",
-                        compiler_path.display()
-                    )
-                })?;
-            let linker_name =
-                Self::get_component_name(compiler_path, LINKER_NAME).with_context(|| {
-                    format!("Failed to get linker name of {}", compiler_path.display())
-                })?;
+            let output_dir = build_dir.as_ref().join(compiler_name);
+            fs::create_dir_all(&output_dir)?;
 
-            let name = Self::get_compiler_name(compiler_path, temp_dir).with_context(|| {
-                format!("Failed to get compiler name of {}", compiler_path.display())
-            })?;
-            let path = compiler_path.to_path_buf();
+            debug!("- Checking {}", compiler.display());
+            let assembler_name =
+                Self::get_component_name(compiler, ASSEMBLER_NAME).with_context(|| {
+                    format!("Failed to get assembler name of {}", compiler.display())
+                })?;
+            let linker_name = Self::get_component_name(compiler, LINKER_NAME)
+                .with_context(|| format!("Failed to get linker name of {}", compiler.display()))?;
+
+            let path = compiler.to_path_buf();
             let assembler = which(assembler_name.trim()).with_context(|| {
                 format!("Cannot find assembler {}", assembler_name.to_string_lossy())
             })?;
             let linker = which(linker_name.trim())
                 .with_context(|| format!("Cannot find linker {}", linker_name.to_string_lossy()))?;
+            let versions = IndexSet::new();
 
-            compiler_list.push(Compiler {
-                name,
+            let mut compiler = Self {
                 path,
                 assembler,
                 linker,
-            });
+                versions,
+            };
+            compiler
+                .fetch_versions(output_dir)
+                .context("Failed to fetch supported versions")?;
+
+            result.push(compiler);
         }
 
-        compiler_list.sort();
-        Ok(compiler_list)
-    }
-
-    pub fn link_objects<I, S, P>(&self, objects: I, output: P) -> Result<()>
-    where
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-        P: AsRef<Path>,
-    {
-        Command::new(&self.linker)
-            .args(["-r", "-o"])
-            .arg(output.as_ref())
-            .args(objects)
-            .run()?
-            .exit_ok()
+        Ok(result)
     }
 }
 
@@ -153,11 +223,10 @@ impl std::fmt::Display for Compiler {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Name: {}, path: {}, assembler: {}, linker: {}",
-            self.name.to_string_lossy(),
+            "Path: {}, assembler: {}, linker: {}",
             self.path.display(),
             self.assembler.display(),
-            self.linker.display(),
+            self.linker.display()
         )
     }
 }

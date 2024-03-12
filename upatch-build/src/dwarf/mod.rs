@@ -27,7 +27,7 @@ use gimli::{
     constants, Attribute, AttributeValue, EndianSlice, Endianity, Reader, RunTimeEndian, SectionId,
 };
 use indexmap::{IndexMap, IndexSet};
-use log::{debug, trace};
+use log::trace;
 use object::{
     File, Object, ObjectSection, ObjectSymbol, Relocation, RelocationKind, RelocationTarget,
     Section,
@@ -40,16 +40,16 @@ use relocate::Relocate;
 
 #[allow(non_snake_case)]
 #[derive(Debug, Clone)]
-pub struct DwarfCompileUnit {
-    pub DW_AT_producer: OsString,
-    pub DW_AT_comp_dir: PathBuf,
-    pub DW_AT_name: PathBuf,
+pub struct CompileUnit {
+    pub producer: OsString,   // DW_AT_producer
+    pub compile_dir: PathBuf, // DW_AT_comp_dir
+    pub file_name: PathBuf,   // DW_AT_name
 }
 
 pub struct Dwarf;
 
 impl Dwarf {
-    pub fn parse<P: AsRef<Path>>(elf: P) -> Result<Vec<DwarfCompileUnit>> {
+    pub fn parse<P: AsRef<Path>>(elf: P) -> Result<Vec<CompileUnit>> {
         // use mmap here, but depend on some devices
         let elf = elf.as_ref();
         let file = std::fs::File::open(elf)?;
@@ -70,7 +70,7 @@ impl Dwarf {
             .with_context(|| format!("Failed to read dwarf of {}", object.as_ref().display()))?
             .into_iter()
             .filter_map(|dwarf| {
-                let file_path = dwarf.DW_AT_comp_dir.join(&dwarf.DW_AT_name);
+                let file_path = dwarf.compile_dir.join(&dwarf.file_name);
                 match file_path.exists() {
                     true => Some(file_path),
                     false => None,
@@ -85,24 +85,20 @@ impl Dwarf {
         }
     }
 
-    pub fn parse_compiler_name<P: AsRef<Path>>(object: P) -> Result<OsString> {
-        let compiler_names = Dwarf::parse(&object)
+    pub fn parse_compiler_versions<P: AsRef<Path>>(object: P) -> Result<IndexSet<OsString>> {
+        let compiler_versions = Dwarf::parse(&object)
             .with_context(|| format!("Failed to read dwarf of {}", object.as_ref().display()))?
             .into_iter()
             .filter_map(|dwarf| {
                 dwarf
-                    .DW_AT_producer
+                    .producer
                     .split('-')
                     .next()
                     .map(|s| s.trim().to_os_string())
             })
             .collect::<IndexSet<_>>();
 
-        match compiler_names.len() {
-            1 => Ok(compiler_names[0].clone()),
-            0 => bail!("Object does not contain compiler name"),
-            _ => bail!("Object contains to too many compiler names"),
-        }
+        Ok(compiler_versions)
     }
 }
 
@@ -182,7 +178,7 @@ impl Dwarf {
         })
     }
 
-    fn get_files(file: &File, endian: RunTimeEndian) -> Result<Vec<DwarfCompileUnit>> {
+    fn get_files(file: &File, endian: RunTimeEndian) -> Result<Vec<CompileUnit>> {
         let arena_data = Arena::new();
         let arena_relocations = Arena::new();
 
@@ -196,7 +192,7 @@ impl Dwarf {
         Self::__get_files(&dwarf)
     }
 
-    fn __get_files<R: Reader>(dwarf: &gimli::Dwarf<R>) -> Result<Vec<DwarfCompileUnit>> {
+    fn __get_files<R: Reader>(dwarf: &gimli::Dwarf<R>) -> Result<Vec<CompileUnit>> {
         let mut result = Vec::new();
         let mut iter = dwarf.units();
         while let Some(header) = iter.next()? {
@@ -208,36 +204,28 @@ impl Dwarf {
                 }
                 // Iterate over the attributes in the DIE.
                 let mut attrs = entry.attrs();
-                let mut element = DwarfCompileUnit {
-                    DW_AT_producer: OsString::new(),
-                    DW_AT_comp_dir: PathBuf::new(),
-                    DW_AT_name: PathBuf::new(),
+                let mut element = CompileUnit {
+                    producer: OsString::new(),
+                    compile_dir: PathBuf::new(),
+                    file_name: PathBuf::new(),
                 };
 
                 while let Some(attr) = attrs.next()? {
                     match attr.name() {
                         constants::DW_AT_comp_dir => {
-                            element.DW_AT_comp_dir.push(&Self::attr_value(&attr, dwarf));
+                            element.compile_dir.push(&Self::attr_value(&attr, dwarf));
                         }
                         constants::DW_AT_name => {
-                            element.DW_AT_name.push(&Self::attr_value(&attr, dwarf));
+                            element.file_name.push(&Self::attr_value(&attr, dwarf));
                         }
                         constants::DW_AT_producer => {
-                            element.DW_AT_producer.push(&Self::attr_value(&attr, dwarf));
+                            element.producer.push(&Self::attr_value(&attr, dwarf));
                         }
                         _ => continue,
                     }
                 }
-                match element.DW_AT_producer.contains("AS")
-                    || element.DW_AT_name.extension().eq(&Some(OsStr::new(".s")))
-                    || element.DW_AT_name.extension().eq(&Some(OsStr::new(".S")))
-                {
-                    true => debug!(
-                        "Warning: Skipped assemble file {}",
-                        element.DW_AT_comp_dir.join(element.DW_AT_name).display()
-                    ),
-                    false => result.push(element),
-                };
+
+                result.push(element)
             }
         }
         Ok(result)
