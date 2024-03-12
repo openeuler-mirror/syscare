@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{bail, ensure, Context, Result};
 
 use indexmap::{IndexMap, IndexSet};
+use log::warn;
 use syscare_common::{ffi::OsStrExt, fs};
 
 use super::{
@@ -53,7 +54,6 @@ pub struct BinaryRelation {
     pub path: PathBuf,
     pub debuginfo: PathBuf,
     pub objects: Vec<ObjectRelation>,
-    pub compiler: OsString,
 }
 
 impl BinaryRelation {
@@ -164,25 +164,31 @@ impl BinaryRelation {
                         object_id.to_string_lossy()
                     )
                 })?;
-            let source_file = Dwarf::parse_source_file(&patched_object).with_context(|| {
-                format!("Failed to find source file of {}", patched_object.display())
-            })?;
-            let original_object =
-                original_objects
-                    .get(&source_file)
-                    .cloned()
-                    .with_context(|| {
-                        format!(
-                            "Failed to find original object of {}",
-                            patched_object.display()
-                        )
-                    })?;
 
-            relations.push(ObjectRelation {
-                source_file,
-                original_object,
-                patched_object,
-            });
+            match Dwarf::parse_source_file(&patched_object).with_context(|| {
+                format!("Failed to find source file of {}", patched_object.display())
+            }) {
+                Ok(source_file) => {
+                    let original_object = original_objects
+                        .get(&source_file)
+                        .cloned()
+                        .with_context(|| {
+                            format!(
+                                "Failed to find original object of {}",
+                                patched_object.display()
+                            )
+                        })?;
+
+                    relations.push(ObjectRelation {
+                        source_file,
+                        original_object,
+                        patched_object,
+                    });
+                }
+                Err(e) => {
+                    warn!("{:?}", e);
+                }
+            }
         }
 
         Ok(relations)
@@ -212,15 +218,11 @@ impl BinaryRelation {
             let binary = Self::find_binary_file(binary)?;
             let objects = Self::parse_object_relations(&binary, &original_dir, &patched_dir)?;
             let debuginfo = debuginfo.as_ref().to_path_buf();
-            let compiler = Dwarf::parse_compiler_name(&binary).with_context(|| {
-                format!("Failed to parse compiler name of {}", binary.display())
-            })?;
 
             relations.push(BinaryRelation {
                 path: binary,
                 debuginfo,
                 objects,
-                compiler,
             });
         }
 
@@ -232,10 +234,9 @@ impl std::fmt::Display for BinaryRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "Binary: {}, debuginfo: {}, compiler: {}",
+            "Binary: {}, debuginfo: {}",
             self.path.display(),
             self.debuginfo.display(),
-            self.compiler.to_string_lossy()
         )?;
         for obj in &self.objects {
             writeln!(f, "{}", obj)?;
