@@ -22,8 +22,8 @@ use syscare_common::fs;
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
-const DEFAULT_BUILD_ROOT: &str = ".";
-const DEFAULT_BUILD_PATCH_CMD: &str = "";
+const DEFAULT_BUILD_ROOT: &str = "./upatch";
+const DEFAULT_CMD: &str = "";
 const DEFAULT_COMPILERS: &str = "cc";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
@@ -54,13 +54,13 @@ pub struct Arguments {
     #[clap(short, long)]
     pub source_dir: PathBuf,
 
-    /// Specify build source command
-    #[clap(short, long)]
-    pub build_source_cmd: String,
+    /// Specify build prepare command
+    #[clap(long, default_value = DEFAULT_CMD, hide_default_value = true)]
+    pub prepare_cmd: String,
 
-    /// Specify build patched source command [default: <BUILD_SOURCE_CMD>]
-    #[clap(long, default_value = DEFAULT_BUILD_PATCH_CMD, hide_default_value = true)]
-    pub build_patch_cmd: String,
+    /// Specify build source command
+    #[clap(long)]
+    pub build_cmd: String,
 
     /// Specify debuginfo files
     #[clap(short, long, multiple = true, required = true)]
@@ -105,11 +105,6 @@ impl Arguments {
 
         if !args.name.is_empty() {
             args.name.push("-");
-        }
-
-        // args.build_root = args.build_root.join("upatch");
-        if args.build_patch_cmd.is_empty() {
-            args.build_patch_cmd = args.build_source_cmd.clone();
         }
 
         args.elf_dir = match args.elf_dir.as_os_str().is_empty() {

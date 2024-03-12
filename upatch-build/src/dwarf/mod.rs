@@ -123,7 +123,7 @@ impl Dwarf {
                                 relocation.set_addend(addend as i64);
                             }
                             Err(_) => {
-                                trace!( "Relocation with invalid symbol for section {} at offset 0x{:08x}",
+                                trace!("Relocation with invalid symbol for section {} at offset 0x{:08x}",
                                     section.name().unwrap(),
                                     offset
                                 );
@@ -225,7 +225,7 @@ impl Dwarf {
                     }
                 }
 
-                result.push(element)
+                result.push(element);
             }
         }
         Ok(result)

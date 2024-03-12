@@ -13,7 +13,7 @@
  */
 
 use std::{
-    ffi::OsStr,
+    ffi::{OsStr, OsString},
     fs::File,
     io::Write,
     os::unix::ffi::OsStrExt,
@@ -25,16 +25,48 @@ use anyhow::{Context, Result};
 use log::{debug, Level};
 use syscare_common::{fs, process::Command};
 
+use crate::{args::Arguments, build_root::BuildRoot};
+
 const PATCH_BIN: &str = "patch";
 const COMPILER_CMD_ENV: &str = "UPATCH_HIJACKER";
-const BUILD_SHELL: &str = "build.sh";
 
-pub struct Project {
-    name: String,
-    root_dir: PathBuf,
+const PREPARE_SCRIPT_NAME: &str = "prepare.sh";
+const BUILD_SCRIPT_NAME: &str = "build.sh";
+
+pub struct Project<'a> {
+    name: OsString,
+    root_dir: &'a Path,
+    build_dir: &'a Path,
+    original_dir: &'a Path,
+    patched_dir: &'a Path,
+    prepare_cmd: &'a str,
+    build_cmd: &'a str,
 }
 
-impl Project {
+impl<'a> Project<'a> {
+    pub fn new(args: &'a Arguments, build_root: &'a BuildRoot) -> Self {
+        let root_dir = args.source_dir.as_path();
+        let build_dir = build_root.output_dir.as_path();
+        let original_dir = build_root.original_dir.as_path();
+        let patched_dir = build_root.patched_dir.as_path();
+
+        let name = fs::file_name(&root_dir);
+        let prepare_cmd = args.prepare_cmd.as_str();
+        let build_cmd = args.build_cmd.as_str();
+
+        Self {
+            name,
+            root_dir,
+            build_dir,
+            original_dir,
+            patched_dir,
+            prepare_cmd,
+            build_cmd,
+        }
+    }
+}
+
+impl Project<'_> {
     fn patch<P, I, S>(&self, patch_file: P, args: I) -> Result<()>
     where
         P: AsRef<Path>,
@@ -49,20 +81,59 @@ impl Project {
             .run_with_output()?
             .exit_ok()
     }
+
+    fn create_script<S, T>(&self, script_name: S, command: T) -> Result<PathBuf>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
+        let script = self.build_dir.join(script_name.as_ref());
+
+        let mut script_file = File::create(&script)?;
+        script_file.write_all(b"#!/bin/bash\n")?;
+        script_file.write_all(command.as_ref().as_bytes())?;
+        drop(script_file);
+
+        Ok(script)
+    }
+
+    fn exec_command<S, T>(&self, script_name: S, command: T) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+    {
+        let script = self.create_script(script_name, command)?;
+
+        Command::new("sh")
+            .arg(script)
+            .current_dir(&self.root_dir)
+            .stdout(Level::Debug)
+            .run_with_output()?
+            .exit_ok()
+    }
+
+    fn exec_build_command<S, T, P>(&self, script_name: S, command: T, object_dir: P) -> Result<()>
+    where
+        S: AsRef<OsStr>,
+        T: AsRef<OsStr>,
+        P: AsRef<Path>,
+    {
+        if command.as_ref().is_empty() {
+            return Ok(());
+        }
+        let script = self.create_script(script_name, command)?;
+
+        Command::new("sh")
+            .arg(script)
+            .env(COMPILER_CMD_ENV, object_dir.as_ref())
+            .current_dir(&self.root_dir)
+            .stdout(Level::Debug)
+            .run_with_output()?
+            .exit_ok()
+    }
 }
 
-impl Project {
-    pub fn new<P: AsRef<Path>>(root_dir: P) -> Self {
-        Self {
-            name: fs::file_name(&root_dir).to_string_lossy().to_string(),
-            root_dir: root_dir.as_ref().to_path_buf(),
-        }
-    }
-
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-
+impl Project<'_> {
     pub fn apply_patches<P: AsRef<Path>>(&self, patches: &[P]) -> Result<()> {
         for patch in patches {
             debug!("- Applying patch");
@@ -90,23 +161,21 @@ impl Project {
         Ok(())
     }
 
-    pub fn build<S, P>(&self, build_command: S, output_dir: P) -> Result<()>
-    where
-        S: AsRef<OsStr>,
-        P: AsRef<Path>,
-    {
-        let script_path = output_dir.as_ref().join(BUILD_SHELL);
+    pub fn prepare(&self) -> Result<()> {
+        self.exec_command(PREPARE_SCRIPT_NAME, self.prepare_cmd)
+    }
 
-        let mut script_file = File::create(&script_path)?;
-        script_file.write_all(b"#!/bin/bash\n")?;
-        script_file.write_all(build_command.as_ref().as_bytes())?;
+    pub fn build(&self) -> Result<()> {
+        self.exec_build_command(BUILD_SCRIPT_NAME, self.build_cmd, self.original_dir)
+    }
 
-        Command::new("sh")
-            .arg(script_path)
-            .env(COMPILER_CMD_ENV, output_dir.as_ref())
-            .current_dir(&self.root_dir)
-            .stdout(Level::Debug)
-            .run_with_output()?
-            .exit_ok()
+    pub fn rebuild(&self) -> Result<()> {
+        self.exec_build_command(BUILD_SCRIPT_NAME, self.build_cmd, self.patched_dir)
+    }
+}
+
+impl std::fmt::Display for Project<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.name.to_string_lossy())
     }
 }

@@ -25,7 +25,7 @@ use flexi_logger::{
     DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
 };
 use indexmap::IndexSet;
-use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
+use log::{debug, error, info, warn, Level, LevelFilter, Record};
 use object::{write, Object, ObjectSection, SectionKind};
 use syscare_common::{ffi::OsStringExt, fs, os, process::Command};
 
@@ -45,7 +45,7 @@ use args::Arguments;
 use build_root::BuildRoot;
 use compiler::Compiler;
 use dwarf::Dwarf;
-use file_relation::{BinaryRelation, ObjectRelation};
+use file_relation::FileRelation;
 use hijacker::Hijacker;
 use project::Project;
 
@@ -57,7 +57,7 @@ const CLI_UMASK: u32 = 0o022;
 const LOG_FILE_NAME: &str = "build";
 
 struct BuildInfo {
-    binaries: Vec<BinaryRelation>,
+    files: FileRelation,
     linker: PathBuf,
     build_dir: PathBuf,
     output_dir: PathBuf,
@@ -190,45 +190,38 @@ impl UpatchBuild {
     }
 
     fn create_diff_objs(
-        &self,
-        objects: &[ObjectRelation],
+        original_object: &Path,
+        patched_object: &Path,
         debuginfo: &Path,
         output_dir: &Path,
         verbose: bool,
     ) -> Result<()> {
         const UPATCH_DIFF_BIN: &str = "/usr/libexec/syscare/upatch-diff";
 
-        for object in objects {
-            let original_object = object.original_object.as_path();
-            let patched_object = object.patched_object.as_path();
+        let ouput_name = original_object.file_name().with_context(|| {
+            format!(
+                "Failed to parse patch file name of {}",
+                original_object.display()
+            )
+        })?;
+        let output_file = output_dir.join(ouput_name);
 
-            let ouput_name = original_object.file_name().with_context(|| {
-                format!(
-                    "Failed to parse patch file name of {}",
-                    original_object.display()
-                )
-            })?;
-            let output_file = output_dir.join(ouput_name);
+        let mut command = Command::new(UPATCH_DIFF_BIN);
+        command
+            .arg("-s")
+            .arg(original_object)
+            .arg("-p")
+            .arg(patched_object)
+            .arg("-o")
+            .arg(output_file)
+            .arg("-r")
+            .arg(debuginfo);
 
-            let mut command = Command::new(UPATCH_DIFF_BIN);
-            command
-                .arg("-s")
-                .arg(original_object)
-                .arg("-p")
-                .arg(patched_object)
-                .arg("-o")
-                .arg(output_file)
-                .arg("-r")
-                .arg(debuginfo);
-
-            if verbose {
-                command.arg("-d");
-            }
-
-            command.stdout(Level::Trace).run_with_output()?.exit_ok()?
+        if verbose {
+            command.arg("-d");
         }
 
-        Ok(())
+        command.stdout(Level::Trace).run_with_output()?.exit_ok()
     }
 
     fn link_objects<P, I, S, Q>(linker: P, objects: I, output: Q) -> Result<()>
@@ -252,34 +245,54 @@ impl UpatchBuild {
     fn build_patch(
         &self,
         build_info: &BuildInfo,
-        binary: &BinaryRelation,
+        binary: &Path,
+        debuginfo: &Path,
         output_file: &Path,
     ) -> Result<()> {
         const OBJECT_EXTENSION: &str = "o";
         const NOTES_OBJECT_NAME: &str = "notes.o";
 
-        let binary_name = binary
-            .path
-            .file_name()
-            .context("Failed to parse binary name")?;
-        let debuginfo_name = binary
-            .debuginfo
+        let binary_name = binary.file_name().context("Failed to parse binary name")?;
+        let debuginfo_name = debuginfo
             .file_name()
             .context("Failed to parse debuginfo name")?;
         let output_dir = build_info.build_dir.join(binary_name);
-        let debuginfo = output_dir.join(debuginfo_name);
+        let new_debuginfo = output_dir.join(debuginfo_name);
 
         debug!("- Preparing to build patch");
         fs::create_dir_all(&output_dir)?;
-        fs::copy(&binary.debuginfo, &debuginfo)?;
-        fs::set_permissions(&debuginfo, Permissions::from_mode(0o644))?;
+        fs::copy(&debuginfo, &new_debuginfo)?;
+        fs::set_permissions(&new_debuginfo, Permissions::from_mode(0o644))?;
 
         debug!("- Resolving debuginfo");
-        resolve::resolve_dynamic(&debuginfo).context("Failed to resolve debuginfo")?;
+        resolve::resolve_dynamic(&new_debuginfo).context("Failed to resolve debuginfo")?;
 
         debug!("- Creating diff objects");
-        self.create_diff_objs(&binary.objects, &debuginfo, &output_dir, build_info.verbose)
-            .with_context(|| format!("Failed to create diff objects for {}", binary.path.display()))?;
+        let patched_objects = build_info
+            .files
+            .get_patched_objects(binary)
+            .with_context(|| format!("Failed to find objects of {}", binary.display()))?;
+
+        for patched_object in patched_objects {
+            let original_object = build_info
+                .files
+                .get_original_object(&patched_object)
+                .with_context(|| {
+                    format!(
+                        "Failed to find patched object of {}",
+                        patched_object.display()
+                    )
+                })?;
+
+            UpatchBuild::create_diff_objs(
+                original_object,
+                patched_object,
+                &new_debuginfo,
+                &output_dir,
+                build_info.verbose,
+            )
+            .with_context(|| format!("Failed to create diff objects for {}", binary.display()))?;
+        }
 
         debug!("- Collecting changes");
         let mut changed_objects = fs::list_files_by_ext(
@@ -288,13 +301,13 @@ impl UpatchBuild {
             fs::TraverseOptions { recursive: false },
         )?;
         if changed_objects.is_empty() {
-            debug!("- Patch: No functional changes");
+            debug!("- No functional changes");
             return Ok(());
         }
 
         debug!("- Creating patch notes");
         let notes_object = output_dir.join(NOTES_OBJECT_NAME);
-        Self::create_note(&debuginfo, &notes_object).context("Failed to create patch notes")?;
+        Self::create_note(&new_debuginfo, &notes_object).context("Failed to create patch notes")?;
         changed_objects.push(notes_object);
 
         debug!("- Linking patch objects");
@@ -302,18 +315,17 @@ impl UpatchBuild {
             .context("Failed to link patch objects")?;
 
         debug!("- Resolving patch");
-        resolve::resolve_upatch(output_file, &debuginfo).context("Failed to resolve patch")?;
+        resolve::resolve_upatch(output_file, &new_debuginfo).context("Failed to resolve patch")?;
 
         debug!("- Patch: {}", output_file.display());
         Ok(())
     }
 
     fn build_patches(&self, build_info: BuildInfo, name: &OsStr) -> Result<()> {
-        for binary in &build_info.binaries {
-            let binary_path = binary.path.as_path();
-            let binary_name = binary.path.file_name().with_context(|| {
-                format!("Failed to parse binary name of {}", binary_path.display())
-            })?;
+        for (binary, debuginfo) in build_info.files.get_files() {
+            let binary_name = binary
+                .file_name()
+                .with_context(|| format!("Failed to parse binary name of {}", binary.display()))?;
             let patch_name = match name.is_empty() {
                 true => binary_name.to_os_string(),
                 false => name.to_os_string().join("-").join(binary_name),
@@ -321,7 +333,7 @@ impl UpatchBuild {
             let output_file = build_info.output_dir.join(&patch_name);
 
             info!("Generating patch {}", patch_name.to_string_lossy());
-            self.build_patch(&build_info, binary, &output_file)
+            self.build_patch(&build_info, binary, debuginfo, &output_file)
                 .with_context(|| {
                     format!("Failed to build patch {}", patch_name.to_string_lossy())
                 })?;
@@ -333,7 +345,6 @@ impl UpatchBuild {
     fn run(&mut self) -> Result<()> {
         let work_dir = self.args.work_dir.as_path();
         let name = self.args.name.as_os_str();
-        let source_dir = self.args.source_dir.as_path();
         let output_dir = self.args.output_dir.as_path();
         let binaries = self.args.elf.as_slice();
         let debuginfos = self.args.debuginfo.as_slice();
@@ -364,11 +375,9 @@ impl UpatchBuild {
         }
         debug!("------------------------------");
 
-        let hijacker = Hijacker::new(&compilers, work_dir).context("Failed to hack compilers")?;
-
-        let project = Project::new(source_dir);
+        let project = Project::new(&self.args, &self.build_root);
         info!("------------------------------");
-        info!("Project {}", project.name());
+        info!("Project {}", project);
         info!("------------------------------");
         info!("Testing patch file(s)");
         project
@@ -383,37 +392,47 @@ impl UpatchBuild {
             true => warn!("Warning: Skipped compiler version check!"),
         }
 
-        // Build unpatched source code
-        info!("Building {}", project.name());
-        project
-            .build(&self.args.build_source_cmd, original_dir)
-            .with_context(|| format!("Failed to build {}", project.name()))?;
+        let mut files = FileRelation::new();
+        let hijacker = Hijacker::new(&compilers, work_dir).context("Failed to hack compilers")?;
 
-        // Patch project
-        info!("Patching {}", project.name());
+        info!("Preparing {}", project);
+        project
+            .prepare()
+            .with_context(|| format!("Failed to prepare {}", project))?;
+
+        info!("Building {}", project);
+        project
+            .build()
+            .with_context(|| format!("Failed to build {}", project))?;
+
+        info!("Collecting file relations");
+        files.collect_outputs(binaries, debuginfos)?;
+        files.collect_original_build(original_dir)?;
+
+        info!("Preparing {}", project);
+        project
+            .prepare()
+            .with_context(|| format!("Failed to prepare {}", project))?;
+
+        info!("Patching {}", project);
         project
             .apply_patches(&self.args.patch)
-            .with_context(|| format!("Failed to patch {}", project.name()))?;
+            .with_context(|| format!("Failed to patch {}", project))?;
 
-        // Build patched source code
-        info!("Rebuilding {}", project.name());
+        info!("Rebuilding {}", project);
         project
-            .build(self.args.build_patch_cmd.clone(), patched_dir)
-            .with_context(|| format!("Failed to rebuild {}", project.name()))?;
+            .rebuild()
+            .with_context(|| format!("Failed to rebuild {}", project))?;
+
+        info!("Collecting file relations");
+        files.collect_patched_build(patched_dir)?;
 
         // Unhack compilers
         drop(hijacker);
 
-        info!("Parsing file relations");
-        let binaries = BinaryRelation::parse(binaries, debuginfos, original_dir, patched_dir)
-            .context("Failed to parse file relations")?;
-        for binary in &binaries {
-            trace!("{}", binary);
-        }
-
         let build_info = BuildInfo {
             linker,
-            binaries,
+            files,
             build_dir: build_dir.to_path_buf(),
             output_dir: output_dir.to_path_buf(),
             verbose,

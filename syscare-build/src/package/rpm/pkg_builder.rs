@@ -40,7 +40,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_prepare(&self, spec_file: &Path) -> Result<()> {
         Command::new(RPM_BUILD_BIN)
             .arg("--define")
-            .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+            .arg(OsString::from("_topdir ").join(self.build_root.as_ref()))
             .arg("-bp")
             .arg(spec_file)
             .run()?
