@@ -17,8 +17,8 @@ use std::{fs::Permissions, os::unix::fs::PermissionsExt, panic, process};
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
 use flexi_logger::{
-    Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, LogSpecification, Logger,
-    LoggerHandle, Naming, WriteMode,
+    Age, Cleanup, Criterion, DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, Naming,
+    WriteMode,
 };
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
@@ -52,7 +52,6 @@ const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
 struct UpatchDaemon {
     args: Arguments,
-    logger: LoggerHandle,
 }
 
 impl UpatchDaemon {
@@ -116,7 +115,7 @@ impl UpatchDaemon {
         let file_spec = FileSpec::default()
             .directory(&args.log_dir)
             .use_timestamp(false);
-        let logger = Logger::with(log_spec)
+        Logger::with(log_spec)
             .log_to_file(file_spec)
             .format(Self::format_log)
             .duplicate_to_stdout(Duplicate::from(stdout_level))
@@ -132,7 +131,7 @@ impl UpatchDaemon {
         // Print panic to log incase it really happens
         panic::set_hook(Box::new(|info| error!("{}", info)));
 
-        Ok(Self { args, logger })
+        Ok(Self { args })
     }
 }
 
@@ -205,13 +204,6 @@ impl UpatchDaemon {
         server.close();
 
         Ok(())
-    }
-}
-
-impl Drop for UpatchDaemon {
-    fn drop(&mut self) {
-        self.logger.flush();
-        self.logger.shutdown();
     }
 }
 
