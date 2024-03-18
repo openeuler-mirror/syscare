@@ -27,7 +27,7 @@ use flexi_logger::{
 use indexmap::IndexSet;
 use log::{debug, error, info, warn, Level, LevelFilter, Record};
 use object::{write, Object, ObjectSection, SectionKind};
-use syscare_common::{ffi::OsStringExt, fs, os, process::Command};
+use syscare_common::{concat_os, fs, os, process::Command};
 
 mod args;
 mod build_root;
@@ -261,7 +261,7 @@ impl UpatchBuild {
 
         debug!("- Preparing to build patch");
         fs::create_dir_all(&output_dir)?;
-        fs::copy(&debuginfo, &new_debuginfo)?;
+        fs::copy(debuginfo, &new_debuginfo)?;
         fs::set_permissions(&new_debuginfo, Permissions::from_mode(0o644))?;
 
         debug!("- Resolving debuginfo");
@@ -276,7 +276,7 @@ impl UpatchBuild {
         for patched_object in patched_objects {
             let original_object = build_info
                 .files
-                .get_original_object(&patched_object)
+                .get_original_object(patched_object)
                 .with_context(|| {
                     format!(
                         "Failed to find patched object of {}",
@@ -328,7 +328,7 @@ impl UpatchBuild {
                 .with_context(|| format!("Failed to parse binary name of {}", binary.display()))?;
             let patch_name = match name.is_empty() {
                 true => binary_name.to_os_string(),
-                false => name.to_os_string().join("-").join(binary_name),
+                false => concat_os!(name, "-", binary_name),
             };
             let output_file = build_info.output_dir.join(&patch_name);
 

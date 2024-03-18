@@ -41,7 +41,7 @@ impl ElfResolver<'_> {
 
         output.exit_ok()?;
 
-        let lines = output.stdout.lines().filter_map(|s| s.ok());
+        let lines = output.stdout.lines();
         for line in lines {
             let words = line.split_whitespace().collect::<Vec<_>>();
             if let Some(path) = words.get(2) {
