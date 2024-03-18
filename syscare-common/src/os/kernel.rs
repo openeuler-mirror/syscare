@@ -12,10 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::{OsStr, OsString},
-    path::Path,
-};
+use std::{ffi::OsStr, path::Path};
 
 use anyhow::Result;
 
@@ -23,7 +20,7 @@ const KEXEC_PATH: &str = "kexec";
 const SYSTEMCTL_PATH: &str = "systemctl";
 
 use super::platform;
-use crate::{ffi::OsStringExt, process::Command};
+use crate::{concat_os, process::Command};
 
 pub fn version() -> &'static OsStr {
     platform::release()
@@ -37,7 +34,7 @@ where
     Command::new(KEXEC_PATH)
         .arg("--load")
         .arg(kernel.as_ref())
-        .arg(OsString::from("--initrd=").join(initramfs.as_ref()))
+        .arg(concat_os!("--initrd=", initramfs.as_ref()))
         .arg("--reuse-cmdline")
         .run_with_output()?
         .exit_ok()

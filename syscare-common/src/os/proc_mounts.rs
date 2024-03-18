@@ -60,7 +60,7 @@ impl<'a> Iterator for MountInfoParser<'a> {
             return None;
         }
 
-        for char_indices in new_str.char_indices() {
+        for (index, char) in new_str.char_indices() {
             let pattern;
             let skip_len;
 
@@ -74,11 +74,11 @@ impl<'a> Iterator for MountInfoParser<'a> {
                     skip_len = 1;
                 }
             };
-            if char_indices.char() == pattern {
+            if char == pattern {
                 self.num += 1;
-                self.pos += char_indices.index() + skip_len;
+                self.pos += index + skip_len;
 
-                return Some(OsStr::from_bytes(&data[..char_indices.index()]));
+                return Some(OsStr::from_bytes(&data[..index]));
             }
         }
 
