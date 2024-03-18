@@ -14,552 +14,28 @@
 
 use std::{
     ffi::{CString, NulError, OsStr, OsString},
-    iter::Filter,
-    os::unix::prelude::OsStrExt as UnixOsStrExt,
+    iter::{Filter, Map},
+    os::unix::{ffi::OsStringExt as StdOsStringExt, prelude::OsStrExt as StdOsStrExt},
     path::{Path, PathBuf},
 };
 
-use crate::io::{BufReadOsLines, OsLines};
+use crate::os_str::{
+    pattern::{Pattern, ReverseSearcher, SearchStep, Searcher},
+    CharIndices, Lines, Split, SplitImpl, SplitInclusive,
+};
 
-use super::utf8;
-
-const REPLACEMENT_CHARACTER: char = '\u{FFFD}';
-
-/* OsStrCharIndices */
-#[derive(PartialEq, Eq, Clone, Debug)]
-pub enum CharByteIndex {
-    Char(usize, char),
-    Byte(usize, u8),
-}
-
-impl CharByteIndex {
-    pub fn index(&self) -> usize {
-        match self {
-            CharByteIndex::Char(idx, _) => *idx,
-            CharByteIndex::Byte(idx, _) => *idx,
-        }
-    }
-
-    pub fn char(&self) -> char {
-        match self {
-            CharByteIndex::Char(_, c) => *c,
-            CharByteIndex::Byte(_, b) => *b as char,
-        }
-    }
-
-    pub fn len(&self) -> usize {
-        match self {
-            CharByteIndex::Char(_, c) => c.len_utf8(),
-            CharByteIndex::Byte(_, _) => 1,
-        }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len() == 0
-    }
-}
-
-#[derive(Clone, Debug)]
-pub struct CharByteIndices<'a> {
-    char_bytes: &'a [u8],
-    front_idx: usize,
-    back_idx: usize,
-}
-
-impl Iterator for CharByteIndices<'_> {
-    type Item = CharByteIndex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let data = &self.char_bytes[self.front_idx..];
-        if data.is_empty() {
-            return None;
-        }
-
-        let char_len = std::cmp::min(utf8::char_width(data[0]), data.len());
-        let char_buf = &data[..char_len];
-
-        match String::from_utf8_lossy(char_buf).chars().next() {
-            Some(c) if c != REPLACEMENT_CHARACTER => {
-                let result = Some(CharByteIndex::Char(self.front_idx, c));
-                self.front_idx += char_len;
-                result
-            }
-            _ => {
-                let result = Some(CharByteIndex::Byte(self.front_idx, data[0]));
-                self.front_idx += 1;
-                result
-            }
-        }
-    }
-}
-
-impl DoubleEndedIterator for CharByteIndices<'_> {
-    fn next_back(&mut self) -> Option<Self::Item> {
-        #[inline]
-        fn last_utf8_char_index(data: &[u8]) -> (usize, usize) {
-            let data_len = data.len();
-            let mut char_len = std::cmp::min(utf8::CHAR_MAX_WIDTH, data_len);
-
-            // Try to match next utf-8 character
-            while char_len > 0 {
-                let char_idx = data_len - char_len;
-                if utf8::char_width(data[char_idx]) == char_len {
-                    return (char_idx, char_len);
-                }
-                char_len -= 1;
-            }
-            (data_len - 1, 1)
-        }
-
-        let data = &self.char_bytes[..self.back_idx];
-        if data.is_empty() {
-            return None;
-        }
-
-        let (char_idx, char_len) = last_utf8_char_index(data);
-        let char_buf = &data[char_idx..];
-
-        match String::from_utf8_lossy(char_buf).chars().next() {
-            Some(c) if c != REPLACEMENT_CHARACTER => {
-                self.back_idx -= char_len;
-                Some(CharByteIndex::Char(self.back_idx, c))
-            }
-            _ => {
-                self.back_idx -= 1;
-                Some(CharByteIndex::Byte(self.back_idx, data[data.len() - 1]))
-            }
-        }
-    }
-}
-
-impl<'a> From<&'a [u8]> for CharByteIndices<'a> {
-    fn from(bytes: &'a [u8]) -> Self {
-        Self {
-            char_bytes: bytes,
-            front_idx: 0,
-            back_idx: bytes.len(),
-        }
-    }
-}
-
-/* Searcher & ReverseSearcher */
-#[derive(Debug, Eq, PartialEq, Clone, Copy)]
-pub enum SearchStep {
-    Match(usize, usize), // (start index, end index)
-    Reject(usize, usize),
-    Done,
-}
-
-pub trait Searcher<'a> {
-    fn haystack(&self) -> &'a [u8];
-
-    fn next(&mut self) -> SearchStep;
-
-    #[inline]
-    fn next_match(&mut self) -> Option<(usize, usize)> {
-        loop {
-            match self.next() {
-                SearchStep::Match(a, b) => return Some((a, b)),
-                SearchStep::Done => return None,
-                _ => continue,
-            }
-        }
-    }
-
-    #[inline]
-    fn next_reject(&mut self) -> Option<(usize, usize)> {
-        loop {
-            match self.next() {
-                SearchStep::Reject(a, b) => return Some((a, b)),
-                SearchStep::Done => return None,
-                _ => continue,
-            }
-        }
-    }
-}
-
-pub trait ReverseSearcher<'a>: Searcher<'a> {
-    fn next_back(&mut self) -> SearchStep;
-
-    #[inline]
-    fn next_match_back(&mut self) -> Option<(usize, usize)> {
-        loop {
-            match self.next_back() {
-                SearchStep::Match(a, b) => return Some((a, b)),
-                SearchStep::Done => return None,
-                _ => continue,
-            }
-        }
-    }
-
-    #[inline]
-    fn next_reject_back(&mut self) -> Option<(usize, usize)> {
-        loop {
-            match self.next_back() {
-                SearchStep::Reject(a, b) => return Some((a, b)),
-                SearchStep::Done => return None,
-                _ => continue,
-            }
-        }
-    }
-}
-
-/* CharLiteralSearcher */
-#[derive(Clone, Debug)]
-pub struct CharLiteralSearcher<'a> {
-    indices: CharByteIndices<'a>,
-    literal: char,
-}
-
-impl<'a> CharLiteralSearcher<'a> {
-    fn new(haystack: &'a [u8], literal: char) -> Self {
-        Self {
-            indices: CharByteIndices::from(haystack),
-            literal,
-        }
-    }
-}
-
-impl<'a> Searcher<'a> for CharLiteralSearcher<'a> {
-    fn haystack(&self) -> &'a [u8] {
-        self.indices.char_bytes
-    }
-
-    fn next(&mut self) -> SearchStep {
-        match self.indices.next() {
-            Some(CharByteIndex::Char(char_idx, c)) => {
-                let new_idx = char_idx + c.len_utf8();
-                match self.literal == c {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
-                }
-            }
-            Some(CharByteIndex::Byte(byte_idx, b)) => {
-                let new_idx = byte_idx + 1;
-                match self.literal == (b as char) {
-                    true => SearchStep::Match(byte_idx, new_idx),
-                    false => SearchStep::Reject(byte_idx, new_idx),
-                }
-            }
-            None => SearchStep::Done,
-        }
-    }
-}
-
-impl<'a> ReverseSearcher<'a> for CharLiteralSearcher<'a> {
-    fn next_back(&mut self) -> SearchStep {
-        match self.indices.next_back() {
-            Some(CharByteIndex::Char(char_idx, c)) => {
-                let new_idx = char_idx + c.len_utf8();
-                match self.literal == c {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
-                }
-            }
-            Some(CharByteIndex::Byte(byte_idx, b)) => {
-                let new_idx = byte_idx + 1;
-                match self.literal == (b as char) {
-                    true => SearchStep::Match(byte_idx, new_idx),
-                    false => SearchStep::Reject(byte_idx, new_idx),
-                }
-            }
-            None => SearchStep::Done,
-        }
-    }
-}
-
-/* CharPredicateSearcher */
-#[derive(Clone, Debug)]
-pub struct CharPredicateSearcher<'a, P> {
-    indices: CharByteIndices<'a>,
-    predicate: P,
-}
-
-impl<'a, P: FnMut(char) -> bool> CharPredicateSearcher<'a, P> {
-    fn new(haystack: &'a [u8], predicate: P) -> Self {
-        Self {
-            indices: CharByteIndices::from(haystack),
-            predicate,
-        }
-    }
-}
-
-impl<'a, P: FnMut(char) -> bool> Searcher<'a> for CharPredicateSearcher<'a, P> {
-    fn haystack(&self) -> &'a [u8] {
-        self.indices.char_bytes
-    }
-
-    fn next(&mut self) -> SearchStep {
-        match self.indices.next() {
-            Some(CharByteIndex::Char(char_idx, c)) => {
-                let new_idx = char_idx + c.len_utf8();
-                match (self.predicate)(c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
-                }
-            }
-            Some(CharByteIndex::Byte(byte_idx, b)) => {
-                let new_idx = byte_idx + 1;
-                match (self.predicate)(b as char) {
-                    true => SearchStep::Match(byte_idx, new_idx),
-                    false => SearchStep::Reject(byte_idx, new_idx),
-                }
-            }
-            None => SearchStep::Done,
-        }
-    }
-}
-
-impl<'a, P: FnMut(char) -> bool> ReverseSearcher<'a> for CharPredicateSearcher<'a, P> {
-    fn next_back(&mut self) -> SearchStep {
-        match self.indices.next_back() {
-            Some(CharByteIndex::Char(char_idx, c)) => {
-                let new_idx = char_idx + c.len_utf8();
-                match (self.predicate)(c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
-                }
-            }
-            Some(CharByteIndex::Byte(byte_idx, b)) => {
-                let new_idx = byte_idx + 1;
-                match (self.predicate)(b as char) {
-                    true => SearchStep::Match(byte_idx, new_idx),
-                    false => SearchStep::Reject(byte_idx, new_idx),
-                }
-            }
-            None => SearchStep::Done,
-        }
-    }
-}
-
-/* OsStrSearcher */
-#[derive(Clone, Debug)]
-pub struct OsStrSearcher<'a, T> {
-    indices: CharByteIndices<'a>,
-    needle: T,
-    match_fw: bool,
-    match_bw: bool,
-}
-
-impl<'a, T> OsStrSearcher<'a, T> {
-    fn new(haystack: &'a [u8], needle: T) -> Self {
-        Self {
-            indices: CharByteIndices::from(haystack),
-            needle,
-            match_fw: false,
-            match_bw: false,
-        }
-    }
-}
-
-impl<'a, T: AsRef<OsStr>> Searcher<'a> for OsStrSearcher<'a, T> {
-    fn haystack(&self) -> &'a [u8] {
-        self.indices.char_bytes
-    }
-
-    fn next(&mut self) -> SearchStep {
-        let haystack: &mut CharByteIndices = &mut self.indices;
-        let needle = &mut CharByteIndices::from(self.needle.as_ref().as_bytes());
-
-        let front_idx = haystack.front_idx;
-
-        if needle.char_bytes.is_empty() {
-            // Case 1: Needle is empty, rejects every char and matches every empty string between them
-            self.match_fw = !self.match_fw;
-            if self.match_fw {
-                return SearchStep::Match(front_idx, front_idx);
-            }
-            match haystack.next() {
-                Some(_) => {
-                    return SearchStep::Reject(front_idx, haystack.front_idx);
-                }
-                None => {
-                    return SearchStep::Done;
-                }
-            }
-        }
-
-        // Compare every chars in needle with haystack in sequence
-        for needle_char in needle.by_ref() {
-            if let Some(haystack_char) = haystack.next() {
-                if haystack_char.char() != needle_char.char() {
-                    // Case 2: Char mismatched, stop matching, reject matched chars
-                    return SearchStep::Reject(front_idx, haystack.front_idx);
-                }
-                continue;
-            }
-            let bytes_left = haystack.char_bytes.len() - haystack.front_idx;
-            if bytes_left != 0 {
-                // Case 3: Haystack is empty, but needle has chars left, reject left chars in haystack
-                return SearchStep::Reject(front_idx, front_idx + bytes_left);
-            }
-            // Case 4: Haystack has nothing left, search done
-            return SearchStep::Done;
-        }
-        // Case 5: All chars in neelde are matched
-        SearchStep::Match(front_idx, haystack.front_idx)
-    }
-}
-
-impl<'a, T: AsRef<OsStr>> ReverseSearcher<'a> for OsStrSearcher<'a, T> {
-    fn next_back(&mut self) -> SearchStep {
-        let haystack = &mut self.indices;
-        let needle = &mut CharByteIndices::from(self.needle.as_ref().as_bytes());
-
-        let back_idx = haystack.back_idx;
-
-        if needle.char_bytes.is_empty() {
-            // Case 1: Needle is empty, rejects every char and matches every empty string between them
-            self.match_bw = !self.match_bw;
-            if self.match_bw {
-                return SearchStep::Match(back_idx, back_idx);
-            }
-            match haystack.next_back() {
-                Some(_) => {
-                    return SearchStep::Reject(haystack.back_idx, back_idx);
-                }
-                None => {
-                    return SearchStep::Done;
-                }
-            }
-        }
-
-        // Compare every chars in needle with haystack in sequence
-        while let Some(needle_char) = needle.next_back() {
-            if let Some(haystack_char) = haystack.next_back() {
-                if haystack_char.char() != needle_char.char() {
-                    // Case 2: Char mismatched, stop matching, reject matched chars
-                    return SearchStep::Reject(haystack.back_idx, back_idx);
-                }
-                continue;
-            }
-            if haystack.back_idx != 0 {
-                // Case 3: Haystack is empty, but needle has chars left, reject left chars in haystack
-                return SearchStep::Reject(0, back_idx);
-            }
-            // Case 4: Haystack has nothing left, search done
-            return SearchStep::Done;
-        }
-        // Case 5: All chars in neelde are matched
-        SearchStep::Match(haystack.back_idx, back_idx)
-    }
-}
-
-/* Pattern */
-pub trait Pattern<'a> {
-    type Searcher: Searcher<'a>;
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher;
-}
-
-impl<'a> Pattern<'a> for char {
-    type Searcher = CharLiteralSearcher<'a>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        CharLiteralSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for String {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for &'a String {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for &'a str {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for OsString {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for &'a OsString {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a> Pattern<'a> for &'a OsStr {
-    type Searcher = OsStrSearcher<'a, Self>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        OsStrSearcher::new(haystack, self)
-    }
-}
-
-impl<'a, P: FnMut(char) -> bool> Pattern<'a> for P {
-    type Searcher = CharPredicateSearcher<'a, P>;
-
-    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
-        CharPredicateSearcher::new(haystack, self)
-    }
-}
-
-/* Split */
 pub type SplitFn = fn(char) -> bool;
 pub type FilterFn = fn(&&OsStr) -> bool;
-
-#[derive(Clone, Debug)]
-pub struct Split<'a, P: Pattern<'a>> {
-    searcher: P::Searcher,
-    position: usize,
-    finished: bool,
-}
-
-impl<'a, P: Pattern<'a>> Iterator for Split<'a, P> {
-    type Item = &'a OsStr;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.finished {
-            return None;
-        }
-        match self.searcher.next_match() {
-            Some((matched_idx, new_idx)) => {
-                let match_result = Some(OsStr::from_bytes(
-                    &self.searcher.haystack()[self.position..matched_idx],
-                ));
-                self.position = new_idx;
-                match_result
-            }
-            None => {
-                let match_result = Some(OsStr::from_bytes(
-                    &self.searcher.haystack()[self.position..],
-                ));
-
-                self.finished = true;
-                match_result
-            }
-        }
-    }
-}
+pub type MapFn = fn(&OsStr) -> &OsStr;
 
 /* OsStrExt */
 pub trait OsStrExt: AsRef<OsStr> {
     fn is_char_boundary(&self, index: usize) -> bool {
-        let haystack = self.as_ref().as_bytes();
         if index == 0 {
             return true;
         }
+
+        let haystack = self.as_ref().as_bytes();
         match haystack.get(index) {
             Some(&b) => {
                 // This is bit magic equivalent to: b < 128 || b >= 192
@@ -569,12 +45,14 @@ pub trait OsStrExt: AsRef<OsStr> {
         }
     }
 
-    fn char_indices(&self) -> CharByteIndices<'_> {
-        CharByteIndices::from(self.as_ref().as_bytes())
-    }
+    fn char_indices(&self) -> CharIndices<'_> {
+        let haystack = self.as_ref().as_bytes();
 
-    fn lines(&self) -> OsLines<&[u8]> {
-        self.as_ref().as_bytes().os_lines()
+        CharIndices {
+            char_bytes: haystack,
+            front_idx: 0,
+            back_idx: haystack.len(),
+        }
     }
 
     fn find<'a, P: Pattern<'a>>(&'a self, pat: P) -> Option<usize> {
@@ -588,10 +66,9 @@ pub trait OsStrExt: AsRef<OsStr> {
     }
 
     fn starts_with<'a, P: Pattern<'a>>(&'a self, pat: P) -> bool {
-        matches!(
-            pat.into_searcher(self.as_ref().as_bytes()).next(),
-            SearchStep::Match(0, _)
-        )
+        let haystack = self.as_ref().as_bytes();
+
+        matches!(pat.into_searcher(haystack).next(), SearchStep::Match(0, _))
     }
 
     fn ends_with<'a, P>(&'a self, pat: P) -> bool
@@ -600,6 +77,7 @@ pub trait OsStrExt: AsRef<OsStr> {
         P::Searcher: ReverseSearcher<'a>,
     {
         let haystack = self.as_ref().as_bytes();
+
         matches!(
             pat.into_searcher(haystack).next_back(),
             SearchStep::Match(_, j) if haystack.len() == j
@@ -608,6 +86,7 @@ pub trait OsStrExt: AsRef<OsStr> {
 
     fn strip_prefix<'a, P: Pattern<'a>>(&'a self, pat: P) -> Option<&'a OsStr> {
         let haystack = self.as_ref().as_bytes();
+
         match pat.into_searcher(haystack).next() {
             SearchStep::Match(start, end) => {
                 debug_assert_eq!(start, 0);
@@ -623,6 +102,7 @@ pub trait OsStrExt: AsRef<OsStr> {
         P::Searcher: ReverseSearcher<'a>,
     {
         let haystack = self.as_ref().as_bytes();
+
         match pat.into_searcher(haystack).next_back() {
             SearchStep::Match(start, end) => {
                 debug_assert_eq!(end, haystack.len());
@@ -633,24 +113,39 @@ pub trait OsStrExt: AsRef<OsStr> {
     }
 
     fn split<'a, P: Pattern<'a>>(&'a self, pat: P) -> Split<P> {
-        Split {
-            searcher: pat.into_searcher(self.as_ref().as_bytes()),
+        let haystack = self.as_ref().as_bytes();
+
+        Split(SplitImpl {
             position: 0,
+            searcher: pat.into_searcher(haystack),
+            allow_tailing_empty: true,
             finished: false,
-        }
+        })
     }
 
-    fn split_at(&self, mid: usize) -> (&OsStr, &OsStr) {
-        if !self.is_char_boundary(mid) {
-            panic!("failed to slice osstring");
-        }
-        let (lhs, rhs) = self.as_ref().as_bytes().split_at(mid);
-        (OsStr::from_bytes(lhs), OsStr::from_bytes(rhs))
+    fn split_inclusive<'a, P: Pattern<'a>>(&'a self, pat: P) -> SplitInclusive<'a, P> {
+        let haystack = self.as_ref().as_bytes();
+
+        SplitInclusive(SplitImpl {
+            position: 0,
+            searcher: pat.into_searcher(haystack),
+            allow_tailing_empty: false,
+            finished: false,
+        })
     }
 
     fn split_whitespace(&self) -> Filter<Split<SplitFn>, FilterFn> {
         self.split(char::is_whitespace as SplitFn)
             .filter(|s| !s.is_empty())
+    }
+
+    fn split_at(&self, mid: usize) -> (&OsStr, &OsStr) {
+        if !self.is_char_boundary(mid) {
+            panic!("Failed to slice osstring");
+        }
+
+        let (lhs, rhs) = self.as_ref().as_bytes().split_at(mid);
+        (OsStr::from_bytes(lhs), OsStr::from_bytes(rhs))
     }
 
     fn trim_start_matches<'a, P: Pattern<'a>>(&'a self, pat: P) -> &'a OsStr {
@@ -659,6 +154,7 @@ pub trait OsStrExt: AsRef<OsStr> {
             Some((a, _)) => a,
             None => haystack.len(),
         };
+
         OsStr::from_bytes(&haystack[start..])
     }
 
@@ -672,6 +168,7 @@ pub trait OsStrExt: AsRef<OsStr> {
             Some((_, b)) => b,
             None => 0,
         };
+
         OsStr::from_bytes(&haystack[..end])
     }
 
@@ -709,455 +206,455 @@ pub trait OsStrExt: AsRef<OsStr> {
         self.trim_end_matches(char::is_whitespace)
     }
 
+    fn lines(&self) -> Map<Lines<'_>, MapFn> {
+        Lines(self.split_inclusive('\n')).map(|mut line| {
+            if let Some(new_line) = line.strip_suffix('\n') {
+                line = new_line;
+            };
+            if let Some(new_line) = line.strip_suffix('\r') {
+                line = new_line;
+            };
+            line
+        })
+    }
+
+    fn replace<'a, P: Pattern<'a>, S: AsRef<OsStr>>(&'a self, from: P, to: S) -> OsString {
+        let haystack = self.as_ref().as_bytes();
+        let replace = to.as_ref().as_bytes();
+
+        let mut buf = Vec::new();
+        let mut searcher = from.into_searcher(haystack);
+        let mut last_idx = 0;
+
+        while let Some((start, end)) = searcher.next_match() {
+            buf.extend(&haystack[last_idx..start]);
+            buf.extend(replace);
+            last_idx = end;
+        }
+        buf.extend(&haystack[last_idx..]);
+
+        OsString::from_vec(buf)
+    }
+
     fn to_cstring(&self) -> Result<CString, NulError> {
-        CString::new(self.as_ref().as_bytes())
+        let haystack = self.as_ref().as_bytes();
+
+        CString::new(haystack)
     }
 }
 
 impl OsStrExt for OsStr {}
-impl OsStrExt for OsString {}
 impl OsStrExt for Path {}
+
+impl OsStrExt for OsString {}
 impl OsStrExt for PathBuf {}
 
-/* OsStringExt */
-pub trait OsStringExt {
-    fn join<S: AsRef<OsStr>>(self, s: S) -> Self;
-    fn append<S: AsRef<OsStr>>(self, s: S) -> Self;
-}
-
-impl OsStringExt for OsString {
-    #[inline]
-    fn join<S: AsRef<OsStr>>(mut self, s: S) -> Self {
-        self.push(s);
-        self
-    }
-
-    #[inline]
-    fn append<S: AsRef<OsStr>>(mut self, s: S) -> Self {
-        if (self.len() != 0) && (!self.ends_with(char::is_whitespace)) {
-            self.push(" ");
-        }
-        self.push(s);
-        self
-    }
-}
-
 #[test]
-fn test_os_str_ext() {
-    let old_str = "\t\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\nGrüße, Jürgen ❤\r\n";
-    let test_str = OsStr::new(old_str);
+fn test() {
+    const PATTERN0: &str = "T";
+    const PATTERN1: &str = "fox";
+    const PATTERN2: &str = "slow";
+    const PATTERN3: &str = "\t";
+    const PATTERN4: char = '\n';
+    const PATTERN5: char = '\r';
+    const PATTERN6: char = '\0';
+    const PATTERN7: &str = "";
+    const PATTERN8: fn(char) -> bool = |c: char| c.is_ascii_control();
+    const PATTERN9: fn(char) -> bool = char::is_whitespace;
 
-    let pattern0 = "T";
-    let pattern1 = "fox";
-    let pattern2 = "slow";
-    let pattern3 = "\t";
-    let pattern4 = '\t';
-    let pattern5 = '\0';
-    let pattern6 = '\r';
-    let pattern7 = "";
-    let pattern8 = |c: char| c.is_ascii_control();
-    let pattern9 = char::is_whitespace;
+    let orig_str = "\r\n\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\x01\u{1F600}\r\n";
+    let test_str = OsStr::new(orig_str);
 
     println!("Testing OsStrExt::is_char_boundary()...");
-    for index in 0..old_str.as_bytes().len() {
+    for index in 0..orig_str.as_bytes().len() {
         assert_eq!(
-            old_str.is_char_boundary(index),
+            orig_str.is_char_boundary(index),
             test_str.is_char_boundary(index)
         );
     }
 
     println!("Testing OsStrExt::char_indices()...");
     assert_eq!(
-        old_str.char_indices().collect::<Vec<_>>(),
-        test_str
-            .char_indices()
-            .map(|c| match c {
-                CharByteIndex::Char(len, c) => (len, c),
-                CharByteIndex::Byte(len, b) => (len, b as char),
-            })
-            .collect::<Vec<_>>()
+        orig_str.char_indices().collect::<Vec<_>>(),
+        test_str.char_indices().collect::<Vec<_>>()
     );
-
-    println!("Testing OsStrExt::lines()...");
     assert_eq!(
-        old_str.lines().map(OsString::from).collect::<Vec<_>>(),
-        test_str.lines().filter_map(|s| s.ok()).collect::<Vec<_>>()
+        orig_str.char_indices().rev().collect::<Vec<_>>(),
+        test_str.char_indices().rev().collect::<Vec<_>>()
     );
 
     println!("Testing OsStrExt::find()...");
-    assert_eq!(old_str.find(pattern0), test_str.find(pattern0));
-    assert_eq!(old_str.find(pattern1), test_str.find(pattern1));
-    assert_eq!(old_str.find(pattern2), test_str.find(pattern2));
-    assert_eq!(old_str.find(pattern3), test_str.find(pattern3));
-    assert_eq!(old_str.find(pattern4), test_str.find(pattern4));
-    assert_eq!(old_str.find(pattern5), test_str.find(pattern5));
-    assert_eq!(old_str.find(pattern6), test_str.find(pattern6));
-    assert_eq!(old_str.find(pattern7), test_str.find(pattern7));
-    assert_eq!(old_str.find(pattern8), test_str.find(pattern8));
-    assert_eq!(old_str.find(pattern9), test_str.find(pattern9));
+    assert_eq!(orig_str.find(PATTERN0), test_str.find(PATTERN0));
+    assert_eq!(orig_str.find(PATTERN1), test_str.find(PATTERN1));
+    assert_eq!(orig_str.find(PATTERN2), test_str.find(PATTERN2));
+    assert_eq!(orig_str.find(PATTERN3), test_str.find(PATTERN3));
+    assert_eq!(orig_str.find(PATTERN4), test_str.find(PATTERN4));
+    assert_eq!(orig_str.find(PATTERN5), test_str.find(PATTERN5));
+    assert_eq!(orig_str.find(PATTERN6), test_str.find(PATTERN6));
+    assert_eq!(orig_str.find(PATTERN7), test_str.find(PATTERN7));
+    assert_eq!(orig_str.find(PATTERN8), test_str.find(PATTERN8));
+    assert_eq!(orig_str.find(PATTERN9), test_str.find(PATTERN9));
 
     println!("Testing OsStrExt::contains()...");
-    assert_eq!(old_str.contains(pattern0), test_str.contains(pattern0));
-    assert_eq!(old_str.contains(pattern1), test_str.contains(pattern1));
-    assert_eq!(old_str.contains(pattern2), test_str.contains(pattern2));
-    assert_eq!(old_str.contains(pattern3), test_str.contains(pattern3));
-    assert_eq!(old_str.contains(pattern4), test_str.contains(pattern4));
-    assert_eq!(old_str.contains(pattern5), test_str.contains(pattern5));
-    assert_eq!(old_str.contains(pattern6), test_str.contains(pattern6));
-    assert_eq!(old_str.contains(pattern7), test_str.contains(pattern7));
-    assert_eq!(old_str.contains(pattern8), test_str.contains(pattern8));
-    assert_eq!(old_str.contains(pattern9), test_str.contains(pattern9));
+    assert_eq!(orig_str.contains(PATTERN0), test_str.contains(PATTERN0));
+    assert_eq!(orig_str.contains(PATTERN1), test_str.contains(PATTERN1));
+    assert_eq!(orig_str.contains(PATTERN2), test_str.contains(PATTERN2));
+    assert_eq!(orig_str.contains(PATTERN3), test_str.contains(PATTERN3));
+    assert_eq!(orig_str.contains(PATTERN4), test_str.contains(PATTERN4));
+    assert_eq!(orig_str.contains(PATTERN5), test_str.contains(PATTERN5));
+    assert_eq!(orig_str.contains(PATTERN6), test_str.contains(PATTERN6));
+    assert_eq!(orig_str.contains(PATTERN7), test_str.contains(PATTERN7));
+    assert_eq!(orig_str.contains(PATTERN8), test_str.contains(PATTERN8));
+    assert_eq!(orig_str.contains(PATTERN9), test_str.contains(PATTERN9));
 
     println!("Testing OsStrExt::starts_with()...");
     assert_eq!(
-        old_str.starts_with(pattern0),
-        test_str.starts_with(pattern0)
+        orig_str.starts_with(PATTERN0),
+        test_str.starts_with(PATTERN0)
     );
     assert_eq!(
-        old_str.starts_with(pattern1),
-        test_str.starts_with(pattern1)
+        orig_str.starts_with(PATTERN1),
+        test_str.starts_with(PATTERN1)
     );
     assert_eq!(
-        old_str.starts_with(pattern2),
-        test_str.starts_with(pattern2)
+        orig_str.starts_with(PATTERN2),
+        test_str.starts_with(PATTERN2)
     );
     assert_eq!(
-        old_str.starts_with(pattern3),
-        test_str.starts_with(pattern3)
+        orig_str.starts_with(PATTERN3),
+        test_str.starts_with(PATTERN3)
     );
     assert_eq!(
-        old_str.starts_with(pattern4),
-        test_str.starts_with(pattern4)
+        orig_str.starts_with(PATTERN4),
+        test_str.starts_with(PATTERN4)
     );
     assert_eq!(
-        old_str.starts_with(pattern5),
-        test_str.starts_with(pattern5)
+        orig_str.starts_with(PATTERN5),
+        test_str.starts_with(PATTERN5)
     );
     assert_eq!(
-        old_str.starts_with(pattern6),
-        test_str.starts_with(pattern6)
+        orig_str.starts_with(PATTERN6),
+        test_str.starts_with(PATTERN6)
     );
     assert_eq!(
-        old_str.starts_with(pattern7),
-        test_str.starts_with(pattern7)
+        orig_str.starts_with(PATTERN7),
+        test_str.starts_with(PATTERN7)
     );
     assert_eq!(
-        old_str.starts_with(pattern8),
-        test_str.starts_with(pattern8)
+        orig_str.starts_with(PATTERN8),
+        test_str.starts_with(PATTERN8)
     );
     assert_eq!(
-        old_str.starts_with(pattern9),
-        test_str.starts_with(pattern9)
+        orig_str.starts_with(PATTERN9),
+        test_str.starts_with(PATTERN9)
     );
 
     println!("Testing OsStrExt::ends_with()...");
-    assert_eq!(old_str.ends_with(pattern0), test_str.ends_with(pattern0));
-    assert_eq!(old_str.ends_with(pattern1), test_str.ends_with(pattern1));
-    assert_eq!(old_str.ends_with(pattern2), test_str.ends_with(pattern2));
-    assert_eq!(old_str.ends_with(pattern3), test_str.ends_with(pattern3));
-    assert_eq!(old_str.ends_with(pattern4), test_str.ends_with(pattern4));
-    assert_eq!(old_str.ends_with(pattern5), test_str.ends_with(pattern5));
-    assert_eq!(old_str.ends_with(pattern6), test_str.ends_with(pattern6));
-    assert_eq!(old_str.ends_with(pattern7), test_str.ends_with(pattern7));
-    assert_eq!(old_str.ends_with(pattern8), test_str.ends_with(pattern8));
-    assert_eq!(old_str.ends_with(pattern9), test_str.ends_with(pattern9));
+    assert_eq!(orig_str.ends_with(PATTERN0), test_str.ends_with(PATTERN0));
+    assert_eq!(orig_str.ends_with(PATTERN1), test_str.ends_with(PATTERN1));
+    assert_eq!(orig_str.ends_with(PATTERN2), test_str.ends_with(PATTERN2));
+    assert_eq!(orig_str.ends_with(PATTERN3), test_str.ends_with(PATTERN3));
+    assert_eq!(orig_str.ends_with(PATTERN4), test_str.ends_with(PATTERN4));
+    assert_eq!(orig_str.ends_with(PATTERN5), test_str.ends_with(PATTERN5));
+    assert_eq!(orig_str.ends_with(PATTERN6), test_str.ends_with(PATTERN6));
+    assert_eq!(orig_str.ends_with(PATTERN7), test_str.ends_with(PATTERN7));
+    assert_eq!(orig_str.ends_with(PATTERN8), test_str.ends_with(PATTERN8));
+    assert_eq!(orig_str.ends_with(PATTERN9), test_str.ends_with(PATTERN9));
 
     println!("Testing OsStrExt::strip_prefix()...");
     assert_eq!(
-        old_str.strip_prefix(pattern0).map(OsStr::new),
-        test_str.strip_prefix(pattern0)
+        orig_str.strip_prefix(PATTERN0).map(OsStr::new),
+        test_str.strip_prefix(PATTERN0)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern1).map(OsStr::new),
-        test_str.strip_prefix(pattern1)
+        orig_str.strip_prefix(PATTERN1).map(OsStr::new),
+        test_str.strip_prefix(PATTERN1)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern2).map(OsStr::new),
-        test_str.strip_prefix(pattern2)
+        orig_str.strip_prefix(PATTERN2).map(OsStr::new),
+        test_str.strip_prefix(PATTERN2)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern3).map(OsStr::new),
-        test_str.strip_prefix(pattern3)
+        orig_str.strip_prefix(PATTERN3).map(OsStr::new),
+        test_str.strip_prefix(PATTERN3)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern4).map(OsStr::new),
-        test_str.strip_prefix(pattern4)
+        orig_str.strip_prefix(PATTERN4).map(OsStr::new),
+        test_str.strip_prefix(PATTERN4)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern5).map(OsStr::new),
-        test_str.strip_prefix(pattern5)
+        orig_str.strip_prefix(PATTERN5).map(OsStr::new),
+        test_str.strip_prefix(PATTERN5)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern6).map(OsStr::new),
-        test_str.strip_prefix(pattern6)
+        orig_str.strip_prefix(PATTERN6).map(OsStr::new),
+        test_str.strip_prefix(PATTERN6)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern7).map(OsStr::new),
-        test_str.strip_prefix(pattern7)
+        orig_str.strip_prefix(PATTERN7).map(OsStr::new),
+        test_str.strip_prefix(PATTERN7)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern8).map(OsStr::new),
-        test_str.strip_prefix(pattern8)
+        orig_str.strip_prefix(PATTERN8).map(OsStr::new),
+        test_str.strip_prefix(PATTERN8)
     );
     assert_eq!(
-        old_str.strip_prefix(pattern9).map(OsStr::new),
-        test_str.strip_prefix(pattern9)
+        orig_str.strip_prefix(PATTERN9).map(OsStr::new),
+        test_str.strip_prefix(PATTERN9)
     );
 
     println!("Testing OsStrExt::strip_suffix()...");
     assert_eq!(
-        old_str.strip_suffix(pattern0).map(OsStr::new),
-        test_str.strip_suffix(pattern0)
+        orig_str.strip_suffix(PATTERN0).map(OsStr::new),
+        test_str.strip_suffix(PATTERN0)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern1).map(OsStr::new),
-        test_str.strip_suffix(pattern1)
+        orig_str.strip_suffix(PATTERN1).map(OsStr::new),
+        test_str.strip_suffix(PATTERN1)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern2).map(OsStr::new),
-        test_str.strip_suffix(pattern2)
+        orig_str.strip_suffix(PATTERN2).map(OsStr::new),
+        test_str.strip_suffix(PATTERN2)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern3).map(OsStr::new),
-        test_str.strip_suffix(pattern3)
+        orig_str.strip_suffix(PATTERN3).map(OsStr::new),
+        test_str.strip_suffix(PATTERN3)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern4).map(OsStr::new),
-        test_str.strip_suffix(pattern4)
+        orig_str.strip_suffix(PATTERN4).map(OsStr::new),
+        test_str.strip_suffix(PATTERN4)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern5).map(OsStr::new),
-        test_str.strip_suffix(pattern5)
+        orig_str.strip_suffix(PATTERN5).map(OsStr::new),
+        test_str.strip_suffix(PATTERN5)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern6).map(OsStr::new),
-        test_str.strip_suffix(pattern6)
+        orig_str.strip_suffix(PATTERN6).map(OsStr::new),
+        test_str.strip_suffix(PATTERN6)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern7).map(OsStr::new),
-        test_str.strip_suffix(pattern7)
+        orig_str.strip_suffix(PATTERN7).map(OsStr::new),
+        test_str.strip_suffix(PATTERN7)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern8).map(OsStr::new),
-        test_str.strip_suffix(pattern8)
+        orig_str.strip_suffix(PATTERN8).map(OsStr::new),
+        test_str.strip_suffix(PATTERN8)
     );
     assert_eq!(
-        old_str.strip_suffix(pattern9).map(OsStr::new),
-        test_str.strip_suffix(pattern9)
+        orig_str.strip_suffix(PATTERN9).map(OsStr::new),
+        test_str.strip_suffix(PATTERN9)
     );
 
     println!("Testing OsStrExt::trim_start_matches()...");
     assert_eq!(
-        old_str.trim_start_matches(pattern0),
-        test_str.trim_start_matches(pattern0)
+        orig_str.trim_start_matches(PATTERN0),
+        test_str.trim_start_matches(PATTERN0)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern1),
-        test_str.trim_start_matches(pattern1)
+        orig_str.trim_start_matches(PATTERN1),
+        test_str.trim_start_matches(PATTERN1)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern2),
-        test_str.trim_start_matches(pattern2)
+        orig_str.trim_start_matches(PATTERN2),
+        test_str.trim_start_matches(PATTERN2)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern3),
-        test_str.trim_start_matches(pattern3)
+        orig_str.trim_start_matches(PATTERN3),
+        test_str.trim_start_matches(PATTERN3)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern4),
-        test_str.trim_start_matches(pattern4)
+        orig_str.trim_start_matches(PATTERN4),
+        test_str.trim_start_matches(PATTERN4)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern5),
-        test_str.trim_start_matches(pattern5)
+        orig_str.trim_start_matches(PATTERN5),
+        test_str.trim_start_matches(PATTERN5)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern6),
-        test_str.trim_start_matches(pattern6)
+        orig_str.trim_start_matches(PATTERN6),
+        test_str.trim_start_matches(PATTERN6)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern7),
-        test_str.trim_start_matches(pattern7)
+        orig_str.trim_start_matches(PATTERN7),
+        test_str.trim_start_matches(PATTERN7)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern8),
-        test_str.trim_start_matches(pattern8)
+        orig_str.trim_start_matches(PATTERN8),
+        test_str.trim_start_matches(PATTERN8)
     );
     assert_eq!(
-        old_str.trim_start_matches(pattern9),
-        test_str.trim_start_matches(pattern9)
+        orig_str.trim_start_matches(PATTERN9),
+        test_str.trim_start_matches(PATTERN9)
     );
 
     println!("Testing OsStrExt::trim_end_matches()...");
     assert_eq!(
-        old_str.trim_end_matches(pattern0),
-        test_str.trim_end_matches(pattern0)
+        orig_str.trim_end_matches(PATTERN0),
+        test_str.trim_end_matches(PATTERN0)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern1),
-        test_str.trim_end_matches(pattern1)
+        orig_str.trim_end_matches(PATTERN1),
+        test_str.trim_end_matches(PATTERN1)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern2),
-        test_str.trim_end_matches(pattern2)
+        orig_str.trim_end_matches(PATTERN2),
+        test_str.trim_end_matches(PATTERN2)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern3),
-        test_str.trim_end_matches(pattern3)
+        orig_str.trim_end_matches(PATTERN3),
+        test_str.trim_end_matches(PATTERN3)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern4),
-        test_str.trim_end_matches(pattern4)
+        orig_str.trim_end_matches(PATTERN4),
+        test_str.trim_end_matches(PATTERN4)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern5),
-        test_str.trim_end_matches(pattern5)
+        orig_str.trim_end_matches(PATTERN5),
+        test_str.trim_end_matches(PATTERN5)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern6),
-        test_str.trim_end_matches(pattern6)
+        orig_str.trim_end_matches(PATTERN6),
+        test_str.trim_end_matches(PATTERN6)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern7),
-        test_str.trim_end_matches(pattern7)
+        orig_str.trim_end_matches(PATTERN7),
+        test_str.trim_end_matches(PATTERN7)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern8),
-        test_str.trim_end_matches(pattern8)
+        orig_str.trim_end_matches(PATTERN8),
+        test_str.trim_end_matches(PATTERN8)
     );
     assert_eq!(
-        old_str.trim_end_matches(pattern9),
-        test_str.trim_end_matches(pattern9)
+        orig_str.trim_end_matches(PATTERN9),
+        test_str.trim_end_matches(PATTERN9)
     );
 
     println!("Testing OsStrExt::trim_matches()...");
-    assert_eq!(test_str, test_str.trim_matches(pattern0));
-    assert_eq!(test_str, test_str.trim_matches(pattern1));
-    assert_eq!(test_str, test_str.trim_matches(pattern2));
+    assert_eq!(test_str, test_str.trim_matches(PATTERN0));
+    assert_eq!(test_str, test_str.trim_matches(PATTERN1));
+    assert_eq!(test_str, test_str.trim_matches(PATTERN2));
     assert_eq!(
-        old_str.trim_matches(pattern4),
-        test_str.trim_matches(pattern3)
+        orig_str.trim_matches(PATTERN4),
+        test_str.trim_matches(PATTERN4)
     );
     assert_eq!(
-        old_str.trim_matches(pattern4),
-        test_str.trim_matches(pattern4)
+        orig_str.trim_matches(PATTERN4),
+        test_str.trim_matches(PATTERN4)
     );
     assert_eq!(
-        old_str.trim_matches(pattern5),
-        test_str.trim_matches(pattern5)
+        orig_str.trim_matches(PATTERN5),
+        test_str.trim_matches(PATTERN5)
     );
     assert_eq!(
-        old_str.trim_matches(pattern6),
-        test_str.trim_matches(pattern6)
+        orig_str.trim_matches(PATTERN6),
+        test_str.trim_matches(PATTERN6)
     );
-    assert_eq!(test_str, test_str.trim_matches(pattern7));
+    assert_eq!(test_str, test_str.trim_matches(PATTERN7));
     assert_eq!(
-        old_str.trim_matches(pattern8),
-        test_str.trim_matches(pattern8)
+        orig_str.trim_matches(PATTERN8),
+        test_str.trim_matches(PATTERN8)
     );
     assert_eq!(
-        old_str.trim_matches(pattern9),
-        test_str.trim_matches(pattern9)
+        orig_str.trim_matches(PATTERN9),
+        test_str.trim_matches(PATTERN9)
     );
 
     println!("Testing OsStrExt::trim_start()...");
-    assert_eq!(old_str.trim_start(), test_str.trim_start());
+    assert_eq!(orig_str.trim_start(), test_str.trim_start());
 
     println!("Testing OsStrExt::trim_end()...");
-    assert_eq!(old_str.trim_end(), test_str.trim_end());
+    assert_eq!(orig_str.trim_end(), test_str.trim_end());
 
     println!("Testing OsStrExt::trim()...");
-    assert_eq!(old_str.trim(), test_str.trim());
+    assert_eq!(orig_str.trim(), test_str.trim());
 
     println!("Testing OsStrExt::split()...");
     assert_eq!(
-        old_str.split(pattern0).collect::<Vec<_>>(),
-        test_str.split(pattern0).collect::<Vec<_>>()
+        orig_str.split(PATTERN0).collect::<Vec<_>>(),
+        test_str.split(PATTERN0).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern1).collect::<Vec<_>>(),
-        test_str.split(pattern1).collect::<Vec<_>>()
+        orig_str.split(PATTERN1).collect::<Vec<_>>(),
+        test_str.split(PATTERN1).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern2).collect::<Vec<_>>(),
-        test_str.split(pattern2).collect::<Vec<_>>()
+        orig_str.split(PATTERN2).collect::<Vec<_>>(),
+        test_str.split(PATTERN2).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern3).collect::<Vec<_>>(),
-        test_str.split(pattern3).collect::<Vec<_>>()
+        orig_str.split(PATTERN3).collect::<Vec<_>>(),
+        test_str.split(PATTERN3).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern4).collect::<Vec<_>>(),
-        test_str.split(pattern4).collect::<Vec<_>>()
+        orig_str.split(PATTERN4).collect::<Vec<_>>(),
+        test_str.split(PATTERN4).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern5).collect::<Vec<_>>(),
-        test_str.split(pattern5).collect::<Vec<_>>()
+        orig_str.split(PATTERN5).collect::<Vec<_>>(),
+        test_str.split(PATTERN5).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern6).collect::<Vec<_>>(),
-        test_str.split(pattern6).collect::<Vec<_>>()
+        orig_str.split(PATTERN6).collect::<Vec<_>>(),
+        test_str.split(PATTERN6).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern7).collect::<Vec<_>>(),
-        test_str.split(pattern7).collect::<Vec<_>>()
+        orig_str.split(PATTERN7).collect::<Vec<_>>(),
+        test_str.split(PATTERN7).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern8).collect::<Vec<_>>(),
-        test_str.split(pattern8).collect::<Vec<_>>()
+        orig_str.split(PATTERN8).collect::<Vec<_>>(),
+        test_str.split(PATTERN8).collect::<Vec<_>>()
     );
     assert_eq!(
-        old_str.split(pattern9).collect::<Vec<_>>(),
-        test_str.split(pattern9).collect::<Vec<_>>()
+        orig_str.split(PATTERN9).collect::<Vec<_>>(),
+        test_str.split(PATTERN9).collect::<Vec<_>>()
+    );
+
+    println!("Testing OsStrExt::split_inclusive()...");
+    assert_eq!(
+        orig_str.split_inclusive(PATTERN4).collect::<Vec<_>>(),
+        test_str.split_inclusive(PATTERN4).collect::<Vec<_>>()
+    );
+
+    println!("Testing OsStrExt::split_whitespace()...");
+    assert_eq!(
+        orig_str.split_whitespace().collect::<Vec<_>>(),
+        test_str.split_whitespace().collect::<Vec<_>>()
     );
 
     println!("Testing OsStrExt::split_at()...");
-    for index in 0..old_str.as_bytes().len() {
-        if !old_str.is_char_boundary(index) {
+    for index in 0..orig_str.as_bytes().len() {
+        if !orig_str.is_char_boundary(index) {
             continue;
         }
 
-        let (a, b) = old_str.split_at(index);
+        let (a, b) = orig_str.split_at(index);
         let str_result = (OsStr::new(a), OsStr::new(b));
         let os_str_result = test_str.split_at(index);
 
         assert_eq!(str_result, os_str_result);
     }
 
-    println!("Testing OsStrExt::split_whitespace()...");
+    println!("Testing OsStrExt::lines()...");
     assert_eq!(
-        old_str.split_whitespace().collect::<Vec<_>>(),
-        test_str.split_whitespace().collect::<Vec<_>>()
+        orig_str.lines().collect::<Vec<_>>(),
+        test_str.lines().collect::<Vec<_>>()
+    );
+
+    println!("Testing OsStrExt::replace()");
+    assert_eq!(
+        orig_str
+            .replace("fox", "dog")
+            .replace("dog", "cat")
+            .as_str(),
+        test_str
+            .replace("fox", "dog")
+            .replace("dog", "cat")
+            .as_os_str()
     );
 
     println!("Testing OsStrExt::to_cstring()...");
-    let c_str = CString::new(old_str).expect("CString conversion failed");
-    assert_eq!(old_str.as_bytes(), c_str.as_bytes());
-    assert_ne!(old_str.as_bytes(), c_str.as_bytes_with_nul());
-}
-
-#[test]
-fn test_os_string_ext() {
-    let orig_str0 = "\t\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\tGrüße, Jürgen ❤\r\n\0";
-    let orig_str1 = "The quick brown fox jumps over a lazy dog";
-
-    println!("Testing OsStringExt::join()...");
-    let mut test_str = OsString::new();
-    for s in orig_str0.split("") {
-        test_str = test_str.join(s)
-    }
-    assert_eq!(orig_str0, test_str);
-
-    println!("Testing OsStringExt::append()...");
-    let test_str = OsString::new()
-        .append("The")
-        .append("quick")
-        .append("brown")
-        .append("fox")
-        .append("jumps")
-        .append("over")
-        .append("a")
-        .append("lazy")
-        .append("dog");
-    assert_eq!(orig_str1, test_str);
+    let c_str = CString::new(orig_str).expect("CString conversion failed");
+    assert_eq!(orig_str.as_bytes(), c_str.as_bytes());
+    assert_ne!(orig_str.as_bytes(), c_str.as_bytes_with_nul());
 }

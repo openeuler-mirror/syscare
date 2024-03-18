@@ -12,8 +12,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-mod c_str;
-mod os_str;
+mod iter;
+pub mod pattern;
+mod utf8;
 
-pub use c_str::*;
-pub use os_str::*;
+pub use iter::*;

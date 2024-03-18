@@ -14,7 +14,7 @@
 
 use std::ffi::{OsStr, OsString};
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct CommandArgs {
     args: Vec<OsString>,
 }
@@ -51,11 +51,5 @@ impl IntoIterator for CommandArgs {
 
     fn into_iter(self) -> Self::IntoIter {
         self.args.into_iter()
-    }
-}
-
-impl Default for CommandArgs {
-    fn default() -> Self {
-        Self::new()
     }
 }

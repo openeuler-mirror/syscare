@@ -47,18 +47,9 @@ impl<R: BufRead> Iterator for OsLines<R> {
     }
 }
 
-impl<R: BufRead> From<R> for OsLines<R> {
-    fn from(buf: R) -> Self {
-        Self { buf }
-    }
-}
-
-pub trait BufReadOsLines: BufRead {
-    fn os_lines(self) -> OsLines<Self>
-    where
-        Self: Sized,
-    {
-        OsLines::from(self)
+pub trait BufReadOsLines: BufRead + Sized {
+    fn os_lines(self) -> OsLines<Self> {
+        OsLines { buf: self }
     }
 }
 
@@ -79,7 +70,7 @@ fn test() {
 
     let buf_reader =
         BufReader::new(fs::open_file("/proc/self/cmdline").expect("Failed to open procfs"));
-    let os_lines = OsLines::from(buf_reader);
+    let os_lines = buf_reader.os_lines();
     for str in os_lines.flatten() {
         println!("{}", str.to_string_lossy());
         assert!(!str.is_empty());

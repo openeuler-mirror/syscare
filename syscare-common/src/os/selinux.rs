@@ -18,10 +18,7 @@ use std::path::Path;
 
 use anyhow::{bail, ensure, Context, Result};
 
-use crate::{
-    ffi::{OsStrExt, OsStringExt},
-    fs,
-};
+use crate::{concat_os, ffi::OsStrExt, fs};
 
 const SELINUX_SYS_FILE: &str = "/sys/fs/selinux/enforce";
 const SELINUX_XATTR_NAME: &str = "security.selinux";
@@ -112,15 +109,15 @@ where
         return Ok(());
     }
 
-    let new_context = OsString::new()
-        .join(&new_value.user)
-        .join(SELINUX_XATTR_SPLITTER)
-        .join(&new_value.role)
-        .join(SELINUX_XATTR_SPLITTER)
-        .join(&new_value.kind)
-        .join(SELINUX_XATTR_SPLITTER)
-        .join(&new_value.level);
-
+    let new_context = concat_os!(
+        &new_value.user,
+        SELINUX_XATTR_SPLITTER,
+        &new_value.role,
+        SELINUX_XATTR_SPLITTER,
+        &new_value.kind,
+        SELINUX_XATTR_SPLITTER,
+        &new_value.level,
+    );
     fs::setxattr(&file_path, SELINUX_XATTR_NAME, new_context)?;
 
     Ok(())

@@ -27,7 +27,7 @@ use std::{
 use anyhow::{Context, Result};
 use log::{error, log, Level};
 
-use crate::io::{OsLines, Select, SelectResult};
+use crate::io::{BufReadOsLines, OsLines, Select, SelectResult};
 
 #[derive(Debug, Clone, Copy)]
 pub struct StdioLevel {
@@ -66,11 +66,11 @@ impl StdioReader {
         let stdio_map = HashMap::from([
             (
                 stdout.as_raw_fd(),
-                StdioLines::Stdout(OsLines::from(BufReader::new(stdout))),
+                StdioLines::Stdout(BufReader::new(stdout).os_lines()),
             ),
             (
                 stderr.as_raw_fd(),
-                StdioLines::Stderr(OsLines::from(BufReader::new(stderr))),
+                StdioLines::Stderr(BufReader::new(stderr).os_lines()),
             ),
         ]);
         let select = Select::new(stdio_map.keys().copied());
