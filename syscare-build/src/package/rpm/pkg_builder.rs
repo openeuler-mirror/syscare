@@ -12,11 +12,11 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{ffi::OsString, path::Path};
+use std::path::Path;
 
 use anyhow::{Context, Result};
 
-use syscare_common::{ffi::OsStringExt, fs, process::Command};
+use syscare_common::{concat_os, fs, process::Command};
 
 use super::PKG_FILE_EXT;
 use crate::{
@@ -40,7 +40,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_prepare(&self, spec_file: &Path) -> Result<()> {
         Command::new(RPM_BUILD_BIN)
             .arg("--define")
-            .arg(OsString::from("_topdir ").join(self.build_root.as_ref()))
+            .arg(concat_os!("_topdir ", self.build_root.as_ref()))
             .arg("-bp")
             .arg(spec_file)
             .run()?
@@ -55,7 +55,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
     ) -> Result<()> {
         Command::new(RPM_BUILD_BIN)
             .arg("--define")
-            .arg(OsString::from("_topdir ").join(self.build_root.as_ref()))
+            .arg(concat_os!("_topdir ", self.build_root.as_ref()))
             .arg("-bs")
             .arg(spec_file)
             .run()?
@@ -91,7 +91,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
     fn build_binary_package(&self, spec_file: &Path, output_dir: &Path) -> Result<()> {
         Command::new(RPM_BUILD_BIN)
             .arg("--define")
-            .arg(OsString::from("_topdir").append(self.build_root.as_ref()))
+            .arg(concat_os!("_topdir ", self.build_root.as_ref()))
             .arg("--define")
             .arg("debug_package %{nil}")
             .arg("--define")

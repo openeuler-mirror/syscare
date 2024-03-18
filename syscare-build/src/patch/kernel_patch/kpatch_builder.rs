@@ -20,7 +20,8 @@ use uuid::Uuid;
 
 use syscare_abi::{PackageInfo, PatchEntity, PatchFile, PatchInfo, PatchType};
 use syscare_common::{
-    ffi::{OsStrExt, OsStringExt},
+    concat_os,
+    ffi::OsStrExt,
     process::{Command, CommandArgs, CommandEnvs},
     util::digest,
 };
@@ -251,7 +252,7 @@ impl KernelPatchBuilder {
                 .exit_ok()?;
 
             let patch_name = kbuild_entity.patch_entity.patch_name.clone();
-            let patch_file_name = patch_name.join(".").join(KPATCH_SUFFIX);
+            let patch_file_name = concat_os!(patch_name, ".", KPATCH_SUFFIX);
 
             let patch_binary = kbuild_params.patch_output_dir.join(patch_file_name);
             let patch_checksum = digest::file(&patch_binary).with_context(|| {

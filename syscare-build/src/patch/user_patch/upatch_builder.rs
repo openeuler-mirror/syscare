@@ -25,8 +25,7 @@ use which::which;
 
 use syscare_abi::{PackageInfo, PatchEntity, PatchFile, PatchInfo, PatchType};
 use syscare_common::{
-    ffi::OsStringExt,
-    fs,
+    args_os, concat_os, fs,
     process::{Command, CommandArgs, CommandEnvs},
     util::digest,
 };
@@ -75,20 +74,17 @@ impl UserPatchBuilder {
     }
 
     fn create_topdir_macro<P: AsRef<Path>>(&self, buildroot: P) -> OsString {
-        OsString::from("--define \"_topdir ")
-            .join(buildroot.as_ref())
-            .join("\"")
+        concat_os!("--define '_topdir ", buildroot.as_ref(), "'")
     }
 
     fn create_build_macros(&self, jobs: usize) -> OsString {
-        OsString::new()
-            .join("--define \"_smp_build_ncpus ")
-            .join(jobs.to_string())
-            .join("\"")
-            .join(" --define \"__spec_install_post %{nil}\"")
-            .join(" --define \"__find_provides %{nil}\"")
-            .join(" --define \"__find_requires %{nil}\"")
-            .join(" --define \"_use_internal_dependency_generator 0\"")
+        args_os!(
+            concat_os!("--define '_smp_build_ncpus ", jobs.to_string(), "'"),
+            "--define '__spec_install_post %{nil}'",
+            "--define '__find_provides %{nil}'",
+            "--define '__find_requires %{nil}'",
+            "--define '_use_internal_dependency_generator 0'",
+        )
     }
 }
 
@@ -110,16 +106,14 @@ impl UserPatchBuilder {
         let topdir_macro = self.create_topdir_macro(pkg_build_root);
         let build_macros = self.create_build_macros(build_params.jobs);
 
-        let prepare_cmd = OsString::from(RPMBUILD_BIN)
-            .append(&topdir_macro)
-            .append("-bp")
-            .append(patch_spec);
-
-        let build_cmd = OsString::from(RPMBUILD_BIN)
-            .append(&topdir_macro)
-            .append(build_macros)
-            .append("-bb --noprep --nocheck --nodebuginfo --noclean")
-            .append(patch_spec);
+        let prepare_cmd = args_os!(RPMBUILD_BIN, &topdir_macro, "-bp", patch_spec);
+        let build_cmd = args_os!(
+            RPMBUILD_BIN,
+            &topdir_macro,
+            &build_macros,
+            "-bb --noprep --nocheck --nodebuginfo --noclean",
+            patch_spec
+        );
 
         info!("- Detecting compilers");
         let compiler_list = self.detect_compilers();
@@ -185,7 +179,7 @@ impl UserPatchBuilder {
         for elf_relation in &ubuild_params.elf_relations {
             cmd_args
                 .arg("--elf")
-                .arg(OsString::from("*").join(&elf_relation.elf))
+                .arg(concat_os!("*", &elf_relation.elf))
                 .arg("--debuginfo")
                 .arg(&elf_relation.debuginfo);
         }

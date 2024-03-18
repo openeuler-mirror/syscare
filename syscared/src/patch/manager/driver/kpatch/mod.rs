@@ -12,15 +12,14 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{ffi::OsString, os::unix::prelude::OsStrExt, path::Path};
+use std::{ffi::OsString, os::unix::ffi::OsStrExt, path::Path};
 
 use anyhow::{bail, ensure, Context, Result};
 use log::debug;
 
 use syscare_abi::PatchStatus;
 use syscare_common::{
-    ffi::OsStringExt,
-    fs,
+    concat_os, fs,
     os::{self, selinux},
     process::Command,
     util::digest,
@@ -104,7 +103,7 @@ impl KernelPatchDriver {
         const KERNEL_NAME_PREFIX: &str = "kernel-";
 
         let kernel_version = os::kernel::version();
-        let current_kernel = OsString::from(KERNEL_NAME_PREFIX).join(kernel_version);
+        let current_kernel = concat_os!(KERNEL_NAME_PREFIX, kernel_version);
 
         let patch_target = patch.target_pkg_name.clone();
         debug!("Patch target:   \"{}\"", patch_target);

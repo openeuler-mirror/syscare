@@ -50,7 +50,7 @@ impl<'a> Project<'a> {
         let original_dir = build_root.original_dir.as_path();
         let patched_dir = build_root.patched_dir.as_path();
 
-        let name = fs::file_name(&root_dir);
+        let name = fs::file_name(root_dir);
         let prepare_cmd = args.prepare_cmd.as_str();
         let build_cmd = args.build_cmd.as_str();
 
@@ -77,7 +77,7 @@ impl Project<'_> {
             .args(args)
             .arg("-i")
             .arg(patch_file.as_ref())
-            .current_dir(&self.root_dir)
+            .current_dir(self.root_dir)
             .run_with_output()?
             .exit_ok()
     }
@@ -106,7 +106,7 @@ impl Project<'_> {
 
         Command::new("sh")
             .arg(script)
-            .current_dir(&self.root_dir)
+            .current_dir(self.root_dir)
             .stdout(Level::Debug)
             .run_with_output()?
             .exit_ok()
@@ -126,7 +126,7 @@ impl Project<'_> {
         Command::new("sh")
             .arg(script)
             .env(COMPILER_CMD_ENV, object_dir.as_ref())
-            .current_dir(&self.root_dir)
+            .current_dir(self.root_dir)
             .stdout(Level::Debug)
             .run_with_output()?
             .exit_ok()
