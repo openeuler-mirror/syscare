@@ -83,18 +83,18 @@ pub trait ReverseSearcher<'a>: Searcher<'a> {
 /* CharLiteralSearcher */
 pub struct CharLiteralSearcher<'a> {
     indices: CharIndices<'a>,
-    literal: char,
+    literals: Vec<char>,
 }
 
 impl<'a> CharLiteralSearcher<'a> {
-    pub fn new(haystack: &'a [u8], literal: char) -> Self {
+    pub fn new(haystack: &'a [u8], literals: Vec<char>) -> Self {
         Self {
             indices: CharIndices {
                 char_bytes: haystack,
                 front_idx: 0,
                 back_idx: haystack.len(),
             },
-            literal,
+            literals,
         }
     }
 }
@@ -108,7 +108,7 @@ impl<'a> Searcher<'a> for CharLiteralSearcher<'a> {
         match self.indices.next() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match self.literal == c {
+                match self.literals.contains(&c) {
                     true => SearchStep::Match(char_idx, new_idx),
                     false => SearchStep::Reject(char_idx, new_idx),
                 }
@@ -123,7 +123,7 @@ impl<'a> ReverseSearcher<'a> for CharLiteralSearcher<'a> {
         match self.indices.next_back() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match self.literal == c {
+                match self.literals.contains(&c) {
                     true => SearchStep::Match(char_idx, new_idx),
                     false => SearchStep::Reject(char_idx, new_idx),
                 }
@@ -319,6 +319,38 @@ pub trait Pattern<'a>: Sized {
 }
 
 impl<'a> Pattern<'a> for char {
+    type Searcher = CharLiteralSearcher<'a>;
+
+    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
+        CharLiteralSearcher::new(haystack, vec![self])
+    }
+}
+
+impl<'a, const ARRAY_SIZE: usize> Pattern<'a> for [char; ARRAY_SIZE] {
+    type Searcher = CharLiteralSearcher<'a>;
+
+    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
+        CharLiteralSearcher::new(haystack, self.to_vec())
+    }
+}
+
+impl<'a, const ARRAY_SIZE: usize> Pattern<'a> for &[char; ARRAY_SIZE] {
+    type Searcher = CharLiteralSearcher<'a>;
+
+    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
+        CharLiteralSearcher::new(haystack, self.to_vec())
+    }
+}
+
+impl<'a> Pattern<'a> for &Vec<char> {
+    type Searcher = CharLiteralSearcher<'a>;
+
+    fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {
+        CharLiteralSearcher::new(haystack, self.to_vec())
+    }
+}
+
+impl<'a> Pattern<'a> for Vec<char> {
     type Searcher = CharLiteralSearcher<'a>;
 
     fn into_searcher(self, haystack: &'a [u8]) -> Self::Searcher {

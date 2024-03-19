@@ -261,6 +261,7 @@ fn test() {
     const PATTERN7: &str = "";
     const PATTERN8: fn(char) -> bool = |c: char| c.is_ascii_control();
     const PATTERN9: fn(char) -> bool = char::is_whitespace;
+    const PATTERN10: [char; 2] = ['\r', '\n'];
 
     let orig_str = "\r\n\tThe\tquick\tbrown\tfox\tjumps\tover\ta\tlazy\tdog\x01\u{1F600}\r\n";
     let test_str = OsStr::new(orig_str);
@@ -294,6 +295,7 @@ fn test() {
     assert_eq!(orig_str.find(PATTERN7), test_str.find(PATTERN7));
     assert_eq!(orig_str.find(PATTERN8), test_str.find(PATTERN8));
     assert_eq!(orig_str.find(PATTERN9), test_str.find(PATTERN9));
+    assert_eq!(orig_str.find(PATTERN10), test_str.find(PATTERN10));
 
     println!("Testing OsStrExt::contains()...");
     assert_eq!(orig_str.contains(PATTERN0), test_str.contains(PATTERN0));
@@ -306,6 +308,7 @@ fn test() {
     assert_eq!(orig_str.contains(PATTERN7), test_str.contains(PATTERN7));
     assert_eq!(orig_str.contains(PATTERN8), test_str.contains(PATTERN8));
     assert_eq!(orig_str.contains(PATTERN9), test_str.contains(PATTERN9));
+    assert_eq!(orig_str.contains(PATTERN10), test_str.contains(PATTERN10));
 
     println!("Testing OsStrExt::starts_with()...");
     assert_eq!(
@@ -348,6 +351,10 @@ fn test() {
         orig_str.starts_with(PATTERN9),
         test_str.starts_with(PATTERN9)
     );
+    assert_eq!(
+        orig_str.starts_with(PATTERN10),
+        test_str.starts_with(PATTERN10)
+    );
 
     println!("Testing OsStrExt::ends_with()...");
     assert_eq!(orig_str.ends_with(PATTERN0), test_str.ends_with(PATTERN0));
@@ -360,6 +367,7 @@ fn test() {
     assert_eq!(orig_str.ends_with(PATTERN7), test_str.ends_with(PATTERN7));
     assert_eq!(orig_str.ends_with(PATTERN8), test_str.ends_with(PATTERN8));
     assert_eq!(orig_str.ends_with(PATTERN9), test_str.ends_with(PATTERN9));
+    assert_eq!(orig_str.ends_with(PATTERN10), test_str.ends_with(PATTERN10));
 
     println!("Testing OsStrExt::strip_prefix()...");
     assert_eq!(
@@ -401,6 +409,10 @@ fn test() {
     assert_eq!(
         orig_str.strip_prefix(PATTERN9).map(OsStr::new),
         test_str.strip_prefix(PATTERN9)
+    );
+    assert_eq!(
+        orig_str.strip_prefix(PATTERN10).map(OsStr::new),
+        test_str.strip_prefix(PATTERN10)
     );
 
     println!("Testing OsStrExt::strip_suffix()...");
@@ -444,6 +456,10 @@ fn test() {
         orig_str.strip_suffix(PATTERN9).map(OsStr::new),
         test_str.strip_suffix(PATTERN9)
     );
+    assert_eq!(
+        orig_str.strip_suffix(PATTERN10).map(OsStr::new),
+        test_str.strip_suffix(PATTERN10)
+    );
 
     println!("Testing OsStrExt::trim_start_matches()...");
     assert_eq!(
@@ -485,6 +501,10 @@ fn test() {
     assert_eq!(
         orig_str.trim_start_matches(PATTERN9),
         test_str.trim_start_matches(PATTERN9)
+    );
+    assert_eq!(
+        orig_str.trim_start_matches(PATTERN10),
+        test_str.trim_start_matches(PATTERN10)
     );
 
     println!("Testing OsStrExt::trim_end_matches()...");
@@ -528,6 +548,10 @@ fn test() {
         orig_str.trim_end_matches(PATTERN9),
         test_str.trim_end_matches(PATTERN9)
     );
+    assert_eq!(
+        orig_str.trim_end_matches(PATTERN10),
+        test_str.trim_end_matches(PATTERN10)
+    );
 
     println!("Testing OsStrExt::trim_matches()...");
     assert_eq!(test_str, test_str.trim_matches(PATTERN0));
@@ -549,7 +573,10 @@ fn test() {
         orig_str.trim_matches(PATTERN6),
         test_str.trim_matches(PATTERN6)
     );
-    assert_eq!(test_str, test_str.trim_matches(PATTERN7));
+    assert_eq!(
+        test_str.trim_matches(PATTERN7),
+        test_str.trim_matches(PATTERN7)
+    );
     assert_eq!(
         orig_str.trim_matches(PATTERN8),
         test_str.trim_matches(PATTERN8)
@@ -608,6 +635,10 @@ fn test() {
     assert_eq!(
         orig_str.split(PATTERN9).collect::<Vec<_>>(),
         test_str.split(PATTERN9).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        orig_str.split(PATTERN10).collect::<Vec<_>>(),
+        test_str.split(PATTERN10).collect::<Vec<_>>()
     );
 
     println!("Testing OsStrExt::split_inclusive()...");
