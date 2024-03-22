@@ -19,7 +19,6 @@ use anyhow::Result;
 use syscare_abi::PackageInfo;
 
 mod build_root;
-mod elf_relation;
 mod pkg_builder;
 mod spec_builder;
 mod spec_writer;
@@ -28,24 +27,15 @@ mod rpm;
 mod tar;
 
 pub use build_root::*;
-pub use elf_relation::*;
 pub use pkg_builder::*;
 pub use spec_builder::*;
 pub use spec_writer::*;
 pub use tar::*;
 
-const DEBUGINFO_FILE_EXT: &str = "debug";
-const DEBUGINFO_INSTALL_DIR: &str = "usr/lib/debug";
-
 trait Package {
     fn extension(&self) -> &'static str;
     fn parse_package_info(&self, pkg_path: &Path) -> Result<PackageInfo>;
     fn query_package_files(&self, pkg_path: &Path) -> Result<Vec<PathBuf>>;
-    fn parse_elf_relations(
-        &self,
-        package: &PackageInfo,
-        debuginfo_root: &Path,
-    ) -> Result<Vec<ElfRelation>>;
     fn extract_package(&self, pkg_path: &Path, output_dir: &Path) -> Result<()>;
     fn find_build_root(&self, directory: &Path) -> Result<PackageBuildRoot>;
     fn find_spec_file(&self, directory: &Path, pkg_name: &str) -> Result<PathBuf>;
@@ -82,15 +72,6 @@ impl PackageImpl {
 
     pub fn query_package_files<P: AsRef<Path>>(&self, pkg_path: P) -> Result<Vec<PathBuf>> {
         self.inner.query_package_files(pkg_path.as_ref())
-    }
-
-    pub fn parse_elf_relations<P: AsRef<Path>>(
-        &self,
-        package: &PackageInfo,
-        debuginfo_pkg_root: P,
-    ) -> Result<Vec<ElfRelation>> {
-        self.inner
-            .parse_elf_relations(package, debuginfo_pkg_root.as_ref())
     }
 
     pub fn extract_package<P: AsRef<Path>, Q: AsRef<Path>>(

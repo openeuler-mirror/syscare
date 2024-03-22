@@ -171,14 +171,13 @@ impl SyscareBuild {
         pkg_build_root: &PackageBuildRoot,
         pkg_info_list: Vec<PackageInfo>,
     ) -> Result<Vec<BuildEntry>> {
+        let pkg_format = PKG_IMPL.format();
         let pkg_spec_dir = &pkg_build_root.specs;
         let pkg_build_dir = &pkg_build_root.build;
 
         let mut build_entries = Vec::new();
         for target_pkg in pkg_info_list {
             let pkg_name = &target_pkg.name;
-            let pkg_format = PKG_IMPL.format();
-
             let spec_file = PKG_IMPL
                 .find_spec_file(pkg_spec_dir, pkg_name)
                 .with_context(|| format!("Cannot find spec file of package {}", pkg_name))?;
@@ -387,8 +386,8 @@ impl SyscareBuild {
         let build_params = self.prepare_to_build()?;
 
         info!("Building patch, this may take a while");
-        let patch_info_list =
-            PatchBuilderFactory::get_builder(build_params.patch_type).build_patch(&build_params)?;
+        let patch_info_list = PatchBuilderFactory::get_builder(&PKG_IMPL, build_params.patch_type)
+            .build_patch(&build_params)?;
         ensure!(
             !patch_info_list.is_empty(),
             "Cannot find any patch metadata"

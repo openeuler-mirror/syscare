@@ -12,6 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+const DEBUGINFO_FILE_EXT: &str = "debug";
+const DEBUGINFO_INSTALL_DIR: &str = "usr/lib/debug";
+
+mod elf_relation;
 mod upatch_builder;
 
 pub use upatch_builder::*;

@@ -32,7 +32,7 @@ pub use pkg_builder::RpmPackageBuilder;
 pub use spec_builder::RpmSpecBuilder;
 pub use spec_writer::RpmSpecWriter;
 
-use super::{ElfRelation, Package, PackageBuildRoot, DEBUGINFO_FILE_EXT};
+use super::{Package, PackageBuildRoot};
 
 pub const PKG_FILE_EXT: &str = "rpm";
 pub const SPEC_FILE_EXT: &str = "spec";
@@ -120,30 +120,6 @@ impl Package for RpmPackage {
         }
 
         Ok(file_list)
-    }
-
-    fn parse_elf_relations(
-        &self,
-        package: &PackageInfo,
-        debuginfo_root: &Path,
-    ) -> Result<Vec<ElfRelation>> {
-        let debuginfo_files = fs::list_files_by_ext(
-            debuginfo_root,
-            DEBUGINFO_FILE_EXT,
-            fs::TraverseOptions { recursive: true },
-        )?;
-        if debuginfo_files.is_empty() {
-            bail!("Cannot find any debuginfo file");
-        }
-
-        let mut elf_relations = Vec::new();
-        for debuginfo in &debuginfo_files {
-            // Skip elf relation error check may cause unknown error
-            if let Ok(elf_relation) = ElfRelation::parse(debuginfo_root, package, debuginfo) {
-                elf_relations.push(elf_relation);
-            }
-        }
-        Ok(elf_relations)
     }
 
     fn extract_package(&self, pkg_path: &Path, output_dir: &Path) -> Result<()> {

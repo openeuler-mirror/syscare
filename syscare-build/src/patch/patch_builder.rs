@@ -16,7 +16,7 @@ use anyhow::Result;
 
 use syscare_abi::{PatchInfo, PatchType};
 
-use crate::build_params::BuildParameters;
+use crate::{build_params::BuildParameters, package::PackageImpl};
 
 use super::{kernel_patch::KernelPatchBuilder, user_patch::UserPatchBuilder};
 
@@ -27,10 +27,13 @@ pub trait PatchBuilder {
 pub struct PatchBuilderFactory;
 
 impl PatchBuilderFactory {
-    pub fn get_builder(patch_type: PatchType) -> Box<dyn PatchBuilder> {
+    pub fn get_builder(
+        pkg_impl: &'static PackageImpl,
+        patch_type: PatchType,
+    ) -> Box<dyn PatchBuilder> {
         match patch_type {
-            PatchType::KernelPatch => Box::new(KernelPatchBuilder),
-            PatchType::UserPatch => Box::new(UserPatchBuilder),
+            PatchType::KernelPatch => Box::new(KernelPatchBuilder::new(pkg_impl)),
+            PatchType::UserPatch => Box::new(UserPatchBuilder::new(pkg_impl)),
         }
     }
 }
