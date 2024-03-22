@@ -27,7 +27,9 @@ use syscare_common::{
 };
 
 use crate::{
-    build_params::BuildParameters, package::PackageBuilderFactory, patch::PatchBuilder, PKG_IMPL,
+    build_params::BuildParameters,
+    package::{PackageBuilderFactory, PackageImpl},
+    patch::PatchBuilder,
 };
 
 use super::kpatch_helper::{KernelPatchHelper, KPATCH_SUFFIX, VMLINUX_FILE_NAME};
@@ -60,7 +62,15 @@ struct KernelPatchEntity {
     patch_entity: PatchEntity,
 }
 
-pub struct KernelPatchBuilder;
+pub struct KernelPatchBuilder {
+    pkg_impl: &'static PackageImpl,
+}
+
+impl KernelPatchBuilder {
+    pub fn new(pkg_impl: &'static PackageImpl) -> Self {
+        Self { pkg_impl }
+    }
+}
 
 impl KernelPatchBuilder {
     fn build_prepare(&self, build_params: &BuildParameters) -> Result<KBuildParameters> {
@@ -75,7 +85,8 @@ impl KernelPatchBuilder {
         let patch_output_dir: PathBuf = build_params.build_root.patch.output.clone();
 
         let kernel_pkg = &kernel_entry.target_pkg;
-        let kernel_source_dir: PathBuf = PKG_IMPL
+        let kernel_source_dir: PathBuf = self
+            .pkg_impl
             .find_source_directory(
                 &kernel_entry.build_source,
                 &format!(
@@ -101,9 +112,12 @@ impl KernelPatchBuilder {
 
         if let Some(build_entry) = oot_module_entry {
             info!("- Building out-of-tree module");
-            PackageBuilderFactory::get_builder(PKG_IMPL.format(), &build_params.pkg_build_root)
-                .build_binary_package(&build_entry.build_spec, &patch_build_root)
-                .context("Failed to build out-of-tree module")?;
+            PackageBuilderFactory::get_builder(
+                self.pkg_impl.format(),
+                &build_params.pkg_build_root,
+            )
+            .build_binary_package(&build_entry.build_spec, &patch_build_root)
+            .context("Failed to build out-of-tree module")?;
         }
 
         Ok(KBuildParameters {

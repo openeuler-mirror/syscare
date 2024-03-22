@@ -18,7 +18,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::{ensure, Context, Result};
 use log::{debug, info, trace, Level};
 use uuid::Uuid;
 use which::which;
@@ -30,7 +30,9 @@ use syscare_common::{
     util::digest,
 };
 
-use crate::{build_params::BuildParameters, package::ElfRelation, patch::PatchBuilder, PKG_IMPL};
+use crate::{build_params::BuildParameters, package::PackageImpl, patch::PatchBuilder};
+
+use super::{elf_relation::ElfRelation, DEBUGINFO_FILE_EXT};
 
 const UPATCH_BUILD_BIN: &str = "/usr/libexec/syscare/upatch-build";
 const RPMBUILD_BIN: &str = "rpmbuild";
@@ -58,10 +60,18 @@ struct UBuildParameters {
     verbose: bool,
 }
 
-pub struct UserPatchBuilder;
+pub struct UserPatchBuilder {
+    pkg_impl: &'static PackageImpl,
+}
 
 impl UserPatchBuilder {
-    fn detect_compilers(&self) -> Vec<PathBuf> {
+    pub fn new(pkg_impl: &'static PackageImpl) -> Self {
+        Self { pkg_impl }
+    }
+}
+
+impl UserPatchBuilder {
+    fn detect_compilers() -> Vec<PathBuf> {
         const COMPILER_NAMES: [&str; 4] = ["cc", "gcc", "c++", "g++"];
 
         // Get compiler path and filter invalid one
@@ -73,11 +83,11 @@ impl UserPatchBuilder {
         compiler_set.into_iter().collect()
     }
 
-    fn create_topdir_macro<P: AsRef<Path>>(&self, buildroot: P) -> OsString {
+    fn create_topdir_macro<P: AsRef<Path>>(buildroot: P) -> OsString {
         concat_os!("--define '_topdir ", buildroot.as_ref(), "'")
     }
 
-    fn create_build_macros(&self, jobs: usize) -> OsString {
+    fn create_build_macros(jobs: usize) -> OsString {
         args_os!(
             concat_os!("--define '_smp_build_ncpus ", jobs.to_string(), "'"),
             "--define '__spec_install_post %{nil}'",
@@ -85,6 +95,30 @@ impl UserPatchBuilder {
             "--define '__find_requires %{nil}'",
             "--define '_use_internal_dependency_generator 0'",
         )
+    }
+
+    fn parse_elf_relations(
+        package: &PackageInfo,
+        debuginfo_root: &Path,
+    ) -> Result<Vec<ElfRelation>> {
+        let debuginfo_files = fs::list_files_by_ext(
+            debuginfo_root,
+            DEBUGINFO_FILE_EXT,
+            fs::TraverseOptions { recursive: true },
+        )?;
+        ensure!(
+            !debuginfo_files.is_empty(),
+            "Cannot find any debuginfo file"
+        );
+
+        let mut elf_relations = Vec::new();
+        for debuginfo in &debuginfo_files {
+            // Skip elf relation error check may cause unknown error
+            if let Ok(elf_relation) = ElfRelation::parse(debuginfo_root, package, debuginfo) {
+                elf_relations.push(elf_relation);
+            }
+        }
+        Ok(elf_relations)
     }
 }
 
@@ -103,8 +137,8 @@ impl UserPatchBuilder {
         let patch_spec = &build_entry.build_spec;
         let patch_target = &build_entry.target_pkg;
 
-        let topdir_macro = self.create_topdir_macro(pkg_build_root);
-        let build_macros = self.create_build_macros(build_params.jobs);
+        let topdir_macro = Self::create_topdir_macro(pkg_build_root);
+        let build_macros = Self::create_build_macros(build_params.jobs);
 
         let prepare_cmd = args_os!(RPMBUILD_BIN, &topdir_macro, "-bp", patch_spec);
         let build_cmd = args_os!(
@@ -116,14 +150,13 @@ impl UserPatchBuilder {
         );
 
         info!("- Detecting compilers");
-        let compiler_list = self.detect_compilers();
+        let compiler_list = Self::detect_compilers();
         for compiler in &compiler_list {
             debug!("{}", compiler.display())
         }
 
         info!("- Parsing elf relations");
-        let elf_relations = PKG_IMPL
-            .parse_elf_relations(patch_target, debuginfo_pkg_root)
+        let elf_relations = Self::parse_elf_relations(patch_target, debuginfo_pkg_root)
             .context("Failed to parse elf relation")?;
         for elf_relation in &elf_relations {
             trace!("{}", elf_relation);
@@ -286,16 +319,22 @@ impl UserPatchBuilder {
         info!("- Collecting patch metadata");
         let mut patch_info_list = Vec::new();
         for pkg_file in output_pkgs {
-            let mut target_pkg = PKG_IMPL.parse_package_info(&pkg_file).with_context(|| {
-                format!("Failed to parse package {} metadata", pkg_file.display())
-            })?;
+            let mut target_pkg =
+                self.pkg_impl
+                    .parse_package_info(&pkg_file)
+                    .with_context(|| {
+                        format!("Failed to parse package {} metadata", pkg_file.display())
+                    })?;
 
             // Override target package release
             target_pkg.release = ubuild_params.patch_target.release.to_owned();
 
-            let pkg_file_list = PKG_IMPL.query_package_files(&pkg_file).with_context(|| {
-                format!("Failed to query package {} file list", pkg_file.display())
-            })?;
+            let pkg_file_list =
+                self.pkg_impl
+                    .query_package_files(&pkg_file)
+                    .with_context(|| {
+                        format!("Failed to query package {} file list", pkg_file.display())
+                    })?;
 
             let patch_info = self
                 .parse_patch_info(
