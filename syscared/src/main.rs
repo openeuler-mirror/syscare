@@ -24,6 +24,7 @@ use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
 use log::{error, info, LevelFilter, Record};
 use parking_lot::RwLock;
+use patch::manager::PatchManager;
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
 
 use syscare_common::{fs, os};
@@ -39,7 +40,7 @@ use rpc::{
     skeleton_impl::{FastRebootSkeletonImpl, PatchSkeletonImpl},
 };
 
-use crate::patch::{PatchManager, PatchMonitor};
+use crate::patch::monitor::PatchMonitor;
 
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -184,12 +185,13 @@ impl SyscareDaemon {
         self.daemonize()?;
 
         info!("Initializing patch manager...");
+        let patch_root = &self.args.data_dir;
         let patch_manager = Arc::new(RwLock::new(
-            PatchManager::new(&self.args.data_dir).context("Failed to initialize patch manager")?,
+            PatchManager::new(patch_root).context("Failed to initialize patch manager")?,
         ));
 
         info!("Initializing patch monitor...");
-        let _patch_monitor = PatchMonitor::new(patch_manager.clone())
+        let _patch_monitor = PatchMonitor::new(patch_root, patch_manager.clone())
             .context("Failed to initialize patch monitor")?;
 
         info!("Initializing skeletons...");

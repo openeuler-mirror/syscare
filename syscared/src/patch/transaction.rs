@@ -15,12 +15,12 @@
 use std::sync::Arc;
 
 use anyhow::{Context, Result};
-use log::{debug, info};
+use log::{debug, warn};
 
 use parking_lot::RwLock;
 use syscare_abi::{PatchStateRecord, PatchStatus};
 
-use super::manager::{Patch, PatchManager, PatchOpFlag};
+use super::{driver::PatchOpFlag, entity::Patch, manager::PatchManager};
 
 type TransationRecord = (Arc<Patch>, PatchStatus);
 
@@ -84,24 +84,24 @@ where
     fn rollback(&mut self) -> Result<()> {
         let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            patch_manager.do_status_transition(&patch, status, PatchOpFlag::Force)?;
+            patch_manager.do_status_transition(&patch, status, PatchOpFlag::Normal)?;
         }
         Ok(())
     }
 
     pub fn invoke(mut self) -> Result<Vec<PatchStateRecord>> {
-        info!("{} started...", self);
+        debug!("{} started...", self);
         match self.start() {
             Ok(result) => {
-                info!("{} finished", self);
+                debug!("{} finished", self);
                 Ok(result)
             }
             Err(e) => {
                 if !self.finish_list.is_empty() {
-                    debug!("{} rolling back...", self);
+                    warn!("{} rolling back...", self);
                     self.rollback()
                         .with_context(|| format!("{} rollback failed", self))?;
-                    debug!("{} rolled back", self);
+                    warn!("{} rolled back", self);
                 }
                 Err(e.context(format!("{} failed", self)))
             }
@@ -111,6 +111,6 @@ where
 
 impl<F> std::fmt::Display for PatchTransaction<F> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_fmt(format_args!("Transaction \"{}\"", self.name))
+        write!(f, "Transaction {}", self.name)
     }
 }
