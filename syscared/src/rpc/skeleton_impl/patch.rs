@@ -19,7 +19,9 @@ use anyhow::{Context, Result};
 use parking_lot::RwLock;
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
 
-use crate::patch::{Patch, PatchManager, PatchOpFlag, PatchTransaction};
+use crate::patch::{
+    driver::PatchOpFlag, entity::Patch, manager::PatchManager, transaction::PatchTransaction,
+};
 
 use super::{
     function::{RpcFunction, RpcResult},
@@ -58,7 +60,7 @@ impl PatchSkeletonImpl {
     }
 
     fn parse_list_record(&self, patch: Arc<Patch>) -> Result<PatchListRecord> {
-        let patch_uuid = patch.uuid.to_owned();
+        let patch_uuid = patch.uuid().to_string();
         let patch_name = patch.to_string();
         let patch_status = self
             .patch_manager
@@ -118,14 +120,21 @@ impl PatchSkeleton for PatchSkeletonImpl {
         })
     }
 
-    fn active_patch(&self, mut identifier: String) -> RpcResult<Vec<PatchStateRecord>> {
+    fn active_patch(
+        &self,
+        mut identifier: String,
+        force: bool,
+    ) -> RpcResult<Vec<PatchStateRecord>> {
         Self::normalize_identifier(&mut identifier);
         RpcFunction::call(move || -> Result<Vec<PatchStateRecord>> {
             PatchTransaction::new(
                 format!("Active patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::active_patch,
-                PatchOpFlag::Normal,
+                match force {
+                    false => PatchOpFlag::Normal,
+                    true => PatchOpFlag::Force,
+                },
                 identifier,
             )?
             .invoke()
@@ -192,7 +201,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
             let patch_list = self.patch_manager.read().match_patch(&identifier)?;
             let patch = patch_list.first().context("No patch matched")?;
 
-            Ok(patch.info.as_ref().clone())
+            Ok(patch.info().clone())
         })
     }
 
@@ -202,7 +211,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
             let patch_list = self.patch_manager.read().match_patch(&identifier)?;
             let patch = patch_list.first().context("No patch matched")?;
 
-            Ok(patch.info.target.clone())
+            Ok(patch.info().target.clone())
         })
     }
 

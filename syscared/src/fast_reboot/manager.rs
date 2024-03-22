@@ -42,7 +42,7 @@ pub struct KExecManager;
 
 impl KExecManager {
     fn find_kernel(kernel_version: &str) -> Result<LoadKernelOption> {
-        info!("Finding kernel \"{}\"...", kernel_version);
+        info!("Finding kernel {}...", kernel_version);
         let kernel_file_name = format!("vmlinuz-{}", kernel_version);
         let kernel_file = fs::find_file(
             BOOT_DIRECTORY.as_path(),
@@ -52,7 +52,7 @@ impl KExecManager {
                 recursive: false,
             },
         )
-        .with_context(|| format!("Cannot find kernel \"{}\"", kernel_version))?;
+        .with_context(|| format!("Cannot find kernel {}", kernel_version))?;
 
         info!("Finding initramfs...");
         let initramfs_file_name = format!("initramfs-{}.img", kernel_version);
@@ -64,7 +64,7 @@ impl KExecManager {
                 recursive: false,
             },
         )
-        .with_context(|| format!("Cannot find kernel \"{}\" initramfs", kernel_version))?;
+        .with_context(|| format!("Cannot find kernel {} initramfs", kernel_version))?;
 
         Ok(LoadKernelOption {
             name: kernel_version.to_owned(),

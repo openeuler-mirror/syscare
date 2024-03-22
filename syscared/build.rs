@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, path::Path, process::Command};
+use std::{env, process::Command};
 
 fn rewrite_version() {
     const ENV_VERSION_NAME: &str = "BUILD_VERSION";
@@ -34,23 +34,6 @@ fn rewrite_version() {
     println!("cargo:rustc-env={}={}", PKG_VERSION_NAME, version);
 }
 
-fn build_ffi_library() {
-    const UPATCH_LIB: &str = "../upatch-lib";
-
-    cc::Build::new()
-        .files(&[
-            Path::new(UPATCH_LIB).join("upatch-common.c"),
-            Path::new(UPATCH_LIB).join("upatch-elf.c"),
-            Path::new(UPATCH_LIB).join("upatch-ioctl.c"),
-            Path::new(UPATCH_LIB).join("upatch-meta.c"),
-            Path::new(UPATCH_LIB).join("upatch-resolve.c"),
-            Path::new(UPATCH_LIB).join("upatch-tool-lib.c"),
-        ])
-        .includes(&[UPATCH_LIB])
-        .compile("libupatch.a");
-}
-
 fn main() {
     rewrite_version();
-    build_ffi_library();
 }
