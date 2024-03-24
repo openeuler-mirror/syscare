@@ -51,9 +51,11 @@ impl RpcProxy {
     }
 
     #[named]
-    pub fn active_patch(&self, identifier: &str) -> Result<Vec<PatchStateRecord>> {
-        self.remote
-            .call_with_args(function_name!(), RpcArguments::new().arg(identifier))
+    pub fn active_patch(&self, identifier: &str, force: bool) -> Result<Vec<PatchStateRecord>> {
+        self.remote.call_with_args(
+            function_name!(),
+            RpcArguments::new().arg(identifier).arg(force),
+        )
     }
 
     #[named]

@@ -103,6 +103,9 @@ pub enum SubCommand {
         /// Patch identifier
         #[clap(required = true)]
         identifiers: Vec<String>,
+        /// Force to active a patch
+        #[clap(short, long)]
+        force: bool,
     },
     /// Deactive a patch
     Deactive {
