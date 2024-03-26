@@ -416,7 +416,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 		sizeof(struct upatch_patch_func);
 	memcpy(uinfo->id, uuid, strlen(uuid));
 
-	log_debug("Changed insn:\n");
+	log_normal("Changed insn:\n");
 	for (i = 0; i < uinfo->changed_func_num; ++i) {
 		struct upatch_info_func *upatch_func =
 			(void *)uelf->core_layout.kbase +
@@ -424,7 +424,6 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 			sizeof(struct upatch_info) +
 			i * sizeof(struct upatch_info_func);
 
-		printf("upatch_funcs_addr[i].old_addr%lx, upatch_funcs_addr[i].new_addr %lx\n", upatch_funcs_addr[i].old_addr, upatch_funcs_addr[i].new_addr);
 		upatch_func->old_addr =
 			upatch_funcs_addr[i].old_addr + uelf->relf->load_bias;
 		upatch_func->new_addr = upatch_funcs_addr[i].new_addr;
@@ -440,7 +439,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 		upatch_func->new_insn = get_new_insn(obj, upatch_func->old_addr,
 						     upatch_func->new_addr);
 
-		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", upatch_func->old_addr,
+		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", upatch_func->old_addr,
 			  upatch_func->old_insn[0], upatch_func->new_insn);
 	}
 
@@ -452,9 +451,9 @@ static int unapply_patch(struct object_file *obj,
 			 struct upatch_info_func *funcs,
 			 unsigned int changed_func_num)
 {
-	log_debug("Changed insn:\n");
+	log_normal("Changed insn:\n");
 	for (int i = 0; i < changed_func_num; ++i) {
-		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
+		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
 			  funcs[i].new_insn, funcs[i].old_insn[0]);
 
 		int ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
