@@ -35,6 +35,7 @@ pub struct Child {
 impl Child {
     fn capture_stdio(&mut self) -> Result<JoinHandle<(OsString, OsString)>> {
         Stdio::new(
+            self.name.clone(),
             self.inner
                 .stdout
                 .take()
