@@ -1,6 +1,6 @@
 [package]
 name         = "syscare-common"
-version      = "1.2.0"
+version      = "1.2.1"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Syscare common library"
 license      = "MulanPSL-2.0"
