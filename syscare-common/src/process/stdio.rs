@@ -115,14 +115,16 @@ impl Iterator for StdioReader {
 }
 
 pub struct Stdio {
+    name: String,
     stdout: ChildStdout,
     stderr: ChildStderr,
     level: StdioLevel,
 }
 
 impl Stdio {
-    pub fn new(stdout: ChildStdout, stderr: ChildStderr, level: StdioLevel) -> Self {
+    pub fn new(name: String, stdout: ChildStdout, stderr: ChildStderr, level: StdioLevel) -> Self {
         Self {
+            name,
             stdout,
             stderr,
             level,
@@ -133,40 +135,44 @@ impl Stdio {
         let stdio_level = self.level;
         let stdio_reader = StdioReader::new(self.stdout, self.stderr);
 
-        let thread = std::thread::spawn(move || -> (OsString, OsString) {
-            let mut stdout_buf = Vec::new();
-            let mut stderr_buf = Vec::new();
+        let thread_name = self.name.as_str();
+        let thread = std::thread::Builder::new()
+            .name(thread_name.to_string())
+            .spawn(move || -> (OsString, OsString) {
+                let mut stdout_buf = Vec::new();
+                let mut stderr_buf = Vec::new();
 
-            for output in stdio_reader {
-                match output {
-                    StdioOutput::Stdout(str) => {
-                        if let Some(level) = stdio_level.stdout {
-                            log!(level, "{}", str.to_string_lossy());
+                for output in stdio_reader {
+                    match output {
+                        StdioOutput::Stdout(str) => {
+                            if let Some(level) = stdio_level.stdout {
+                                log!(level, "{}", str.to_string_lossy());
+                            }
+                            stdout_buf.extend(str.into_vec());
+                            stdout_buf.push(b'\n');
                         }
-                        stdout_buf.extend(str.into_vec());
-                        stdout_buf.push(b'\n');
-                    }
-                    StdioOutput::Stderr(str) => {
-                        if let Some(level) = stdio_level.stderr {
-                            log!(level, "{}", str.to_string_lossy());
+                        StdioOutput::Stderr(str) => {
+                            if let Some(level) = stdio_level.stderr {
+                                log!(level, "{}", str.to_string_lossy());
+                            }
+                            stderr_buf.extend(str.into_vec());
+                            stderr_buf.push(b'\n');
                         }
-                        stderr_buf.extend(str.into_vec());
-                        stderr_buf.push(b'\n');
                     }
                 }
-            }
-            if stdout_buf.ends_with(&[b'\n']) {
-                stdout_buf.pop();
-            }
-            if stderr_buf.ends_with(&[b'\n']) {
-                stderr_buf.pop();
-            }
+                if stdout_buf.ends_with(&[b'\n']) {
+                    stdout_buf.pop();
+                }
+                if stderr_buf.ends_with(&[b'\n']) {
+                    stderr_buf.pop();
+                }
 
-            (
-                OsString::from_vec(stdout_buf),
-                OsString::from_vec(stderr_buf),
-            )
-        });
+                (
+                    OsString::from_vec(stdout_buf),
+                    OsString::from_vec(stderr_buf),
+                )
+            })
+            .with_context(|| format!("Failed to create thread {}", thread_name))?;
 
         Ok(thread)
     }
