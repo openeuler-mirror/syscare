@@ -33,10 +33,10 @@ impl std::fmt::Debug for KernelPatchSymbol {
         f.debug_struct("KernelPatchSymbol")
             .field("name", &self.name)
             .field("target", &self.target)
-            .field("old_addr", &format!("0x{}", self.old_addr))
-            .field("old_size", &format!("0x{}", self.old_size))
-            .field("new_addr", &format!("0x{}", self.new_addr))
-            .field("new_size", &format!("0x{}", self.new_size))
+            .field("old_addr", &format!("{:#x}", self.old_addr))
+            .field("old_size", &format!("{:#x}", self.old_size))
+            .field("new_addr", &format!("{:#x}", self.new_addr))
+            .field("new_size", &format!("{:#x}", self.new_size))
             .finish()
     }
 }
@@ -45,7 +45,7 @@ impl std::fmt::Display for KernelPatchSymbol {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
              f,
-             "name: {}, target: {}, old_addr: 0x{:x}, old_size: 0x{:x}, new_addr: 0x{:x}, new_size: 0x{:x}",
+             "name: {}, target: {}, old_addr: {:#x}, old_size: {:#x}, new_addr: {:#x}, new_size: {:#x}",
              self.name.to_string_lossy(),
              self.target.to_string_lossy(),
              self.old_addr,

@@ -163,7 +163,6 @@ impl PatchResolverImpl for UpatchResolverImpl {
             kind: PatchType::UserPatch,
             info: patch_info.clone(),
             pkg_name: patch_info.target.full_name(),
-            build_id: String::new(),
             patch_file: patch_root.join(&patch_entity.patch_name),
             target_elf: patch_entity.patch_target.clone(),
             symbols: Vec::new(),

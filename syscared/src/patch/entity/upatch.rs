@@ -61,7 +61,6 @@ pub struct UserPatch {
     pub kind: PatchType,
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
-    pub build_id: String,
     pub symbols: Vec<UserPatchSymbol>,
     pub patch_file: PathBuf,
     pub target_elf: PathBuf,
