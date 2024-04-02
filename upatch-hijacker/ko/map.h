@@ -22,7 +22,6 @@
 #define _UPATCH_HIJACKER_KO_MAP_H
 
 #include <linux/types.h>
-#include <stdbool.h>
 
 typedef bool (*find_value_fn)(const void *value, const void *param);
 typedef void (*free_value_fn)(void *value);

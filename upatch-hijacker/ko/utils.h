@@ -21,8 +21,6 @@
 #ifndef _UPATCH_HIJACKER_KO_UTILS_H
 #define _UPATCH_HIJACKER_KO_UTILS_H
 
-#include <stdbool.h>
-
 #include <linux/fs.h>
 #include <linux/namei.h>
 #include <linux/path.h>
