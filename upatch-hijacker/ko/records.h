@@ -23,7 +23,6 @@
 
 #include <linux/types.h>
 #include <linux/limits.h>
-#include <stdbool.h>
 
 struct inode;
 struct uprobe_consumer;
