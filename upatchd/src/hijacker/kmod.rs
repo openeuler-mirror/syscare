@@ -13,14 +13,14 @@
  */
 
 use std::{
-    ffi::CString,
+    ffi::{CString, OsString},
     path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
 use log::{error, info};
 use nix::kmod;
-use syscare_common::fs;
+use syscare_common::{fs, os};
 
 const KMOD_SYS_PATH: &str = "/sys/module";
 
@@ -53,8 +53,23 @@ impl HijackerKmodGuard {
         self.sys_path.exists()
     }
 
+    fn selinux_relable_module<P: AsRef<Path>>(patch_file: P) -> Result<()> {
+        const KMOD_SECURITY_TYPE: &str = "modules_object_t";
+
+        let file_path = patch_file.as_ref();
+        let mut sec_context = os::selinux::get_security_context(file_path)?;
+
+        if sec_context.kind != KMOD_SECURITY_TYPE {
+            sec_context.kind = OsString::from(KMOD_SECURITY_TYPE);
+            os::selinux::set_security_context(file_path, sec_context)?;
+        }
+
+        Ok(())
+    }
+
     fn install<P: AsRef<Path>>(&self, kmod_path: P) -> Result<()> {
         info!("Installing kernel module '{}'...", self.kmod_name);
+        Self::selinux_relable_module(&kmod_path)?;
         let ko_file = fs::open_file(kmod_path)?;
         kmod::finit_module(
             &ko_file,
