@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       1
+Release:       2
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -164,6 +164,8 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Sun Apr 7 2024 ningyu<ningyu9@huawei.com> - 1.2.1-2
+- update to syscare.1.2.1-2
 * Thu Mar 28 2024 ningyu<ningyu9@huawei.com> - 1.2.1-1
 - update to 1.2.1
 * Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
