@@ -70,7 +70,7 @@ static inline void remove_entry(struct map_entry *entry)
 
 static inline void release_entry(struct kref *kref)
 {
-    remove_entry(container_of_safe(kref, struct map_entry, ref));
+    remove_entry(container_of(kref, struct map_entry, ref));
 }
 
 static inline struct map_entry *lookup_entry(struct map *map, const void *param)
