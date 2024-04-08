@@ -19,7 +19,7 @@ echo "Checking out dest branch..."
 git checkout "$REPO_BRANCH"
 
 echo "Vendoring dependencies..."
-cargo vendor --respect-source-config --sync upatch/Cargo.toml
+cargo vendor --respect-source-config --sync Cargo.toml
 
 mkdir -p .cargo
 cat << EOF > .cargo/config.toml

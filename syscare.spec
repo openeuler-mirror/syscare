@@ -5,21 +5,17 @@
 
 %define pkg_kmod       %{name}-kmod
 %define pkg_build      %{name}-build
-%define pkg_build_kmod %{pkg_build}-kmod
-%define pkg_build_ebpf %{pkg_build}-ebpf
 
 ############################################
 ############ Package syscare ###############
 ############################################
 Name:          syscare
-Version:       1.2.0
-Release:       10
+Version:       1.2.1
+Release:       2
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
-
-Patch0001:     0001-upatch-fix-memory-leak.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -53,9 +49,6 @@ make
 %install
 cd build
 %make_install
-
-mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
-mv -f %{buildroot}/usr/libexec/syscare/upatch_hijacker.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 
 ############### PostInstall ################
 %post
@@ -107,8 +100,6 @@ fi
 %package build
 Summary: Syscare build tools.
 BuildRequires: elfutils-libelf-devel
-Suggests: %{pkg_build_kmod}
-Requires: (%{pkg_build_kmod} >= %{build_version} or %{pkg_build_ebpf} >= %{build_version})
 Requires: coreutils
 Requires: patch
 Requires: kpatch
@@ -165,70 +156,18 @@ fi
 %attr(755,root,root) /usr/libexec/syscare/c++-hijacker
 %attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
 %attr(755,root,root) /usr/libexec/syscare/g++-hijacker
-
-############################################
-######## Package syscare-build-kmod ########
-############################################
-%package build-kmod
-Summary: Kernel module for syscare patch build tools.
-BuildRequires: make gcc
-BuildRequires: kernel-devel
-Requires: kernel >= %{kernel_version}
-
-############### Description ################
-%description build-kmod
-Syscare build dependency - kernel module.
-
-############### PostInstall ################
-%post build-kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
-depmod > /dev/null 2>&1
-
-############### PreUninstall ###############
-%preun build-kmod
-# Nothing
-
-############## PostUninstall ###############
-%postun build-kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
-depmod > /dev/null 2>&1
-
-################## Files ###################
-%files build-kmod
-%dir /lib/modules/%{kernel_name}/extra/syscare
-%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko
-
-############################################
-######## Package syscare-build-ebpf ########
-############################################
-%package build-ebpf
-Summary: eBPF for syscare patch build tools.
-BuildRequires: make llvm clang bpftool
-BuildRequires: libbpf libbpf-devel libbpf-static
-
-############### Description ################
-%description build-ebpf
-Syscare build dependency - eBPF.
-
-############### PostInstall ################
-%post build-ebpf
-
-############### PreUninstall ###############
-%preun build-ebpf
-# Nothing
-
-############## PostUninstall ###############
-%postun build-ebpf
-# Nothing
-
-################## Files ###################
-%files build-ebpf
-%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker
+%attr(755,root,root) /usr/libexec/syscare/gnu-as-hijacker
+%attr(755,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
+%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker.ko
 
 ############################################
 ################ Change log ################
 ############################################
 %changelog
+* Sun Apr 7 2024 ningyu<ningyu9@huawei.com> - 1.2.1-2
+- update to syscare.1.2.1-2
+* Thu Mar 28 2024 ningyu<ningyu9@huawei.com> - 1.2.1-1
+- update to 1.2.1
 * Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
 - fix memory leak
 * Fri Dec 22 2023 ningyu<ningyu9@huawei.com> - 1.2.0-9
