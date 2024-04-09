@@ -150,7 +150,7 @@ impl KernelPatchBuilder {
         match &kbuild_params.oot_source_dir {
             // Kernel patch
             None => {
-                let entity_uuid = Uuid::new_v4().to_string();
+                let entity_uuid = Uuid::new_v4();
                 let entity_target = VMLINUX_FILE_NAME;
                 let entity_name = format!("{}-{}", entity_target, entity_uuid);
 
@@ -182,7 +182,7 @@ impl KernelPatchBuilder {
                         .to_string_lossy()
                         .replace(['.', '-'], "_");
 
-                    let entity_uuid: String = Uuid::new_v4().to_string();
+                    let entity_uuid = Uuid::new_v4();
                     let entitiy_name = format!("{}-{}", module_name, entity_uuid);
                     let entity_target = file_name.to_os_string();
 
@@ -290,7 +290,7 @@ impl KernelPatchBuilder {
     ) -> Result<Vec<PatchInfo>> {
         // Generate patch info
         let patch_info = PatchInfo {
-            uuid: Uuid::new_v4().to_string(),
+            uuid: Uuid::new_v4(),
             name: kbuild_params.patch_name.to_owned(),
             kind: kbuild_params.patch_type,
             version: kbuild_params.patch_version.to_owned(),
