@@ -16,13 +16,11 @@ use std::{
     ffi::OsString,
     os::unix::ffi::OsStringExt,
     path::{Path, PathBuf},
-    str::FromStr,
     sync::Arc,
 };
 
 use anyhow::{anyhow, Context, Result};
 use object::{NativeFile, Object, ObjectSection};
-use uuid::Uuid;
 
 use syscare_abi::{PatchEntity, PatchInfo, PatchType};
 use syscare_common::{concat_os, ffi::OsStrExt, fs};
@@ -194,7 +192,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
             .join(KPATCH_SYS_FILE_NAME);
 
         let mut patch = KernelPatch {
-            uuid: Uuid::from_str(&patch_entity.uuid).context("Invalid patch uuid")?,
+            uuid: patch_entity.uuid,
             name: concat_os!(
                 patch_info.target.short_name(),
                 "/",

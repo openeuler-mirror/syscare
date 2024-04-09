@@ -62,7 +62,7 @@ impl RpmSpecBuilder {
     fn parse_patch_uuid(patch_info: &PatchInfo) -> String {
         let mut result = String::new();
         for entity in &patch_info.entities {
-            result.push_str(&entity.uuid);
+            result.push_str(&entity.uuid.to_string());
             result.push(' ');
         }
         result = result.trim().to_string();
@@ -113,7 +113,7 @@ impl RpmSpecBuilder {
             patch_info.name
         );
         let pkg_version = format!("{}-{}", patch_info.version, patch_info.release);
-        let pkg_root = Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid);
+        let pkg_root = Path::new(PKG_INSTALL_DIR).join(patch_info.uuid.to_string());
 
         let mut spec = RpmSpecFile::new(
             pkg_name,

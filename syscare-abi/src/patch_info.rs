@@ -16,6 +16,8 @@ use std::{ffi::OsString, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 
+use uuid::Uuid;
+
 use super::package_info::PackageInfo;
 
 pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
@@ -34,7 +36,7 @@ impl std::fmt::Display for PatchType {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PatchEntity {
-    pub uuid: String,
+    pub uuid: Uuid,
     pub patch_name: OsString,
     pub patch_target: PathBuf,
     pub checksum: String,
@@ -49,7 +51,7 @@ pub struct PatchFile {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PatchInfo {
-    pub uuid: String,
+    pub uuid: Uuid,
     pub name: String,
     pub version: String,
     pub release: u32,
