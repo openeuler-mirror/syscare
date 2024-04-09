@@ -259,7 +259,7 @@ impl UserPatchBuilder {
             }
 
             if let Some(patch_file) = patch_entity_map.get(&elf_name) {
-                let entity_uuid = Uuid::new_v4().to_string();
+                let entity_uuid = Uuid::new_v4();
                 let entity_name = fs::file_name(patch_file);
                 let entity_target = elf_file.to_owned();
                 let entity_checksum = digest::file(patch_file).with_context(|| {
@@ -277,7 +277,7 @@ impl UserPatchBuilder {
         }
 
         let patch_info = PatchInfo {
-            uuid: Uuid::new_v4().to_string(),
+            uuid: Uuid::new_v4(),
             name: ubuild_params.patch_name.to_owned(),
             kind: ubuild_params.patch_type,
             version: ubuild_params.patch_version.to_owned(),

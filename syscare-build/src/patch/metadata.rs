@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 
+use uuid::Uuid;
+
 use syscare_abi::{PatchInfo, PATCH_INFO_MAGIC};
 use syscare_common::{fs, util::serde};
 
@@ -61,7 +63,7 @@ impl PatchMetadata {
         }
 
         let patch_info = PatchInfo {
-            uuid: String::default(),
+            uuid: Uuid::default(),
             name: build_params.patch_name.to_owned(),
             version: build_params.patch_version.to_owned(),
             release: build_params.patch_release.to_owned(),
