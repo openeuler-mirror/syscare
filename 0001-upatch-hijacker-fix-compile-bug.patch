@@ -1,0 +1,33 @@
+From 8c09e8b3d9d59012c1019c01ac2246c770501c75 Mon Sep 17 00:00:00 2001
+From: ningyu <405888464@qq.com>
+Date: Sun, 7 Apr 2024 10:50:13 +0800
+Subject: [PATCH 01/10] upatch-hijacker: fix compile bug container_of_safe =>
+ container_of
+
+---
+ upatch-hijacker/ko/map.c | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/upatch-hijacker/ko/map.c b/upatch-hijacker/ko/map.c
+index a9c18ba..3049556 100644
+--- a/upatch-hijacker/ko/map.c
++++ b/upatch-hijacker/ko/map.c
+@@ -70,7 +70,7 @@ static inline void remove_entry(struct map_entry *entry)
+ 
+ static inline void release_entry(struct kref *kref)
+ {
+-    remove_entry(container_of_safe(kref, struct map_entry, ref));
++    remove_entry(container_of(kref, struct map_entry, ref));
+ }
+ 
+ static inline struct map_entry *lookup_entry(struct map *map, const void *param)
+@@ -234,4 +234,4 @@ void *map_get(struct map *map, const void *param)
+ size_t map_size(const struct map *map)
+ {
+     return (map != NULL) ? map->length : 0;
+-}
+\ No newline at end of file
++}
+-- 
+2.41.0
+

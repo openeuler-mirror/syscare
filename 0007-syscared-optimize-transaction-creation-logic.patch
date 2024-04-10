@@ -1,0 +1,112 @@
+From bbf3396adbbd53709ab5a78c1035e6b9b010d549 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 12 Apr 2024 11:40:25 +0800
+Subject: [PATCH 07/10] syscared: optimize transaction creation logic
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/upatch/sys.rs |  4 ++--
+ syscared/src/patch/transaction.rs       |  9 +++------
+ syscared/src/rpc/skeleton_impl/patch.rs | 10 +++++-----
+ 3 files changed, 10 insertions(+), 13 deletions(-)
+
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index 1908520..f0745f0 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -20,7 +20,7 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
+         .run_with_output()?
+         .exit_code();
+ 
+@@ -44,7 +44,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
+         .run_with_output()?
+         .exit_code();
+ 
+diff --git a/syscared/src/patch/transaction.rs b/syscared/src/patch/transaction.rs
+index a3c5dda..695532c 100644
+--- a/syscared/src/patch/transaction.rs
++++ b/syscared/src/patch/transaction.rs
+@@ -43,18 +43,15 @@ where
+         action: F,
+         flag: PatchOpFlag,
+         identifier: String,
+-    ) -> Result<Self> {
+-        let instance = Self {
++    ) -> Self {
++        Self {
+             name,
+             patch_manager,
+             action,
+             identifier,
+             flag,
+             finish_list: Vec::new(),
+-        };
+-
+-        debug!("{} is created", instance);
+-        Ok(instance)
++        }
+     }
+ }
+ 
+diff --git a/syscared/src/rpc/skeleton_impl/patch.rs b/syscared/src/rpc/skeleton_impl/patch.rs
+index 98494b1..b009d46 100644
+--- a/syscared/src/rpc/skeleton_impl/patch.rs
++++ b/syscared/src/rpc/skeleton_impl/patch.rs
+@@ -101,7 +101,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
+                     true => PatchOpFlag::Force,
+                 },
+                 identifier,
+-            )?
++            )
+             .invoke()
+         })
+     }
+@@ -115,7 +115,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
+                 PatchManager::remove_patch,
+                 PatchOpFlag::Normal,
+                 identifier,
+-            )?
++            )
+             .invoke()
+         })
+     }
+@@ -136,7 +136,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
+                     true => PatchOpFlag::Force,
+                 },
+                 identifier,
+-            )?
++            )
+             .invoke()
+         })
+     }
+@@ -150,7 +150,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
+                 PatchManager::deactive_patch,
+                 PatchOpFlag::Normal,
+                 identifier,
+-            )?
++            )
+             .invoke()
+         })
+     }
+@@ -164,7 +164,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
+                 PatchManager::accept_patch,
+                 PatchOpFlag::Normal,
+                 identifier,
+-            )?
++            )
+             .invoke()
+         })
+     }
+-- 
+2.41.0
+

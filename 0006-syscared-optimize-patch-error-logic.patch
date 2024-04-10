@@ -1,0 +1,103 @@
+From 1fbb81935c66c47a68716580878f2b983272a2bc Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 12 Apr 2024 11:35:57 +0800
+Subject: [PATCH 06/10] syscared: optimize patch error logic
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/upatch/mod.rs | 21 +++++++++++----------
+ syscared/src/patch/driver/upatch/sys.rs |  4 ++--
+ 2 files changed, 13 insertions(+), 12 deletions(-)
+
+diff --git a/syscared/src/patch/driver/upatch/mod.rs b/syscared/src/patch/driver/upatch/mod.rs
+index a7fa154..0b82db9 100644
+--- a/syscared/src/patch/driver/upatch/mod.rs
++++ b/syscared/src/patch/driver/upatch/mod.rs
+@@ -56,8 +56,7 @@ pub struct UserPatchDriver {
+ impl UserPatchDriver {
+     pub fn new() -> Result<Self> {
+         let elf_patch_map = Arc::new(Mutex::new(IndexMap::new()));
+-        let patch_monitor =
+-            UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
++        let patch_monitor = UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
+ 
+         let instance = Self {
+             patch_target_map: IndexMap::new(),
+@@ -196,8 +195,10 @@ impl UserPatchDriver {
+                 );
+             }
+             for pid in &need_active {
+-                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file) {
+-                    error!("{:?}", e);
++                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file)
++                    .with_context(|| format!("Failed to patch process, pid={}", pid))
++                {
++                    error!("{}", e);
+                     continue;
+                 }
+                 patch_record.processes.insert(*pid);
+@@ -262,7 +263,7 @@ impl UserPatchDriver {
+         );
+ 
+         debug!(
+-            "Upatch: Applying patch '{}', patch_file: {}",
++            "Upatch: Applying patch '{}' ({})",
+             patch_uuid,
+             patch.patch_file.display()
+         );
+@@ -281,7 +282,7 @@ impl UserPatchDriver {
+         );
+ 
+         debug!(
+-            "Upatch: Removing patch '{}', patch_file: {}",
++            "Upatch: Removing patch '{}' ({})",
+             patch_uuid,
+             patch.patch_file.display()
+         );
+@@ -326,9 +327,8 @@ impl UserPatchDriver {
+             );
+         }
+         for pid in need_active {
+-            if let Err(e) = sys::active_patch(&uuid, pid, target_elf, patch_file) {
+-                error!("{:?}", e);
+-            }
++            sys::active_patch(&uuid, pid, target_elf, patch_file)
++                .with_context(|| format!("Failed to patch process, pid={}", pid))?;
+             patch_record.processes.insert(pid);
+         }
+ 
+@@ -394,7 +394,8 @@ impl UserPatchDriver {
+             );
+         }
+         for pid in need_deactive {
+-            sys::deactive_patch(&uuid, pid, target_elf, patch_file)?;
++            sys::deactive_patch(&uuid, pid, target_elf, patch_file)
++                .with_context(|| format!("Failed to unpatch process, pid={}", pid))?;
+             patch_record.processes.remove(&pid); // remove process from record
+         }
+ 
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index f0745f0..1908520 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -20,7 +20,7 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Debug)
++        .stdout(Level::Info)
+         .run_with_output()?
+         .exit_code();
+ 
+@@ -44,7 +44,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Debug)
++        .stdout(Level::Info)
+         .run_with_output()?
+         .exit_code();
+ 
+-- 
+2.41.0
+

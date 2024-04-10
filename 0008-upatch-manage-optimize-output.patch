@@ -1,0 +1,136 @@
+From 7c976ffc72330c85bc815bc1983dd7096778bf1b Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 12 Apr 2024 11:50:59 +0800
+Subject: [PATCH 08/10] upatch-manage: optimize output
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch-manage/upatch-manage.c  |  2 +-
+ upatch-manage/upatch-patch.c   | 10 +++++-----
+ upatch-manage/upatch-process.c | 23 ++++++++++++-----------
+ 3 files changed, 18 insertions(+), 17 deletions(-)
+
+diff --git a/upatch-manage/upatch-manage.c b/upatch-manage/upatch-manage.c
+index a5973e4..e33eeb3 100644
+--- a/upatch-manage/upatch-manage.c
++++ b/upatch-manage/upatch-manage.c
+@@ -152,7 +152,7 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
+ 
+ 	ret = process_patch(pid, &uelf, &relf, uuid, binary_path);
+ 	if (ret) {
+-		log_error("Failed to patch process, pid=%d ret=%d\n", pid, ret);
++		log_error("Failed to patch process, pid=%d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+ 	log_normal("SUCCESS\n");
+diff --git a/upatch-manage/upatch-patch.c b/upatch-manage/upatch-patch.c
+index bda4e10..5e16002 100644
+--- a/upatch-manage/upatch-patch.c
++++ b/upatch-manage/upatch-patch.c
+@@ -712,6 +712,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 		goto out;
+ 	}
+ 
++	printf("Patch ");
+ 	upatch_process_print_short(&proc);
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+@@ -768,8 +769,7 @@ out:
+ 	if (is_calc_time) {
+ 		gettimeofday(&end_tv, NULL);
+ 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+-		log_normal(
+-			"PID '%d' process patch frozen_time is %ld microsecond\n",
++		log_normal("Process %d frozen time is %ld microsecond(s)\n",
+ 			pid, frozen_time);
+ 	}
+ 	return ret;
+@@ -831,10 +831,11 @@ int process_unpatch(int pid, const char *uuid)
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("cannot init process %d\n", pid);
++		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+ 
++	printf("Unpatch ");
+ 	upatch_process_print_short(&proc);
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+@@ -880,8 +881,7 @@ out:
+ 	if (is_calc_time) {
+ 		gettimeofday(&end_tv, NULL);
+ 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+-		log_normal(
+-			"PID '%d' process patch frozen_time is %ld microsecond\n",
++		log_normal("Process %d frozen time is %ld microsecond(s)\n",
+ 			pid, frozen_time);
+ 	}
+ 	return ret;
+diff --git a/upatch-manage/upatch-process.c b/upatch-manage/upatch-process.c
+index 0d57238..cd3f7e0 100644
+--- a/upatch-manage/upatch-process.c
++++ b/upatch-manage/upatch-process.c
+@@ -204,30 +204,31 @@ static void process_print_cmdline(struct upatch_process *proc)
+ 	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
+ 	int fd = open(buf, O_RDONLY);
+ 	if (fd == -1) {
+-		log_error("open\n");
++		log_error("Failed to open %s", buf);
+ 		return;
+ 	}
+ 
+ 	while (1) {
+ 		rv = read(fd, buf, sizeof(buf));
+ 
+-		if (rv == -1 && errno == EINTR)
+-			continue;
+-
+ 		if (rv == -1) {
+-			log_error("read\n");
++			if (errno == EINTR) {
++				continue;
++			}
++			log_error("Failed to read cmdline\n");
+ 			goto err_close;
+ 		}
+ 
+-		if (rv == 0)
++		if (rv == 0) {
+ 			break;
++		}
+ 
+ 		for (i = 0; i < rv; i++) {
+-			if (buf[i] != '\n' && isprint(buf[i])) {
+-				putchar(buf[i]);
++			if (isprint(buf[i])) {
++				printf("%c", buf[i]);
+ 			}
+ 			else {
+-				printf("\\x%02x", (unsigned char)buf[i]);
++				printf(" ");
+ 			}
+ 		}
+ 	}
+@@ -238,7 +239,7 @@ err_close:
+ 
+ void upatch_process_print_short(struct upatch_process *proc)
+ {
+-	printf("upatch target pid %d, cmdline:", proc->pid);
++	printf("process %d, cmdline: ", proc->pid);
+ 	process_print_cmdline(proc);
+ 	printf("\n");
+ }
+@@ -254,7 +255,7 @@ int upatch_process_mem_open(struct upatch_process *proc, int mode)
+ 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
+ 	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
+ 	if (proc->memfd < 0) {
+-		log_error("can't open /proc/%d/mem", proc->pid);
++		log_error("Failed to open %s", path);
+ 		return -1;
+ 	}
+ 
+-- 
+2.41.0
+

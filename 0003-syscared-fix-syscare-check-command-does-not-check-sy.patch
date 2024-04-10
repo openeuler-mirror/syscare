@@ -1,0 +1,385 @@
+From e5294afa8135f54f44196bd92e5a32c2b09b9bda Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 10 Apr 2024 12:19:51 +0800
+Subject: [PATCH 03/10] syscared: fix 'syscare check command does not check
+ symbol confiliction' issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/kpatch/mod.rs | 23 ++-------
+ syscared/src/patch/driver/mod.rs        | 66 +++++++++++++++++++------
+ syscared/src/patch/driver/upatch/mod.rs | 35 +++++--------
+ syscared/src/patch/manager.rs           | 21 ++++----
+ 4 files changed, 79 insertions(+), 66 deletions(-)
+
+diff --git a/syscared/src/patch/driver/kpatch/mod.rs b/syscared/src/patch/driver/kpatch/mod.rs
+index e6ab14e..e4509d8 100644
+--- a/syscared/src/patch/driver/kpatch/mod.rs
++++ b/syscared/src/patch/driver/kpatch/mod.rs
+@@ -24,7 +24,6 @@ use log::debug;
+ use syscare_abi::PatchStatus;
+ use syscare_common::{concat_os, os, util::digest};
+ 
+-use super::PatchOpFlag;
+ use crate::patch::entity::KernelPatch;
+ 
+ mod sys;
+@@ -103,7 +102,7 @@ impl KernelPatchDriver {
+         Ok(())
+     }
+ 
+-    fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
++    pub fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
+         let mut conflict_patches = indexset! {};
+ 
+         let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+@@ -132,7 +131,7 @@ impl KernelPatchDriver {
+         Ok(())
+     }
+ 
+-    fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
++    pub fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
+         let mut override_patches = indexset! {};
+ 
+         let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+@@ -196,11 +195,7 @@ impl KernelPatchDriver {
+         sys::read_patch_status(patch)
+     }
+ 
+-    pub fn check(&self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
+-        if flag == PatchOpFlag::Force {
+-            return Ok(());
+-        }
+-
++    pub fn check(&self, patch: &KernelPatch) -> Result<()> {
+         Self::check_consistency(patch)?;
+         Self::check_compatiblity(patch)?;
+         Self::check_dependency(patch)?;
+@@ -217,22 +212,14 @@ impl KernelPatchDriver {
+         sys::remove_patch(patch)
+     }
+ 
+-    pub fn active(&mut self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
+-        if flag != PatchOpFlag::Force {
+-            self.check_conflict_symbols(patch)?;
+-        }
+-
++    pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
+         sys::active_patch(patch)?;
+         self.add_patch_symbols(patch);
+ 
+         Ok(())
+     }
+ 
+-    pub fn deactive(&mut self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
+-        if flag != PatchOpFlag::Force {
+-            self.check_override_symbols(patch)?;
+-        }
+-
++    pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
+         sys::deactive_patch(patch)?;
+         self.remove_patch_symbols(patch);
+ 
+diff --git a/syscared/src/patch/driver/mod.rs b/syscared/src/patch/driver/mod.rs
+index 9dff9dd..e6dab94 100644
+--- a/syscared/src/patch/driver/mod.rs
++++ b/syscared/src/patch/driver/mod.rs
+@@ -36,6 +36,22 @@ pub struct PatchDriver {
+     upatch: UserPatchDriver,
+ }
+ 
++impl PatchDriver {
++    fn check_conflict_symbols(&self, patch: &Patch) -> Result<()> {
++        match patch {
++            Patch::KernelPatch(patch) => self.kpatch.check_conflict_symbols(patch),
++            Patch::UserPatch(patch) => self.upatch.check_conflict_symbols(patch),
++        }
++    }
++
++    fn check_override_symbols(&self, patch: &Patch) -> Result<()> {
++        match patch {
++            Patch::KernelPatch(patch) => self.kpatch.check_override_symbols(patch),
++            Patch::UserPatch(patch) => self.upatch.check_override_symbols(patch),
++        }
++    }
++}
++
+ impl PatchDriver {
+     pub fn new() -> Result<Self> {
+         info!("Initializing kernel patch driver...");
+@@ -53,26 +69,40 @@ impl PatchDriver {
+     }
+ 
+     /// Fetch and return the patch status.
+-    pub fn status(&self, patch: &Patch) -> Result<PatchStatus> {
++    pub fn patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
+         match patch {
+             Patch::KernelPatch(patch) => self.kpatch.status(patch),
+             Patch::UserPatch(patch) => self.upatch.status(patch),
+         }
++        .with_context(|| format!("Failed to get patch '{}' status", patch))
+     }
+ 
+-    /// Perform file intergrity & consistency check. </br>
+-    /// Should be used befor patch application.
+-    pub fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++    /// Perform patch file intergrity & consistency check. </br>
++    /// Should be used before patch application.
++    pub fn check_patch(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++        if flag == PatchOpFlag::Force {
++            return Ok(());
++        }
+         match patch {
+-            Patch::KernelPatch(patch) => self.kpatch.check(patch, flag),
+-            Patch::UserPatch(patch) => self.upatch.check(patch, flag),
++            Patch::KernelPatch(patch) => self.kpatch.check(patch),
++            Patch::UserPatch(patch) => self.upatch.check(patch),
++        }
++        .with_context(|| format!("Patch '{}' is not patchable", patch))
++    }
++
++    /// Perform patch confliction check. </br>
++    /// Used for patch check.
++    pub fn check_confliction(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++        if flag == PatchOpFlag::Force {
++            return Ok(());
+         }
+-        .with_context(|| format!("Patch '{}' check failed", patch))
++        self.check_conflict_symbols(patch)
++            .with_context(|| format!("Patch '{}' is conflicted", patch))
+     }
+ 
+     /// Apply a patch. </br>
+     /// After this action, the patch status would be changed to 'DEACTIVED'.
+-    pub fn apply(&mut self, patch: &Patch) -> Result<()> {
++    pub fn apply_patch(&mut self, patch: &Patch) -> Result<()> {
+         match patch {
+             Patch::KernelPatch(patch) => self.kpatch.apply(patch),
+             Patch::UserPatch(patch) => self.upatch.apply(patch),
+@@ -82,7 +112,7 @@ impl PatchDriver {
+ 
+     /// Remove a patch. </br>
+     /// After this action, the patch status would be changed to 'NOT-APPLIED'.
+-    pub fn remove(&mut self, patch: &Patch) -> Result<()> {
++    pub fn remove_patch(&mut self, patch: &Patch) -> Result<()> {
+         match patch {
+             Patch::KernelPatch(patch) => self.kpatch.remove(patch),
+             Patch::UserPatch(patch) => self.upatch.remove(patch),
+@@ -92,20 +122,26 @@ impl PatchDriver {
+ 
+     /// Active a patch. </br>
+     /// After this action, the patch status would be changed to 'ACTIVED'.
+-    pub fn active(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++    pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++        if flag != PatchOpFlag::Force {
++            self.check_conflict_symbols(patch)?;
++        }
+         match patch {
+-            Patch::KernelPatch(patch) => self.kpatch.active(patch, flag),
+-            Patch::UserPatch(patch) => self.upatch.active(patch, flag),
++            Patch::KernelPatch(patch) => self.kpatch.active(patch),
++            Patch::UserPatch(patch) => self.upatch.active(patch),
+         }
+         .with_context(|| format!("Failed to active patch '{}'", patch))
+     }
+ 
+     /// Deactive a patch. </br>
+     /// After this action, the patch status would be changed to 'DEACTIVED'.
+-    pub fn deactive(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++    pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
++        if flag != PatchOpFlag::Force {
++            self.check_override_symbols(patch)?;
++        }
+         match patch {
+-            Patch::KernelPatch(patch) => self.kpatch.deactive(patch, flag),
+-            Patch::UserPatch(patch) => self.upatch.deactive(patch, flag),
++            Patch::KernelPatch(patch) => self.kpatch.deactive(patch),
++            Patch::UserPatch(patch) => self.upatch.deactive(patch),
+         }
+         .with_context(|| format!("Failed to deactive patch '{}'", patch))
+     }
+diff --git a/syscared/src/patch/driver/upatch/mod.rs b/syscared/src/patch/driver/upatch/mod.rs
+index 2ca3539..98fc54c 100644
+--- a/syscared/src/patch/driver/upatch/mod.rs
++++ b/syscared/src/patch/driver/upatch/mod.rs
+@@ -28,7 +28,6 @@ use uuid::Uuid;
+ use syscare_abi::PatchStatus;
+ use syscare_common::util::digest;
+ 
+-use super::PatchOpFlag;
+ use crate::patch::entity::UserPatch;
+ 
+ mod monitor;
+@@ -71,7 +70,7 @@ impl UserPatchDriver {
+ }
+ 
+ impl UserPatchDriver {
+-    fn check_consistency(&self, patch: &UserPatch) -> Result<()> {
++    fn check_consistency(patch: &UserPatch) -> Result<()> {
+         let patch_file = patch.patch_file.as_path();
+         let real_checksum = digest::file(patch_file)?;
+         debug!("Target checksum: '{}'", patch.checksum);
+@@ -84,11 +83,11 @@ impl UserPatchDriver {
+         Ok(())
+     }
+ 
+-    fn check_compatiblity(&self, _patch: &UserPatch) -> Result<()> {
++    fn check_compatiblity(_patch: &UserPatch) -> Result<()> {
+         Ok(())
+     }
+ 
+-    fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
++    pub fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
+         let patch_symbols = patch.symbols.as_slice();
+         let target_name = patch.target_elf.as_os_str();
+         let conflict_patches = match self.patch_target_map.get(target_name) {
+@@ -114,7 +113,7 @@ impl UserPatchDriver {
+         Ok(())
+     }
+ 
+-    fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
++    pub fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
+         let patch_uuid = patch.uuid;
+         let patch_symbols = patch.symbols.as_slice();
+         let target_name = patch.target_elf.as_os_str();
+@@ -233,13 +232,9 @@ impl UserPatchDriver {
+             .unwrap_or(PatchStatus::NotApplied))
+     }
+ 
+-    pub fn check(&self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
+-        if flag == PatchOpFlag::Force {
+-            return Ok(());
+-        }
+-
+-        self.check_consistency(patch)?;
+-        self.check_compatiblity(patch)?;
++    pub fn check(&self, patch: &UserPatch) -> Result<()> {
++        Self::check_consistency(patch)?;
++        Self::check_compatiblity(patch)?;
+ 
+         Ok(())
+     }
+@@ -272,7 +267,7 @@ impl UserPatchDriver {
+         Ok(())
+     }
+ 
+-    pub fn active(&mut self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
++    pub fn active(&mut self, patch: &UserPatch) -> Result<()> {
+         let patch_uuid = patch.uuid;
+         let patch_status = self.get_patch_status(patch_uuid)?;
+         ensure!(
+@@ -280,10 +275,6 @@ impl UserPatchDriver {
+             "Upatch: Invalid patch status"
+         );
+ 
+-        if flag != PatchOpFlag::Force {
+-            self.check_conflict_symbols(patch)?;
+-        }
+-
+         let target_elf = patch.target_elf.as_path();
+         let patch_file = patch.patch_file.as_path();
+         let pid_list = process::find_target_process(target_elf)?;
+@@ -300,13 +291,13 @@ impl UserPatchDriver {
+ 
+         drop(active_patch_map);
+ 
+-        self.add_patch_symbols(patch);
+         self.set_patch_status(patch_uuid, PatchStatus::Actived)?;
++        self.add_patch_symbols(patch);
+ 
+         Ok(())
+     }
+ 
+-    pub fn deactive(&mut self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
++    pub fn deactive(&mut self, patch: &UserPatch) -> Result<()> {
+         let patch_uuid = patch.uuid;
+         let patch_status = self.get_patch_status(patch_uuid)?;
+         ensure!(
+@@ -314,10 +305,6 @@ impl UserPatchDriver {
+             "Upatch: Invalid patch status"
+         );
+ 
+-        if flag != PatchOpFlag::Force {
+-            self.check_override_symbols(patch)?;
+-        }
+-
+         let target_elf = patch.target_elf.as_path();
+         let patch_file = patch.patch_file.as_path();
+         let pid_list = process::find_target_process(target_elf)?;
+@@ -337,8 +324,8 @@ impl UserPatchDriver {
+ 
+         drop(active_patch_map);
+ 
+-        self.remove_patch_symbols(patch);
+         self.set_patch_status(patch_uuid, PatchStatus::Deactived)?;
++        self.remove_patch_symbols(patch);
+ 
+         Ok(())
+     }
+diff --git a/syscared/src/patch/manager.rs b/syscared/src/patch/manager.rs
+index b353bdf..f633567 100644
+--- a/syscared/src/patch/manager.rs
++++ b/syscared/src/patch/manager.rs
+@@ -134,7 +134,7 @@ impl PatchManager {
+             .unwrap_or_default();
+ 
+         if status == PatchStatus::Unknown {
+-            status = self.driver_get_patch_status(patch, PatchOpFlag::Normal)?;
++            status = self.driver_patch_status(patch, PatchOpFlag::Normal)?;
+             self.set_patch_status(patch, status)?;
+         }
+ 
+@@ -142,7 +142,10 @@ impl PatchManager {
+     }
+ 
+     pub fn check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+-        self.driver_check_patch(patch, flag)
++        self.driver.check_patch(patch, flag)?;
++        self.driver.check_confliction(patch, flag)?;
++
++        Ok(())
+     }
+ 
+     pub fn apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
+@@ -438,31 +441,31 @@ impl PatchManager {
+ }
+ 
+ impl PatchManager {
+-    fn driver_get_patch_status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
+-        self.driver.status(patch)
++    fn driver_patch_status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
++        self.driver.patch_status(patch)
+     }
+ 
+     fn driver_check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+-        self.driver.check(patch, flag)
++        self.driver.check_patch(patch, flag)
+     }
+ 
+     fn driver_apply_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
+-        self.driver.apply(patch)?;
++        self.driver.apply_patch(patch)?;
+         self.set_patch_status(patch, PatchStatus::Deactived)
+     }
+ 
+     fn driver_remove_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
+-        self.driver.remove(patch)?;
++        self.driver.remove_patch(patch)?;
+         self.set_patch_status(patch, PatchStatus::NotApplied)
+     }
+ 
+     fn driver_active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+-        self.driver.active(patch, flag)?;
++        self.driver.active_patch(patch, flag)?;
+         self.set_patch_status(patch, PatchStatus::Actived)
+     }
+ 
+     fn driver_deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+-        self.driver.deactive(patch, flag)?;
++        self.driver.deactive_patch(patch, flag)?;
+         self.set_patch_status(patch, PatchStatus::Deactived)
+     }
+ 
+-- 
+2.41.0
+
