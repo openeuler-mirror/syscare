@@ -12,77 +12,89 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::OsStr,
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsStr, os::linux::fs::MetadataExt, path::Path};
 
 use anyhow::Result;
 use indexmap::IndexSet;
 use syscare_common::fs;
 
-use syscare_common::os::proc_maps::ProcMaps;
+const PROC_BLACK_LIST: [&str; 18] = [
+    "/usr/lib/systemd/systemd-journald",
+    "/usr/lib/systemd/systemd-logind",
+    "/usr/lib/systemd/systemd-udevd",
+    "/usr/lib/systemd/systemd-hostnamed",
+    "/usr/bin/udevadm",
+    "/usr/sbin/auditd",
+    "/usr/bin/syscare",
+    "/usr/bin/syscared",
+    "/usr/bin/upatchd",
+    "/usr/libexec/syscare/as-hijacker",
+    "/usr/libexec/syscare/cc-hijacker",
+    "/usr/libexec/syscare/c++-hijacker",
+    "/usr/libexec/syscare/gcc-hijacker",
+    "/usr/libexec/syscare/g++-hijacker",
+    "/usr/libexec/syscare/syscare-build",
+    "/usr/libexec/syscare/upatch-build",
+    "/usr/libexec/syscare/upatch-diff",
+    "/usr/libexec/syscare/upatch-manage",
+];
 
 #[inline]
-fn parse_process_id<P: AsRef<Path>>(path: P) -> Option<i32> {
-    path.as_ref()
+fn is_blacklisted(file_path: &Path) -> bool {
+    PROC_BLACK_LIST
+        .iter()
+        .map(Path::new)
+        .any(|blacklist_path| blacklist_path == file_path)
+}
+
+#[inline]
+fn parse_process_id(proc_path: &Path) -> Option<i32> {
+    proc_path
         .file_name()
         .and_then(OsStr::to_str)
         .map(str::parse)
         .and_then(Result::ok)
 }
 
-#[inline]
-fn parse_process_path(pid: i32) -> Option<(i32, PathBuf)> {
-    const PROC_BLACK_LIST: [&str; 18] = [
-        "/usr/lib/systemd/systemd-journald",
-        "/usr/lib/systemd/systemd-logind",
-        "/usr/lib/systemd/systemd-udevd",
-        "/usr/lib/systemd/systemd-hostnamed",
-        "/usr/bin/udevadm",
-        "/usr/sbin/auditd",
-        "/usr/bin/syscare",
-        "/usr/bin/syscared",
-        "/usr/bin/upatchd",
-        "/usr/libexec/syscare/as-hijacker",
-        "/usr/libexec/syscare/cc-hijacker",
-        "/usr/libexec/syscare/c++-hijacker",
-        "/usr/libexec/syscare/gcc-hijacker",
-        "/usr/libexec/syscare/g++-hijacker",
-        "/usr/libexec/syscare/syscare-build",
-        "/usr/libexec/syscare/upatch-build",
-        "/usr/libexec/syscare/upatch-diff",
-        "/usr/libexec/syscare/upatch-manage",
-    ];
-
-    fs::read_link(format!("/proc/{}/exe", pid))
-        .ok()
-        .filter(|path| {
-            !PROC_BLACK_LIST
-                .iter()
-                .any(|blacklist_path| path.as_os_str() == *blacklist_path)
-        })
-        .map(|path| (pid, path))
-}
-
 pub fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
-    let target_file = fs::canonicalize(target_elf.as_ref())?;
-    let target_path = target_file.as_path();
-    let target_pids = fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })?
-        .into_iter()
-        .filter_map(self::parse_process_id)
-        .filter_map(self::parse_process_path)
-        .filter(|(pid, bin_path)| {
-            if bin_path == target_path {
-                return true;
-            }
-            if let Ok(mut mappings) = ProcMaps::new(*pid) {
-                return mappings.any(|map| map.path_name == target_path);
-            }
-            false
-        })
-        .map(|(pid, _)| pid)
-        .collect();
+    let mut target_pids = IndexSet::new();
+    let target_path = target_elf.as_ref();
+    let target_inode = target_path.metadata()?.st_ino();
+
+    for proc_path in fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })? {
+        let pid = match self::parse_process_id(&proc_path) {
+            Some(pid) => pid,
+            None => continue,
+        };
+        let exec_path = match fs::read_link(format!("/proc/{}/exe", pid)) {
+            Ok(file_path) => file_path,
+            Err(_) => continue,
+        };
+        if is_blacklisted(&exec_path) {
+            continue;
+        }
+        // Try to match binary path
+        if exec_path == target_path {
+            target_pids.insert(pid);
+            continue;
+        }
+        // Try to match mapped files
+        let map_files = fs::list_symlinks(
+            format!("/proc/{}/map_files", pid),
+            fs::TraverseOptions { recursive: false },
+        )?;
+        for mapped_file in map_files {
+            if let Ok(mapped_inode) = mapped_file
+                .read_link()
+                .and_then(|file_path| Ok(file_path.metadata()?.st_ino()))
+            {
+                if mapped_inode == target_inode {
+                    target_pids.insert(pid);
+                    break;
+                }
+            };
+        }
+    }
 
     Ok(target_pids)
 }
