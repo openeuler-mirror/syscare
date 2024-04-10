@@ -113,7 +113,7 @@ impl RpmSpecBuilder {
             patch_info.name
         );
         let pkg_version = format!("{}-{}", patch_info.version, patch_info.release);
-        let pkg_root = Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid.to_string());
+        let pkg_root = Path::new(PKG_INSTALL_DIR).join(patch_info.uuid.to_string());
 
         let mut spec = RpmSpecFile::new(
             pkg_name,
