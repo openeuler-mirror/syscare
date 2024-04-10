@@ -37,6 +37,22 @@ pub struct PatchDriver {
 }
 
 impl PatchDriver {
+    fn check_conflict_symbols(&self, patch: &Patch) -> Result<()> {
+        match patch {
+            Patch::KernelPatch(patch) => self.kpatch.check_conflict_symbols(patch),
+            Patch::UserPatch(patch) => self.upatch.check_conflict_symbols(patch),
+        }
+    }
+
+    fn check_override_symbols(&self, patch: &Patch) -> Result<()> {
+        match patch {
+            Patch::KernelPatch(patch) => self.kpatch.check_override_symbols(patch),
+            Patch::UserPatch(patch) => self.upatch.check_override_symbols(patch),
+        }
+    }
+}
+
+impl PatchDriver {
     pub fn new() -> Result<Self> {
         info!("Initializing kernel patch driver...");
         let kpatch_driver =
@@ -53,26 +69,40 @@ impl PatchDriver {
     }
 
     /// Fetch and return the patch status.
-    pub fn status(&self, patch: &Patch) -> Result<PatchStatus> {
+    pub fn patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
         match patch {
             Patch::KernelPatch(patch) => self.kpatch.status(patch),
             Patch::UserPatch(patch) => self.upatch.status(patch),
         }
+        .with_context(|| format!("Failed to get patch '{}' status", patch))
     }
 
-    /// Perform file intergrity & consistency check. </br>
-    /// Should be used befor patch application.
-    pub fn check(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check(patch, flag),
-            Patch::UserPatch(patch) => self.upatch.check(patch, flag),
+    /// Perform patch file intergrity & consistency check. </br>
+    /// Should be used before patch application.
+    pub fn check_patch(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        if flag == PatchOpFlag::Force {
+            return Ok(());
         }
-        .with_context(|| format!("Patch '{}' check failed", patch))
+        match patch {
+            Patch::KernelPatch(patch) => self.kpatch.check(patch),
+            Patch::UserPatch(patch) => self.upatch.check(patch),
+        }
+        .with_context(|| format!("Patch '{}' is not patchable", patch))
+    }
+
+    /// Perform patch confliction check. </br>
+    /// Used for patch check.
+    pub fn check_confliction(&self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        if flag == PatchOpFlag::Force {
+            return Ok(());
+        }
+        self.check_conflict_symbols(patch)
+            .with_context(|| format!("Patch '{}' is conflicted", patch))
     }
 
     /// Apply a patch. </br>
     /// After this action, the patch status would be changed to 'DEACTIVED'.
-    pub fn apply(&mut self, patch: &Patch) -> Result<()> {
+    pub fn apply_patch(&mut self, patch: &Patch) -> Result<()> {
         match patch {
             Patch::KernelPatch(patch) => self.kpatch.apply(patch),
             Patch::UserPatch(patch) => self.upatch.apply(patch),
@@ -82,7 +112,7 @@ impl PatchDriver {
 
     /// Remove a patch. </br>
     /// After this action, the patch status would be changed to 'NOT-APPLIED'.
-    pub fn remove(&mut self, patch: &Patch) -> Result<()> {
+    pub fn remove_patch(&mut self, patch: &Patch) -> Result<()> {
         match patch {
             Patch::KernelPatch(patch) => self.kpatch.remove(patch),
             Patch::UserPatch(patch) => self.upatch.remove(patch),
@@ -92,20 +122,26 @@ impl PatchDriver {
 
     /// Active a patch. </br>
     /// After this action, the patch status would be changed to 'ACTIVED'.
-    pub fn active(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+    pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        if flag != PatchOpFlag::Force {
+            self.check_conflict_symbols(patch)?;
+        }
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.active(patch, flag),
-            Patch::UserPatch(patch) => self.upatch.active(patch, flag),
+            Patch::KernelPatch(patch) => self.kpatch.active(patch),
+            Patch::UserPatch(patch) => self.upatch.active(patch),
         }
         .with_context(|| format!("Failed to active patch '{}'", patch))
     }
 
     /// Deactive a patch. </br>
     /// After this action, the patch status would be changed to 'DEACTIVED'.
-    pub fn deactive(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+    pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        if flag != PatchOpFlag::Force {
+            self.check_override_symbols(patch)?;
+        }
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.deactive(patch, flag),
-            Patch::UserPatch(patch) => self.upatch.deactive(patch, flag),
+            Patch::KernelPatch(patch) => self.kpatch.deactive(patch),
+            Patch::UserPatch(patch) => self.upatch.deactive(patch),
         }
         .with_context(|| format!("Failed to deactive patch '{}'", patch))
     }

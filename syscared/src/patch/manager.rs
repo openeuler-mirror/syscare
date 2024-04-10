@@ -134,7 +134,7 @@ impl PatchManager {
             .unwrap_or_default();
 
         if status == PatchStatus::Unknown {
-            status = self.driver_get_patch_status(patch, PatchOpFlag::Normal)?;
+            status = self.driver_patch_status(patch, PatchOpFlag::Normal)?;
             self.set_patch_status(patch, status)?;
         }
 
@@ -142,7 +142,10 @@ impl PatchManager {
     }
 
     pub fn check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        self.driver_check_patch(patch, flag)
+        self.driver.check_patch(patch, flag)?;
+        self.driver.check_confliction(patch, flag)?;
+
+        Ok(())
     }
 
     pub fn apply_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<PatchStatus> {
@@ -438,31 +441,31 @@ impl PatchManager {
 }
 
 impl PatchManager {
-    fn driver_get_patch_status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
-        self.driver.status(patch)
+    fn driver_patch_status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
+        self.driver.patch_status(patch)
     }
 
     fn driver_check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        self.driver.check(patch, flag)
+        self.driver.check_patch(patch, flag)
     }
 
     fn driver_apply_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
-        self.driver.apply(patch)?;
+        self.driver.apply_patch(patch)?;
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 
     fn driver_remove_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
-        self.driver.remove(patch)?;
+        self.driver.remove_patch(patch)?;
         self.set_patch_status(patch, PatchStatus::NotApplied)
     }
 
     fn driver_active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        self.driver.active(patch, flag)?;
+        self.driver.active_patch(patch, flag)?;
         self.set_patch_status(patch, PatchStatus::Actived)
     }
 
     fn driver_deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
-        self.driver.deactive(patch, flag)?;
+        self.driver.deactive_patch(patch, flag)?;
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 

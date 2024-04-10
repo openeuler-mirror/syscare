@@ -24,7 +24,6 @@ use log::debug;
 use syscare_abi::PatchStatus;
 use syscare_common::{concat_os, os, util::digest};
 
-use super::PatchOpFlag;
 use crate::patch::entity::KernelPatch;
 
 mod sys;
@@ -103,7 +102,7 @@ impl KernelPatchDriver {
         Ok(())
     }
 
-    fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
+    pub fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
         let mut conflict_patches = indexset! {};
 
         let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
@@ -132,7 +131,7 @@ impl KernelPatchDriver {
         Ok(())
     }
 
-    fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
+    pub fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
         let mut override_patches = indexset! {};
 
         let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
@@ -196,11 +195,7 @@ impl KernelPatchDriver {
         sys::read_patch_status(patch)
     }
 
-    pub fn check(&self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
-        if flag == PatchOpFlag::Force {
-            return Ok(());
-        }
-
+    pub fn check(&self, patch: &KernelPatch) -> Result<()> {
         Self::check_consistency(patch)?;
         Self::check_compatiblity(patch)?;
         Self::check_dependency(patch)?;
@@ -217,22 +212,14 @@ impl KernelPatchDriver {
         sys::remove_patch(patch)
     }
 
-    pub fn active(&mut self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
-        if flag != PatchOpFlag::Force {
-            self.check_conflict_symbols(patch)?;
-        }
-
+    pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
         sys::active_patch(patch)?;
         self.add_patch_symbols(patch);
 
         Ok(())
     }
 
-    pub fn deactive(&mut self, patch: &KernelPatch, flag: PatchOpFlag) -> Result<()> {
-        if flag != PatchOpFlag::Force {
-            self.check_override_symbols(patch)?;
-        }
-
+    pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
         sys::deactive_patch(patch)?;
         self.remove_patch_symbols(patch);
 

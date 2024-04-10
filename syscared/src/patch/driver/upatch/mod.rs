@@ -28,7 +28,6 @@ use uuid::Uuid;
 use syscare_abi::PatchStatus;
 use syscare_common::util::digest;
 
-use super::PatchOpFlag;
 use crate::patch::entity::UserPatch;
 
 mod monitor;
@@ -71,7 +70,7 @@ impl UserPatchDriver {
 }
 
 impl UserPatchDriver {
-    fn check_consistency(&self, patch: &UserPatch) -> Result<()> {
+    fn check_consistency(patch: &UserPatch) -> Result<()> {
         let patch_file = patch.patch_file.as_path();
         let real_checksum = digest::file(patch_file)?;
         debug!("Target checksum: '{}'", patch.checksum);
@@ -84,11 +83,11 @@ impl UserPatchDriver {
         Ok(())
     }
 
-    fn check_compatiblity(&self, _patch: &UserPatch) -> Result<()> {
+    fn check_compatiblity(_patch: &UserPatch) -> Result<()> {
         Ok(())
     }
 
-    fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
+    pub fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
         let patch_symbols = patch.symbols.as_slice();
         let target_name = patch.target_elf.as_os_str();
         let conflict_patches = match self.patch_target_map.get(target_name) {
@@ -114,7 +113,7 @@ impl UserPatchDriver {
         Ok(())
     }
 
-    fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
+    pub fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
         let patch_uuid = patch.uuid;
         let patch_symbols = patch.symbols.as_slice();
         let target_name = patch.target_elf.as_os_str();
@@ -233,13 +232,9 @@ impl UserPatchDriver {
             .unwrap_or(PatchStatus::NotApplied))
     }
 
-    pub fn check(&self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
-        if flag == PatchOpFlag::Force {
-            return Ok(());
-        }
-
-        self.check_consistency(patch)?;
-        self.check_compatiblity(patch)?;
+    pub fn check(&self, patch: &UserPatch) -> Result<()> {
+        Self::check_consistency(patch)?;
+        Self::check_compatiblity(patch)?;
 
         Ok(())
     }
@@ -272,17 +267,13 @@ impl UserPatchDriver {
         Ok(())
     }
 
-    pub fn active(&mut self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
+    pub fn active(&mut self, patch: &UserPatch) -> Result<()> {
         let patch_uuid = patch.uuid;
         let patch_status = self.get_patch_status(patch_uuid)?;
         ensure!(
             patch_status == PatchStatus::Deactived,
             "Upatch: Invalid patch status"
         );
-
-        if flag != PatchOpFlag::Force {
-            self.check_conflict_symbols(patch)?;
-        }
 
         let target_elf = patch.target_elf.as_path();
         let patch_file = patch.patch_file.as_path();
@@ -300,23 +291,19 @@ impl UserPatchDriver {
 
         drop(active_patch_map);
 
-        self.add_patch_symbols(patch);
         self.set_patch_status(patch_uuid, PatchStatus::Actived)?;
+        self.add_patch_symbols(patch);
 
         Ok(())
     }
 
-    pub fn deactive(&mut self, patch: &UserPatch, flag: PatchOpFlag) -> Result<()> {
+    pub fn deactive(&mut self, patch: &UserPatch) -> Result<()> {
         let patch_uuid = patch.uuid;
         let patch_status = self.get_patch_status(patch_uuid)?;
         ensure!(
             patch_status == PatchStatus::Actived,
             "Upatch: Invalid patch status"
         );
-
-        if flag != PatchOpFlag::Force {
-            self.check_override_symbols(patch)?;
-        }
 
         let target_elf = patch.target_elf.as_path();
         let patch_file = patch.patch_file.as_path();
@@ -337,8 +324,8 @@ impl UserPatchDriver {
 
         drop(active_patch_map);
 
-        self.remove_patch_symbols(patch);
         self.set_patch_status(patch_uuid, PatchStatus::Deactived)?;
+        self.remove_patch_symbols(patch);
 
         Ok(())
     }
