@@ -38,7 +38,7 @@ mod target;
 use monitor::UserPatchMonitor;
 use target::PatchTarget;
 
-pub(self) type ActivePatchMap = Arc<Mutex<IndexMap<PathBuf, ActivePatch>>>;
+type ActivePatchMap = Arc<Mutex<IndexMap<PathBuf, ActivePatch>>>;
 
 #[derive(Default)]
 struct ActivePatch {
