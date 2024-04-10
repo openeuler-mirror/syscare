@@ -11,11 +11,22 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       2
+Release:       3
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
+
+Patch0001:     0001-upatch-hijacker-fix-compile-bug.patch
+Patch0002:     0002-daemon-fix-cannot-get-file-selinux-xattr-when-selinu.patch
+Patch0003:     0003-syscared-fix-syscare-check-command-does-not-check-sy.patch
+Patch0004:     0004-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
+Patch0005:     0005-abi-change-uuid-type-from-string-to-uuid-bytes.patch
+Patch0006:     0006-syscared-optimize-patch-error-logic.patch
+Patch0007:     0007-syscared-optimize-transaction-creation-logic.patch
+Patch0008:     0008-upatch-manage-optimize-output.patch
+Patch0009:     0009-syscared-optimize-patch-error-logic.patch
+Patch0010:     0010-syscared-optimize-transaction-creation-logic.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -60,9 +71,11 @@ systemctl start syscare
 
 ############### PreUninstall ###############
 %preun
-systemctl daemon-reload
-systemctl stop syscare
-systemctl disable syscare
+if [ "$1" -eq 0 ]; then
+    systemctl daemon-reload
+    systemctl stop syscare
+    systemctl disable syscare
+fi
 
 ############## PostUninstall ###############
 %postun
@@ -164,6 +177,18 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Fri Apr 12 2024 ningyu<ningyu9@huawei.com> - 1.2.1-3
+- upatch-hijacker: fix compile bug
+- daemon: fix 'cannot get file selinux xattr when selinux is not enforcing' issue
+- syscared: fix 'syscare check command does not check symbol confiliction' issue
+- syscared: fix 'cannot find process of dynlib patch' issue
+- Change uuid type from string to uuid bytes
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- upatch-manage: optimize output
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- spec: fix "cannot find syscare service after upgrade" bug
 * Sun Apr 7 2024 ningyu<ningyu9@huawei.com> - 1.2.1-2
 - update to syscare.1.2.1-2
 * Thu Mar 28 2024 ningyu<ningyu9@huawei.com> - 1.2.1-1

@@ -1,0 +1,35 @@
+From 91b63792ed2b13ce8fc706df1ffa7d9fdadc31c7 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 12 Apr 2024 11:40:25 +0800
+Subject: [PATCH 10/10] syscared: optimize transaction creation logic
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/upatch/sys.rs | 4 ++--
+ 1 file changed, 2 insertions(+), 2 deletions(-)
+
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index 1908520..f0745f0 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -20,7 +20,7 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
+         .run_with_output()?
+         .exit_code();
+ 
+@@ -44,7 +44,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
+         .arg(target_elf)
+         .arg("--upatch")
+         .arg(patch_file)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
+         .run_with_output()?
+         .exit_code();
+ 
+-- 
+2.41.0
+

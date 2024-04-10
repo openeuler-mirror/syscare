@@ -1,0 +1,222 @@
+From c213504c02d73738a86935fb5883f2e59d083da7 Mon Sep 17 00:00:00 2001
+From: ningyu <ningyu9@huawei.com>
+Date: Tue, 9 Apr 2024 09:21:35 +0000
+Subject: [PATCH 05/10] abi: change uuid type from string to uuid bytes
+
+---
+ Cargo.lock                                             | 1 +
+ syscare-abi/Cargo.toml                                 | 1 +
+ syscare-abi/src/patch_info.rs                          | 6 ++++--
+ syscare-build/src/package/rpm/spec_builder.rs          | 4 ++--
+ syscare-build/src/patch/kernel_patch/kpatch_builder.rs | 6 +++---
+ syscare-build/src/patch/metadata.rs                    | 4 +++-
+ syscare-build/src/patch/user_patch/upatch_builder.rs   | 4 ++--
+ syscared/src/patch/resolver/kpatch.rs                  | 4 +---
+ syscared/src/patch/resolver/upatch.rs                  | 5 ++---
+ 9 files changed, 19 insertions(+), 16 deletions(-)
+
+diff --git a/Cargo.lock b/Cargo.lock
+index 1d13df6..e6d830b 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -1129,6 +1129,7 @@ name = "syscare-abi"
+ version = "1.2.1"
+ dependencies = [
+  "serde",
++ "uuid",
+ ]
+ 
+ [[package]]
+diff --git a/syscare-abi/Cargo.toml b/syscare-abi/Cargo.toml
+index 7b23a8a..f086850 100644
+--- a/syscare-abi/Cargo.toml
++++ b/syscare-abi/Cargo.toml
+@@ -10,3 +10,4 @@ build        = "build.rs"
+ 
+ [dependencies]
+ serde = { version = "1.0", features = ["derive"] }
++uuid  = { version = "0.8", features = ["v4"] }
+diff --git a/syscare-abi/src/patch_info.rs b/syscare-abi/src/patch_info.rs
+index 55618ae..08cc2c7 100644
+--- a/syscare-abi/src/patch_info.rs
++++ b/syscare-abi/src/patch_info.rs
+@@ -16,6 +16,8 @@ use std::{ffi::OsString, path::PathBuf};
+ 
+ use serde::{Deserialize, Serialize};
+ 
++use uuid::Uuid;
++
+ use super::package_info::PackageInfo;
+ 
+ pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
+@@ -34,7 +36,7 @@ impl std::fmt::Display for PatchType {
+ 
+ #[derive(Debug, Serialize, Deserialize, Clone)]
+ pub struct PatchEntity {
+-    pub uuid: String,
++    pub uuid: Uuid,
+     pub patch_name: OsString,
+     pub patch_target: PathBuf,
+     pub checksum: String,
+@@ -49,7 +51,7 @@ pub struct PatchFile {
+ 
+ #[derive(Debug, Serialize, Deserialize, Clone)]
+ pub struct PatchInfo {
+-    pub uuid: String,
++    pub uuid: Uuid,
+     pub name: String,
+     pub version: String,
+     pub release: u32,
+diff --git a/syscare-build/src/package/rpm/spec_builder.rs b/syscare-build/src/package/rpm/spec_builder.rs
+index 88f57d8..a24954f 100644
+--- a/syscare-build/src/package/rpm/spec_builder.rs
++++ b/syscare-build/src/package/rpm/spec_builder.rs
+@@ -62,7 +62,7 @@ impl RpmSpecBuilder {
+     fn parse_patch_uuid(patch_info: &PatchInfo) -> String {
+         let mut result = String::new();
+         for entity in &patch_info.entities {
+-            result.push_str(&entity.uuid);
++            result.push_str(&entity.uuid.to_string());
+             result.push(' ');
+         }
+         result = result.trim().to_string();
+@@ -113,7 +113,7 @@ impl RpmSpecBuilder {
+             patch_info.name
+         );
+         let pkg_version = format!("{}-{}", patch_info.version, patch_info.release);
+-        let pkg_root = Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid);
++        let pkg_root = Path::new(PKG_INSTALL_DIR).join(patch_info.uuid.to_string());
+ 
+         let mut spec = RpmSpecFile::new(
+             pkg_name,
+diff --git a/syscare-build/src/patch/kernel_patch/kpatch_builder.rs b/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
+index 1b66510..ba49661 100644
+--- a/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
++++ b/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
+@@ -150,7 +150,7 @@ impl KernelPatchBuilder {
+         match &kbuild_params.oot_source_dir {
+             // Kernel patch
+             None => {
+-                let entity_uuid = Uuid::new_v4().to_string();
++                let entity_uuid = Uuid::new_v4();
+                 let entity_target = VMLINUX_FILE_NAME;
+                 let entity_name = format!("{}-{}", entity_target, entity_uuid);
+ 
+@@ -182,7 +182,7 @@ impl KernelPatchBuilder {
+                         .to_string_lossy()
+                         .replace(['.', '-'], "_");
+ 
+-                    let entity_uuid: String = Uuid::new_v4().to_string();
++                    let entity_uuid = Uuid::new_v4();
+                     let entitiy_name = format!("{}-{}", module_name, entity_uuid);
+                     let entity_target = file_name.to_os_string();
+ 
+@@ -290,7 +290,7 @@ impl KernelPatchBuilder {
+     ) -> Result<Vec<PatchInfo>> {
+         // Generate patch info
+         let patch_info = PatchInfo {
+-            uuid: Uuid::new_v4().to_string(),
++            uuid: Uuid::new_v4(),
+             name: kbuild_params.patch_name.to_owned(),
+             kind: kbuild_params.patch_type,
+             version: kbuild_params.patch_version.to_owned(),
+diff --git a/syscare-build/src/patch/metadata.rs b/syscare-build/src/patch/metadata.rs
+index 284c096..918b487 100644
+--- a/syscare-build/src/patch/metadata.rs
++++ b/syscare-build/src/patch/metadata.rs
+@@ -16,6 +16,8 @@ use std::path::{Path, PathBuf};
+ 
+ use anyhow::{Context, Result};
+ 
++use uuid::Uuid;
++
+ use syscare_abi::{PatchInfo, PATCH_INFO_MAGIC};
+ use syscare_common::{fs, util::serde};
+ 
+@@ -61,7 +63,7 @@ impl PatchMetadata {
+         }
+ 
+         let patch_info = PatchInfo {
+-            uuid: String::default(),
++            uuid: Uuid::default(),
+             name: build_params.patch_name.to_owned(),
+             version: build_params.patch_version.to_owned(),
+             release: build_params.patch_release.to_owned(),
+diff --git a/syscare-build/src/patch/user_patch/upatch_builder.rs b/syscare-build/src/patch/user_patch/upatch_builder.rs
+index ad8710b..1e0e6b6 100644
+--- a/syscare-build/src/patch/user_patch/upatch_builder.rs
++++ b/syscare-build/src/patch/user_patch/upatch_builder.rs
+@@ -259,7 +259,7 @@ impl UserPatchBuilder {
+             }
+ 
+             if let Some(patch_file) = patch_entity_map.get(&elf_name) {
+-                let entity_uuid = Uuid::new_v4().to_string();
++                let entity_uuid = Uuid::new_v4();
+                 let entity_name = fs::file_name(patch_file);
+                 let entity_target = elf_file.to_owned();
+                 let entity_checksum = digest::file(patch_file).with_context(|| {
+@@ -277,7 +277,7 @@ impl UserPatchBuilder {
+         }
+ 
+         let patch_info = PatchInfo {
+-            uuid: Uuid::new_v4().to_string(),
++            uuid: Uuid::new_v4(),
+             name: ubuild_params.patch_name.to_owned(),
+             kind: ubuild_params.patch_type,
+             version: ubuild_params.patch_version.to_owned(),
+diff --git a/syscared/src/patch/resolver/kpatch.rs b/syscared/src/patch/resolver/kpatch.rs
+index 7de81b3..50711eb 100644
+--- a/syscared/src/patch/resolver/kpatch.rs
++++ b/syscared/src/patch/resolver/kpatch.rs
+@@ -16,13 +16,11 @@ use std::{
+     ffi::OsString,
+     os::unix::ffi::OsStringExt,
+     path::{Path, PathBuf},
+-    str::FromStr,
+     sync::Arc,
+ };
+ 
+ use anyhow::{anyhow, Context, Result};
+ use object::{NativeFile, Object, ObjectSection};
+-use uuid::Uuid;
+ 
+ use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+ use syscare_common::{concat_os, ffi::OsStrExt, fs};
+@@ -194,7 +192,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
+             .join(KPATCH_SYS_FILE_NAME);
+ 
+         let mut patch = KernelPatch {
+-            uuid: Uuid::from_str(&patch_entity.uuid).context("Invalid patch uuid")?,
++            uuid: patch_entity.uuid,
+             name: concat_os!(
+                 patch_info.target.short_name(),
+                 "/",
+diff --git a/syscared/src/patch/resolver/upatch.rs b/syscared/src/patch/resolver/upatch.rs
+index 507bf8e..15c7363 100644
+--- a/syscared/src/patch/resolver/upatch.rs
++++ b/syscared/src/patch/resolver/upatch.rs
+@@ -12,11 +12,10 @@
+  * See the Mulan PSL v2 for more details.
+  */
+ 
+-use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, str::FromStr, sync::Arc};
++use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, sync::Arc};
+ 
+ use anyhow::{anyhow, Context, Result};
+ use object::{NativeFile, Object, ObjectSection};
+-use uuid::Uuid;
+ 
+ use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+ use syscare_common::{concat_os, fs};
+@@ -152,7 +151,7 @@ impl PatchResolverImpl for UpatchResolverImpl {
+         patch_entity: &PatchEntity,
+     ) -> Result<Patch> {
+         let mut patch = UserPatch {
+-            uuid: Uuid::from_str(&patch_entity.uuid).context("Invalid patch uuid")?,
++            uuid: patch_entity.uuid,
+             name: concat_os!(
+                 patch_info.target.short_name(),
+                 "/",
+-- 
+2.41.0
+
