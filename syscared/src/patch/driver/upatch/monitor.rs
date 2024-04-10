@@ -23,10 +23,10 @@ use std::{
 use anyhow::{bail, Context, Result};
 use indexmap::IndexMap;
 use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
-use log::{error, info};
+use log::info;
 use parking_lot::{Mutex, RwLock};
 
-use super::ActivePatchMap;
+use super::ElfPatchMap;
 
 const MONITOR_THREAD_NAME: &str = "upatch_monitor";
 const MONITOR_CHECK_PERIOD: u64 = 100;
@@ -40,9 +40,9 @@ pub(super) struct UserPatchMonitor {
 }
 
 impl UserPatchMonitor {
-    pub fn new<F>(active_patch_map: ActivePatchMap, callback: F) -> Result<Self>
+    pub fn new<F>(elf_patch_map: ElfPatchMap, callback: F) -> Result<Self>
     where
-        F: Fn(ActivePatchMap, &Path) -> Result<()> + Send + 'static,
+        F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
     {
         let inotify = Arc::new(Mutex::new(Some(
             Inotify::init().context("Failed to initialize inotify")?,
@@ -52,7 +52,7 @@ impl UserPatchMonitor {
         let monitor_thread = MonitorThread {
             inotify: inotify.clone(),
             target_map: target_map.clone(),
-            active_patch_map,
+            elf_patch_map,
             callback,
         }
         .run()?;
@@ -115,13 +115,13 @@ impl UserPatchMonitor {
 struct MonitorThread<F> {
     inotify: Arc<Mutex<Option<Inotify>>>,
     target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
-    active_patch_map: ActivePatchMap,
+    elf_patch_map: ElfPatchMap,
     callback: F,
 }
 
 impl<F> MonitorThread<F>
 where
-    F: Fn(ActivePatchMap, &Path) -> Result<()> + Send + 'static,
+    F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
 {
     fn run(self) -> Result<thread::JoinHandle<()>> {
         thread::Builder::new()
@@ -140,9 +140,7 @@ where
                         continue;
                     }
                     if let Some(patch_file) = self.target_map.read().get(&event.wd) {
-                        if let Err(e) = (self.callback)(self.active_patch_map.clone(), patch_file) {
-                            error!("{:?}", e);
-                        }
+                        (self.callback)(self.elf_patch_map.clone(), patch_file);
                     }
                 }
             }
