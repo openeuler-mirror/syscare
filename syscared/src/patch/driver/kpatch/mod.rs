@@ -17,7 +17,7 @@ use std::{
     fmt::Write,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{ensure, Result};
 use indexmap::{indexset, IndexMap, IndexSet};
 use log::debug;
 
@@ -209,13 +209,7 @@ impl KernelPatchDriver {
     }
 
     pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
-        let selinux_status = os::selinux::get_status()?;
-        if selinux_status == os::selinux::Status::Enforcing {
-            debug!("SELinux is enforcing");
-            sys::set_security_attribute(&patch.patch_file)
-                .context("Kpatch: Failed to set security attribute")?;
-        }
-
+        sys::selinux_relable_patch(patch)?;
         sys::apply_patch(patch)
     }
 

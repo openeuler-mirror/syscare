@@ -12,10 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::{CString, OsString},
-    path::Path,
-};
+use std::ffi::{CString, OsString};
 
 use anyhow::{anyhow, bail, Context, Result};
 use log::debug;
@@ -39,15 +36,21 @@ pub fn list_kernel_modules() -> Result<Vec<OsString>> {
     Ok(module_names)
 }
 
-pub fn set_security_attribute<P: AsRef<Path>>(patch_file: P) -> Result<()> {
+pub fn selinux_relable_patch(patch: &KernelPatch) -> Result<()> {
     const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
 
-    let file_path = patch_file.as_ref();
-    let mut sec_context = os::selinux::get_security_context(file_path)?;
+    if os::selinux::get_status()? != os::selinux::Status::Enforcing {
+        return Ok(());
+    }
 
+    debug!(
+        "Relabeling patch module '{}'...",
+        patch.module_name.to_string_lossy()
+    );
+    let mut sec_context = os::selinux::get_security_context(&patch.patch_file)?;
     if sec_context.kind != KPATCH_PATCH_SEC_TYPE {
         sec_context.kind = OsString::from(KPATCH_PATCH_SEC_TYPE);
-        os::selinux::set_security_context(file_path, sec_context)?;
+        os::selinux::set_security_context(&patch.patch_file, sec_context)?;
     }
 
     Ok(())
@@ -85,12 +88,11 @@ fn write_patch_status(patch: &KernelPatch, value: &str) -> Result<()> {
 }
 
 pub fn apply_patch(patch: &KernelPatch) -> Result<()> {
-    let patch_module = fs::open_file(&patch.patch_file)?;
-
     debug!(
         "Inserting patch module '{}'...",
         patch.module_name.to_string_lossy()
     );
+    let patch_module = fs::open_file(&patch.patch_file)?;
     kmod::finit_module(
         &patch_module,
         CString::new("")?.as_c_str(),

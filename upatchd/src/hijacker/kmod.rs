@@ -27,50 +27,49 @@ const KMOD_SYS_PATH: &str = "/sys/module";
 /// An RAII guard of the kernel module.
 pub struct HijackerKmodGuard {
     kmod_name: String,
+    kmod_path: PathBuf,
     sys_path: PathBuf,
 }
 
 impl HijackerKmodGuard {
-    pub fn new<S: AsRef<str>, P: AsRef<Path>>(name: S, path: P) -> Result<Self> {
-        let kmod_name = name.as_ref().to_string();
-        let sys_path = Path::new(KMOD_SYS_PATH).join(name.as_ref());
-        let kmod_path = path.as_ref().to_path_buf();
-
-        let instance: HijackerKmodGuard = Self {
-            kmod_name,
-            sys_path,
+    pub fn new<S: AsRef<str>, P: AsRef<Path>>(name: S, kmod_path: P) -> Result<Self> {
+        let instance = Self {
+            kmod_name: name.as_ref().to_string(),
+            kmod_path: kmod_path.as_ref().to_path_buf(),
+            sys_path: Path::new(KMOD_SYS_PATH).join(name.as_ref()),
         };
-        if !instance.is_installed() {
-            instance.install(kmod_path)?;
-        }
+        instance.selinux_relabel_kmod()?;
+        instance.install_kmod()?;
+
         Ok(instance)
     }
 }
 
 impl HijackerKmodGuard {
-    #[inline]
-    fn is_installed(&self) -> bool {
-        self.sys_path.exists()
-    }
-
-    fn selinux_relable_module<P: AsRef<Path>>(patch_file: P) -> Result<()> {
+    fn selinux_relabel_kmod(&self) -> Result<()> {
         const KMOD_SECURITY_TYPE: &str = "modules_object_t";
 
-        let file_path = patch_file.as_ref();
-        let mut sec_context = os::selinux::get_security_context(file_path)?;
+        if os::selinux::get_status()? != os::selinux::Status::Enforcing {
+            return Ok(());
+        }
 
+        info!("Relabeling kernel module '{}'...", self.kmod_name);
+        let mut sec_context = os::selinux::get_security_context(&self.kmod_path)?;
         if sec_context.kind != KMOD_SECURITY_TYPE {
             sec_context.kind = OsString::from(KMOD_SECURITY_TYPE);
-            os::selinux::set_security_context(file_path, sec_context)?;
+            os::selinux::set_security_context(&self.kmod_path, sec_context)?;
         }
 
         Ok(())
     }
 
-    fn install<P: AsRef<Path>>(&self, kmod_path: P) -> Result<()> {
+    fn install_kmod(&self) -> Result<()> {
+        if self.sys_path.exists() {
+            return Ok(());
+        }
+
         info!("Installing kernel module '{}'...", self.kmod_name);
-        Self::selinux_relable_module(&kmod_path)?;
-        let ko_file = fs::open_file(kmod_path)?;
+        let ko_file = fs::open_file(&self.kmod_path)?;
         kmod::finit_module(
             &ko_file,
             CString::new("")?.as_c_str(),
@@ -79,7 +78,11 @@ impl HijackerKmodGuard {
         .with_context(|| format!("Failed to install kernel module '{}'", self.kmod_name))
     }
 
-    fn remove(&self) -> Result<()> {
+    fn remove_kmod(&self) -> Result<()> {
+        if !self.sys_path.exists() {
+            return Ok(());
+        }
+
         info!("Removing kernel module '{}'...", self.kmod_name);
         kmod::delete_module(
             CString::new(self.kmod_name.as_str())?.as_c_str(),
@@ -91,10 +94,8 @@ impl HijackerKmodGuard {
 
 impl Drop for HijackerKmodGuard {
     fn drop(&mut self) {
-        if self.is_installed() {
-            if let Err(e) = self.remove() {
-                error!("{:?}", e);
-            }
+        if let Err(e) = self.remove_kmod() {
+            error!("{:?}", e);
         }
     }
 }

@@ -98,9 +98,7 @@ impl Hijacker {
         info!("Using elf mapping: {}", config);
 
         debug!("Initializing hijacker kernel module...");
-        let kmod_name = KMOD_NAME.to_string();
-        let kmod_path = KMOD_FILE_PATH.to_string();
-        let kmod = HijackerKmodGuard::new(kmod_name, kmod_path)?;
+        let kmod = HijackerKmodGuard::new(KMOD_NAME, KMOD_FILE_PATH)?;
 
         debug!("Initializing hijacker ioctl channel...");
         let ioctl = HijackerIoctl::new(KMOD_DEV_PATH)?;
