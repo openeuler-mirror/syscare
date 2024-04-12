@@ -43,18 +43,15 @@ where
         action: F,
         flag: PatchOpFlag,
         identifier: String,
-    ) -> Result<Self> {
-        let instance = Self {
+    ) -> Self {
+        Self {
             name,
             patch_manager,
             action,
             identifier,
             flag,
             finish_list: Vec::new(),
-        };
-
-        debug!("{} is created", instance);
-        Ok(instance)
+        }
     }
 }
 
