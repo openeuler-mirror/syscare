@@ -56,8 +56,7 @@ pub struct UserPatchDriver {
 impl UserPatchDriver {
     pub fn new() -> Result<Self> {
         let elf_patch_map = Arc::new(Mutex::new(IndexMap::new()));
-        let patch_monitor =
-            UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
+        let patch_monitor = UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
 
         let instance = Self {
             patch_target_map: IndexMap::new(),
@@ -196,8 +195,10 @@ impl UserPatchDriver {
                 );
             }
             for pid in &need_active {
-                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file) {
-                    error!("{:?}", e);
+                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file)
+                    .with_context(|| format!("Failed to patch process, pid={}", pid))
+                {
+                    error!("{}", e);
                     continue;
                 }
                 patch_record.processes.insert(*pid);
@@ -262,7 +263,7 @@ impl UserPatchDriver {
         );
 
         debug!(
-            "Upatch: Applying patch '{}', patch_file: {}",
+            "Upatch: Applying patch '{}' ({})",
             patch_uuid,
             patch.patch_file.display()
         );
@@ -281,7 +282,7 @@ impl UserPatchDriver {
         );
 
         debug!(
-            "Upatch: Removing patch '{}', patch_file: {}",
+            "Upatch: Removing patch '{}' ({})",
             patch_uuid,
             patch.patch_file.display()
         );
@@ -326,9 +327,8 @@ impl UserPatchDriver {
             );
         }
         for pid in need_active {
-            if let Err(e) = sys::active_patch(&uuid, pid, target_elf, patch_file) {
-                error!("{:?}", e);
-            }
+            sys::active_patch(&uuid, pid, target_elf, patch_file)
+                .with_context(|| format!("Failed to patch process, pid={}", pid))?;
             patch_record.processes.insert(pid);
         }
 
@@ -394,7 +394,8 @@ impl UserPatchDriver {
             );
         }
         for pid in need_deactive {
-            sys::deactive_patch(&uuid, pid, target_elf, patch_file)?;
+            sys::deactive_patch(&uuid, pid, target_elf, patch_file)
+                .with_context(|| format!("Failed to unpatch process, pid={}", pid))?;
             patch_record.processes.remove(&pid); // remove process from record
         }
 
