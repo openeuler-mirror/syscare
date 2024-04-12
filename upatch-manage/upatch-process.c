@@ -204,30 +204,31 @@ static void process_print_cmdline(struct upatch_process *proc)
 	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
 	int fd = open(buf, O_RDONLY);
 	if (fd == -1) {
-		log_error("open\n");
+		log_error("Failed to open %s", buf);
 		return;
 	}
 
 	while (1) {
 		rv = read(fd, buf, sizeof(buf));
 
-		if (rv == -1 && errno == EINTR)
-			continue;
-
 		if (rv == -1) {
-			log_error("read\n");
+			if (errno == EINTR) {
+				continue;
+			}
+			log_error("Failed to read cmdline\n");
 			goto err_close;
 		}
 
-		if (rv == 0)
+		if (rv == 0) {
 			break;
+		}
 
 		for (i = 0; i < rv; i++) {
-			if (buf[i] != '\n' && isprint(buf[i])) {
-				putchar(buf[i]);
+			if (isprint(buf[i])) {
+				printf("%c", buf[i]);
 			}
 			else {
-				printf("\\x%02x", (unsigned char)buf[i]);
+				printf(" ");
 			}
 		}
 	}
@@ -238,7 +239,7 @@ err_close:
 
 void upatch_process_print_short(struct upatch_process *proc)
 {
-	printf("upatch target pid %d, cmdline:", proc->pid);
+	printf("process %d, cmdline: ", proc->pid);
 	process_print_cmdline(proc);
 	printf("\n");
 }
@@ -254,7 +255,7 @@ int upatch_process_mem_open(struct upatch_process *proc, int mode)
 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
 	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
 	if (proc->memfd < 0) {
-		log_error("can't open /proc/%d/mem", proc->pid);
+		log_error("Failed to open %s", path);
 		return -1;
 	}
 

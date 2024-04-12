@@ -712,6 +712,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 		goto out;
 	}
 
+	printf("Patch ");
 	upatch_process_print_short(&proc);
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
@@ -768,8 +769,7 @@ out:
 	if (is_calc_time) {
 		gettimeofday(&end_tv, NULL);
 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
-		log_normal(
-			"PID '%d' process patch frozen_time is %ld microsecond\n",
+		log_normal("Process %d frozen time is %ld microsecond(s)\n",
 			pid, frozen_time);
 	}
 	return ret;
@@ -831,10 +831,11 @@ int process_unpatch(int pid, const char *uuid)
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("cannot init process %d\n", pid);
+		log_error("Failed to init process %d, ret=%d\n", pid, ret);
 		goto out;
 	}
 
+	printf("Unpatch ");
 	upatch_process_print_short(&proc);
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
@@ -880,8 +881,7 @@ out:
 	if (is_calc_time) {
 		gettimeofday(&end_tv, NULL);
 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
-		log_normal(
-			"PID '%d' process patch frozen_time is %ld microsecond\n",
+		log_normal("Process %d frozen time is %ld microsecond(s)\n",
 			pid, frozen_time);
 	}
 	return ret;
