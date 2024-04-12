@@ -152,7 +152,7 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
 
 	ret = process_patch(pid, &uelf, &relf, uuid, binary_path);
 	if (ret) {
-		log_error("Failed to patch process, pid=%d ret=%d\n", pid, ret);
+		log_error("Failed to patch process, pid=%d, ret=%d\n", pid, ret);
 		goto out;
 	}
 	log_normal("SUCCESS\n");
