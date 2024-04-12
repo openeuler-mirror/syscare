@@ -101,7 +101,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                     true => PatchOpFlag::Force,
                 },
                 identifier,
-            )?
+            )
             .invoke()
         })
     }
@@ -115,7 +115,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 PatchManager::remove_patch,
                 PatchOpFlag::Normal,
                 identifier,
-            )?
+            )
             .invoke()
         })
     }
@@ -136,7 +136,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                     true => PatchOpFlag::Force,
                 },
                 identifier,
-            )?
+            )
             .invoke()
         })
     }
@@ -150,7 +150,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 PatchManager::deactive_patch,
                 PatchOpFlag::Normal,
                 identifier,
-            )?
+            )
             .invoke()
         })
     }
@@ -164,7 +164,7 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 PatchManager::accept_patch,
                 PatchOpFlag::Normal,
                 identifier,
-            )?
+            )
             .invoke()
         })
     }
