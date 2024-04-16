@@ -13,7 +13,7 @@
  */
 
 use std::{
-    ffi::{CStr, OsStr, OsString},
+    ffi::{CStr, CString, FromBytesWithNulError, OsStr, OsString},
     os::unix::{ffi::OsStringExt, prelude::OsStrExt},
     path::{Path, PathBuf},
 };
@@ -34,9 +34,19 @@ pub trait CStrExt: AsRef<CStr> {
     fn to_path_buf(&self) -> PathBuf {
         PathBuf::from(self.to_os_string())
     }
+
+    fn from_bytes_with_next_nul(bytes: &[u8]) -> Result<&CStr, FromBytesWithNulError> {
+        let nul_pos = bytes.iter().position(|b| b == &b'\0').unwrap_or(0);
+        let cstr_bytes = &bytes[..=nul_pos];
+
+        CStr::from_bytes_with_nul(cstr_bytes)
+    }
 }
 
-impl<T: AsRef<CStr>> CStrExt for T {}
+impl CStrExt for CStr {}
+impl CStrExt for &CStr {}
+impl CStrExt for CString {}
+impl CStrExt for &CString {}
 
 #[test]
 fn test_cstr() {
