@@ -61,17 +61,11 @@ pub fn read_patch_status(patch: &KernelPatch) -> Result<PatchStatus> {
     debug!("Reading {}", sys_file.display());
 
     let status = match fs::read_to_string(sys_file) {
-        Ok(str) => {
-            let status = str.trim();
-            let patch_status = match status {
-                KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
-                KPATCH_STATUS_ENABLED => PatchStatus::Actived,
-                _ => {
-                    bail!("Kpatch: Invalid patch status");
-                }
-            };
-            Ok(patch_status)
-        }
+        Ok(str) => match str.trim() {
+            KPATCH_STATUS_DISABLED => Ok(PatchStatus::Deactived),
+            KPATCH_STATUS_ENABLED => Ok(PatchStatus::Actived),
+            _ => bail!("Kpatch: Invalid patch status"),
+        },
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PatchStatus::NotApplied),
         Err(e) => Err(e),
     }
