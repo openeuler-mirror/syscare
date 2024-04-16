@@ -14,9 +14,9 @@
 
 use std::ffi::OsString;
 
-/// Patch symbol definiation
+/// Patch function definiation
 #[derive(Clone)]
-pub struct PatchSymbol {
+pub struct PatchFunction {
     pub name: OsString,
     pub target: OsString,
     pub old_addr: u64,
@@ -25,9 +25,9 @@ pub struct PatchSymbol {
     pub new_size: u64,
 }
 
-impl std::fmt::Debug for PatchSymbol {
+impl std::fmt::Debug for PatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("PatchSymbol")
+        f.debug_struct("PatchFunction")
             .field("name", &self.name)
             .field("target", &self.target)
             .field("old_addr", &format!("0x{}", self.old_addr))
@@ -38,7 +38,7 @@ impl std::fmt::Debug for PatchSymbol {
     }
 }
 
-impl std::fmt::Display for PatchSymbol {
+impl std::fmt::Display for PatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
              f,

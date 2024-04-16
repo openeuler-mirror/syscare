@@ -17,9 +17,9 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 use syscare_abi::{PatchInfo, PatchType};
 use uuid::Uuid;
 
-/// User patch symbol definition
+/// User patch function definition
 #[derive(Clone)]
-pub struct UserPatchSymbol {
+pub struct UserPatchFunction {
     pub name: OsString,
     pub old_addr: u64,
     pub old_size: u64,
@@ -27,9 +27,9 @@ pub struct UserPatchSymbol {
     pub new_size: u64,
 }
 
-impl std::fmt::Debug for UserPatchSymbol {
+impl std::fmt::Debug for UserPatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("UserPatchSymbol")
+        f.debug_struct("UserPatchFunction")
             .field("name", &self.name)
             .field("old_addr", &format!("0x{}", self.old_addr))
             .field("old_size", &format!("0x{}", self.old_size))
@@ -39,7 +39,7 @@ impl std::fmt::Debug for UserPatchSymbol {
     }
 }
 
-impl std::fmt::Display for UserPatchSymbol {
+impl std::fmt::Display for UserPatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
@@ -61,7 +61,7 @@ pub struct UserPatch {
     pub kind: PatchType,
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
-    pub symbols: Vec<UserPatchSymbol>,
+    pub functions: Vec<UserPatchFunction>,
     pub patch_file: PathBuf,
     pub target_elf: PathBuf,
     pub checksum: String,

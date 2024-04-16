@@ -17,22 +17,22 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
 use syscare_abi::{PatchInfo, PatchType};
 use uuid::Uuid;
 
-/// Kernel patch symbol definition
+/// Kernel patch function definition
 #[derive(Clone)]
-pub struct KernelPatchSymbol {
+pub struct KernelPatchFunction {
     pub name: OsString,
-    pub target: OsString,
+    pub object: OsString,
     pub old_addr: u64,
     pub old_size: u64,
     pub new_addr: u64,
     pub new_size: u64,
 }
 
-impl std::fmt::Debug for KernelPatchSymbol {
+impl std::fmt::Debug for KernelPatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("KernelPatchSymbol")
+        f.debug_struct("KernelPatchFunction")
             .field("name", &self.name)
-            .field("target", &self.target)
+            .field("object", &self.object)
             .field("old_addr", &format!("{:#x}", self.old_addr))
             .field("old_size", &format!("{:#x}", self.old_size))
             .field("new_addr", &format!("{:#x}", self.new_addr))
@@ -41,13 +41,13 @@ impl std::fmt::Debug for KernelPatchSymbol {
     }
 }
 
-impl std::fmt::Display for KernelPatchSymbol {
+impl std::fmt::Display for KernelPatchFunction {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
              f,
-             "name: {}, target: {}, old_addr: {:#x}, old_size: {:#x}, new_addr: {:#x}, new_size: {:#x}",
+             "name: {}, object: {}, old_addr: {:#x}, old_size: {:#x}, new_addr: {:#x}, new_size: {:#x}",
              self.name.to_string_lossy(),
-             self.target.to_string_lossy(),
+             self.object.to_string_lossy(),
              self.old_addr,
              self.old_size,
              self.new_addr,
@@ -65,7 +65,7 @@ pub struct KernelPatch {
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
     pub module_name: OsString,
-    pub symbols: Vec<KernelPatchSymbol>,
+    pub functions: Vec<KernelPatchFunction>,
     pub patch_file: PathBuf,
     pub sys_file: PathBuf,
     pub checksum: String,

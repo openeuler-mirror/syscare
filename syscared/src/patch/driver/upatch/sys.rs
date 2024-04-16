@@ -25,12 +25,10 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
         .exit_code();
 
     match exit_code {
-        0 => {}
-        EEXIST => {}
-        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+        0 => Ok(()),
+        EEXIST => Ok(()),
+        _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
     }
-
-    Ok(())
 }
 
 pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
@@ -49,9 +47,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
         .exit_code();
 
     match exit_code {
-        0 => {}
-        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+        0 => Ok(()),
+        _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
     }
-
-    Ok(())
 }

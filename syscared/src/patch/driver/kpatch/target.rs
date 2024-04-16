@@ -12,69 +12,106 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::{OsStr, OsString};
+use std::ffi::OsString;
 
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-use crate::patch::entity::KernelPatchSymbol;
+use crate::patch::entity::KernelPatchFunction;
 
-#[derive(Debug, PartialEq)]
-pub struct PatchTargetRecord {
+#[derive(Debug)]
+pub struct PatchFunction {
     pub uuid: Uuid,
     pub name: OsString,
     pub size: u64,
 }
 
+impl PatchFunction {
+    fn new(uuid: Uuid, function: &KernelPatchFunction) -> Self {
+        Self {
+            uuid,
+            name: function.name.to_os_string(),
+            size: function.new_size,
+        }
+    }
+
+    fn is_same_function(&self, uuid: &Uuid, function: &KernelPatchFunction) -> bool {
+        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
+    }
+}
+
+#[derive(Debug)]
 pub struct PatchTarget {
     name: OsString,
-    symbol_map: IndexMap<u64, Vec<PatchTargetRecord>>, // symbol addr -> symbol collision list
+    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
 }
 
 impl PatchTarget {
-    fn match_record(record: &PatchTargetRecord, uuid: &Uuid, symbol: &KernelPatchSymbol) -> bool {
-        (record.uuid == *uuid) && (record.name == symbol.name) && (record.size == symbol.new_size)
-    }
-}
-
-impl PatchTarget {
-    pub fn new<S: AsRef<OsStr>>(name: S) -> Self {
+    pub fn new(name: OsString) -> Self {
         Self {
-            name: name.as_ref().to_os_string(),
-            symbol_map: IndexMap::new(),
+            name,
+            function_map: IndexMap::new(),
+        }
+    }
+}
+
+impl PatchTarget {
+    pub fn has_function(&self) -> bool {
+        self.function_map.is_empty()
+    }
+
+    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
+    where
+        I: IntoIterator<Item = &'a KernelPatchFunction>,
+    {
+        for function in functions {
+            if self.name != function.object {
+                continue;
+            }
+            self.function_map
+                .entry(function.old_addr)
+                .or_default()
+                .push(PatchFunction::new(uuid, function));
         }
     }
 
-    pub fn classify_symbols(
-        symbols: &[KernelPatchSymbol],
-    ) -> IndexMap<&OsStr, Vec<&KernelPatchSymbol>> {
-        let mut symbol_map = IndexMap::new();
-
-        for symbol in symbols {
-            let target_name = symbol.target.as_os_str();
-
-            symbol_map
-                .entry(target_name)
-                .or_insert_with(Vec::new)
-                .push(symbol);
+    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
+    where
+        I: IntoIterator<Item = &'a KernelPatchFunction>,
+    {
+        for function in functions {
+            if self.name != function.object {
+                continue;
+            }
+            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
+                if let Some(index) = collision_list
+                    .iter()
+                    .position(|patch_function| patch_function.is_same_function(uuid, function))
+                {
+                    collision_list.remove(index);
+                    if collision_list.is_empty() {
+                        self.function_map.remove(&function.old_addr);
+                    }
+                }
+            }
         }
-
-        symbol_map
     }
+}
 
+impl PatchTarget {
     pub fn get_conflicts<'a, I>(
         &'a self,
-        symbols: I,
-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+        functions: I,
+    ) -> impl IntoIterator<Item = &'a PatchFunction>
     where
-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
+        I: IntoIterator<Item = &'a KernelPatchFunction>,
     {
-        symbols.into_iter().filter_map(move |symbol| {
-            if self.name != symbol.target {
+        functions.into_iter().filter_map(move |function| {
+            if self.name != function.object {
                 return None;
             }
-            self.symbol_map
-                .get(&symbol.old_addr)
+            self.function_map
+                .get(&function.old_addr)
                 .and_then(|list| list.last())
         })
     }
@@ -82,66 +119,19 @@ impl PatchTarget {
     pub fn get_overrides<'a, I>(
         &'a self,
         uuid: &'a Uuid,
-        symbols: I,
-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+        functions: I,
+    ) -> impl IntoIterator<Item = &'a PatchFunction>
     where
-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
+        I: IntoIterator<Item = &'a KernelPatchFunction>,
     {
-        symbols.into_iter().filter_map(move |symbol| {
-            if self.name != symbol.target {
+        functions.into_iter().filter_map(move |function| {
+            if self.name != function.object {
                 return None;
             }
-            self.symbol_map
-                .get(&symbol.old_addr)
+            self.function_map
+                .get(&function.old_addr)
                 .and_then(|list| list.last())
-                .filter(|record| !Self::match_record(record, uuid, symbol))
+                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
         })
-    }
-
-    pub fn add_symbols<'a, I>(&mut self, uuid: Uuid, symbols: I)
-    where
-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
-    {
-        for symbol in symbols {
-            if self.name != symbol.target {
-                continue;
-            }
-
-            let symbol_addr = symbol.old_addr;
-            let symbol_record = PatchTargetRecord {
-                uuid,
-                name: symbol.name.to_os_string(),
-                size: symbol.new_size,
-            };
-
-            self.symbol_map
-                .entry(symbol_addr)
-                .or_default()
-                .push(symbol_record);
-        }
-    }
-
-    pub fn remove_symbols<'a, I>(&mut self, uuid: &Uuid, symbols: I)
-    where
-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
-    {
-        for symbol in symbols {
-            if self.name != symbol.target {
-                continue;
-            }
-
-            let symbol_addr = symbol.old_addr;
-            if let Some(collision_list) = self.symbol_map.get_mut(&symbol_addr) {
-                if let Some(index) = collision_list
-                    .iter()
-                    .position(|record| Self::match_record(record, uuid, symbol))
-                {
-                    collision_list.remove(index);
-                    if collision_list.is_empty() {
-                        self.symbol_map.remove(&symbol_addr);
-                    }
-                }
-            }
-        }
     }
 }

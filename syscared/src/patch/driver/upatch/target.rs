@@ -17,42 +17,103 @@ use std::ffi::OsString;
 use indexmap::IndexMap;
 use uuid::Uuid;
 
-use crate::patch::entity::UserPatchSymbol;
+use crate::patch::entity::UserPatchFunction;
 
-#[derive(Debug, PartialEq)]
-pub struct PatchTargetRecord {
+use super::entity::PatchEntity;
+
+#[derive(Debug)]
+pub struct PatchFunction {
     pub uuid: Uuid,
     pub name: OsString,
     pub size: u64,
 }
 
-pub struct PatchTarget {
-    symbol_map: IndexMap<u64, Vec<PatchTargetRecord>>, // symbol addr -> symbol collision list
-}
-
-impl PatchTarget {
-    fn match_record(record: &PatchTargetRecord, uuid: &Uuid, symbol: &UserPatchSymbol) -> bool {
-        (record.uuid == *uuid) && (record.name == symbol.name) && (record.size == symbol.new_size)
-    }
-}
-
-impl PatchTarget {
-    pub fn new() -> Self {
+impl PatchFunction {
+    pub fn new(uuid: Uuid, function: &UserPatchFunction) -> Self {
         Self {
-            symbol_map: IndexMap::new(),
+            uuid,
+            name: function.name.to_os_string(),
+            size: function.new_size,
         }
     }
 
+    pub fn is_same_function(&self, uuid: &Uuid, function: &UserPatchFunction) -> bool {
+        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
+    }
+}
+
+#[derive(Debug, Default)]
+pub struct PatchTarget {
+    patch_map: IndexMap<Uuid, PatchEntity>, // patched file data
+    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
+}
+
+impl PatchTarget {
+    pub fn is_patched(&self) -> bool {
+        !self.patch_map.is_empty()
+    }
+
+    pub fn add_patch(&mut self, uuid: Uuid, entity: PatchEntity) {
+        self.patch_map.insert(uuid, entity);
+    }
+
+    pub fn remove_patch(&mut self, uuid: &Uuid) {
+        self.patch_map.remove(uuid);
+    }
+
+    pub fn get_patch(&mut self, uuid: &Uuid) -> Option<&mut PatchEntity> {
+        self.patch_map.get_mut(uuid)
+    }
+
+    pub fn all_patches(&mut self) -> impl IntoIterator<Item = (&Uuid, &mut PatchEntity)> {
+        self.patch_map.iter_mut()
+    }
+}
+
+impl PatchTarget {
+    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
+    where
+        I: IntoIterator<Item = &'a UserPatchFunction>,
+    {
+        for function in functions {
+            self.function_map
+                .entry(function.old_addr)
+                .or_default()
+                .push(PatchFunction::new(uuid, function));
+        }
+    }
+
+    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
+    where
+        I: IntoIterator<Item = &'a UserPatchFunction>,
+    {
+        for function in functions {
+            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
+                if let Some(index) = collision_list
+                    .iter()
+                    .position(|patch_function| patch_function.is_same_function(uuid, function))
+                {
+                    collision_list.remove(index);
+                    if collision_list.is_empty() {
+                        self.function_map.remove(&function.old_addr);
+                    }
+                }
+            }
+        }
+    }
+}
+
+impl PatchTarget {
     pub fn get_conflicts<'a, I>(
         &'a self,
-        symbols: I,
-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+        functions: I,
+    ) -> impl IntoIterator<Item = &'a PatchFunction>
     where
-        I: IntoIterator<Item = &'a UserPatchSymbol>,
+        I: IntoIterator<Item = &'a UserPatchFunction>,
     {
-        symbols.into_iter().filter_map(move |symbol| {
-            self.symbol_map
-                .get(&symbol.old_addr)
+        functions.into_iter().filter_map(move |function| {
+            self.function_map
+                .get(&function.old_addr)
                 .and_then(|list| list.last())
         })
     }
@@ -60,55 +121,16 @@ impl PatchTarget {
     pub fn get_overrides<'a, I>(
         &'a self,
         uuid: &'a Uuid,
-        symbols: I,
-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+        functions: I,
+    ) -> impl IntoIterator<Item = &'a PatchFunction>
     where
-        I: IntoIterator<Item = &'a UserPatchSymbol>,
+        I: IntoIterator<Item = &'a UserPatchFunction>,
     {
-        symbols.into_iter().filter_map(move |symbol| {
-            self.symbol_map
-                .get(&symbol.old_addr)
+        functions.into_iter().filter_map(move |function| {
+            self.function_map
+                .get(&function.old_addr)
                 .and_then(|list| list.last())
-                .filter(|record| !Self::match_record(record, uuid, symbol))
+                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
         })
-    }
-
-    pub fn add_symbols<'a, I>(&mut self, uuid: Uuid, symbols: I)
-    where
-        I: IntoIterator<Item = &'a UserPatchSymbol>,
-    {
-        for symbol in symbols {
-            let symbol_addr = symbol.old_addr;
-            let symbol_record = PatchTargetRecord {
-                uuid,
-                name: symbol.name.to_os_string(),
-                size: symbol.new_size,
-            };
-
-            self.symbol_map
-                .entry(symbol_addr)
-                .or_default()
-                .push(symbol_record);
-        }
-    }
-
-    pub fn remove_symbols<'a, I>(&mut self, uuid: &Uuid, symbols: I)
-    where
-        I: IntoIterator<Item = &'a UserPatchSymbol>,
-    {
-        for symbol in symbols {
-            let symbol_addr = symbol.old_addr;
-            if let Some(collision_list) = self.symbol_map.get_mut(&symbol_addr) {
-                if let Some(index) = collision_list
-                    .iter()
-                    .position(|record| Self::match_record(record, uuid, symbol))
-                {
-                    collision_list.remove(index);
-                    if collision_list.is_empty() {
-                        self.symbol_map.remove(&symbol_addr);
-                    }
-                }
-            }
-        }
     }
 }

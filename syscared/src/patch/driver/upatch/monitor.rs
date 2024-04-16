@@ -21,12 +21,13 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use indexmap::IndexMap;
-use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
+use indexmap::{IndexMap, IndexSet};
+use inotify::{Inotify, WatchDescriptor, WatchMask};
 use log::info;
 use parking_lot::{Mutex, RwLock};
+use syscare_common::ffi::OsStrExt;
 
-use super::ElfPatchMap;
+use super::target::PatchTarget;
 
 const MONITOR_THREAD_NAME: &str = "upatch_monitor";
 const MONITOR_CHECK_PERIOD: u64 = 100;
@@ -34,33 +35,36 @@ const MONITOR_EVENT_BUFFER_CAPACITY: usize = 16 * 64; // inotify event size: 16
 
 pub(super) struct UserPatchMonitor {
     inotify: Arc<Mutex<Option<Inotify>>>,
-    watch_map: Arc<Mutex<IndexMap<PathBuf, WatchDescriptor>>>,
-    target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
+    watch_wd_map: Arc<Mutex<IndexMap<PathBuf, WatchDescriptor>>>,
+    watch_file_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
     monitor_thread: Option<thread::JoinHandle<()>>,
 }
 
 impl UserPatchMonitor {
-    pub fn new<F>(elf_patch_map: ElfPatchMap, callback: F) -> Result<Self>
+    pub fn new<F>(
+        patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+        callback: F,
+    ) -> Result<Self>
     where
-        F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
+        F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
     {
         let inotify = Arc::new(Mutex::new(Some(
             Inotify::init().context("Failed to initialize inotify")?,
         )));
-        let watch_map = Arc::new(Mutex::new(IndexMap::new()));
-        let target_map = Arc::new(RwLock::new(IndexMap::new()));
+        let watch_wd_map = Arc::new(Mutex::new(IndexMap::new()));
+        let watch_file_map = Arc::new(RwLock::new(IndexMap::new()));
         let monitor_thread = MonitorThread {
             inotify: inotify.clone(),
-            target_map: target_map.clone(),
-            elf_patch_map,
+            watch_file_map: watch_file_map.clone(),
+            patch_target_map,
             callback,
         }
         .run()?;
 
         Ok(Self {
             inotify,
-            target_map,
-            watch_map,
+            watch_wd_map,
+            watch_file_map,
             monitor_thread: Some(monitor_thread),
         })
     }
@@ -69,7 +73,7 @@ impl UserPatchMonitor {
 impl UserPatchMonitor {
     pub fn watch_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
         let watch_file = file_path.as_ref();
-        if self.watch_map.lock().contains_key(watch_file) {
+        if self.watch_wd_map.lock().contains_key(watch_file) {
             return Ok(());
         }
 
@@ -79,10 +83,10 @@ impl UserPatchMonitor {
                     .add_watch(watch_file, WatchMask::OPEN)
                     .with_context(|| format!("Failed to watch file {}", watch_file.display()))?;
 
-                self.target_map
+                self.watch_file_map
                     .write()
                     .insert(wd.clone(), watch_file.to_owned());
-                self.watch_map.lock().insert(watch_file.to_owned(), wd);
+                self.watch_wd_map.lock().insert(watch_file.to_owned(), wd);
                 info!("Start watching file {}", watch_file.display());
             }
             None => bail!("Inotify does not exist"),
@@ -94,10 +98,10 @@ impl UserPatchMonitor {
     pub fn ignore_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
         let ignore_file = file_path.as_ref();
 
-        if let Some(wd) = self.watch_map.lock().remove(ignore_file) {
+        if let Some(wd) = self.watch_wd_map.lock().remove(ignore_file) {
             match self.inotify.lock().as_mut() {
                 Some(inotify) => {
-                    self.target_map.write().remove(&wd);
+                    self.watch_file_map.write().remove(&wd);
 
                     inotify.rm_watch(wd).with_context(|| {
                         format!("Failed to stop watch file {}", ignore_file.display())
@@ -114,14 +118,14 @@ impl UserPatchMonitor {
 
 struct MonitorThread<F> {
     inotify: Arc<Mutex<Option<Inotify>>>,
-    target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
-    elf_patch_map: ElfPatchMap,
+    watch_file_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
+    patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
     callback: F,
 }
 
 impl<F> MonitorThread<F>
 where
-    F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
+    F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
 {
     fn run(self) -> Result<thread::JoinHandle<()>> {
         thread::Builder::new()
@@ -130,18 +134,30 @@ where
             .with_context(|| format!("Failed to create thread '{}'", MONITOR_THREAD_NAME))
     }
 
+    #[inline]
+    fn filter_blacklist_path(path: &Path) -> bool {
+        const BLACKLIST_KEYWORDS: [&str; 2] = ["syscare", "upatch"];
+
+        for keyword in BLACKLIST_KEYWORDS {
+            if path.contains(keyword) {
+                return false;
+            }
+        }
+        true
+    }
+
     fn thread_main(self) {
         while let Some(inotify) = self.inotify.lock().as_mut() {
             let mut buffer = [0; MONITOR_EVENT_BUFFER_CAPACITY];
 
             if let Ok(events) = inotify.read_events(&mut buffer) {
-                for event in events {
-                    if !event.mask.contains(EventMask::OPEN) {
-                        continue;
-                    }
-                    if let Some(patch_file) = self.target_map.read().get(&event.wd) {
-                        (self.callback)(self.elf_patch_map.clone(), patch_file);
-                    }
+                let watch_file_map = self.watch_file_map.read();
+                let target_elfs = events
+                    .filter_map(|event| watch_file_map.get(&event.wd))
+                    .filter(|path| Self::filter_blacklist_path(path))
+                    .collect::<IndexSet<_>>();
+                for target_elf in target_elfs {
+                    (self.callback)(self.patch_target_map.clone(), target_elf);
                 }
             }
 
