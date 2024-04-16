@@ -13,8 +13,7 @@
  */
 
 use std::{
-    ffi::OsString,
-    os::unix::ffi::OsStringExt,
+    ffi::{CStr, OsString},
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -25,10 +24,14 @@ use object::{NativeFile, Object, ObjectSection};
 use uuid::Uuid;
 
 use syscare_abi::{PatchEntity, PatchInfo, PatchType};
-use syscare_common::{concat_os, ffi::OsStrExt, fs};
+use syscare_common::{
+    concat_os,
+    ffi::{CStrExt, OsStrExt},
+    fs,
+};
 
 use super::PatchResolverImpl;
-use crate::patch::entity::{KernelPatch, KernelPatchSymbol, Patch};
+use crate::patch::entity::{KernelPatch, KernelPatchFunction, Patch};
 
 const KPATCH_SUFFIX: &str = ".ko";
 const KPATCH_SYS_DIR: &str = "/sys/kernel/livepatch";
@@ -37,7 +40,10 @@ const KPATCH_SYS_FILE_NAME: &str = "enabled";
 mod ffi {
     use std::os::raw::{c_char, c_long, c_ulong};
 
-    use object::Pod;
+    use object::{
+        read::elf::{ElfSectionRelocationIterator, FileHeader},
+        Pod, Relocation,
+    };
 
     #[repr(C)]
     #[derive(Debug, Clone, Copy)]
@@ -54,9 +60,9 @@ mod ffi {
         pub ref_offset: c_long,
     }
 
-    pub const KPATCH_FUNC_SIZE: usize = std::mem::size_of::<KpatchFunction>();
-    pub const KPATCH_FUNC_NAME_OFFSET: usize = 40;
-    pub const KPATCH_OBJECT_NAME_OFFSET: usize = 48;
+    pub const KPATCH_FUNCTION_SIZE: usize = std::mem::size_of::<KpatchFunction>();
+    pub const KPATCH_FUNCTION_OFFSET: usize = 40;
+    pub const KPATCH_OBJECT_OFFSET: usize = 48;
 
     /*
      * SAFETY: This struct is
@@ -66,24 +72,34 @@ mod ffi {
      */
     unsafe impl Pod for KpatchFunction {}
 
-    pub enum KpatchRelocation {
-        NewAddr = 0,
-        Name = 1,
-        ObjName = 2,
+    pub struct KpatchRelocation {
+        pub addr: (u64, Relocation),
+        pub name: (u64, Relocation),
+        pub object: (u64, Relocation),
     }
 
-    impl From<usize> for KpatchRelocation {
-        fn from(value: usize) -> Self {
-            match value {
-                0 => KpatchRelocation::NewAddr,
-                1 => KpatchRelocation::Name,
-                2 => KpatchRelocation::ObjName,
-                _ => unreachable!(),
-            }
+    pub struct KpatchRelocationIterator<'data, 'file, Elf: FileHeader>(
+        ElfSectionRelocationIterator<'data, 'file, Elf, &'data [u8]>,
+    );
+
+    impl<'data, 'file, Elf: FileHeader> KpatchRelocationIterator<'data, 'file, Elf> {
+        pub fn new(relocations: ElfSectionRelocationIterator<'data, 'file, Elf>) -> Self {
+            Self(relocations)
         }
     }
 
-    pub const KPATCH_FUNC_RELA_TYPE_NUM: usize = 3;
+    impl<'data, 'file, Elf: FileHeader> Iterator for KpatchRelocationIterator<'data, 'file, Elf> {
+        type Item = KpatchRelocation;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if let (Some(addr), Some(name), Some(object)) =
+                (self.0.next(), self.0.next(), self.0.next())
+            {
+                return Some(KpatchRelocation { addr, name, object });
+            }
+            None
+        }
+    }
 }
 
 use ffi::*;
@@ -115,19 +131,19 @@ impl KpatchResolverImpl {
             .with_context(|| format!("Failed to read section '{}'", KPATCH_FUNCS_SECTION))?;
 
         // Resolve patch functions
-        let patch_symbols = &mut patch.symbols;
-        let patch_functions = object::slice_from_bytes::<KpatchFunction>(
+        let patch_functions = &mut patch.functions;
+        let kpatch_function_slice = object::slice_from_bytes::<KpatchFunction>(
             function_data,
-            function_data.len() / KPATCH_FUNC_SIZE,
+            function_data.len() / KPATCH_FUNCTION_SIZE,
         )
         .map(|(f, _)| f)
         .map_err(|_| anyhow!("Invalid data format"))
         .context("Failed to resolve patch functions")?;
 
-        for function in patch_functions {
-            patch_symbols.push(KernelPatchSymbol {
+        for function in kpatch_function_slice {
+            patch_functions.push(KernelPatchFunction {
                 name: OsString::new(),
-                target: OsString::new(),
+                object: OsString::new(),
                 old_addr: function.old_addr,
                 old_size: function.old_size,
                 new_addr: function.new_addr,
@@ -136,44 +152,35 @@ impl KpatchResolverImpl {
         }
 
         // Relocate patch functions
-        for (index, (offset, relocation)) in function_section.relocations().enumerate() {
-            match KpatchRelocation::from(index % KPATCH_FUNC_RELA_TYPE_NUM) {
-                KpatchRelocation::Name => {
-                    let symbol_index =
-                        (offset as usize - KPATCH_FUNC_NAME_OFFSET) / KPATCH_FUNC_SIZE;
-                    let patch_symbol = patch_symbols
-                        .get_mut(symbol_index)
-                        .context("Failed to find patch symbol")?;
+        for relocation in KpatchRelocationIterator::new(function_section.relocations()) {
+            let (name_reloc_offset, name_reloc) = relocation.name;
+            let (object_reloc_offset, obj_reloc) = relocation.object;
 
-                    let name_offset = relocation.addend() as usize;
-                    let mut name_bytes = &string_data[name_offset..];
-                    let string_end = name_bytes
-                        .iter()
-                        .position(|b| b == &b'\0')
-                        .context("Failed to find termination char")?;
-                    name_bytes = &name_bytes[..string_end];
+            // Relocate patch function name
+            let name_index =
+                (name_reloc_offset as usize - KPATCH_FUNCTION_OFFSET) / KPATCH_FUNCTION_SIZE;
+            let name_function = patch_functions
+                .get_mut(name_index)
+                .context("Failed to find patch function")?;
+            let name_offset = name_reloc.addend() as usize;
+            let name_string = CStr::from_bytes_with_next_nul(&string_data[name_offset..])
+                .context("Failed to parse patch object name")?
+                .to_os_string();
 
-                    patch_symbol.name = OsString::from_vec(name_bytes.to_vec());
-                }
-                KpatchRelocation::ObjName => {
-                    let symbol_index =
-                        (offset as usize - KPATCH_OBJECT_NAME_OFFSET) / KPATCH_FUNC_SIZE;
-                    let patch_symbol = patch_symbols
-                        .get_mut(symbol_index)
-                        .context("Failed to find patch symbol")?;
+            name_function.name = name_string;
 
-                    let name_offset = relocation.addend() as usize;
-                    let mut name_bytes = &string_data[name_offset..];
-                    let string_end = name_bytes
-                        .iter()
-                        .position(|b| b == &b'\0')
-                        .context("Failed to find termination char")?;
-                    name_bytes = &name_bytes[..string_end];
+            // Relocate patch function object
+            let object_index =
+                (object_reloc_offset as usize - KPATCH_OBJECT_OFFSET) / KPATCH_FUNCTION_SIZE;
+            let object_function = patch_functions
+                .get_mut(object_index)
+                .context("Failed to find patch function")?;
+            let object_offset = obj_reloc.addend() as usize;
+            let object_string = CStr::from_bytes_with_next_nul(&string_data[object_offset..])
+                .context("Failed to parse patch function name")?
+                .to_os_string();
 
-                    patch_symbol.target = OsString::from_vec(name_bytes.to_vec());
-                }
-                _ => {}
-            };
+            object_function.object = object_string;
         }
 
         Ok(())
@@ -208,10 +215,10 @@ impl PatchResolverImpl for KpatchResolverImpl {
             module_name,
             patch_file,
             sys_file,
-            symbols: Vec::new(),
+            functions: Vec::new(),
             checksum: patch_entity.checksum.clone(),
         };
-        Self::resolve_patch_file(&mut patch).context("Failed to resolve patch elf")?;
+        Self::resolve_patch_file(&mut patch).context("Failed to resolve patch")?;
 
         Ok(Patch::KernelPatch(patch))
     }

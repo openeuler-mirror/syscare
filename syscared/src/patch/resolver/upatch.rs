@@ -12,22 +12,30 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, str::FromStr, sync::Arc};
+use std::{
+    ffi::{CStr, OsString},
+    path::Path,
+    str::FromStr,
+    sync::Arc,
+};
 
 use anyhow::{anyhow, Context, Result};
 use object::{NativeFile, Object, ObjectSection};
 use uuid::Uuid;
 
 use syscare_abi::{PatchEntity, PatchInfo, PatchType};
-use syscare_common::{concat_os, fs};
+use syscare_common::{concat_os, ffi::CStrExt, fs};
 
 use super::PatchResolverImpl;
-use crate::patch::entity::{Patch, UserPatch, UserPatchSymbol};
+use crate::patch::entity::{Patch, UserPatch, UserPatchFunction};
 
 mod ffi {
     use std::os::raw::{c_char, c_ulong};
 
-    use object::Pod;
+    use object::{
+        read::elf::{ElfSectionRelocationIterator, FileHeader},
+        Pod, Relocation,
+    };
 
     #[repr(C)]
     #[derive(Debug, Clone, Copy)]
@@ -49,25 +57,34 @@ mod ffi {
      */
     unsafe impl Pod for UpatchFunction {}
 
-    pub const UPATCH_FUNC_SIZE: usize = std::mem::size_of::<UpatchFunction>();
-    pub const UPATCH_FUNC_NAME_OFFSET: usize = 40;
+    pub const UPATCH_FUNCTION_SIZE: usize = std::mem::size_of::<UpatchFunction>();
+    pub const UPATCH_FUNCTION_OFFSET: usize = 40;
 
-    pub enum UpatchRelocation {
-        NewAddr = 0,
-        Name = 1,
+    pub struct UpatchRelocation {
+        pub addr: (u64, Relocation),
+        pub name: (u64, Relocation),
     }
 
-    impl From<usize> for UpatchRelocation {
-        fn from(value: usize) -> Self {
-            match value {
-                0 => UpatchRelocation::NewAddr,
-                1 => UpatchRelocation::Name,
-                _ => unreachable!(),
-            }
+    pub struct UpatchRelocationIterator<'data, 'file, Elf: FileHeader>(
+        ElfSectionRelocationIterator<'data, 'file, Elf, &'data [u8]>,
+    );
+
+    impl<'data, 'file, Elf: FileHeader> UpatchRelocationIterator<'data, 'file, Elf> {
+        pub fn new(relocations: ElfSectionRelocationIterator<'data, 'file, Elf>) -> Self {
+            Self(relocations)
         }
     }
 
-    pub const UPATCH_FUNC_RELA_TYPE_NUM: usize = 2;
+    impl<'data, 'file, Elf: FileHeader> Iterator for UpatchRelocationIterator<'data, 'file, Elf> {
+        type Item = UpatchRelocation;
+
+        fn next(&mut self) -> Option<Self::Item> {
+            if let (Some(addr), Some(name)) = (self.0.next(), self.0.next()) {
+                return Some(UpatchRelocation { addr, name });
+            }
+            None
+        }
+    }
 }
 
 use ffi::*;
@@ -99,17 +116,17 @@ impl UpatchResolverImpl {
             .with_context(|| format!("Failed to read section '{}'", UPATCH_FUNCS_SECTION))?;
 
         // Resolve patch functions
-        let patch_symbols = &mut patch.symbols;
-        let patch_functions = object::slice_from_bytes::<UpatchFunction>(
+        let patch_functions = &mut patch.functions;
+        let upatch_function_slice = object::slice_from_bytes::<UpatchFunction>(
             function_data,
-            function_data.len() / UPATCH_FUNC_SIZE,
+            function_data.len() / UPATCH_FUNCTION_SIZE,
         )
         .map(|(f, _)| f)
         .map_err(|_| anyhow!("Invalid data format"))
         .context("Failed to resolve patch functions")?;
 
-        for function in patch_functions {
-            patch_symbols.push(UserPatchSymbol {
+        for function in upatch_function_slice {
+            patch_functions.push(UserPatchFunction {
                 name: OsString::new(),
                 old_addr: function.old_addr,
                 old_size: function.old_size,
@@ -119,25 +136,20 @@ impl UpatchResolverImpl {
         }
 
         // Relocate patch functions
-        for (index, (offset, relocation)) in function_section.relocations().enumerate() {
-            if let UpatchRelocation::Name =
-                UpatchRelocation::from(index % UPATCH_FUNC_RELA_TYPE_NUM)
-            {
-                let symbol_index = (offset as usize - UPATCH_FUNC_NAME_OFFSET) / UPATCH_FUNC_SIZE;
-                let patch_symbol = patch_symbols
-                    .get_mut(symbol_index)
-                    .context("Failed to find patch symbol")?;
+        for relocation in UpatchRelocationIterator::new(function_section.relocations()) {
+            let (name_reloc_offset, name_reloc) = relocation.name;
 
-                let name_offset = relocation.addend() as usize;
-                let mut name_bytes = &string_data[name_offset..];
-                let string_end = name_bytes
-                    .iter()
-                    .position(|b| b == &b'\0')
-                    .context("Failed to find termination char")?;
-                name_bytes = &name_bytes[..string_end];
+            let name_index =
+                (name_reloc_offset as usize - UPATCH_FUNCTION_OFFSET) / UPATCH_FUNCTION_SIZE;
+            let name_function = patch_functions
+                .get_mut(name_index)
+                .context("Failed to find patch function")?;
+            let name_offset = name_reloc.addend() as usize;
+            let name_string = CStr::from_bytes_with_next_nul(&string_data[name_offset..])
+                .context("Failed to parse patch function name")?
+                .to_os_string();
 
-                patch_symbol.name = OsString::from_vec(name_bytes.to_vec());
-            }
+            name_function.name = name_string;
         }
 
         Ok(())
@@ -165,10 +177,10 @@ impl PatchResolverImpl for UpatchResolverImpl {
             pkg_name: patch_info.target.full_name(),
             patch_file: patch_root.join(&patch_entity.patch_name),
             target_elf: patch_entity.patch_target.clone(),
-            symbols: Vec::new(),
+            functions: Vec::new(),
             checksum: patch_entity.checksum.clone(),
         };
-        Self::resolve_patch_elf(&mut patch).context("Failed to resolve patch elf")?;
+        Self::resolve_patch_elf(&mut patch).context("Failed to resolve patch")?;
 
         Ok(Patch::UserPatch(patch))
     }

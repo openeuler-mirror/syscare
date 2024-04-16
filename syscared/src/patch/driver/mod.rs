@@ -37,17 +37,17 @@ pub struct PatchDriver {
 }
 
 impl PatchDriver {
-    fn check_conflict_symbols(&self, patch: &Patch) -> Result<()> {
+    fn check_conflict_functions(&self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check_conflict_symbols(patch),
-            Patch::UserPatch(patch) => self.upatch.check_conflict_symbols(patch),
+            Patch::KernelPatch(patch) => self.kpatch.check_conflict_functions(patch),
+            Patch::UserPatch(patch) => self.upatch.check_conflict_functions(patch),
         }
     }
 
-    fn check_override_symbols(&self, patch: &Patch) -> Result<()> {
+    fn check_override_functions(&self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check_override_symbols(patch),
-            Patch::UserPatch(patch) => self.upatch.check_override_symbols(patch),
+            Patch::KernelPatch(patch) => self.kpatch.check_override_functions(patch),
+            Patch::UserPatch(patch) => self.upatch.check_override_functions(patch),
         }
     }
 }
@@ -96,7 +96,7 @@ impl PatchDriver {
         if flag == PatchOpFlag::Force {
             return Ok(());
         }
-        self.check_conflict_symbols(patch)
+        self.check_conflict_functions(patch)
             .with_context(|| format!("Patch '{}' is conflicted", patch))
     }
 
@@ -124,7 +124,7 @@ impl PatchDriver {
     /// After this action, the patch status would be changed to 'ACTIVED'.
     pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         if flag != PatchOpFlag::Force {
-            self.check_conflict_symbols(patch)?;
+            self.check_conflict_functions(patch)?;
         }
         match patch {
             Patch::KernelPatch(patch) => self.kpatch.active(patch),
@@ -137,7 +137,7 @@ impl PatchDriver {
     /// After this action, the patch status would be changed to 'DEACTIVED'.
     pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         if flag != PatchOpFlag::Force {
-            self.check_override_symbols(patch)?;
+            self.check_override_functions(patch)?;
         }
         match patch {
             Patch::KernelPatch(patch) => self.kpatch.deactive(patch),

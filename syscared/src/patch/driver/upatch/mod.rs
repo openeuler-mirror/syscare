@@ -13,65 +13,97 @@
  */
 
 use std::{
-    ffi::OsString,
+    ffi::OsStr,
     fmt::Write,
+    os::linux::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use indexmap::{indexset, IndexMap, IndexSet};
-use log::{debug, error};
-use parking_lot::Mutex;
+use log::{debug, info, warn};
+use parking_lot::RwLock;
 use uuid::Uuid;
 
 use syscare_abi::PatchStatus;
-use syscare_common::util::digest;
+use syscare_common::{fs, util::digest};
 
-use crate::patch::entity::UserPatch;
+use crate::patch::{driver::upatch::entity::PatchEntity, entity::UserPatch};
 
+mod entity;
 mod monitor;
-mod process;
 mod sys;
 mod target;
 
 use monitor::UserPatchMonitor;
 use target::PatchTarget;
 
-type ElfPatchMap = Arc<Mutex<IndexMap<PathBuf, ElfPatchRecord>>>;
-
-#[derive(Default)]
-struct ElfPatchRecord {
-    patch_map: IndexMap<Uuid, PathBuf>, // Patch applied to target elf (uuid and patch file)
-    processes: IndexSet<i32>,           // Target elf process list
-}
-
 pub struct UserPatchDriver {
-    patch_target_map: IndexMap<OsString, PatchTarget>,
-    patch_status_map: IndexMap<Uuid, PatchStatus>,
-    elf_patch_map: ElfPatchMap,
-    patch_monitor: UserPatchMonitor,
+    status_map: IndexMap<Uuid, PatchStatus>,
+    target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+    monitor: UserPatchMonitor,
 }
 
 impl UserPatchDriver {
     pub fn new() -> Result<Self> {
-        let elf_patch_map = Arc::new(Mutex::new(IndexMap::new()));
-        let patch_monitor = UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
-
+        let status_map = IndexMap::new();
+        let target_map = Arc::new(RwLock::new(IndexMap::new()));
+        let monitor = UserPatchMonitor::new(target_map.clone(), Self::patch_new_process)?;
         let instance = Self {
-            patch_target_map: IndexMap::new(),
-            patch_status_map: IndexMap::new(),
-            elf_patch_map,
-            patch_monitor,
+            status_map,
+            target_map,
+            monitor,
         };
+
         Ok(instance)
     }
 }
 
 impl UserPatchDriver {
+    #[inline]
+    fn get_patch_status(&self, uuid: &Uuid) -> PatchStatus {
+        self.status_map
+            .get(uuid)
+            .copied()
+            .unwrap_or(PatchStatus::NotApplied)
+    }
+
+    #[inline]
+    fn set_patch_status(&mut self, uuid: &Uuid, value: PatchStatus) {
+        *self.status_map.entry(*uuid).or_default() = value;
+    }
+
+    fn remove_patch_status(&mut self, uuid: &Uuid) {
+        self.status_map.remove(uuid);
+    }
+}
+
+impl UserPatchDriver {
+    fn add_patch_target(&mut self, patch: &UserPatch) {
+        let target_elf = patch.target_elf.as_path();
+        let mut target_map = self.target_map.write();
+
+        if !target_map.contains_key(target_elf) {
+            target_map.insert(target_elf.to_path_buf(), PatchTarget::default());
+        }
+    }
+
+    fn remove_patch_target(&mut self, patch: &UserPatch) {
+        let target_elf = patch.target_elf.as_path();
+        let mut target_map = self.target_map.write();
+
+        if let Some(target) = target_map.get_mut(target_elf) {
+            if !target.is_patched() {
+                target_map.remove(target_elf);
+            }
+        }
+    }
+}
+
+impl UserPatchDriver {
     fn check_consistency(patch: &UserPatch) -> Result<()> {
-        let patch_file = patch.patch_file.as_path();
-        let real_checksum = digest::file(patch_file)?;
+        let real_checksum = digest::file(&patch.patch_file)?;
         debug!("Target checksum: '{}'", patch.checksum);
         debug!("Expected checksum: '{}'", real_checksum);
 
@@ -86,12 +118,10 @@ impl UserPatchDriver {
         Ok(())
     }
 
-    pub fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
-        let patch_symbols = patch.symbols.as_slice();
-        let target_name = patch.target_elf.as_os_str();
-        let conflict_patches = match self.patch_target_map.get(target_name) {
+    pub fn check_conflict_functions(&self, patch: &UserPatch) -> Result<()> {
+        let conflict_patches = match self.target_map.read().get(&patch.target_elf) {
             Some(target) => target
-                .get_conflicts(patch_symbols)
+                .get_conflicts(&patch.functions)
                 .into_iter()
                 .map(|record| record.uuid)
                 .collect(),
@@ -112,13 +142,10 @@ impl UserPatchDriver {
         Ok(())
     }
 
-    pub fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
-        let patch_uuid = patch.uuid;
-        let patch_symbols = patch.symbols.as_slice();
-        let target_name = patch.target_elf.as_os_str();
-        let override_patches = match self.patch_target_map.get(target_name) {
+    pub fn check_override_functions(&self, patch: &UserPatch) -> Result<()> {
+        let override_patches = match self.target_map.read().get(&patch.target_elf) {
             Some(target) => target
-                .get_overrides(&patch_uuid, patch_symbols)
+                .get_overrides(&patch.uuid, &patch.functions)
                 .into_iter()
                 .map(|record| record.uuid)
                 .collect(),
@@ -142,110 +169,109 @@ impl UserPatchDriver {
 }
 
 impl UserPatchDriver {
-    fn add_patch_symbols(&mut self, patch: &UserPatch) {
-        let target_name = patch.target_elf.as_os_str();
-
-        let patch_uuid = patch.uuid;
-        let patch_target = self
-            .patch_target_map
-            .entry(target_name.to_os_string())
-            .or_insert_with(PatchTarget::new);
-        let patch_symbols = patch.symbols.as_slice();
-
-        patch_target.add_symbols(patch_uuid, patch_symbols);
+    #[inline]
+    fn parse_process_id(proc_path: &Path) -> Option<i32> {
+        proc_path
+            .file_name()
+            .and_then(OsStr::to_str)
+            .map(str::parse)
+            .and_then(Result::ok)
     }
 
-    fn remove_patch_symbols(&mut self, patch: &UserPatch) {
-        let patch_uuid = patch.uuid;
-        let patch_symbols = patch.symbols.as_slice();
-        let target_name = patch.target_elf.as_os_str();
+    fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
+        let mut target_pids = IndexSet::new();
+        let target_path = target_elf.as_ref();
+        let target_inode = target_path.metadata()?.st_ino();
 
-        if let Some(patch_target) = self.patch_target_map.get_mut(target_name) {
-            patch_target.remove_symbols(&patch_uuid, patch_symbols);
+        for proc_path in fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })? {
+            let pid = match Self::parse_process_id(&proc_path) {
+                Some(pid) => pid,
+                None => continue,
+            };
+            let exec_path = match fs::read_link(format!("/proc/{}/exe", pid)) {
+                Ok(file_path) => file_path,
+                Err(_) => continue,
+            };
+            // Try to match binary path
+            if exec_path == target_path {
+                target_pids.insert(pid);
+                continue;
+            }
+            // Try to match mapped files
+            let map_files = fs::list_symlinks(
+                format!("/proc/{}/map_files", pid),
+                fs::TraverseOptions { recursive: false },
+            )?;
+            for mapped_file in map_files {
+                if let Ok(mapped_inode) = mapped_file
+                    .read_link()
+                    .and_then(|file_path| Ok(file_path.metadata()?.st_ino()))
+                {
+                    if mapped_inode == target_inode {
+                        target_pids.insert(pid);
+                        break;
+                    }
+                };
+            }
         }
-    }
-}
 
-impl UserPatchDriver {
-    fn patch_new_process(elf_patch_map: ElfPatchMap, target_elf: &Path) {
-        let process_list = match process::find_target_process(target_elf) {
-            Ok(processes) => processes,
+        Ok(target_pids)
+    }
+
+    fn patch_new_process(
+        target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+        target_elf: &Path,
+    ) {
+        let process_list = match Self::find_target_process(target_elf) {
+            Ok(pids) => pids,
             Err(_) => return,
         };
 
-        let mut patch_map = elf_patch_map.lock();
-        let patch_record = match patch_map.get_mut(target_elf) {
-            Some(record) => record,
+        let mut target_map = target_map.write();
+        let patch_target = match target_map.get_mut(target_elf) {
+            Some(target) => target,
             None => return,
         };
 
-        let need_active = process_list
-            .difference(&patch_record.processes)
-            .copied()
-            .collect::<Vec<_>>();
+        for (patch_uuid, patch_entity) in patch_target.all_patches() {
+            patch_entity.clean_dead_process(&process_list);
 
-        // Active patch
-        for (uuid, patch_file) in &patch_record.patch_map {
-            if !need_active.is_empty() {
+            // Active patch
+            let need_actived = patch_entity.need_actived(&process_list);
+            if !need_actived.is_empty() {
                 debug!(
-                    "Upatch: Activating patch '{}' ({}) to process {:?}",
-                    uuid,
+                    "Upatch: Activating patch '{}' ({}) for process {:?}",
+                    patch_uuid,
                     target_elf.display(),
-                    need_active,
+                    need_actived,
                 );
             }
-            for pid in &need_active {
-                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file)
-                    .with_context(|| format!("Failed to patch process, pid={}", pid))
-                {
-                    error!("{}", e);
+
+            let ignore_list = patch_entity.need_ignored(&process_list);
+            for pid in need_actived {
+                if ignore_list.contains(&pid) {
                     continue;
                 }
-                patch_record.processes.insert(*pid);
+                match sys::active_patch(patch_uuid, pid, target_elf, &patch_entity.patch_file) {
+                    Ok(_) => patch_entity.add_process(pid),
+                    Err(e) => {
+                        warn!(
+                            "Upatch: Failed to active patch '{}' for process {}, {}",
+                            patch_uuid,
+                            pid,
+                            e.to_string().to_lowercase(),
+                        );
+                        patch_entity.ignore_process(pid)
+                    }
+                }
             }
         }
-
-        // Remove process no longer exists
-        let need_remove = patch_record
-            .processes
-            .difference(&process_list)
-            .copied()
-            .collect::<Vec<_>>();
-        for pid in need_remove {
-            patch_record.processes.remove(&pid);
-        }
-    }
-}
-
-impl UserPatchDriver {
-    #[inline]
-    fn get_patch_status(&self, uuid: Uuid) -> Result<PatchStatus> {
-        let patch_status = self
-            .patch_status_map
-            .get(&uuid)
-            .copied()
-            .context("Upatch: Patch does not exist")?;
-
-        Ok(patch_status)
-    }
-
-    #[inline]
-    fn set_patch_status(&mut self, uuid: Uuid, value: PatchStatus) -> Result<()> {
-        let patch_status = self
-            .patch_status_map
-            .get_mut(&uuid)
-            .context("Upatch: Patch does not exist")?;
-
-        *patch_status = value;
-        Ok(())
     }
 }
 
 impl UserPatchDriver {
     pub fn status(&self, patch: &UserPatch) -> Result<PatchStatus> {
-        Ok(self
-            .get_patch_status(patch.uuid)
-            .unwrap_or(PatchStatus::NotApplied))
+        Ok(self.get_patch_status(&patch.uuid))
     }
 
     pub fn check(&self, patch: &UserPatch) -> Result<()> {
@@ -256,170 +282,189 @@ impl UserPatchDriver {
     }
 
     pub fn apply(&mut self, patch: &UserPatch) -> Result<()> {
-        let patch_uuid = patch.uuid;
-        ensure!(
-            self.get_patch_status(patch_uuid).is_err(),
-            "Upatch: Patch already exists"
-        );
-
-        debug!(
+        info!(
             "Upatch: Applying patch '{}' ({})",
-            patch_uuid,
+            patch.uuid,
             patch.patch_file.display()
         );
-        self.patch_status_map
-            .insert(patch_uuid, PatchStatus::Deactived);
+
+        self.add_patch_target(patch);
+        self.set_patch_status(&patch.uuid, PatchStatus::Deactived);
 
         Ok(())
     }
 
     pub fn remove(&mut self, patch: &UserPatch) -> Result<()> {
-        let patch_uuid = patch.uuid;
-        let patch_status = self.get_patch_status(patch_uuid)?;
-        ensure!(
-            patch_status == PatchStatus::Deactived,
-            "Upatch: Invalid patch status"
-        );
-
-        debug!(
+        info!(
             "Upatch: Removing patch '{}' ({})",
-            patch_uuid,
+            patch.uuid,
             patch.patch_file.display()
         );
-        self.patch_status_map.remove(&patch_uuid);
+
+        self.remove_patch_target(patch);
+        self.remove_patch_status(&patch.uuid);
 
         Ok(())
     }
 
     pub fn active(&mut self, patch: &UserPatch) -> Result<()> {
-        let uuid = patch.uuid;
-        let patch_status = self.get_patch_status(uuid)?;
-        ensure!(
-            patch_status == PatchStatus::Deactived,
-            "Upatch: Invalid patch status"
-        );
-
-        let target_elf = patch.target_elf.as_path();
+        let patch_uuid = &patch.uuid;
         let patch_file = patch.patch_file.as_path();
-        let process_list = process::find_target_process(target_elf)?;
+        let patch_functions = patch.functions.as_slice();
+        let target_elf = patch.target_elf.as_path();
 
-        let mut patch_map = self.elf_patch_map.lock();
-        let patch_record = patch_map.entry(target_elf.to_path_buf()).or_default();
+        let process_list = Self::find_target_process(target_elf)?;
 
-        let need_active = process_list
-            .difference(&patch_record.processes)
-            .copied()
-            .collect::<Vec<_>>();
-        let need_remove = patch_record
-            .processes
-            .difference(&process_list)
-            .copied()
-            .collect::<Vec<_>>();
-        let mut need_start_watch = false;
+        let mut target_map = self.target_map.write();
+        let patch_target = target_map
+            .get_mut(target_elf)
+            .context("Upatch: Cannot find patch target")?;
+        let mut patch_entity = match patch_target.get_patch(patch_uuid) {
+            Some(_) => bail!("Upatch: Patch is already exist"),
+            None => PatchEntity::new(patch_file.to_path_buf()),
+        };
 
         // Active patch
-        if !need_active.is_empty() {
-            debug!(
-                "Upatch: Activating patch '{}' ({}) to process {:?}",
-                uuid,
-                target_elf.display(),
-                need_active,
-            );
-        }
-        for pid in need_active {
-            sys::active_patch(&uuid, pid, target_elf, patch_file)
-                .with_context(|| format!("Failed to patch process, pid={}", pid))?;
-            patch_record.processes.insert(pid);
-        }
-
-        // Remove process no longer exists
-        for pid in need_remove {
-            patch_record.processes.remove(&pid);
+        info!(
+            "Upatch: Activating patch '{}' ({}) for {}",
+            patch_uuid,
+            patch_file.display(),
+            target_elf.display(),
+        );
+        let mut results = Vec::new();
+        for pid in patch_entity.need_actived(&process_list) {
+            let result = sys::active_patch(patch_uuid, pid, target_elf, patch_file);
+            match result {
+                Ok(_) => patch_entity.add_process(pid),
+                Err(_) => patch_entity.ignore_process(pid),
+            }
+            results.push((pid, result));
         }
 
-        // If elf is not patched before, start watching it & add a new entry
-        if !patch_record.patch_map.contains_key(&uuid) {
-            patch_record
-                .patch_map
-                .insert(uuid, patch_file.to_path_buf());
-            need_start_watch = true;
+        // Check results, return error if all process fails
+        match results.iter().any(|(_, result)| result.is_ok()) {
+            true => {
+                for (pid, result) in &results {
+                    if let Err(e) = result {
+                        warn!(
+                            "Upatch: Failed to active patch '{}' for process {}, {}",
+                            patch_uuid,
+                            pid,
+                            e.to_string().to_lowercase(),
+                        );
+                    }
+                }
+            }
+            false => {
+                let mut err_msg = String::new();
+
+                writeln!(err_msg, "Upatch: Failed to active patch")?;
+                for (pid, result) in &results {
+                    if let Err(e) = result {
+                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
+                    }
+                }
+                bail!(err_msg);
+            }
         }
 
-        drop(patch_map);
+        // If target is no patched before, start watching it
+        let need_start_watch = !patch_target.is_patched();
+
+        // Apply patch to target
+        patch_target.add_patch(*patch_uuid, patch_entity);
+        patch_target.add_functions(*patch_uuid, patch_functions);
+
+        // Drop the lock
+        drop(target_map);
 
         if need_start_watch {
-            self.patch_monitor.watch_file(target_elf)?;
+            self.monitor.watch_file(target_elf)?;
         }
-        self.set_patch_status(uuid, PatchStatus::Actived)?;
-        self.add_patch_symbols(patch);
+        self.set_patch_status(patch_uuid, PatchStatus::Actived);
 
         Ok(())
     }
 
     pub fn deactive(&mut self, patch: &UserPatch) -> Result<()> {
-        let uuid = patch.uuid;
-        let patch_status = self.get_patch_status(uuid)?;
-        ensure!(
-            patch_status == PatchStatus::Actived,
-            "Upatch: Invalid patch status"
-        );
-
-        let target_elf = patch.target_elf.as_path();
+        let patch_uuid = &patch.uuid;
         let patch_file = patch.patch_file.as_path();
-        let process_list = process::find_target_process(target_elf)?;
+        let patch_functions = patch.functions.as_slice();
+        let target_elf = patch.target_elf.as_path();
 
-        let mut patch_map = self.elf_patch_map.lock();
-        let patch_record = patch_map
+        let process_list = Self::find_target_process(target_elf)?;
+
+        let mut target_map = self.target_map.write();
+        let patch_target = target_map
             .get_mut(target_elf)
-            .context("Failed to find elf patch record")?;
+            .context("Upatch: Cannot find patch target")?;
+        let patch_entity = patch_target
+            .get_patch(patch_uuid)
+            .context("Upatch: Cannot find patch entity")?;
 
-        let need_deactive = process_list
-            .intersection(&patch_record.processes)
-            .copied()
-            .collect::<Vec<_>>();
-        let need_removed = patch_record
-            .processes
-            .difference(&process_list)
-            .copied()
-            .collect::<Vec<_>>();
-        let mut need_stop_watch = false;
+        // Remove dead process
+        patch_entity.clean_dead_process(&process_list);
 
         // Deactive patch
-        if !need_deactive.is_empty() {
-            debug!(
-                "Upatch: Deactivating patch '{}' ({}) of process {:?}",
-                uuid,
-                target_elf.display(),
-                need_deactive,
-            );
-        }
-        for pid in need_deactive {
-            sys::deactive_patch(&uuid, pid, target_elf, patch_file)
-                .with_context(|| format!("Failed to unpatch process, pid={}", pid))?;
-            patch_record.processes.remove(&pid); // remove process from record
-        }
-
-        // Remove process no longer exists
-        for pid in need_removed {
-            patch_record.processes.remove(&pid);
-        }
-
-        // Remove patch from elf patch record
-        patch_record.patch_map.remove(&uuid);
-
-        // If elf has no more patch, stop watching it & remove the entry
-        if patch_record.patch_map.is_empty() {
-            patch_map.remove(target_elf);
-            need_stop_watch = true;
+        info!(
+            "Upatch: Deactivating patch '{}' ({}) for {}",
+            patch_uuid,
+            patch_file.display(),
+            target_elf.display(),
+        );
+        let mut results = Vec::new();
+        let ignore_list = patch_entity.need_ignored(&process_list);
+        for pid in patch_entity.need_deactived(&process_list) {
+            if ignore_list.contains(&pid) {
+                continue;
+            }
+            let result = sys::deactive_patch(patch_uuid, pid, target_elf, patch_file);
+            if result.is_ok() {
+                patch_entity.remove_process(pid)
+            }
+            results.push((pid, result));
         }
 
-        drop(patch_map);
+        // Check results, return error if any process failes
+        match results.iter().any(|(_, result)| result.is_err()) {
+            true => {
+                let mut err_msg = String::new();
+
+                writeln!(err_msg, "Upatch: Failed to deactive patch")?;
+                for (pid, result) in &results {
+                    if let Err(e) = result {
+                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
+                    }
+                }
+                bail!(err_msg)
+            }
+            false => {
+                for (pid, result) in &results {
+                    if let Err(e) = result {
+                        warn!(
+                            "Upatch: Failed to deactive patch '{}' for process {}, {}",
+                            patch_uuid,
+                            pid,
+                            e.to_string().to_lowercase(),
+                        );
+                    }
+                }
+            }
+        }
+
+        // Remove patch functions from target
+        patch_target.remove_patch(patch_uuid);
+        patch_target.remove_functions(patch_uuid, patch_functions);
+
+        // If target is no longer patched, stop watching it
+        let need_stop_watch = !patch_target.is_patched();
+
+        drop(target_map);
 
         if need_stop_watch {
-            self.patch_monitor.ignore_file(target_elf)?;
+            self.monitor.ignore_file(target_elf)?;
         }
-        self.set_patch_status(uuid, PatchStatus::Deactived)?;
-        self.remove_patch_symbols(patch);
+        self.set_patch_status(patch_uuid, PatchStatus::Deactived);
 
         Ok(())
     }

@@ -19,12 +19,12 @@ use std::{
 
 use anyhow::{ensure, Result};
 use indexmap::{indexset, IndexMap, IndexSet};
-use log::debug;
+use log::{debug, info};
 
 use syscare_abi::PatchStatus;
 use syscare_common::{concat_os, os, util::digest};
 
-use crate::patch::entity::KernelPatch;
+use crate::patch::entity::{KernelPatch, KernelPatchFunction};
 
 mod sys;
 mod target;
@@ -32,21 +32,84 @@ mod target;
 use target::PatchTarget;
 
 pub struct KernelPatchDriver {
-    patch_target_map: IndexMap<OsString, PatchTarget>,
+    target_map: IndexMap<OsString, PatchTarget>,
 }
 
 impl KernelPatchDriver {
     pub fn new() -> Result<Self> {
         Ok(Self {
-            patch_target_map: IndexMap::new(),
+            target_map: IndexMap::new(),
         })
     }
 }
 
 impl KernelPatchDriver {
+    fn group_patch_targets(patch: &KernelPatch) -> IndexSet<&OsStr> {
+        let mut patch_targets = IndexSet::new();
+
+        for function in &patch.functions {
+            patch_targets.insert(function.object.as_os_str());
+        }
+        patch_targets
+    }
+
+    pub fn group_patch_functions(
+        patch: &KernelPatch,
+    ) -> IndexMap<&OsStr, Vec<&KernelPatchFunction>> {
+        let mut patch_function_map: IndexMap<&OsStr, Vec<&KernelPatchFunction>> = IndexMap::new();
+
+        for function in &patch.functions {
+            patch_function_map
+                .entry(function.object.as_os_str())
+                .or_default()
+                .push(function);
+        }
+        patch_function_map
+    }
+}
+
+impl KernelPatchDriver {
+    fn add_patch_target(&mut self, patch: &KernelPatch) {
+        for target_name in Self::group_patch_targets(patch) {
+            if !self.target_map.contains_key(target_name) {
+                self.target_map.insert(
+                    target_name.to_os_string(),
+                    PatchTarget::new(target_name.to_os_string()),
+                );
+            }
+        }
+    }
+
+    fn remove_patch_target(&mut self, patch: &KernelPatch) {
+        for target_name in Self::group_patch_targets(patch) {
+            if let Some(target) = self.target_map.get_mut(target_name) {
+                if !target.has_function() {
+                    self.target_map.remove(target_name);
+                }
+            }
+        }
+    }
+
+    fn add_patch_functions(&mut self, patch: &KernelPatch) {
+        for (target_name, functions) in Self::group_patch_functions(patch) {
+            if let Some(target) = self.target_map.get_mut(target_name) {
+                target.add_functions(patch.uuid, functions);
+            }
+        }
+    }
+
+    fn remove_patch_functions(&mut self, patch: &KernelPatch) {
+        for (target_name, functions) in Self::group_patch_functions(patch) {
+            if let Some(target) = self.target_map.get_mut(target_name) {
+                target.remove_functions(&patch.uuid, functions);
+            }
+        }
+    }
+}
+
+impl KernelPatchDriver {
     fn check_consistency(patch: &KernelPatch) -> Result<()> {
-        let patch_file = patch.patch_file.as_path();
-        let real_checksum = digest::file(patch_file)?;
+        let real_checksum = digest::file(&patch.patch_file)?;
         debug!("Target checksum: '{}'", patch.checksum);
         debug!("Expected checksum: '{}'", real_checksum);
 
@@ -78,7 +141,7 @@ impl KernelPatchDriver {
         let mut non_exist_kmod = IndexSet::new();
 
         let kmod_list = sys::list_kernel_modules()?;
-        for kmod_name in Self::parse_target_modules(patch) {
+        for kmod_name in Self::group_patch_targets(patch) {
             if kmod_name == VMLINUX_MODULE_NAME {
                 continue;
             }
@@ -102,15 +165,15 @@ impl KernelPatchDriver {
         Ok(())
     }
 
-    pub fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
+    pub fn check_conflict_functions(&self, patch: &KernelPatch) -> Result<()> {
         let mut conflict_patches = indexset! {};
 
-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
-        for (target_name, symbols) in target_symbols {
-            if let Some(target) = self.patch_target_map.get(target_name) {
+        let target_functions = Self::group_patch_functions(patch);
+        for (target_name, functions) in target_functions {
+            if let Some(target) = self.target_map.get(target_name) {
                 conflict_patches.extend(
                     target
-                        .get_conflicts(symbols)
+                        .get_conflicts(functions)
                         .into_iter()
                         .map(|record| record.uuid),
                 );
@@ -131,15 +194,15 @@ impl KernelPatchDriver {
         Ok(())
     }
 
-    pub fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
+    pub fn check_override_functions(&self, patch: &KernelPatch) -> Result<()> {
         let mut override_patches = indexset! {};
 
-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
-        for (target_name, symbols) in target_symbols {
-            if let Some(target) = self.patch_target_map.get(target_name) {
+        let target_functions = Self::group_patch_functions(patch);
+        for (target_name, functions) in target_functions {
+            if let Some(target) = self.target_map.get(target_name) {
                 override_patches.extend(
                     target
-                        .get_overrides(&patch.uuid, symbols)
+                        .get_overrides(&patch.uuid, functions)
                         .into_iter()
                         .map(|record| record.uuid),
                 );
@@ -162,35 +225,6 @@ impl KernelPatchDriver {
 }
 
 impl KernelPatchDriver {
-    fn parse_target_modules(patch: &KernelPatch) -> impl IntoIterator<Item = &OsStr> {
-        patch.symbols.iter().map(|symbol| symbol.target.as_os_str())
-    }
-
-    fn add_patch_symbols(&mut self, patch: &KernelPatch) {
-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
-
-        for (target_name, symbols) in target_symbols {
-            let target = self
-                .patch_target_map
-                .entry(target_name.to_os_string())
-                .or_insert_with(|| PatchTarget::new(target_name));
-
-            target.add_symbols(patch.uuid, symbols);
-        }
-    }
-
-    fn remove_patch_symbols(&mut self, patch: &KernelPatch) {
-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
-
-        for (target_name, symbols) in target_symbols {
-            if let Some(target) = self.patch_target_map.get_mut(target_name) {
-                target.remove_symbols(&patch.uuid, symbols);
-            }
-        }
-    }
-}
-
-impl KernelPatchDriver {
     pub fn status(&self, patch: &KernelPatch) -> Result<PatchStatus> {
         sys::read_patch_status(patch)
     }
@@ -204,24 +238,51 @@ impl KernelPatchDriver {
     }
 
     pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
+        info!(
+            "Kpatch: Applying patch '{}' ({})",
+            patch.uuid,
+            patch.patch_file.display()
+        );
+
         sys::selinux_relable_patch(patch)?;
-        sys::apply_patch(patch)
+        sys::apply_patch(patch)?;
+        self.add_patch_target(patch);
+
+        Ok(())
     }
 
     pub fn remove(&mut self, patch: &KernelPatch) -> Result<()> {
-        sys::remove_patch(patch)
+        info!(
+            "Kpatch: Removing patch '{}' ({})",
+            patch.uuid,
+            patch.patch_file.display()
+        );
+        sys::remove_patch(patch)?;
+        self.remove_patch_target(patch);
+
+        Ok(())
     }
 
     pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
+        info!(
+            "Kpatch: Activating patch '{}' ({})",
+            patch.uuid,
+            patch.patch_file.display()
+        );
         sys::active_patch(patch)?;
-        self.add_patch_symbols(patch);
+        self.add_patch_functions(patch);
 
         Ok(())
     }
 
     pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
+        info!(
+            "Kpatch: Deactivating patch '{}' ({})",
+            patch.uuid,
+            patch.patch_file.display()
+        );
         sys::deactive_patch(patch)?;
-        self.remove_patch_symbols(patch);
+        self.remove_patch_functions(patch);
 
         Ok(())
     }
