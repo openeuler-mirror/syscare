@@ -237,21 +237,20 @@ impl UserPatchDriver {
             patch_entity.clean_dead_process(&process_list);
 
             // Active patch
-            let need_actived = patch_entity.need_actived(&process_list);
+            let need_ignored = patch_entity.need_ignored(&process_list);
+
+            let mut need_actived = patch_entity.need_actived(&process_list);
+            need_actived.retain(|pid| !need_ignored.contains(pid));
             if !need_actived.is_empty() {
                 debug!(
-                    "Upatch: Activating patch '{}' ({}) for process {:?}",
+                    "Activating patch '{}' ({}) for process {:?}",
                     patch_uuid,
                     target_elf.display(),
                     need_actived,
                 );
             }
 
-            let ignore_list = patch_entity.need_ignored(&process_list);
             for pid in need_actived {
-                if ignore_list.contains(&pid) {
-                    continue;
-                }
                 match sys::active_patch(patch_uuid, pid, target_elf, &patch_entity.patch_file) {
                     Ok(_) => patch_entity.add_process(pid),
                     Err(e) => {
@@ -283,7 +282,7 @@ impl UserPatchDriver {
 
     pub fn apply(&mut self, patch: &UserPatch) -> Result<()> {
         info!(
-            "Upatch: Applying patch '{}' ({})",
+            "Applying patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
@@ -296,7 +295,7 @@ impl UserPatchDriver {
 
     pub fn remove(&mut self, patch: &UserPatch) -> Result<()> {
         info!(
-            "Upatch: Removing patch '{}' ({})",
+            "Removing patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
@@ -326,7 +325,7 @@ impl UserPatchDriver {
 
         // Active patch
         info!(
-            "Upatch: Activating patch '{}' ({}) for {}",
+            "Activating patch '{}' ({}) for {}",
             patch_uuid,
             patch_file.display(),
             target_elf.display(),
@@ -342,29 +341,28 @@ impl UserPatchDriver {
         }
 
         // Check results, return error if all process fails
-        match results.iter().any(|(_, result)| result.is_ok()) {
-            true => {
-                for (pid, result) in &results {
-                    if let Err(e) = result {
-                        warn!(
-                            "Upatch: Failed to active patch '{}' for process {}, {}",
-                            patch_uuid,
-                            pid,
-                            e.to_string().to_lowercase(),
-                        );
-                    }
+        if !results.is_empty() && results.iter().all(|(_, result)| result.is_err()) {
+            let mut err_msg = String::new();
+
+            writeln!(err_msg, "Upatch: Failed to active patch")?;
+            for (pid, result) in &results {
+                if let Err(e) = result {
+                    writeln!(err_msg, "* Process {}: {}", pid, e)?;
                 }
             }
-            false => {
-                let mut err_msg = String::new();
+            err_msg.pop();
+            bail!(err_msg);
+        }
 
-                writeln!(err_msg, "Upatch: Failed to active patch")?;
-                for (pid, result) in &results {
-                    if let Err(e) = result {
-                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
-                    }
-                }
-                bail!(err_msg);
+        // Print failure results
+        for (pid, result) in &results {
+            if let Err(e) = result {
+                warn!(
+                    "Upatch: Failed to active patch '{}' for process {}, {}",
+                    patch_uuid,
+                    pid,
+                    e.to_string().to_lowercase(),
+                );
             }
         }
 
@@ -407,17 +405,19 @@ impl UserPatchDriver {
 
         // Deactive patch
         info!(
-            "Upatch: Deactivating patch '{}' ({}) for {}",
+            "Deactivating patch '{}' ({}) for {}",
             patch_uuid,
             patch_file.display(),
             target_elf.display(),
         );
+
+        let need_ignored = patch_entity.need_ignored(&process_list);
+
+        let mut need_deactived = patch_entity.need_deactived(&process_list);
+        need_deactived.retain(|pid| need_ignored.contains(pid));
+
         let mut results = Vec::new();
-        let ignore_list = patch_entity.need_ignored(&process_list);
         for pid in patch_entity.need_deactived(&process_list) {
-            if ignore_list.contains(&pid) {
-                continue;
-            }
             let result = sys::deactive_patch(patch_uuid, pid, target_elf, patch_file);
             if result.is_ok() {
                 patch_entity.remove_process(pid)
@@ -426,29 +426,28 @@ impl UserPatchDriver {
         }
 
         // Check results, return error if any process failes
-        match results.iter().any(|(_, result)| result.is_err()) {
-            true => {
-                let mut err_msg = String::new();
+        if !results.is_empty() && results.iter().any(|(_, result)| result.is_err()) {
+            let mut err_msg = String::new();
 
-                writeln!(err_msg, "Upatch: Failed to deactive patch")?;
-                for (pid, result) in &results {
-                    if let Err(e) = result {
-                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
-                    }
+            writeln!(err_msg, "Upatch: Failed to deactive patch")?;
+            for (pid, result) in &results {
+                if let Err(e) = result {
+                    writeln!(err_msg, "* Process {}: {}", pid, e)?;
                 }
-                bail!(err_msg)
             }
-            false => {
-                for (pid, result) in &results {
-                    if let Err(e) = result {
-                        warn!(
-                            "Upatch: Failed to deactive patch '{}' for process {}, {}",
-                            patch_uuid,
-                            pid,
-                            e.to_string().to_lowercase(),
-                        );
-                    }
-                }
+            err_msg.pop();
+            bail!(err_msg);
+        }
+
+        // Print failure results
+        for (pid, result) in &results {
+            if let Err(e) = result {
+                warn!(
+                    "Upatch: Failed to deactive patch '{}' for process {}, {}",
+                    patch_uuid,
+                    pid,
+                    e.to_string().to_lowercase(),
+                );
             }
         }
 

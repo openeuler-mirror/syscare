@@ -239,7 +239,7 @@ impl KernelPatchDriver {
 
     pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
         info!(
-            "Kpatch: Applying patch '{}' ({})",
+            "Applying patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
@@ -253,7 +253,7 @@ impl KernelPatchDriver {
 
     pub fn remove(&mut self, patch: &KernelPatch) -> Result<()> {
         info!(
-            "Kpatch: Removing patch '{}' ({})",
+            "Removing patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
@@ -265,7 +265,7 @@ impl KernelPatchDriver {
 
     pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
         info!(
-            "Kpatch: Activating patch '{}' ({})",
+            "Activating patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
@@ -277,7 +277,7 @@ impl KernelPatchDriver {
 
     pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
         info!(
-            "Kpatch: Deactivating patch '{}' ({})",
+            "Deactivating patch '{}' ({})",
             patch.uuid,
             patch.patch_file.display()
         );
