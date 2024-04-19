@@ -52,7 +52,7 @@ enum exit_status {
 /* it is time cost */
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
 #define log_normal(format, ...) log(NORMAL, format, ##__VA_ARGS__)
-#define log_warn(format, ...) log(WARN, "%s: " format, logprefix, ##__VA_ARGS__)
+#define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
 #define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
 
 #define log(level, format, ...)                        \

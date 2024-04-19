@@ -146,7 +146,7 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
 
 	int ret = upatch_init(&uelf, upatch_path);
 	if (ret) {
-		log_error("Failed to initialize patch, ret=%d\n", ret);
+		log_error("Failed to initialize patch, pid=%d, ret=%d\n", pid, ret);
 		goto out;
 	}
 
@@ -155,7 +155,6 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
 		log_error("Failed to patch process, pid=%d, ret=%d\n", pid, ret);
 		goto out;
 	}
-	log_normal("SUCCESS\n");
 
 out:
 	upatch_close(&uelf);
@@ -173,7 +172,6 @@ int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch
 		log_error("Failed to unpatch process, pid=%d, ret=%d\n", pid, ret);
 		return ret;
 	}
-	log_normal("SUCCESS\n");
 
 	return 0;
 }
@@ -185,7 +183,6 @@ int info_upatch(const char *binary_path, const char *upatch_path, int pid)
 		log_error("Failed to get patch info, pid=%d, ret=%d\n", pid, ret);
 		return ret;
 	}
-	log_normal("SUCCESS\n");
 
 	return 0;
 }
@@ -207,6 +204,7 @@ int main(int argc, char *argv[])
 	log_debug("Patch: %s\n", args.upatch);
 	log_debug("Binary: %s\n", args.binary);
 
+	args.pid = args.pid & INT32_MAX;
 	switch (args.cmd) {
 	case PATCH:
 		ret = patch_upatch(args.uuid, args.binary, args.upatch, args.pid);
@@ -223,5 +221,6 @@ int main(int argc, char *argv[])
 		break;
 	}
 
+	(ret == 0) ? log_normal("SUCCESS\n\n") : log_error("FAILED\n\n");
 	return abs(ret);
 }
