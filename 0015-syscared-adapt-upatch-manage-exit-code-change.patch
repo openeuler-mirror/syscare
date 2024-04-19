@@ -1,0 +1,35 @@
+From 96ccd901456d950761835befde8979519575778d Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 19 Apr 2024 12:02:23 +0800
+Subject: [PATCH 15/17] syscared: adapt upatch-manage exit code change
+
+1. upatch driver treats EEXIST as an error
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/upatch/sys.rs | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index bfeb1b8..a388bc6 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -2,7 +2,6 @@ use std::path::Path;
+ 
+ use anyhow::{bail, Result};
+ use log::Level;
+-use nix::libc::EEXIST;
+ use uuid::Uuid;
+ 
+ use syscare_common::process::Command;
+@@ -26,7 +25,6 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
+ 
+     match exit_code {
+         0 => Ok(()),
+-        EEXIST => Ok(()),
+         _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
+     }
+ }
+-- 
+2.41.0
+

@@ -1,0 +1,2317 @@
+From 13df37eba5f5b763922b7b2b91e4097e93b13158 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Tue, 16 Apr 2024 14:20:27 +0800
+Subject: [PATCH 13/17] syscared: improve patch management
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/kpatch/mod.rs     | 161 ++++--
+ syscared/src/patch/driver/kpatch/sys.rs     |  16 +-
+ syscared/src/patch/driver/kpatch/target.rs  | 164 +++----
+ syscared/src/patch/driver/mod.rs            |  18 +-
+ syscared/src/patch/driver/upatch/entity.rs  |  74 +++
+ syscared/src/patch/driver/upatch/mod.rs     | 511 +++++++++++---------
+ syscared/src/patch/driver/upatch/monitor.rs |  72 +--
+ syscared/src/patch/driver/upatch/process.rs | 100 ----
+ syscared/src/patch/driver/upatch/sys.rs     |  14 +-
+ syscared/src/patch/driver/upatch/target.rs  | 138 +++---
+ syscared/src/patch/entity/kpatch.rs         |  20 +-
+ syscared/src/patch/entity/symbol.rs         |  10 +-
+ syscared/src/patch/entity/upatch.rs         |  12 +-
+ syscared/src/patch/resolver/kpatch.rs       | 141 +++---
+ syscared/src/patch/resolver/upatch.rs       |  97 ++--
+ 15 files changed, 832 insertions(+), 716 deletions(-)
+ create mode 100644 syscared/src/patch/driver/upatch/entity.rs
+ delete mode 100644 syscared/src/patch/driver/upatch/process.rs
+
+diff --git a/syscared/src/patch/driver/kpatch/mod.rs b/syscared/src/patch/driver/kpatch/mod.rs
+index e4509d8..45dc719 100644
+--- a/syscared/src/patch/driver/kpatch/mod.rs
++++ b/syscared/src/patch/driver/kpatch/mod.rs
+@@ -19,12 +19,12 @@ use std::{
+ 
+ use anyhow::{ensure, Result};
+ use indexmap::{indexset, IndexMap, IndexSet};
+-use log::debug;
++use log::{debug, info};
+ 
+ use syscare_abi::PatchStatus;
+ use syscare_common::{concat_os, os, util::digest};
+ 
+-use crate::patch::entity::KernelPatch;
++use crate::patch::entity::{KernelPatch, KernelPatchFunction};
+ 
+ mod sys;
+ mod target;
+@@ -32,21 +32,84 @@ mod target;
+ use target::PatchTarget;
+ 
+ pub struct KernelPatchDriver {
+-    patch_target_map: IndexMap<OsString, PatchTarget>,
++    target_map: IndexMap<OsString, PatchTarget>,
+ }
+ 
+ impl KernelPatchDriver {
+     pub fn new() -> Result<Self> {
+         Ok(Self {
+-            patch_target_map: IndexMap::new(),
++            target_map: IndexMap::new(),
+         })
+     }
+ }
+ 
++impl KernelPatchDriver {
++    fn group_patch_targets(patch: &KernelPatch) -> IndexSet<&OsStr> {
++        let mut patch_targets = IndexSet::new();
++
++        for function in &patch.functions {
++            patch_targets.insert(function.object.as_os_str());
++        }
++        patch_targets
++    }
++
++    pub fn group_patch_functions(
++        patch: &KernelPatch,
++    ) -> IndexMap<&OsStr, Vec<&KernelPatchFunction>> {
++        let mut patch_function_map: IndexMap<&OsStr, Vec<&KernelPatchFunction>> = IndexMap::new();
++
++        for function in &patch.functions {
++            patch_function_map
++                .entry(function.object.as_os_str())
++                .or_default()
++                .push(function);
++        }
++        patch_function_map
++    }
++}
++
++impl KernelPatchDriver {
++    fn add_patch_target(&mut self, patch: &KernelPatch) {
++        for target_name in Self::group_patch_targets(patch) {
++            if !self.target_map.contains_key(target_name) {
++                self.target_map.insert(
++                    target_name.to_os_string(),
++                    PatchTarget::new(target_name.to_os_string()),
++                );
++            }
++        }
++    }
++
++    fn remove_patch_target(&mut self, patch: &KernelPatch) {
++        for target_name in Self::group_patch_targets(patch) {
++            if let Some(target) = self.target_map.get_mut(target_name) {
++                if !target.has_function() {
++                    self.target_map.remove(target_name);
++                }
++            }
++        }
++    }
++
++    fn add_patch_functions(&mut self, patch: &KernelPatch) {
++        for (target_name, functions) in Self::group_patch_functions(patch) {
++            if let Some(target) = self.target_map.get_mut(target_name) {
++                target.add_functions(patch.uuid, functions);
++            }
++        }
++    }
++
++    fn remove_patch_functions(&mut self, patch: &KernelPatch) {
++        for (target_name, functions) in Self::group_patch_functions(patch) {
++            if let Some(target) = self.target_map.get_mut(target_name) {
++                target.remove_functions(&patch.uuid, functions);
++            }
++        }
++    }
++}
++
+ impl KernelPatchDriver {
+     fn check_consistency(patch: &KernelPatch) -> Result<()> {
+-        let patch_file = patch.patch_file.as_path();
+-        let real_checksum = digest::file(patch_file)?;
++        let real_checksum = digest::file(&patch.patch_file)?;
+         debug!("Target checksum: '{}'", patch.checksum);
+         debug!("Expected checksum: '{}'", real_checksum);
+ 
+@@ -78,7 +141,7 @@ impl KernelPatchDriver {
+         let mut non_exist_kmod = IndexSet::new();
+ 
+         let kmod_list = sys::list_kernel_modules()?;
+-        for kmod_name in Self::parse_target_modules(patch) {
++        for kmod_name in Self::group_patch_targets(patch) {
+             if kmod_name == VMLINUX_MODULE_NAME {
+                 continue;
+             }
+@@ -102,15 +165,15 @@ impl KernelPatchDriver {
+         Ok(())
+     }
+ 
+-    pub fn check_conflict_symbols(&self, patch: &KernelPatch) -> Result<()> {
++    pub fn check_conflict_functions(&self, patch: &KernelPatch) -> Result<()> {
+         let mut conflict_patches = indexset! {};
+ 
+-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+-        for (target_name, symbols) in target_symbols {
+-            if let Some(target) = self.patch_target_map.get(target_name) {
++        let target_functions = Self::group_patch_functions(patch);
++        for (target_name, functions) in target_functions {
++            if let Some(target) = self.target_map.get(target_name) {
+                 conflict_patches.extend(
+                     target
+-                        .get_conflicts(symbols)
++                        .get_conflicts(functions)
+                         .into_iter()
+                         .map(|record| record.uuid),
+                 );
+@@ -131,15 +194,15 @@ impl KernelPatchDriver {
+         Ok(())
+     }
+ 
+-    pub fn check_override_symbols(&self, patch: &KernelPatch) -> Result<()> {
++    pub fn check_override_functions(&self, patch: &KernelPatch) -> Result<()> {
+         let mut override_patches = indexset! {};
+ 
+-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+-        for (target_name, symbols) in target_symbols {
+-            if let Some(target) = self.patch_target_map.get(target_name) {
++        let target_functions = Self::group_patch_functions(patch);
++        for (target_name, functions) in target_functions {
++            if let Some(target) = self.target_map.get(target_name) {
+                 override_patches.extend(
+                     target
+-                        .get_overrides(&patch.uuid, symbols)
++                        .get_overrides(&patch.uuid, functions)
+                         .into_iter()
+                         .map(|record| record.uuid),
+                 );
+@@ -161,35 +224,6 @@ impl KernelPatchDriver {
+     }
+ }
+ 
+-impl KernelPatchDriver {
+-    fn parse_target_modules(patch: &KernelPatch) -> impl IntoIterator<Item = &OsStr> {
+-        patch.symbols.iter().map(|symbol| symbol.target.as_os_str())
+-    }
+-
+-    fn add_patch_symbols(&mut self, patch: &KernelPatch) {
+-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+-
+-        for (target_name, symbols) in target_symbols {
+-            let target = self
+-                .patch_target_map
+-                .entry(target_name.to_os_string())
+-                .or_insert_with(|| PatchTarget::new(target_name));
+-
+-            target.add_symbols(patch.uuid, symbols);
+-        }
+-    }
+-
+-    fn remove_patch_symbols(&mut self, patch: &KernelPatch) {
+-        let target_symbols = PatchTarget::classify_symbols(&patch.symbols);
+-
+-        for (target_name, symbols) in target_symbols {
+-            if let Some(target) = self.patch_target_map.get_mut(target_name) {
+-                target.remove_symbols(&patch.uuid, symbols);
+-            }
+-        }
+-    }
+-}
+-
+ impl KernelPatchDriver {
+     pub fn status(&self, patch: &KernelPatch) -> Result<PatchStatus> {
+         sys::read_patch_status(patch)
+@@ -204,24 +238,51 @@ impl KernelPatchDriver {
+     }
+ 
+     pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
++        info!(
++            "Kpatch: Applying patch '{}' ({})",
++            patch.uuid,
++            patch.patch_file.display()
++        );
++
+         sys::selinux_relable_patch(patch)?;
+-        sys::apply_patch(patch)
++        sys::apply_patch(patch)?;
++        self.add_patch_target(patch);
++
++        Ok(())
+     }
+ 
+     pub fn remove(&mut self, patch: &KernelPatch) -> Result<()> {
+-        sys::remove_patch(patch)
++        info!(
++            "Kpatch: Removing patch '{}' ({})",
++            patch.uuid,
++            patch.patch_file.display()
++        );
++        sys::remove_patch(patch)?;
++        self.remove_patch_target(patch);
++
++        Ok(())
+     }
+ 
+     pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
++        info!(
++            "Kpatch: Activating patch '{}' ({})",
++            patch.uuid,
++            patch.patch_file.display()
++        );
+         sys::active_patch(patch)?;
+-        self.add_patch_symbols(patch);
++        self.add_patch_functions(patch);
+ 
+         Ok(())
+     }
+ 
+     pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
++        info!(
++            "Kpatch: Deactivating patch '{}' ({})",
++            patch.uuid,
++            patch.patch_file.display()
++        );
+         sys::deactive_patch(patch)?;
+-        self.remove_patch_symbols(patch);
++        self.remove_patch_functions(patch);
+ 
+         Ok(())
+     }
+diff --git a/syscared/src/patch/driver/kpatch/sys.rs b/syscared/src/patch/driver/kpatch/sys.rs
+index 5035d06..ea6b68f 100644
+--- a/syscared/src/patch/driver/kpatch/sys.rs
++++ b/syscared/src/patch/driver/kpatch/sys.rs
+@@ -61,17 +61,11 @@ pub fn read_patch_status(patch: &KernelPatch) -> Result<PatchStatus> {
+     debug!("Reading {}", sys_file.display());
+ 
+     let status = match fs::read_to_string(sys_file) {
+-        Ok(str) => {
+-            let status = str.trim();
+-            let patch_status = match status {
+-                KPATCH_STATUS_DISABLED => PatchStatus::Deactived,
+-                KPATCH_STATUS_ENABLED => PatchStatus::Actived,
+-                _ => {
+-                    bail!("Kpatch: Invalid patch status");
+-                }
+-            };
+-            Ok(patch_status)
+-        }
++        Ok(str) => match str.trim() {
++            KPATCH_STATUS_DISABLED => Ok(PatchStatus::Deactived),
++            KPATCH_STATUS_ENABLED => Ok(PatchStatus::Actived),
++            _ => bail!("Kpatch: Invalid patch status"),
++        },
+         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(PatchStatus::NotApplied),
+         Err(e) => Err(e),
+     }
+diff --git a/syscared/src/patch/driver/kpatch/target.rs b/syscared/src/patch/driver/kpatch/target.rs
+index 0b01f2f..beab803 100644
+--- a/syscared/src/patch/driver/kpatch/target.rs
++++ b/syscared/src/patch/driver/kpatch/target.rs
+@@ -12,69 +12,106 @@
+  * See the Mulan PSL v2 for more details.
+  */
+ 
+-use std::ffi::{OsStr, OsString};
++use std::ffi::OsString;
+ 
+ use indexmap::IndexMap;
+ use uuid::Uuid;
+ 
+-use crate::patch::entity::KernelPatchSymbol;
++use crate::patch::entity::KernelPatchFunction;
+ 
+-#[derive(Debug, PartialEq)]
+-pub struct PatchTargetRecord {
++#[derive(Debug)]
++pub struct PatchFunction {
+     pub uuid: Uuid,
+     pub name: OsString,
+     pub size: u64,
+ }
+ 
++impl PatchFunction {
++    fn new(uuid: Uuid, function: &KernelPatchFunction) -> Self {
++        Self {
++            uuid,
++            name: function.name.to_os_string(),
++            size: function.new_size,
++        }
++    }
++
++    fn is_same_function(&self, uuid: &Uuid, function: &KernelPatchFunction) -> bool {
++        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
++    }
++}
++
++#[derive(Debug)]
+ pub struct PatchTarget {
+     name: OsString,
+-    symbol_map: IndexMap<u64, Vec<PatchTargetRecord>>, // symbol addr -> symbol collision list
++    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
+ }
+ 
+ impl PatchTarget {
+-    fn match_record(record: &PatchTargetRecord, uuid: &Uuid, symbol: &KernelPatchSymbol) -> bool {
+-        (record.uuid == *uuid) && (record.name == symbol.name) && (record.size == symbol.new_size)
++    pub fn new(name: OsString) -> Self {
++        Self {
++            name,
++            function_map: IndexMap::new(),
++        }
+     }
+ }
+ 
+ impl PatchTarget {
+-    pub fn new<S: AsRef<OsStr>>(name: S) -> Self {
+-        Self {
+-            name: name.as_ref().to_os_string(),
+-            symbol_map: IndexMap::new(),
+-        }
++    pub fn has_function(&self) -> bool {
++        self.function_map.is_empty()
+     }
+ 
+-    pub fn classify_symbols(
+-        symbols: &[KernelPatchSymbol],
+-    ) -> IndexMap<&OsStr, Vec<&KernelPatchSymbol>> {
+-        let mut symbol_map = IndexMap::new();
+-
+-        for symbol in symbols {
+-            let target_name = symbol.target.as_os_str();
+-
+-            symbol_map
+-                .entry(target_name)
+-                .or_insert_with(Vec::new)
+-                .push(symbol);
++    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
++    where
++        I: IntoIterator<Item = &'a KernelPatchFunction>,
++    {
++        for function in functions {
++            if self.name != function.object {
++                continue;
++            }
++            self.function_map
++                .entry(function.old_addr)
++                .or_default()
++                .push(PatchFunction::new(uuid, function));
+         }
++    }
+ 
+-        symbol_map
++    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
++    where
++        I: IntoIterator<Item = &'a KernelPatchFunction>,
++    {
++        for function in functions {
++            if self.name != function.object {
++                continue;
++            }
++            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
++                if let Some(index) = collision_list
++                    .iter()
++                    .position(|patch_function| patch_function.is_same_function(uuid, function))
++                {
++                    collision_list.remove(index);
++                    if collision_list.is_empty() {
++                        self.function_map.remove(&function.old_addr);
++                    }
++                }
++            }
++        }
+     }
++}
+ 
++impl PatchTarget {
+     pub fn get_conflicts<'a, I>(
+         &'a self,
+-        symbols: I,
+-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
++        functions: I,
++    ) -> impl IntoIterator<Item = &'a PatchFunction>
+     where
+-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
++        I: IntoIterator<Item = &'a KernelPatchFunction>,
+     {
+-        symbols.into_iter().filter_map(move |symbol| {
+-            if self.name != symbol.target {
++        functions.into_iter().filter_map(move |function| {
++            if self.name != function.object {
+                 return None;
+             }
+-            self.symbol_map
+-                .get(&symbol.old_addr)
++            self.function_map
++                .get(&function.old_addr)
+                 .and_then(|list| list.last())
+         })
+     }
+@@ -82,66 +119,19 @@ impl PatchTarget {
+     pub fn get_overrides<'a, I>(
+         &'a self,
+         uuid: &'a Uuid,
+-        symbols: I,
+-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
++        functions: I,
++    ) -> impl IntoIterator<Item = &'a PatchFunction>
+     where
+-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
++        I: IntoIterator<Item = &'a KernelPatchFunction>,
+     {
+-        symbols.into_iter().filter_map(move |symbol| {
+-            if self.name != symbol.target {
++        functions.into_iter().filter_map(move |function| {
++            if self.name != function.object {
+                 return None;
+             }
+-            self.symbol_map
+-                .get(&symbol.old_addr)
++            self.function_map
++                .get(&function.old_addr)
+                 .and_then(|list| list.last())
+-                .filter(|record| !Self::match_record(record, uuid, symbol))
++                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
+         })
+     }
+-
+-    pub fn add_symbols<'a, I>(&mut self, uuid: Uuid, symbols: I)
+-    where
+-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
+-    {
+-        for symbol in symbols {
+-            if self.name != symbol.target {
+-                continue;
+-            }
+-
+-            let symbol_addr = symbol.old_addr;
+-            let symbol_record = PatchTargetRecord {
+-                uuid,
+-                name: symbol.name.to_os_string(),
+-                size: symbol.new_size,
+-            };
+-
+-            self.symbol_map
+-                .entry(symbol_addr)
+-                .or_default()
+-                .push(symbol_record);
+-        }
+-    }
+-
+-    pub fn remove_symbols<'a, I>(&mut self, uuid: &Uuid, symbols: I)
+-    where
+-        I: IntoIterator<Item = &'a KernelPatchSymbol>,
+-    {
+-        for symbol in symbols {
+-            if self.name != symbol.target {
+-                continue;
+-            }
+-
+-            let symbol_addr = symbol.old_addr;
+-            if let Some(collision_list) = self.symbol_map.get_mut(&symbol_addr) {
+-                if let Some(index) = collision_list
+-                    .iter()
+-                    .position(|record| Self::match_record(record, uuid, symbol))
+-                {
+-                    collision_list.remove(index);
+-                    if collision_list.is_empty() {
+-                        self.symbol_map.remove(&symbol_addr);
+-                    }
+-                }
+-            }
+-        }
+-    }
+ }
+diff --git a/syscared/src/patch/driver/mod.rs b/syscared/src/patch/driver/mod.rs
+index e6dab94..d64c2d4 100644
+--- a/syscared/src/patch/driver/mod.rs
++++ b/syscared/src/patch/driver/mod.rs
+@@ -37,17 +37,17 @@ pub struct PatchDriver {
+ }
+ 
+ impl PatchDriver {
+-    fn check_conflict_symbols(&self, patch: &Patch) -> Result<()> {
++    fn check_conflict_functions(&self, patch: &Patch) -> Result<()> {
+         match patch {
+-            Patch::KernelPatch(patch) => self.kpatch.check_conflict_symbols(patch),
+-            Patch::UserPatch(patch) => self.upatch.check_conflict_symbols(patch),
++            Patch::KernelPatch(patch) => self.kpatch.check_conflict_functions(patch),
++            Patch::UserPatch(patch) => self.upatch.check_conflict_functions(patch),
+         }
+     }
+ 
+-    fn check_override_symbols(&self, patch: &Patch) -> Result<()> {
++    fn check_override_functions(&self, patch: &Patch) -> Result<()> {
+         match patch {
+-            Patch::KernelPatch(patch) => self.kpatch.check_override_symbols(patch),
+-            Patch::UserPatch(patch) => self.upatch.check_override_symbols(patch),
++            Patch::KernelPatch(patch) => self.kpatch.check_override_functions(patch),
++            Patch::UserPatch(patch) => self.upatch.check_override_functions(patch),
+         }
+     }
+ }
+@@ -96,7 +96,7 @@ impl PatchDriver {
+         if flag == PatchOpFlag::Force {
+             return Ok(());
+         }
+-        self.check_conflict_symbols(patch)
++        self.check_conflict_functions(patch)
+             .with_context(|| format!("Patch '{}' is conflicted", patch))
+     }
+ 
+@@ -124,7 +124,7 @@ impl PatchDriver {
+     /// After this action, the patch status would be changed to 'ACTIVED'.
+     pub fn active_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+         if flag != PatchOpFlag::Force {
+-            self.check_conflict_symbols(patch)?;
++            self.check_conflict_functions(patch)?;
+         }
+         match patch {
+             Patch::KernelPatch(patch) => self.kpatch.active(patch),
+@@ -137,7 +137,7 @@ impl PatchDriver {
+     /// After this action, the patch status would be changed to 'DEACTIVED'.
+     pub fn deactive_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+         if flag != PatchOpFlag::Force {
+-            self.check_override_symbols(patch)?;
++            self.check_override_functions(patch)?;
+         }
+         match patch {
+             Patch::KernelPatch(patch) => self.kpatch.deactive(patch),
+diff --git a/syscared/src/patch/driver/upatch/entity.rs b/syscared/src/patch/driver/upatch/entity.rs
+new file mode 100644
+index 0000000..80932c4
+--- /dev/null
++++ b/syscared/src/patch/driver/upatch/entity.rs
+@@ -0,0 +1,74 @@
++// SPDX-License-Identifier: Mulan PSL v2
++/*
++ * Copyright (c) 2024 Huawei Technologies Co., Ltd.
++ * syscared is licensed under Mulan PSL v2.
++ * You can use this software according to the terms and conditions of the Mulan PSL v2.
++ * You may obtain a copy of Mulan PSL v2 at:
++ *         http://license.coscl.org.cn/MulanPSL2
++ *
++ * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
++ * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
++ * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
++ * See the Mulan PSL v2 for more details.
++ */
++
++use std::path::PathBuf;
++
++use indexmap::{indexset, IndexSet};
++
++#[derive(Debug)]
++pub struct PatchEntity {
++    pub patch_file: PathBuf,
++    process_list: IndexSet<i32>,
++    ignored_list: IndexSet<i32>,
++}
++
++impl PatchEntity {
++    pub fn new(patch_file: PathBuf) -> Self {
++        Self {
++            patch_file,
++            process_list: indexset! {},
++            ignored_list: indexset! {},
++        }
++    }
++}
++
++impl PatchEntity {
++    pub fn add_process(&mut self, pid: i32) {
++        self.process_list.insert(pid);
++    }
++
++    pub fn remove_process(&mut self, pid: i32) {
++        self.process_list.remove(&pid);
++    }
++
++    pub fn ignore_process(&mut self, pid: i32) {
++        self.ignored_list.insert(pid);
++    }
++
++    pub fn clean_dead_process(&mut self, process_list: &IndexSet<i32>) {
++        self.process_list.retain(|pid| process_list.contains(pid));
++        self.ignored_list.retain(|pid| process_list.contains(pid));
++    }
++
++    pub fn need_ignored(&self, process_list: &IndexSet<i32>) -> IndexSet<i32> {
++        process_list
++            .intersection(&self.ignored_list)
++            .copied()
++            .collect()
++    }
++
++    pub fn need_actived(&self, process_list: &IndexSet<i32>) -> IndexSet<i32> {
++        process_list
++            .difference(&self.process_list)
++            .copied()
++            .collect()
++    }
++
++    pub fn need_deactived(&self, process_list: &IndexSet<i32>) -> IndexSet<i32> {
++        process_list
++            .intersection(&self.process_list)
++            .copied()
++            .collect()
++    }
++}
+diff --git a/syscared/src/patch/driver/upatch/mod.rs b/syscared/src/patch/driver/upatch/mod.rs
+index 0b82db9..dd07e9b 100644
+--- a/syscared/src/patch/driver/upatch/mod.rs
++++ b/syscared/src/patch/driver/upatch/mod.rs
+@@ -13,65 +13,97 @@
+  */
+ 
+ use std::{
+-    ffi::OsString,
++    ffi::OsStr,
+     fmt::Write,
++    os::linux::fs::MetadataExt,
+     path::{Path, PathBuf},
+     sync::Arc,
+ };
+ 
+-use anyhow::{ensure, Context, Result};
++use anyhow::{bail, ensure, Context, Result};
+ use indexmap::{indexset, IndexMap, IndexSet};
+-use log::{debug, error};
+-use parking_lot::Mutex;
++use log::{debug, info, warn};
++use parking_lot::RwLock;
+ use uuid::Uuid;
+ 
+ use syscare_abi::PatchStatus;
+-use syscare_common::util::digest;
++use syscare_common::{fs, util::digest};
+ 
+-use crate::patch::entity::UserPatch;
++use crate::patch::{driver::upatch::entity::PatchEntity, entity::UserPatch};
+ 
++mod entity;
+ mod monitor;
+-mod process;
+ mod sys;
+ mod target;
+ 
+ use monitor::UserPatchMonitor;
+ use target::PatchTarget;
+ 
+-type ElfPatchMap = Arc<Mutex<IndexMap<PathBuf, ElfPatchRecord>>>;
+-
+-#[derive(Default)]
+-struct ElfPatchRecord {
+-    patch_map: IndexMap<Uuid, PathBuf>, // Patch applied to target elf (uuid and patch file)
+-    processes: IndexSet<i32>,           // Target elf process list
+-}
+-
+ pub struct UserPatchDriver {
+-    patch_target_map: IndexMap<OsString, PatchTarget>,
+-    patch_status_map: IndexMap<Uuid, PatchStatus>,
+-    elf_patch_map: ElfPatchMap,
+-    patch_monitor: UserPatchMonitor,
++    status_map: IndexMap<Uuid, PatchStatus>,
++    target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
++    monitor: UserPatchMonitor,
+ }
+ 
+ impl UserPatchDriver {
+     pub fn new() -> Result<Self> {
+-        let elf_patch_map = Arc::new(Mutex::new(IndexMap::new()));
+-        let patch_monitor = UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
+-
++        let status_map = IndexMap::new();
++        let target_map = Arc::new(RwLock::new(IndexMap::new()));
++        let monitor = UserPatchMonitor::new(target_map.clone(), Self::patch_new_process)?;
+         let instance = Self {
+-            patch_target_map: IndexMap::new(),
+-            patch_status_map: IndexMap::new(),
+-            elf_patch_map,
+-            patch_monitor,
++            status_map,
++            target_map,
++            monitor,
+         };
++
+         Ok(instance)
+     }
+ }
+ 
++impl UserPatchDriver {
++    #[inline]
++    fn get_patch_status(&self, uuid: &Uuid) -> PatchStatus {
++        self.status_map
++            .get(uuid)
++            .copied()
++            .unwrap_or(PatchStatus::NotApplied)
++    }
++
++    #[inline]
++    fn set_patch_status(&mut self, uuid: &Uuid, value: PatchStatus) {
++        *self.status_map.entry(*uuid).or_default() = value;
++    }
++
++    fn remove_patch_status(&mut self, uuid: &Uuid) {
++        self.status_map.remove(uuid);
++    }
++}
++
++impl UserPatchDriver {
++    fn add_patch_target(&mut self, patch: &UserPatch) {
++        let target_elf = patch.target_elf.as_path();
++        let mut target_map = self.target_map.write();
++
++        if !target_map.contains_key(target_elf) {
++            target_map.insert(target_elf.to_path_buf(), PatchTarget::default());
++        }
++    }
++
++    fn remove_patch_target(&mut self, patch: &UserPatch) {
++        let target_elf = patch.target_elf.as_path();
++        let mut target_map = self.target_map.write();
++
++        if let Some(target) = target_map.get_mut(target_elf) {
++            if !target.is_patched() {
++                target_map.remove(target_elf);
++            }
++        }
++    }
++}
++
+ impl UserPatchDriver {
+     fn check_consistency(patch: &UserPatch) -> Result<()> {
+-        let patch_file = patch.patch_file.as_path();
+-        let real_checksum = digest::file(patch_file)?;
++        let real_checksum = digest::file(&patch.patch_file)?;
+         debug!("Target checksum: '{}'", patch.checksum);
+         debug!("Expected checksum: '{}'", real_checksum);
+ 
+@@ -86,12 +118,10 @@ impl UserPatchDriver {
+         Ok(())
+     }
+ 
+-    pub fn check_conflict_symbols(&self, patch: &UserPatch) -> Result<()> {
+-        let patch_symbols = patch.symbols.as_slice();
+-        let target_name = patch.target_elf.as_os_str();
+-        let conflict_patches = match self.patch_target_map.get(target_name) {
++    pub fn check_conflict_functions(&self, patch: &UserPatch) -> Result<()> {
++        let conflict_patches = match self.target_map.read().get(&patch.target_elf) {
+             Some(target) => target
+-                .get_conflicts(patch_symbols)
++                .get_conflicts(&patch.functions)
+                 .into_iter()
+                 .map(|record| record.uuid)
+                 .collect(),
+@@ -112,13 +142,10 @@ impl UserPatchDriver {
+         Ok(())
+     }
+ 
+-    pub fn check_override_symbols(&self, patch: &UserPatch) -> Result<()> {
+-        let patch_uuid = patch.uuid;
+-        let patch_symbols = patch.symbols.as_slice();
+-        let target_name = patch.target_elf.as_os_str();
+-        let override_patches = match self.patch_target_map.get(target_name) {
++    pub fn check_override_functions(&self, patch: &UserPatch) -> Result<()> {
++        let override_patches = match self.target_map.read().get(&patch.target_elf) {
+             Some(target) => target
+-                .get_overrides(&patch_uuid, patch_symbols)
++                .get_overrides(&patch.uuid, &patch.functions)
+                 .into_iter()
+                 .map(|record| record.uuid)
+                 .collect(),
+@@ -142,110 +169,109 @@ impl UserPatchDriver {
+ }
+ 
+ impl UserPatchDriver {
+-    fn add_patch_symbols(&mut self, patch: &UserPatch) {
+-        let target_name = patch.target_elf.as_os_str();
+-
+-        let patch_uuid = patch.uuid;
+-        let patch_target = self
+-            .patch_target_map
+-            .entry(target_name.to_os_string())
+-            .or_insert_with(PatchTarget::new);
+-        let patch_symbols = patch.symbols.as_slice();
+-
+-        patch_target.add_symbols(patch_uuid, patch_symbols);
++    #[inline]
++    fn parse_process_id(proc_path: &Path) -> Option<i32> {
++        proc_path
++            .file_name()
++            .and_then(OsStr::to_str)
++            .map(str::parse)
++            .and_then(Result::ok)
+     }
+ 
+-    fn remove_patch_symbols(&mut self, patch: &UserPatch) {
+-        let patch_uuid = patch.uuid;
+-        let patch_symbols = patch.symbols.as_slice();
+-        let target_name = patch.target_elf.as_os_str();
+-
+-        if let Some(patch_target) = self.patch_target_map.get_mut(target_name) {
+-            patch_target.remove_symbols(&patch_uuid, patch_symbols);
++    fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
++        let mut target_pids = IndexSet::new();
++        let target_path = target_elf.as_ref();
++        let target_inode = target_path.metadata()?.st_ino();
++
++        for proc_path in fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })? {
++            let pid = match Self::parse_process_id(&proc_path) {
++                Some(pid) => pid,
++                None => continue,
++            };
++            let exec_path = match fs::read_link(format!("/proc/{}/exe", pid)) {
++                Ok(file_path) => file_path,
++                Err(_) => continue,
++            };
++            // Try to match binary path
++            if exec_path == target_path {
++                target_pids.insert(pid);
++                continue;
++            }
++            // Try to match mapped files
++            let map_files = fs::list_symlinks(
++                format!("/proc/{}/map_files", pid),
++                fs::TraverseOptions { recursive: false },
++            )?;
++            for mapped_file in map_files {
++                if let Ok(mapped_inode) = mapped_file
++                    .read_link()
++                    .and_then(|file_path| Ok(file_path.metadata()?.st_ino()))
++                {
++                    if mapped_inode == target_inode {
++                        target_pids.insert(pid);
++                        break;
++                    }
++                };
++            }
+         }
++
++        Ok(target_pids)
+     }
+-}
+ 
+-impl UserPatchDriver {
+-    fn patch_new_process(elf_patch_map: ElfPatchMap, target_elf: &Path) {
+-        let process_list = match process::find_target_process(target_elf) {
+-            Ok(processes) => processes,
++    fn patch_new_process(
++        target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
++        target_elf: &Path,
++    ) {
++        let process_list = match Self::find_target_process(target_elf) {
++            Ok(pids) => pids,
+             Err(_) => return,
+         };
+ 
+-        let mut patch_map = elf_patch_map.lock();
+-        let patch_record = match patch_map.get_mut(target_elf) {
+-            Some(record) => record,
++        let mut target_map = target_map.write();
++        let patch_target = match target_map.get_mut(target_elf) {
++            Some(target) => target,
+             None => return,
+         };
+ 
+-        let need_active = process_list
+-            .difference(&patch_record.processes)
+-            .copied()
+-            .collect::<Vec<_>>();
++        for (patch_uuid, patch_entity) in patch_target.all_patches() {
++            patch_entity.clean_dead_process(&process_list);
+ 
+-        // Active patch
+-        for (uuid, patch_file) in &patch_record.patch_map {
+-            if !need_active.is_empty() {
++            // Active patch
++            let need_actived = patch_entity.need_actived(&process_list);
++            if !need_actived.is_empty() {
+                 debug!(
+-                    "Upatch: Activating patch '{}' ({}) to process {:?}",
+-                    uuid,
++                    "Upatch: Activating patch '{}' ({}) for process {:?}",
++                    patch_uuid,
+                     target_elf.display(),
+-                    need_active,
++                    need_actived,
+                 );
+             }
+-            for pid in &need_active {
+-                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file)
+-                    .with_context(|| format!("Failed to patch process, pid={}", pid))
+-                {
+-                    error!("{}", e);
++
++            let ignore_list = patch_entity.need_ignored(&process_list);
++            for pid in need_actived {
++                if ignore_list.contains(&pid) {
+                     continue;
+                 }
+-                patch_record.processes.insert(*pid);
++                match sys::active_patch(patch_uuid, pid, target_elf, &patch_entity.patch_file) {
++                    Ok(_) => patch_entity.add_process(pid),
++                    Err(e) => {
++                        warn!(
++                            "Upatch: Failed to active patch '{}' for process {}, {}",
++                            patch_uuid,
++                            pid,
++                            e.to_string().to_lowercase(),
++                        );
++                        patch_entity.ignore_process(pid)
++                    }
++                }
+             }
+         }
+-
+-        // Remove process no longer exists
+-        let need_remove = patch_record
+-            .processes
+-            .difference(&process_list)
+-            .copied()
+-            .collect::<Vec<_>>();
+-        for pid in need_remove {
+-            patch_record.processes.remove(&pid);
+-        }
+-    }
+-}
+-
+-impl UserPatchDriver {
+-    #[inline]
+-    fn get_patch_status(&self, uuid: Uuid) -> Result<PatchStatus> {
+-        let patch_status = self
+-            .patch_status_map
+-            .get(&uuid)
+-            .copied()
+-            .context("Upatch: Patch does not exist")?;
+-
+-        Ok(patch_status)
+-    }
+-
+-    #[inline]
+-    fn set_patch_status(&mut self, uuid: Uuid, value: PatchStatus) -> Result<()> {
+-        let patch_status = self
+-            .patch_status_map
+-            .get_mut(&uuid)
+-            .context("Upatch: Patch does not exist")?;
+-
+-        *patch_status = value;
+-        Ok(())
+     }
+ }
+ 
+ impl UserPatchDriver {
+     pub fn status(&self, patch: &UserPatch) -> Result<PatchStatus> {
+-        Ok(self
+-            .get_patch_status(patch.uuid)
+-            .unwrap_or(PatchStatus::NotApplied))
++        Ok(self.get_patch_status(&patch.uuid))
+     }
+ 
+     pub fn check(&self, patch: &UserPatch) -> Result<()> {
+@@ -256,170 +282,189 @@ impl UserPatchDriver {
+     }
+ 
+     pub fn apply(&mut self, patch: &UserPatch) -> Result<()> {
+-        let patch_uuid = patch.uuid;
+-        ensure!(
+-            self.get_patch_status(patch_uuid).is_err(),
+-            "Upatch: Patch already exists"
+-        );
+-
+-        debug!(
++        info!(
+             "Upatch: Applying patch '{}' ({})",
+-            patch_uuid,
++            patch.uuid,
+             patch.patch_file.display()
+         );
+-        self.patch_status_map
+-            .insert(patch_uuid, PatchStatus::Deactived);
++
++        self.add_patch_target(patch);
++        self.set_patch_status(&patch.uuid, PatchStatus::Deactived);
+ 
+         Ok(())
+     }
+ 
+     pub fn remove(&mut self, patch: &UserPatch) -> Result<()> {
+-        let patch_uuid = patch.uuid;
+-        let patch_status = self.get_patch_status(patch_uuid)?;
+-        ensure!(
+-            patch_status == PatchStatus::Deactived,
+-            "Upatch: Invalid patch status"
+-        );
+-
+-        debug!(
++        info!(
+             "Upatch: Removing patch '{}' ({})",
+-            patch_uuid,
++            patch.uuid,
+             patch.patch_file.display()
+         );
+-        self.patch_status_map.remove(&patch_uuid);
++
++        self.remove_patch_target(patch);
++        self.remove_patch_status(&patch.uuid);
+ 
+         Ok(())
+     }
+ 
+     pub fn active(&mut self, patch: &UserPatch) -> Result<()> {
+-        let uuid = patch.uuid;
+-        let patch_status = self.get_patch_status(uuid)?;
+-        ensure!(
+-            patch_status == PatchStatus::Deactived,
+-            "Upatch: Invalid patch status"
+-        );
+-
+-        let target_elf = patch.target_elf.as_path();
++        let patch_uuid = &patch.uuid;
+         let patch_file = patch.patch_file.as_path();
+-        let process_list = process::find_target_process(target_elf)?;
++        let patch_functions = patch.functions.as_slice();
++        let target_elf = patch.target_elf.as_path();
+ 
+-        let mut patch_map = self.elf_patch_map.lock();
+-        let patch_record = patch_map.entry(target_elf.to_path_buf()).or_default();
++        let process_list = Self::find_target_process(target_elf)?;
+ 
+-        let need_active = process_list
+-            .difference(&patch_record.processes)
+-            .copied()
+-            .collect::<Vec<_>>();
+-        let need_remove = patch_record
+-            .processes
+-            .difference(&process_list)
+-            .copied()
+-            .collect::<Vec<_>>();
+-        let mut need_start_watch = false;
++        let mut target_map = self.target_map.write();
++        let patch_target = target_map
++            .get_mut(target_elf)
++            .context("Upatch: Cannot find patch target")?;
++        let mut patch_entity = match patch_target.get_patch(patch_uuid) {
++            Some(_) => bail!("Upatch: Patch is already exist"),
++            None => PatchEntity::new(patch_file.to_path_buf()),
++        };
+ 
+         // Active patch
+-        if !need_active.is_empty() {
+-            debug!(
+-                "Upatch: Activating patch '{}' ({}) to process {:?}",
+-                uuid,
+-                target_elf.display(),
+-                need_active,
+-            );
+-        }
+-        for pid in need_active {
+-            sys::active_patch(&uuid, pid, target_elf, patch_file)
+-                .with_context(|| format!("Failed to patch process, pid={}", pid))?;
+-            patch_record.processes.insert(pid);
++        info!(
++            "Upatch: Activating patch '{}' ({}) for {}",
++            patch_uuid,
++            patch_file.display(),
++            target_elf.display(),
++        );
++        let mut results = Vec::new();
++        for pid in patch_entity.need_actived(&process_list) {
++            let result = sys::active_patch(patch_uuid, pid, target_elf, patch_file);
++            match result {
++                Ok(_) => patch_entity.add_process(pid),
++                Err(_) => patch_entity.ignore_process(pid),
++            }
++            results.push((pid, result));
+         }
+ 
+-        // Remove process no longer exists
+-        for pid in need_remove {
+-            patch_record.processes.remove(&pid);
++        // Check results, return error if all process fails
++        match results.iter().any(|(_, result)| result.is_ok()) {
++            true => {
++                for (pid, result) in &results {
++                    if let Err(e) = result {
++                        warn!(
++                            "Upatch: Failed to active patch '{}' for process {}, {}",
++                            patch_uuid,
++                            pid,
++                            e.to_string().to_lowercase(),
++                        );
++                    }
++                }
++            }
++            false => {
++                let mut err_msg = String::new();
++
++                writeln!(err_msg, "Upatch: Failed to active patch")?;
++                for (pid, result) in &results {
++                    if let Err(e) = result {
++                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
++                    }
++                }
++                bail!(err_msg);
++            }
+         }
+ 
+-        // If elf is not patched before, start watching it & add a new entry
+-        if !patch_record.patch_map.contains_key(&uuid) {
+-            patch_record
+-                .patch_map
+-                .insert(uuid, patch_file.to_path_buf());
+-            need_start_watch = true;
+-        }
++        // If target is no patched before, start watching it
++        let need_start_watch = !patch_target.is_patched();
+ 
+-        drop(patch_map);
++        // Apply patch to target
++        patch_target.add_patch(*patch_uuid, patch_entity);
++        patch_target.add_functions(*patch_uuid, patch_functions);
++
++        // Drop the lock
++        drop(target_map);
+ 
+         if need_start_watch {
+-            self.patch_monitor.watch_file(target_elf)?;
++            self.monitor.watch_file(target_elf)?;
+         }
+-        self.set_patch_status(uuid, PatchStatus::Actived)?;
+-        self.add_patch_symbols(patch);
++        self.set_patch_status(patch_uuid, PatchStatus::Actived);
+ 
+         Ok(())
+     }
+ 
+     pub fn deactive(&mut self, patch: &UserPatch) -> Result<()> {
+-        let uuid = patch.uuid;
+-        let patch_status = self.get_patch_status(uuid)?;
+-        ensure!(
+-            patch_status == PatchStatus::Actived,
+-            "Upatch: Invalid patch status"
+-        );
+-
+-        let target_elf = patch.target_elf.as_path();
++        let patch_uuid = &patch.uuid;
+         let patch_file = patch.patch_file.as_path();
+-        let process_list = process::find_target_process(target_elf)?;
++        let patch_functions = patch.functions.as_slice();
++        let target_elf = patch.target_elf.as_path();
++
++        let process_list = Self::find_target_process(target_elf)?;
+ 
+-        let mut patch_map = self.elf_patch_map.lock();
+-        let patch_record = patch_map
++        let mut target_map = self.target_map.write();
++        let patch_target = target_map
+             .get_mut(target_elf)
+-            .context("Failed to find elf patch record")?;
++            .context("Upatch: Cannot find patch target")?;
++        let patch_entity = patch_target
++            .get_patch(patch_uuid)
++            .context("Upatch: Cannot find patch entity")?;
+ 
+-        let need_deactive = process_list
+-            .intersection(&patch_record.processes)
+-            .copied()
+-            .collect::<Vec<_>>();
+-        let need_removed = patch_record
+-            .processes
+-            .difference(&process_list)
+-            .copied()
+-            .collect::<Vec<_>>();
+-        let mut need_stop_watch = false;
++        // Remove dead process
++        patch_entity.clean_dead_process(&process_list);
+ 
+         // Deactive patch
+-        if !need_deactive.is_empty() {
+-            debug!(
+-                "Upatch: Deactivating patch '{}' ({}) of process {:?}",
+-                uuid,
+-                target_elf.display(),
+-                need_deactive,
+-            );
+-        }
+-        for pid in need_deactive {
+-            sys::deactive_patch(&uuid, pid, target_elf, patch_file)
+-                .with_context(|| format!("Failed to unpatch process, pid={}", pid))?;
+-            patch_record.processes.remove(&pid); // remove process from record
++        info!(
++            "Upatch: Deactivating patch '{}' ({}) for {}",
++            patch_uuid,
++            patch_file.display(),
++            target_elf.display(),
++        );
++        let mut results = Vec::new();
++        let ignore_list = patch_entity.need_ignored(&process_list);
++        for pid in patch_entity.need_deactived(&process_list) {
++            if ignore_list.contains(&pid) {
++                continue;
++            }
++            let result = sys::deactive_patch(patch_uuid, pid, target_elf, patch_file);
++            if result.is_ok() {
++                patch_entity.remove_process(pid)
++            }
++            results.push((pid, result));
+         }
+ 
+-        // Remove process no longer exists
+-        for pid in need_removed {
+-            patch_record.processes.remove(&pid);
++        // Check results, return error if any process failes
++        match results.iter().any(|(_, result)| result.is_err()) {
++            true => {
++                let mut err_msg = String::new();
++
++                writeln!(err_msg, "Upatch: Failed to deactive patch")?;
++                for (pid, result) in &results {
++                    if let Err(e) = result {
++                        writeln!(err_msg, "* Process {}: {}", pid, e)?;
++                    }
++                }
++                bail!(err_msg)
++            }
++            false => {
++                for (pid, result) in &results {
++                    if let Err(e) = result {
++                        warn!(
++                            "Upatch: Failed to deactive patch '{}' for process {}, {}",
++                            patch_uuid,
++                            pid,
++                            e.to_string().to_lowercase(),
++                        );
++                    }
++                }
++            }
+         }
+ 
+-        // Remove patch from elf patch record
+-        patch_record.patch_map.remove(&uuid);
++        // Remove patch functions from target
++        patch_target.remove_patch(patch_uuid);
++        patch_target.remove_functions(patch_uuid, patch_functions);
+ 
+-        // If elf has no more patch, stop watching it & remove the entry
+-        if patch_record.patch_map.is_empty() {
+-            patch_map.remove(target_elf);
+-            need_stop_watch = true;
+-        }
++        // If target is no longer patched, stop watching it
++        let need_stop_watch = !patch_target.is_patched();
+ 
+-        drop(patch_map);
++        drop(target_map);
+ 
+         if need_stop_watch {
+-            self.patch_monitor.ignore_file(target_elf)?;
++            self.monitor.ignore_file(target_elf)?;
+         }
+-        self.set_patch_status(uuid, PatchStatus::Deactived)?;
+-        self.remove_patch_symbols(patch);
++        self.set_patch_status(patch_uuid, PatchStatus::Deactived);
+ 
+         Ok(())
+     }
+diff --git a/syscared/src/patch/driver/upatch/monitor.rs b/syscared/src/patch/driver/upatch/monitor.rs
+index 1dbb513..09df2a2 100644
+--- a/syscared/src/patch/driver/upatch/monitor.rs
++++ b/syscared/src/patch/driver/upatch/monitor.rs
+@@ -21,12 +21,13 @@ use std::{
+ };
+ 
+ use anyhow::{bail, Context, Result};
+-use indexmap::IndexMap;
+-use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
++use indexmap::{IndexMap, IndexSet};
++use inotify::{Inotify, WatchDescriptor, WatchMask};
+ use log::info;
+ use parking_lot::{Mutex, RwLock};
++use syscare_common::ffi::OsStrExt;
+ 
+-use super::ElfPatchMap;
++use super::target::PatchTarget;
+ 
+ const MONITOR_THREAD_NAME: &str = "upatch_monitor";
+ const MONITOR_CHECK_PERIOD: u64 = 100;
+@@ -34,33 +35,36 @@ const MONITOR_EVENT_BUFFER_CAPACITY: usize = 16 * 64; // inotify event size: 16
+ 
+ pub(super) struct UserPatchMonitor {
+     inotify: Arc<Mutex<Option<Inotify>>>,
+-    watch_map: Arc<Mutex<IndexMap<PathBuf, WatchDescriptor>>>,
+-    target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
++    watch_wd_map: Arc<Mutex<IndexMap<PathBuf, WatchDescriptor>>>,
++    watch_file_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
+     monitor_thread: Option<thread::JoinHandle<()>>,
+ }
+ 
+ impl UserPatchMonitor {
+-    pub fn new<F>(elf_patch_map: ElfPatchMap, callback: F) -> Result<Self>
++    pub fn new<F>(
++        patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
++        callback: F,
++    ) -> Result<Self>
+     where
+-        F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
++        F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
+     {
+         let inotify = Arc::new(Mutex::new(Some(
+             Inotify::init().context("Failed to initialize inotify")?,
+         )));
+-        let watch_map = Arc::new(Mutex::new(IndexMap::new()));
+-        let target_map = Arc::new(RwLock::new(IndexMap::new()));
++        let watch_wd_map = Arc::new(Mutex::new(IndexMap::new()));
++        let watch_file_map = Arc::new(RwLock::new(IndexMap::new()));
+         let monitor_thread = MonitorThread {
+             inotify: inotify.clone(),
+-            target_map: target_map.clone(),
+-            elf_patch_map,
++            watch_file_map: watch_file_map.clone(),
++            patch_target_map,
+             callback,
+         }
+         .run()?;
+ 
+         Ok(Self {
+             inotify,
+-            target_map,
+-            watch_map,
++            watch_wd_map,
++            watch_file_map,
+             monitor_thread: Some(monitor_thread),
+         })
+     }
+@@ -69,7 +73,7 @@ impl UserPatchMonitor {
+ impl UserPatchMonitor {
+     pub fn watch_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
+         let watch_file = file_path.as_ref();
+-        if self.watch_map.lock().contains_key(watch_file) {
++        if self.watch_wd_map.lock().contains_key(watch_file) {
+             return Ok(());
+         }
+ 
+@@ -79,10 +83,10 @@ impl UserPatchMonitor {
+                     .add_watch(watch_file, WatchMask::OPEN)
+                     .with_context(|| format!("Failed to watch file {}", watch_file.display()))?;
+ 
+-                self.target_map
++                self.watch_file_map
+                     .write()
+                     .insert(wd.clone(), watch_file.to_owned());
+-                self.watch_map.lock().insert(watch_file.to_owned(), wd);
++                self.watch_wd_map.lock().insert(watch_file.to_owned(), wd);
+                 info!("Start watching file {}", watch_file.display());
+             }
+             None => bail!("Inotify does not exist"),
+@@ -94,10 +98,10 @@ impl UserPatchMonitor {
+     pub fn ignore_file<P: AsRef<Path>>(&self, file_path: P) -> Result<()> {
+         let ignore_file = file_path.as_ref();
+ 
+-        if let Some(wd) = self.watch_map.lock().remove(ignore_file) {
++        if let Some(wd) = self.watch_wd_map.lock().remove(ignore_file) {
+             match self.inotify.lock().as_mut() {
+                 Some(inotify) => {
+-                    self.target_map.write().remove(&wd);
++                    self.watch_file_map.write().remove(&wd);
+ 
+                     inotify.rm_watch(wd).with_context(|| {
+                         format!("Failed to stop watch file {}", ignore_file.display())
+@@ -114,14 +118,14 @@ impl UserPatchMonitor {
+ 
+ struct MonitorThread<F> {
+     inotify: Arc<Mutex<Option<Inotify>>>,
+-    target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
+-    elf_patch_map: ElfPatchMap,
++    watch_file_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
++    patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+     callback: F,
+ }
+ 
+ impl<F> MonitorThread<F>
+ where
+-    F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
++    F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
+ {
+     fn run(self) -> Result<thread::JoinHandle<()>> {
+         thread::Builder::new()
+@@ -130,18 +134,30 @@ where
+             .with_context(|| format!("Failed to create thread '{}'", MONITOR_THREAD_NAME))
+     }
+ 
++    #[inline]
++    fn filter_blacklist_path(path: &Path) -> bool {
++        const BLACKLIST_KEYWORDS: [&str; 2] = ["syscare", "upatch"];
++
++        for keyword in BLACKLIST_KEYWORDS {
++            if path.contains(keyword) {
++                return false;
++            }
++        }
++        true
++    }
++
+     fn thread_main(self) {
+         while let Some(inotify) = self.inotify.lock().as_mut() {
+             let mut buffer = [0; MONITOR_EVENT_BUFFER_CAPACITY];
+ 
+             if let Ok(events) = inotify.read_events(&mut buffer) {
+-                for event in events {
+-                    if !event.mask.contains(EventMask::OPEN) {
+-                        continue;
+-                    }
+-                    if let Some(patch_file) = self.target_map.read().get(&event.wd) {
+-                        (self.callback)(self.elf_patch_map.clone(), patch_file);
+-                    }
++                let watch_file_map = self.watch_file_map.read();
++                let target_elfs = events
++                    .filter_map(|event| watch_file_map.get(&event.wd))
++                    .filter(|path| Self::filter_blacklist_path(path))
++                    .collect::<IndexSet<_>>();
++                for target_elf in target_elfs {
++                    (self.callback)(self.patch_target_map.clone(), target_elf);
+                 }
+             }
+ 
+diff --git a/syscared/src/patch/driver/upatch/process.rs b/syscared/src/patch/driver/upatch/process.rs
+deleted file mode 100644
+index 9b2f6de..0000000
+--- a/syscared/src/patch/driver/upatch/process.rs
++++ /dev/null
+@@ -1,100 +0,0 @@
+-// SPDX-License-Identifier: Mulan PSL v2
+-/*
+- * Copyright (c) 2024 Huawei Technologies Co., Ltd.
+- * syscared is licensed under Mulan PSL v2.
+- * You can use this software according to the terms and conditions of the Mulan PSL v2.
+- * You may obtain a copy of Mulan PSL v2 at:
+- *         http://license.coscl.org.cn/MulanPSL2
+- *
+- * THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND,
+- * EITHER EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT,
+- * MERCHANTABILITY OR FIT FOR A PARTICULAR PURPOSE.
+- * See the Mulan PSL v2 for more details.
+- */
+-
+-use std::{ffi::OsStr, os::linux::fs::MetadataExt, path::Path};
+-
+-use anyhow::Result;
+-use indexmap::IndexSet;
+-use syscare_common::fs;
+-
+-const PROC_BLACK_LIST: [&str; 18] = [
+-    "/usr/lib/systemd/systemd-journald",
+-    "/usr/lib/systemd/systemd-logind",
+-    "/usr/lib/systemd/systemd-udevd",
+-    "/usr/lib/systemd/systemd-hostnamed",
+-    "/usr/bin/udevadm",
+-    "/usr/sbin/auditd",
+-    "/usr/bin/syscare",
+-    "/usr/bin/syscared",
+-    "/usr/bin/upatchd",
+-    "/usr/libexec/syscare/as-hijacker",
+-    "/usr/libexec/syscare/cc-hijacker",
+-    "/usr/libexec/syscare/c++-hijacker",
+-    "/usr/libexec/syscare/gcc-hijacker",
+-    "/usr/libexec/syscare/g++-hijacker",
+-    "/usr/libexec/syscare/syscare-build",
+-    "/usr/libexec/syscare/upatch-build",
+-    "/usr/libexec/syscare/upatch-diff",
+-    "/usr/libexec/syscare/upatch-manage",
+-];
+-
+-#[inline]
+-fn is_blacklisted(file_path: &Path) -> bool {
+-    PROC_BLACK_LIST
+-        .iter()
+-        .map(Path::new)
+-        .any(|blacklist_path| blacklist_path == file_path)
+-}
+-
+-#[inline]
+-fn parse_process_id(proc_path: &Path) -> Option<i32> {
+-    proc_path
+-        .file_name()
+-        .and_then(OsStr::to_str)
+-        .map(str::parse)
+-        .and_then(Result::ok)
+-}
+-
+-pub fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
+-    let mut target_pids = IndexSet::new();
+-    let target_path = target_elf.as_ref();
+-    let target_inode = target_path.metadata()?.st_ino();
+-
+-    for proc_path in fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })? {
+-        let pid = match self::parse_process_id(&proc_path) {
+-            Some(pid) => pid,
+-            None => continue,
+-        };
+-        let exec_path = match fs::read_link(format!("/proc/{}/exe", pid)) {
+-            Ok(file_path) => file_path,
+-            Err(_) => continue,
+-        };
+-        if is_blacklisted(&exec_path) {
+-            continue;
+-        }
+-        // Try to match binary path
+-        if exec_path == target_path {
+-            target_pids.insert(pid);
+-            continue;
+-        }
+-        // Try to match mapped files
+-        let map_files = fs::list_symlinks(
+-            format!("/proc/{}/map_files", pid),
+-            fs::TraverseOptions { recursive: false },
+-        )?;
+-        for mapped_file in map_files {
+-            if let Ok(mapped_inode) = mapped_file
+-                .read_link()
+-                .and_then(|file_path| Ok(file_path.metadata()?.st_ino()))
+-            {
+-                if mapped_inode == target_inode {
+-                    target_pids.insert(pid);
+-                    break;
+-                }
+-            };
+-        }
+-    }
+-
+-    Ok(target_pids)
+-}
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index f0745f0..bfeb1b8 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -25,12 +25,10 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
+         .exit_code();
+ 
+     match exit_code {
+-        0 => {}
+-        EEXIST => {}
+-        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
++        0 => Ok(()),
++        EEXIST => Ok(()),
++        _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
+     }
+-
+-    Ok(())
+ }
+ 
+ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
+@@ -49,9 +47,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
+         .exit_code();
+ 
+     match exit_code {
+-        0 => {}
+-        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
++        0 => Ok(()),
++        _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
+     }
+-
+-    Ok(())
+ }
+diff --git a/syscared/src/patch/driver/upatch/target.rs b/syscared/src/patch/driver/upatch/target.rs
+index df1e075..26c3ed3 100644
+--- a/syscared/src/patch/driver/upatch/target.rs
++++ b/syscared/src/patch/driver/upatch/target.rs
+@@ -17,98 +17,120 @@ use std::ffi::OsString;
+ use indexmap::IndexMap;
+ use uuid::Uuid;
+ 
+-use crate::patch::entity::UserPatchSymbol;
++use crate::patch::entity::UserPatchFunction;
+ 
+-#[derive(Debug, PartialEq)]
+-pub struct PatchTargetRecord {
++use super::entity::PatchEntity;
++
++#[derive(Debug)]
++pub struct PatchFunction {
+     pub uuid: Uuid,
+     pub name: OsString,
+     pub size: u64,
+ }
+ 
++impl PatchFunction {
++    pub fn new(uuid: Uuid, function: &UserPatchFunction) -> Self {
++        Self {
++            uuid,
++            name: function.name.to_os_string(),
++            size: function.new_size,
++        }
++    }
++
++    pub fn is_same_function(&self, uuid: &Uuid, function: &UserPatchFunction) -> bool {
++        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
++    }
++}
++
++#[derive(Debug, Default)]
+ pub struct PatchTarget {
+-    symbol_map: IndexMap<u64, Vec<PatchTargetRecord>>, // symbol addr -> symbol collision list
++    patch_map: IndexMap<Uuid, PatchEntity>, // patched file data
++    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
+ }
+ 
+ impl PatchTarget {
+-    fn match_record(record: &PatchTargetRecord, uuid: &Uuid, symbol: &UserPatchSymbol) -> bool {
+-        (record.uuid == *uuid) && (record.name == symbol.name) && (record.size == symbol.new_size)
++    pub fn is_patched(&self) -> bool {
++        !self.patch_map.is_empty()
+     }
+-}
+ 
+-impl PatchTarget {
+-    pub fn new() -> Self {
+-        Self {
+-            symbol_map: IndexMap::new(),
+-        }
++    pub fn add_patch(&mut self, uuid: Uuid, entity: PatchEntity) {
++        self.patch_map.insert(uuid, entity);
+     }
+ 
+-    pub fn get_conflicts<'a, I>(
+-        &'a self,
+-        symbols: I,
+-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+-    where
+-        I: IntoIterator<Item = &'a UserPatchSymbol>,
+-    {
+-        symbols.into_iter().filter_map(move |symbol| {
+-            self.symbol_map
+-                .get(&symbol.old_addr)
+-                .and_then(|list| list.last())
+-        })
++    pub fn remove_patch(&mut self, uuid: &Uuid) {
++        self.patch_map.remove(uuid);
+     }
+ 
+-    pub fn get_overrides<'a, I>(
+-        &'a self,
+-        uuid: &'a Uuid,
+-        symbols: I,
+-    ) -> impl IntoIterator<Item = &'a PatchTargetRecord>
+-    where
+-        I: IntoIterator<Item = &'a UserPatchSymbol>,
+-    {
+-        symbols.into_iter().filter_map(move |symbol| {
+-            self.symbol_map
+-                .get(&symbol.old_addr)
+-                .and_then(|list| list.last())
+-                .filter(|record| !Self::match_record(record, uuid, symbol))
+-        })
++    pub fn get_patch(&mut self, uuid: &Uuid) -> Option<&mut PatchEntity> {
++        self.patch_map.get_mut(uuid)
++    }
++
++    pub fn all_patches(&mut self) -> impl IntoIterator<Item = (&Uuid, &mut PatchEntity)> {
++        self.patch_map.iter_mut()
+     }
++}
+ 
+-    pub fn add_symbols<'a, I>(&mut self, uuid: Uuid, symbols: I)
++impl PatchTarget {
++    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
+     where
+-        I: IntoIterator<Item = &'a UserPatchSymbol>,
++        I: IntoIterator<Item = &'a UserPatchFunction>,
+     {
+-        for symbol in symbols {
+-            let symbol_addr = symbol.old_addr;
+-            let symbol_record = PatchTargetRecord {
+-                uuid,
+-                name: symbol.name.to_os_string(),
+-                size: symbol.new_size,
+-            };
+-
+-            self.symbol_map
+-                .entry(symbol_addr)
++        for function in functions {
++            self.function_map
++                .entry(function.old_addr)
+                 .or_default()
+-                .push(symbol_record);
++                .push(PatchFunction::new(uuid, function));
+         }
+     }
+ 
+-    pub fn remove_symbols<'a, I>(&mut self, uuid: &Uuid, symbols: I)
++    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
+     where
+-        I: IntoIterator<Item = &'a UserPatchSymbol>,
++        I: IntoIterator<Item = &'a UserPatchFunction>,
+     {
+-        for symbol in symbols {
+-            let symbol_addr = symbol.old_addr;
+-            if let Some(collision_list) = self.symbol_map.get_mut(&symbol_addr) {
++        for function in functions {
++            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
+                 if let Some(index) = collision_list
+                     .iter()
+-                    .position(|record| Self::match_record(record, uuid, symbol))
++                    .position(|patch_function| patch_function.is_same_function(uuid, function))
+                 {
+                     collision_list.remove(index);
+                     if collision_list.is_empty() {
+-                        self.symbol_map.remove(&symbol_addr);
++                        self.function_map.remove(&function.old_addr);
+                     }
+                 }
+             }
+         }
+     }
+ }
++
++impl PatchTarget {
++    pub fn get_conflicts<'a, I>(
++        &'a self,
++        functions: I,
++    ) -> impl IntoIterator<Item = &'a PatchFunction>
++    where
++        I: IntoIterator<Item = &'a UserPatchFunction>,
++    {
++        functions.into_iter().filter_map(move |function| {
++            self.function_map
++                .get(&function.old_addr)
++                .and_then(|list| list.last())
++        })
++    }
++
++    pub fn get_overrides<'a, I>(
++        &'a self,
++        uuid: &'a Uuid,
++        functions: I,
++    ) -> impl IntoIterator<Item = &'a PatchFunction>
++    where
++        I: IntoIterator<Item = &'a UserPatchFunction>,
++    {
++        functions.into_iter().filter_map(move |function| {
++            self.function_map
++                .get(&function.old_addr)
++                .and_then(|list| list.last())
++                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
++        })
++    }
++}
+diff --git a/syscared/src/patch/entity/kpatch.rs b/syscared/src/patch/entity/kpatch.rs
+index 9399920..ab2c8b2 100644
+--- a/syscared/src/patch/entity/kpatch.rs
++++ b/syscared/src/patch/entity/kpatch.rs
+@@ -17,22 +17,22 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
+ use syscare_abi::{PatchInfo, PatchType};
+ use uuid::Uuid;
+ 
+-/// Kernel patch symbol definition
++/// Kernel patch function definition
+ #[derive(Clone)]
+-pub struct KernelPatchSymbol {
++pub struct KernelPatchFunction {
+     pub name: OsString,
+-    pub target: OsString,
++    pub object: OsString,
+     pub old_addr: u64,
+     pub old_size: u64,
+     pub new_addr: u64,
+     pub new_size: u64,
+ }
+ 
+-impl std::fmt::Debug for KernelPatchSymbol {
++impl std::fmt::Debug for KernelPatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        f.debug_struct("KernelPatchSymbol")
++        f.debug_struct("KernelPatchFunction")
+             .field("name", &self.name)
+-            .field("target", &self.target)
++            .field("object", &self.object)
+             .field("old_addr", &format!("{:#x}", self.old_addr))
+             .field("old_size", &format!("{:#x}", self.old_size))
+             .field("new_addr", &format!("{:#x}", self.new_addr))
+@@ -41,13 +41,13 @@ impl std::fmt::Debug for KernelPatchSymbol {
+     }
+ }
+ 
+-impl std::fmt::Display for KernelPatchSymbol {
++impl std::fmt::Display for KernelPatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         write!(
+              f,
+-             "name: {}, target: {}, old_addr: {:#x}, old_size: {:#x}, new_addr: {:#x}, new_size: {:#x}",
++             "name: {}, object: {}, old_addr: {:#x}, old_size: {:#x}, new_addr: {:#x}, new_size: {:#x}",
+              self.name.to_string_lossy(),
+-             self.target.to_string_lossy(),
++             self.object.to_string_lossy(),
+              self.old_addr,
+              self.old_size,
+              self.new_addr,
+@@ -65,7 +65,7 @@ pub struct KernelPatch {
+     pub info: Arc<PatchInfo>,
+     pub pkg_name: String,
+     pub module_name: OsString,
+-    pub symbols: Vec<KernelPatchSymbol>,
++    pub functions: Vec<KernelPatchFunction>,
+     pub patch_file: PathBuf,
+     pub sys_file: PathBuf,
+     pub checksum: String,
+diff --git a/syscared/src/patch/entity/symbol.rs b/syscared/src/patch/entity/symbol.rs
+index 300775a..c7845aa 100644
+--- a/syscared/src/patch/entity/symbol.rs
++++ b/syscared/src/patch/entity/symbol.rs
+@@ -14,9 +14,9 @@
+ 
+ use std::ffi::OsString;
+ 
+-/// Patch symbol definiation
++/// Patch function definiation
+ #[derive(Clone)]
+-pub struct PatchSymbol {
++pub struct PatchFunction {
+     pub name: OsString,
+     pub target: OsString,
+     pub old_addr: u64,
+@@ -25,9 +25,9 @@ pub struct PatchSymbol {
+     pub new_size: u64,
+ }
+ 
+-impl std::fmt::Debug for PatchSymbol {
++impl std::fmt::Debug for PatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        f.debug_struct("PatchSymbol")
++        f.debug_struct("PatchFunction")
+             .field("name", &self.name)
+             .field("target", &self.target)
+             .field("old_addr", &format!("0x{}", self.old_addr))
+@@ -38,7 +38,7 @@ impl std::fmt::Debug for PatchSymbol {
+     }
+ }
+ 
+-impl std::fmt::Display for PatchSymbol {
++impl std::fmt::Display for PatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         write!(
+              f,
+diff --git a/syscared/src/patch/entity/upatch.rs b/syscared/src/patch/entity/upatch.rs
+index 4e62431..ef24866 100644
+--- a/syscared/src/patch/entity/upatch.rs
++++ b/syscared/src/patch/entity/upatch.rs
+@@ -17,9 +17,9 @@ use std::{ffi::OsString, path::PathBuf, sync::Arc};
+ use syscare_abi::{PatchInfo, PatchType};
+ use uuid::Uuid;
+ 
+-/// User patch symbol definition
++/// User patch function definition
+ #[derive(Clone)]
+-pub struct UserPatchSymbol {
++pub struct UserPatchFunction {
+     pub name: OsString,
+     pub old_addr: u64,
+     pub old_size: u64,
+@@ -27,9 +27,9 @@ pub struct UserPatchSymbol {
+     pub new_size: u64,
+ }
+ 
+-impl std::fmt::Debug for UserPatchSymbol {
++impl std::fmt::Debug for UserPatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+-        f.debug_struct("UserPatchSymbol")
++        f.debug_struct("UserPatchFunction")
+             .field("name", &self.name)
+             .field("old_addr", &format!("0x{}", self.old_addr))
+             .field("old_size", &format!("0x{}", self.old_size))
+@@ -39,7 +39,7 @@ impl std::fmt::Debug for UserPatchSymbol {
+     }
+ }
+ 
+-impl std::fmt::Display for UserPatchSymbol {
++impl std::fmt::Display for UserPatchFunction {
+     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+         write!(
+             f,
+@@ -61,7 +61,7 @@ pub struct UserPatch {
+     pub kind: PatchType,
+     pub info: Arc<PatchInfo>,
+     pub pkg_name: String,
+-    pub symbols: Vec<UserPatchSymbol>,
++    pub functions: Vec<UserPatchFunction>,
+     pub patch_file: PathBuf,
+     pub target_elf: PathBuf,
+     pub checksum: String,
+diff --git a/syscared/src/patch/resolver/kpatch.rs b/syscared/src/patch/resolver/kpatch.rs
+index 50711eb..524482e 100644
+--- a/syscared/src/patch/resolver/kpatch.rs
++++ b/syscared/src/patch/resolver/kpatch.rs
+@@ -13,8 +13,7 @@
+  */
+ 
+ use std::{
+-    ffi::OsString,
+-    os::unix::ffi::OsStringExt,
++    ffi::{CStr, OsString},
+     path::{Path, PathBuf},
+     sync::Arc,
+ };
+@@ -23,10 +22,14 @@ use anyhow::{anyhow, Context, Result};
+ use object::{NativeFile, Object, ObjectSection};
+ 
+ use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+-use syscare_common::{concat_os, ffi::OsStrExt, fs};
++use syscare_common::{
++    concat_os,
++    ffi::{CStrExt, OsStrExt},
++    fs,
++};
+ 
+ use super::PatchResolverImpl;
+-use crate::patch::entity::{KernelPatch, KernelPatchSymbol, Patch};
++use crate::patch::entity::{KernelPatch, KernelPatchFunction, Patch};
+ 
+ const KPATCH_SUFFIX: &str = ".ko";
+ const KPATCH_SYS_DIR: &str = "/sys/kernel/livepatch";
+@@ -35,7 +38,10 @@ const KPATCH_SYS_FILE_NAME: &str = "enabled";
+ mod ffi {
+     use std::os::raw::{c_char, c_long, c_ulong};
+ 
+-    use object::Pod;
++    use object::{
++        read::elf::{ElfSectionRelocationIterator, FileHeader},
++        Pod, Relocation,
++    };
+ 
+     #[repr(C)]
+     #[derive(Debug, Clone, Copy)]
+@@ -52,9 +58,9 @@ mod ffi {
+         pub ref_offset: c_long,
+     }
+ 
+-    pub const KPATCH_FUNC_SIZE: usize = std::mem::size_of::<KpatchFunction>();
+-    pub const KPATCH_FUNC_NAME_OFFSET: usize = 40;
+-    pub const KPATCH_OBJECT_NAME_OFFSET: usize = 48;
++    pub const KPATCH_FUNCTION_SIZE: usize = std::mem::size_of::<KpatchFunction>();
++    pub const KPATCH_FUNCTION_OFFSET: usize = 40;
++    pub const KPATCH_OBJECT_OFFSET: usize = 48;
+ 
+     /*
+      * SAFETY: This struct is
+@@ -64,24 +70,34 @@ mod ffi {
+      */
+     unsafe impl Pod for KpatchFunction {}
+ 
+-    pub enum KpatchRelocation {
+-        NewAddr = 0,
+-        Name = 1,
+-        ObjName = 2,
++    pub struct KpatchRelocation {
++        pub addr: (u64, Relocation),
++        pub name: (u64, Relocation),
++        pub object: (u64, Relocation),
+     }
+ 
+-    impl From<usize> for KpatchRelocation {
+-        fn from(value: usize) -> Self {
+-            match value {
+-                0 => KpatchRelocation::NewAddr,
+-                1 => KpatchRelocation::Name,
+-                2 => KpatchRelocation::ObjName,
+-                _ => unreachable!(),
+-            }
++    pub struct KpatchRelocationIterator<'data, 'file, Elf: FileHeader>(
++        ElfSectionRelocationIterator<'data, 'file, Elf, &'data [u8]>,
++    );
++
++    impl<'data, 'file, Elf: FileHeader> KpatchRelocationIterator<'data, 'file, Elf> {
++        pub fn new(relocations: ElfSectionRelocationIterator<'data, 'file, Elf>) -> Self {
++            Self(relocations)
+         }
+     }
+ 
+-    pub const KPATCH_FUNC_RELA_TYPE_NUM: usize = 3;
++    impl<'data, 'file, Elf: FileHeader> Iterator for KpatchRelocationIterator<'data, 'file, Elf> {
++        type Item = KpatchRelocation;
++
++        fn next(&mut self) -> Option<Self::Item> {
++            if let (Some(addr), Some(name), Some(object)) =
++                (self.0.next(), self.0.next(), self.0.next())
++            {
++                return Some(KpatchRelocation { addr, name, object });
++            }
++            None
++        }
++    }
+ }
+ 
+ use ffi::*;
+@@ -113,19 +129,19 @@ impl KpatchResolverImpl {
+             .with_context(|| format!("Failed to read section '{}'", KPATCH_FUNCS_SECTION))?;
+ 
+         // Resolve patch functions
+-        let patch_symbols = &mut patch.symbols;
+-        let patch_functions = object::slice_from_bytes::<KpatchFunction>(
++        let patch_functions = &mut patch.functions;
++        let kpatch_function_slice = object::slice_from_bytes::<KpatchFunction>(
+             function_data,
+-            function_data.len() / KPATCH_FUNC_SIZE,
++            function_data.len() / KPATCH_FUNCTION_SIZE,
+         )
+         .map(|(f, _)| f)
+         .map_err(|_| anyhow!("Invalid data format"))
+         .context("Failed to resolve patch functions")?;
+ 
+-        for function in patch_functions {
+-            patch_symbols.push(KernelPatchSymbol {
++        for function in kpatch_function_slice {
++            patch_functions.push(KernelPatchFunction {
+                 name: OsString::new(),
+-                target: OsString::new(),
++                object: OsString::new(),
+                 old_addr: function.old_addr,
+                 old_size: function.old_size,
+                 new_addr: function.new_addr,
+@@ -134,44 +150,35 @@ impl KpatchResolverImpl {
+         }
+ 
+         // Relocate patch functions
+-        for (index, (offset, relocation)) in function_section.relocations().enumerate() {
+-            match KpatchRelocation::from(index % KPATCH_FUNC_RELA_TYPE_NUM) {
+-                KpatchRelocation::Name => {
+-                    let symbol_index =
+-                        (offset as usize - KPATCH_FUNC_NAME_OFFSET) / KPATCH_FUNC_SIZE;
+-                    let patch_symbol = patch_symbols
+-                        .get_mut(symbol_index)
+-                        .context("Failed to find patch symbol")?;
+-
+-                    let name_offset = relocation.addend() as usize;
+-                    let mut name_bytes = &string_data[name_offset..];
+-                    let string_end = name_bytes
+-                        .iter()
+-                        .position(|b| b == &b'\0')
+-                        .context("Failed to find termination char")?;
+-                    name_bytes = &name_bytes[..string_end];
+-
+-                    patch_symbol.name = OsString::from_vec(name_bytes.to_vec());
+-                }
+-                KpatchRelocation::ObjName => {
+-                    let symbol_index =
+-                        (offset as usize - KPATCH_OBJECT_NAME_OFFSET) / KPATCH_FUNC_SIZE;
+-                    let patch_symbol = patch_symbols
+-                        .get_mut(symbol_index)
+-                        .context("Failed to find patch symbol")?;
+-
+-                    let name_offset = relocation.addend() as usize;
+-                    let mut name_bytes = &string_data[name_offset..];
+-                    let string_end = name_bytes
+-                        .iter()
+-                        .position(|b| b == &b'\0')
+-                        .context("Failed to find termination char")?;
+-                    name_bytes = &name_bytes[..string_end];
+-
+-                    patch_symbol.target = OsString::from_vec(name_bytes.to_vec());
+-                }
+-                _ => {}
+-            };
++        for relocation in KpatchRelocationIterator::new(function_section.relocations()) {
++            let (name_reloc_offset, name_reloc) = relocation.name;
++            let (object_reloc_offset, obj_reloc) = relocation.object;
++
++            // Relocate patch function name
++            let name_index =
++                (name_reloc_offset as usize - KPATCH_FUNCTION_OFFSET) / KPATCH_FUNCTION_SIZE;
++            let name_function = patch_functions
++                .get_mut(name_index)
++                .context("Failed to find patch function")?;
++            let name_offset = name_reloc.addend() as usize;
++            let name_string = CStr::from_bytes_with_next_nul(&string_data[name_offset..])
++                .context("Failed to parse patch object name")?
++                .to_os_string();
++
++            name_function.name = name_string;
++
++            // Relocate patch function object
++            let object_index =
++                (object_reloc_offset as usize - KPATCH_OBJECT_OFFSET) / KPATCH_FUNCTION_SIZE;
++            let object_function = patch_functions
++                .get_mut(object_index)
++                .context("Failed to find patch function")?;
++            let object_offset = obj_reloc.addend() as usize;
++            let object_string = CStr::from_bytes_with_next_nul(&string_data[object_offset..])
++                .context("Failed to parse patch function name")?
++                .to_os_string();
++
++            object_function.object = object_string;
+         }
+ 
+         Ok(())
+@@ -206,10 +213,10 @@ impl PatchResolverImpl for KpatchResolverImpl {
+             module_name,
+             patch_file,
+             sys_file,
+-            symbols: Vec::new(),
++            functions: Vec::new(),
+             checksum: patch_entity.checksum.clone(),
+         };
+-        Self::resolve_patch_file(&mut patch).context("Failed to resolve patch elf")?;
++        Self::resolve_patch_file(&mut patch).context("Failed to resolve patch")?;
+ 
+         Ok(Patch::KernelPatch(patch))
+     }
+diff --git a/syscared/src/patch/resolver/upatch.rs b/syscared/src/patch/resolver/upatch.rs
+index 15c7363..5df11db 100644
+--- a/syscared/src/patch/resolver/upatch.rs
++++ b/syscared/src/patch/resolver/upatch.rs
+@@ -12,21 +12,28 @@
+  * See the Mulan PSL v2 for more details.
+  */
+ 
+-use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, sync::Arc};
++use std::{
++    ffi::{CStr, OsString},
++    path::Path,
++    sync::Arc,
++};
+ 
+ use anyhow::{anyhow, Context, Result};
+ use object::{NativeFile, Object, ObjectSection};
+ 
+ use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+-use syscare_common::{concat_os, fs};
++use syscare_common::{concat_os, ffi::CStrExt, fs};
+ 
+ use super::PatchResolverImpl;
+-use crate::patch::entity::{Patch, UserPatch, UserPatchSymbol};
++use crate::patch::entity::{Patch, UserPatch, UserPatchFunction};
+ 
+ mod ffi {
+     use std::os::raw::{c_char, c_ulong};
+ 
+-    use object::Pod;
++    use object::{
++        read::elf::{ElfSectionRelocationIterator, FileHeader},
++        Pod, Relocation,
++    };
+ 
+     #[repr(C)]
+     #[derive(Debug, Clone, Copy)]
+@@ -48,25 +55,34 @@ mod ffi {
+      */
+     unsafe impl Pod for UpatchFunction {}
+ 
+-    pub const UPATCH_FUNC_SIZE: usize = std::mem::size_of::<UpatchFunction>();
+-    pub const UPATCH_FUNC_NAME_OFFSET: usize = 40;
++    pub const UPATCH_FUNCTION_SIZE: usize = std::mem::size_of::<UpatchFunction>();
++    pub const UPATCH_FUNCTION_OFFSET: usize = 40;
+ 
+-    pub enum UpatchRelocation {
+-        NewAddr = 0,
+-        Name = 1,
++    pub struct UpatchRelocation {
++        pub addr: (u64, Relocation),
++        pub name: (u64, Relocation),
+     }
+ 
+-    impl From<usize> for UpatchRelocation {
+-        fn from(value: usize) -> Self {
+-            match value {
+-                0 => UpatchRelocation::NewAddr,
+-                1 => UpatchRelocation::Name,
+-                _ => unreachable!(),
+-            }
++    pub struct UpatchRelocationIterator<'data, 'file, Elf: FileHeader>(
++        ElfSectionRelocationIterator<'data, 'file, Elf, &'data [u8]>,
++    );
++
++    impl<'data, 'file, Elf: FileHeader> UpatchRelocationIterator<'data, 'file, Elf> {
++        pub fn new(relocations: ElfSectionRelocationIterator<'data, 'file, Elf>) -> Self {
++            Self(relocations)
+         }
+     }
+ 
+-    pub const UPATCH_FUNC_RELA_TYPE_NUM: usize = 2;
++    impl<'data, 'file, Elf: FileHeader> Iterator for UpatchRelocationIterator<'data, 'file, Elf> {
++        type Item = UpatchRelocation;
++
++        fn next(&mut self) -> Option<Self::Item> {
++            if let (Some(addr), Some(name)) = (self.0.next(), self.0.next()) {
++                return Some(UpatchRelocation { addr, name });
++            }
++            None
++        }
++    }
+ }
+ 
+ use ffi::*;
+@@ -98,17 +114,17 @@ impl UpatchResolverImpl {
+             .with_context(|| format!("Failed to read section '{}'", UPATCH_FUNCS_SECTION))?;
+ 
+         // Resolve patch functions
+-        let patch_symbols = &mut patch.symbols;
+-        let patch_functions = object::slice_from_bytes::<UpatchFunction>(
++        let patch_functions = &mut patch.functions;
++        let upatch_function_slice = object::slice_from_bytes::<UpatchFunction>(
+             function_data,
+-            function_data.len() / UPATCH_FUNC_SIZE,
++            function_data.len() / UPATCH_FUNCTION_SIZE,
+         )
+         .map(|(f, _)| f)
+         .map_err(|_| anyhow!("Invalid data format"))
+         .context("Failed to resolve patch functions")?;
+ 
+-        for function in patch_functions {
+-            patch_symbols.push(UserPatchSymbol {
++        for function in upatch_function_slice {
++            patch_functions.push(UserPatchFunction {
+                 name: OsString::new(),
+                 old_addr: function.old_addr,
+                 old_size: function.old_size,
+@@ -118,25 +134,20 @@ impl UpatchResolverImpl {
+         }
+ 
+         // Relocate patch functions
+-        for (index, (offset, relocation)) in function_section.relocations().enumerate() {
+-            if let UpatchRelocation::Name =
+-                UpatchRelocation::from(index % UPATCH_FUNC_RELA_TYPE_NUM)
+-            {
+-                let symbol_index = (offset as usize - UPATCH_FUNC_NAME_OFFSET) / UPATCH_FUNC_SIZE;
+-                let patch_symbol = patch_symbols
+-                    .get_mut(symbol_index)
+-                    .context("Failed to find patch symbol")?;
+-
+-                let name_offset = relocation.addend() as usize;
+-                let mut name_bytes = &string_data[name_offset..];
+-                let string_end = name_bytes
+-                    .iter()
+-                    .position(|b| b == &b'\0')
+-                    .context("Failed to find termination char")?;
+-                name_bytes = &name_bytes[..string_end];
+-
+-                patch_symbol.name = OsString::from_vec(name_bytes.to_vec());
+-            }
++        for relocation in UpatchRelocationIterator::new(function_section.relocations()) {
++            let (name_reloc_offset, name_reloc) = relocation.name;
++
++            let name_index =
++                (name_reloc_offset as usize - UPATCH_FUNCTION_OFFSET) / UPATCH_FUNCTION_SIZE;
++            let name_function = patch_functions
++                .get_mut(name_index)
++                .context("Failed to find patch function")?;
++            let name_offset = name_reloc.addend() as usize;
++            let name_string = CStr::from_bytes_with_next_nul(&string_data[name_offset..])
++                .context("Failed to parse patch function name")?
++                .to_os_string();
++
++            name_function.name = name_string;
+         }
+ 
+         Ok(())
+@@ -164,10 +175,10 @@ impl PatchResolverImpl for UpatchResolverImpl {
+             pkg_name: patch_info.target.full_name(),
+             patch_file: patch_root.join(&patch_entity.patch_name),
+             target_elf: patch_entity.patch_target.clone(),
+-            symbols: Vec::new(),
++            functions: Vec::new(),
+             checksum: patch_entity.checksum.clone(),
+         };
+-        Self::resolve_patch_elf(&mut patch).context("Failed to resolve patch elf")?;
++        Self::resolve_patch_elf(&mut patch).context("Failed to resolve patch")?;
+ 
+         Ok(Patch::UserPatch(patch))
+     }
+-- 
+2.41.0
+
