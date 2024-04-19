@@ -1,7 +1,7 @@
-From 1a419fd88160f45a8fdabd8e6427811804735af1 Mon Sep 17 00:00:00 2001
+From 1d67bb57973cc0bc4b227c4359c15c4f31a1c82c Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
-Date: Fri, 12 Apr 2024 11:35:57 +0800
-Subject: [PATCH 09/10] syscared: optimize patch error logic
+Date: Fri, 12 Apr 2024 11:40:25 +0800
+Subject: [PATCH 11/17] syscared: optimize transaction creation logic
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -9,15 +9,15 @@ Signed-off-by: renoseven <dev@renoseven.net>
  1 file changed, 2 insertions(+), 2 deletions(-)
 
 diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
-index f0745f0..1908520 100644
+index 1908520..f0745f0 100644
 --- a/syscared/src/patch/driver/upatch/sys.rs
 +++ b/syscared/src/patch/driver/upatch/sys.rs
 @@ -20,7 +20,7 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
          .arg(target_elf)
          .arg("--upatch")
          .arg(patch_file)
--        .stdout(Level::Debug)
-+        .stdout(Level::Info)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
          .run_with_output()?
          .exit_code();
  
@@ -25,8 +25,8 @@ index f0745f0..1908520 100644
          .arg(target_elf)
          .arg("--upatch")
          .arg(patch_file)
--        .stdout(Level::Debug)
-+        .stdout(Level::Info)
+-        .stdout(Level::Info)
++        .stdout(Level::Debug)
          .run_with_output()?
          .exit_code();
  

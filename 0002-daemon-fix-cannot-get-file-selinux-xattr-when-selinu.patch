@@ -1,7 +1,7 @@
 From a535e14a7db49df3c8aab017e32b92d8e5bb4087 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 10 Apr 2024 10:25:21 +0800
-Subject: [PATCH 02/10] daemon: fix 'cannot get file selinux xattr when selinux
+Subject: [PATCH 02/17] daemon: fix 'cannot get file selinux xattr when selinux
  is not enforcing' issue
 
 Signed-off-by: renoseven <dev@renoseven.net>

@@ -1,7 +1,7 @@
-From c213504c02d73738a86935fb5883f2e59d083da7 Mon Sep 17 00:00:00 2001
+From b53cb3d2903ea8ee3667f892b813648da7bc59a7 Mon Sep 17 00:00:00 2001
 From: ningyu <ningyu9@huawei.com>
 Date: Tue, 9 Apr 2024 09:21:35 +0000
-Subject: [PATCH 05/10] abi: change uuid type from string to uuid bytes
+Subject: [PATCH 04/17] Change uuid type to Uuid
 
 ---
  Cargo.lock                                             | 1 +
@@ -68,7 +68,7 @@ index 55618ae..08cc2c7 100644
      pub version: String,
      pub release: u32,
 diff --git a/syscare-build/src/package/rpm/spec_builder.rs b/syscare-build/src/package/rpm/spec_builder.rs
-index 88f57d8..a24954f 100644
+index 88f57d8..5570c34 100644
 --- a/syscare-build/src/package/rpm/spec_builder.rs
 +++ b/syscare-build/src/package/rpm/spec_builder.rs
 @@ -62,7 +62,7 @@ impl RpmSpecBuilder {
@@ -85,7 +85,7 @@ index 88f57d8..a24954f 100644
          );
          let pkg_version = format!("{}-{}", patch_info.version, patch_info.release);
 -        let pkg_root = Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid);
-+        let pkg_root = Path::new(PKG_INSTALL_DIR).join(patch_info.uuid.to_string());
++        let pkg_root = Path::new(PKG_INSTALL_DIR).join(&patch_info.uuid.to_string());
  
          let mut spec = RpmSpecFile::new(
              pkg_name,

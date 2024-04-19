@@ -1,7 +1,7 @@
-From 1fbb81935c66c47a68716580878f2b983272a2bc Mon Sep 17 00:00:00 2001
+From 520e46ddd8f393125509a436134255765c5960cc Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 12 Apr 2024 11:35:57 +0800
-Subject: [PATCH 06/10] syscared: optimize patch error logic
+Subject: [PATCH 07/17] syscared: optimize patch error logic
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---

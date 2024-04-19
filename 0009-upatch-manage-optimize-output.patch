@@ -1,7 +1,7 @@
-From 7c976ffc72330c85bc815bc1983dd7096778bf1b Mon Sep 17 00:00:00 2001
+From 399de1f2021ae91ee6fc1271b1ee4f2f5933eaf1 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 12 Apr 2024 11:50:59 +0800
-Subject: [PATCH 08/10] upatch-manage: optimize output
+Subject: [PATCH 09/17] upatch-manage: optimize output
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
