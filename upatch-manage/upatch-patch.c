@@ -679,6 +679,31 @@ out:
 	return ret;
 }
 
+static void upatch_time_tick(int pid) {
+	static struct timeval start_tv;
+	static struct timeval end_tv;
+
+	if ((end_tv.tv_sec != 0) || (end_tv.tv_usec != 0)) {
+		memset(&start_tv, 0, sizeof(struct timeval));
+		memset(&end_tv, 0, sizeof(struct timeval));
+	}
+
+	if ((start_tv.tv_sec == 0) && (start_tv.tv_usec == 0)) {
+		gettimeofday(&start_tv, NULL);
+	} else {
+		gettimeofday(&end_tv, NULL);
+	}
+
+	if ((start_tv.tv_sec == 0) || (start_tv.tv_usec == 0) ||
+		(end_tv.tv_sec == 0) || (end_tv.tv_usec == 0)) {
+		return;
+	}
+
+	unsigned long frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+	log_normal("Process %d frozen time is %ld microsecond(s)\n",
+		pid, frozen_time);
+}
+
 int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
 {
 	struct object_file *obj;
@@ -698,14 +723,10 @@ int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
 
 int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, const char *uuid, const char *binary_path)
 {
-	int ret;
-	bool is_calc_time = false;
-	struct timeval start_tv, end_tv;
-	unsigned long frozen_time;
 	struct upatch_process proc;
 
 	// 查看process的信息，pid: maps, mem, cmdline, exe
-	ret = upatch_process_init(&proc, pid);
+	int ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
 		log_error("Failed to init process\n");
 		goto out;
@@ -748,9 +769,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
     }
 
     uelf->relf = relf;
-
-	is_calc_time = true;
-	gettimeofday(&start_tv, NULL);
+	upatch_time_tick(pid);
 
 	/* Finally, attach to process */
 	ret = upatch_process_attach(&proc);
@@ -769,16 +788,11 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 
 out_free:
 	upatch_process_detach(&proc);
-	gettimeofday(&end_tv, NULL);
+	upatch_time_tick(pid);
 
 	upatch_process_destroy(&proc);
 
 out:
-	if (is_calc_time) {
-		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
-		log_normal("Process %d frozen time is %ld microsecond(s)\n",
-			pid, frozen_time);
-	}
 	return ret;
 }
 
@@ -827,16 +841,12 @@ out:
 
 int process_unpatch(int pid, const char *uuid)
 {
-	int ret;
-	bool is_calc_time = false;
-	struct timeval start_tv, end_tv;
-	unsigned long frozen_time;
 	struct upatch_process proc;
 
 	// TODO: check build id
 	// TODO: 栈解析
 	// 查看process的信息，pid: maps, mem, cmdline, exe
-	ret = upatch_process_init(&proc, pid);
+	int ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
 		log_error("Failed to init process\n");
 		goto out;
@@ -867,8 +877,7 @@ int process_unpatch(int pid, const char *uuid)
 		goto out_free;
 	}
 
-	is_calc_time = true;
-	gettimeofday(&start_tv, NULL);
+	upatch_time_tick(pid);
 
 	/* Finally, attach to process */
 	ret = upatch_process_attach(&proc);
@@ -886,16 +895,11 @@ int process_unpatch(int pid, const char *uuid)
 
 out_free:
 	upatch_process_detach(&proc);
-	gettimeofday(&end_tv, NULL);
+	upatch_time_tick(pid);
 
 	upatch_process_destroy(&proc);
 
 out:
-	if (is_calc_time) {
-		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
-		log_normal("Process %d frozen time is %ld microsecond(s)\n",
-			pid, frozen_time);
-	}
 	return ret;
 }
 
