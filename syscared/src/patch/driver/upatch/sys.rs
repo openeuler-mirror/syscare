@@ -2,7 +2,6 @@ use std::path::Path;
 
 use anyhow::{bail, Result};
 use log::Level;
-use nix::libc::EEXIST;
 use uuid::Uuid;
 
 use syscare_common::process::Command;
@@ -26,7 +25,6 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
 
     match exit_code {
         0 => Ok(()),
-        EEXIST => Ok(()),
         _ => bail!(std::io::Error::from_raw_os_error(exit_code)),
     }
 }
