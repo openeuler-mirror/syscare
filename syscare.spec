@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       3
+Release:       4
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -20,13 +20,20 @@ Source0:       %{name}-%{version}.tar.gz
 Patch0001:     0001-upatch-hijacker-fix-compile-bug.patch
 Patch0002:     0002-daemon-fix-cannot-get-file-selinux-xattr-when-selinu.patch
 Patch0003:     0003-syscared-fix-syscare-check-command-does-not-check-sy.patch
-Patch0004:     0004-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
-Patch0005:     0005-abi-change-uuid-type-from-string-to-uuid-bytes.patch
-Patch0006:     0006-syscared-optimize-patch-error-logic.patch
-Patch0007:     0007-syscared-optimize-transaction-creation-logic.patch
-Patch0008:     0008-upatch-manage-optimize-output.patch
-Patch0009:     0009-syscared-optimize-patch-error-logic.patch
-Patch0010:     0010-syscared-optimize-transaction-creation-logic.patch
+Patch0004:     0004-Change-uuid-type-to-Uuid.patch
+Patch0005:     0005-fix-clippy-warning.patch
+Patch0006:     0006-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
+Patch0007:     0007-syscared-optimize-patch-error-logic.patch
+Patch0008:     0008-syscared-optimize-transaction-creation-logic.patch
+Patch0009:     0009-upatch-manage-optimize-output.patch
+Patch0010:     0010-syscared-optimize-patch-error-logic.patch
+Patch0011:     0011-syscared-optimize-transaction-creation-logic.patch
+Patch0012:     0012-common-impl-CStr-from_bytes_with_next_nul.patch
+Patch0013:     0013-syscared-improve-patch-management.patch
+Patch0014:     0014-syscared-stop-activating-ignored-process-on-new-proc.patch
+Patch0015:     0015-syscared-adapt-upatch-manage-exit-code-change.patch
+Patch0016:     0016-upatch-manage-change-exit-code.patch
+Patch0017:     0017-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -177,6 +184,13 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4
+- common: impl CStr::from_bytes_with_next_nul()
+- syscared: improve patch management
+- syscared: stop activating ignored process on new process start
+- syscared: adapt upatch-manage exit code change
+- upatch-manage: change exit code
+- upatch-manage: change the way to calculate frozen time
 * Fri Apr 12 2024 ningyu<ningyu9@huawei.com> - 1.2.1-3
 - upatch-hijacker: fix compile bug
 - daemon: fix 'cannot get file selinux xattr when selinux is not enforcing' issue

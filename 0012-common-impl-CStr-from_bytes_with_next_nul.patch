@@ -1,0 +1,47 @@
+From b64fa8df5ef916510e345cdd0382c32364d0c255 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Tue, 16 Apr 2024 12:44:11 +0800
+Subject: [PATCH 12/17] common: impl CStr::from_bytes_with_next_nul()
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscare-common/src/ffi/c_str.rs | 14 ++++++++++++--
+ 1 file changed, 12 insertions(+), 2 deletions(-)
+
+diff --git a/syscare-common/src/ffi/c_str.rs b/syscare-common/src/ffi/c_str.rs
+index 060149a..4f3f26d 100644
+--- a/syscare-common/src/ffi/c_str.rs
++++ b/syscare-common/src/ffi/c_str.rs
+@@ -13,7 +13,7 @@
+  */
+ 
+ use std::{
+-    ffi::{CStr, OsStr, OsString},
++    ffi::{CStr, CString, FromBytesWithNulError, OsStr, OsString},
+     os::unix::{ffi::OsStringExt, prelude::OsStrExt},
+     path::{Path, PathBuf},
+ };
+@@ -34,9 +34,19 @@ pub trait CStrExt: AsRef<CStr> {
+     fn to_path_buf(&self) -> PathBuf {
+         PathBuf::from(self.to_os_string())
+     }
++
++    fn from_bytes_with_next_nul(bytes: &[u8]) -> Result<&CStr, FromBytesWithNulError> {
++        let nul_pos = bytes.iter().position(|b| b == &b'\0').unwrap_or(0);
++        let cstr_bytes = &bytes[..=nul_pos];
++
++        CStr::from_bytes_with_nul(cstr_bytes)
++    }
+ }
+ 
+-impl<T: AsRef<CStr>> CStrExt for T {}
++impl CStrExt for CStr {}
++impl CStrExt for &CStr {}
++impl CStrExt for CString {}
++impl CStrExt for &CString {}
+ 
+ #[test]
+ fn test_cstr() {
+-- 
+2.41.0
+
