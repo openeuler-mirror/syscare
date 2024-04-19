@@ -291,7 +291,6 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
 				  0);
 	if (addr == 0) {
-		log_error("Failed to alloc remote patch memory\n");
 		return NULL;
 	}
 
@@ -308,7 +307,7 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 	return (void *)addr;
 }
 
-static void __upatch_memfree(struct object_file *obj, void *base,
+static void upatch_free(struct object_file *obj, void *base,
 			     unsigned int size)
 {
 	log_debug("Free patch memory %p\n", base);
@@ -323,14 +322,13 @@ static int __alloc_memory(struct object_file *obj_file,
 	/* Do the allocs. */
 	layout->base = upatch_alloc(obj_file, layout->size);
 	if (!layout->base) {
-		log_error("Failed to alloc patch core layout %p\n", layout->base);
-		return -ENOMEM;
+		return -errno;
 	}
 
 	layout->kbase = malloc(layout->size);
 	if (!layout->kbase) {
-		__upatch_memfree(obj_file, layout->base, layout->size);
-		return -ENOMEM;
+		upatch_free(obj_file, layout->base, layout->size);
+		return -errno;
 	}
 
 	memset(layout->kbase, 0, layout->size);
@@ -345,7 +343,6 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
 	/* Do the allocs. */
 	ret = __alloc_memory(obj, &uelf->core_layout);
 	if (ret) {
-		log_error("Failed to alloc patch memory, ret=%d\n", ret);
 		return ret;
 	}
 
@@ -634,11 +631,13 @@ static int upatch_apply_patches(struct upatch_process *proc,
 	 */
 	ret = alloc_memory(uelf, obj);
 	if (ret) {
+		log_error("Failed to alloc patch memory\n");
 		goto free;
 	}
 
 	ret = upatch_mprotect(uelf, obj);
 	if (ret) {
+		log_error("Failed to set patch memory permission\n");
 		goto free;
 	}
 
@@ -675,7 +674,7 @@ static int upatch_apply_patches(struct upatch_process *proc,
 
 // TODO: clear
 free:
-	__upatch_memfree(obj, uelf->core_layout.base, uelf->core_layout.size);
+	upatch_free(obj, uelf->core_layout.base, uelf->core_layout.size);
 out:
 	return ret;
 }
@@ -708,15 +707,16 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+		log_error("Failed to init process\n");
 		goto out;
 	}
 
-	printf("Patch ");
+	printf("Patch '%s' to ", uuid);
 	upatch_process_print_short(&proc);
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
 	if (ret < 0) {
+		log_error("Failed to open process memory\n");
 		goto out_free;
 	}
 
@@ -731,15 +731,19 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	 */
 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
 	ret = upatch_process_map_object_files(&proc, NULL);
-	if (ret < 0)
+	if (ret < 0) {
+		log_error("Failed to read process memory mapping\n");
 		goto out_free;
+	}
 	ret = upatch_process_uuid_exist(&proc, uuid);
 	if (ret != 0) {
+		ret = 0;
+		log_error("Patch '%s' already exists\n", uuid);
 		goto out_free;
 	}
 	ret = binary_init(relf, binary_path);
     if (ret) {
-        log_error("Failed to load binary, ret=%d\n", ret);
+        log_error("Failed to load binary\n");
         goto out_free;
     }
 
@@ -750,24 +754,27 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 
 	/* Finally, attach to process */
 	ret = upatch_process_attach(&proc);
-	if (ret < 0)
+	if (ret < 0) {
+		log_error("Failed to attach process\n");
 		goto out_free;
+	}
 
 	// TODO: 栈解析
 	// 应用
 	ret = upatch_apply_patches(&proc, uelf, uuid);
-	if (ret < 0)
+	if (ret < 0) {
+		log_error("Failed to apply patch\n");
 		goto out_free;
-
-	ret = 0;
+	}
 
 out_free:
 	upatch_process_detach(&proc);
+	gettimeofday(&end_tv, NULL);
+
 	upatch_process_destroy(&proc);
 
 out:
 	if (is_calc_time) {
-		gettimeofday(&end_tv, NULL);
 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
 		log_normal("Process %d frozen time is %ld microsecond(s)\n",
 			pid, frozen_time);
@@ -800,7 +807,7 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 			}
 
 			log_debug("munmap upatch layout core:\n");
-			__upatch_memfree(obj,
+			upatch_free(obj,
 				(void *)patch->uinfo->start,
 				patch->uinfo->end - patch->uinfo->start
 			);
@@ -810,7 +817,7 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 	}
 
 	if (!found) {
-		log_debug("can't found patch info memory\n");
+		log_warn("Patch '%s' is not found\n", uuid);
 		goto out;
 	}
 
@@ -831,16 +838,18 @@ int process_unpatch(int pid, const char *uuid)
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+		log_error("Failed to init process\n");
 		goto out;
 	}
 
-	printf("Unpatch ");
+	printf("Unpatch '%s' from ", uuid);
 	upatch_process_print_short(&proc);
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
-	if (ret < 0)
+	if (ret < 0) {
+		log_error("Failed to open process memory\n");
 		goto out_free;
+	}
 
 	// use uprobe to hack function. the program has been executed to the entry
 	// point
@@ -853,8 +862,10 @@ int process_unpatch(int pid, const char *uuid)
 	 */
 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
 	ret = upatch_process_map_object_files(&proc, NULL);
-	if (ret < 0)
+	if (ret < 0) {
+		log_error("Failed to read process memory mapping\n");
 		goto out_free;
+	}
 
 	is_calc_time = true;
 	gettimeofday(&start_tv, NULL);
@@ -862,24 +873,25 @@ int process_unpatch(int pid, const char *uuid)
 	/* Finally, attach to process */
 	ret = upatch_process_attach(&proc);
 	if (ret < 0) {
+		log_error("Failed to attach process\n");
 		goto out_free;
 	}
 
 	// 应用
 	ret = upatch_unapply_patches(&proc, uuid);
 	if (ret < 0) {
+		log_error("Failed to remove patch\n");
 		goto out_free;
 	}
 
-	ret = 0;
-
 out_free:
 	upatch_process_detach(&proc);
+	gettimeofday(&end_tv, NULL);
+
 	upatch_process_destroy(&proc);
 
 out:
 	if (is_calc_time) {
-		gettimeofday(&end_tv, NULL);
 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
 		log_normal("Process %d frozen time is %ld microsecond(s)\n",
 			pid, frozen_time);
@@ -924,23 +936,25 @@ int process_info(int pid)
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
+		log_error("Failed to init process\n");
 		goto out;
 	}
 
 	ret = upatch_process_mem_open(&proc, MEM_READ);
 	if (ret < 0) {
+		log_error("Failed to open process memory\n");
 		goto out_free;
 	}
 
 	ret = upatch_process_map_object_files(&proc, NULL);
 	if (ret < 0) {
+		log_error("Failed to read process memory mapping\n");
 		goto out_free;
 	}
 
 	ret = upatch_info(&proc);
 	if (ret) {
-		status = "active";
+		status = "actived";
 	}
 	else {
 		status = "removed";

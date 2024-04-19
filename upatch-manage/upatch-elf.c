@@ -54,20 +54,20 @@ static int open_elf(struct elf_info *einfo, const char *name)
     fd = open(name, O_RDONLY);
     if (fd == -1) {
         ret = -errno;
-        log_error("Failed to open file '%s', ret=%d\n", name, ret);
+        log_error("Failed to open file '%s'\n", name);
         goto out;
     }
 
     ret = stat(name, &st);
     if (ret != 0) {
         ret = -errno;
-        log_error("Failed to stat file '%s', ret=%d\n", name, ret);
+        log_error("Failed to stat file '%s'\n", name);
         goto out;
     }
 
     ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
     if (ret != 0) {
-        log_error("Failed to read file '%s', ret=%d\n", name, ret);
+        log_error("Failed to read file '%s'\n", name);
         goto out;
     }
 
@@ -112,7 +112,7 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
 {
     int ret = open_elf(&uelf->info, name);
     if (ret) {
-        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
+        log_error("Failed to open file '%s'\n", name);
         return ret;
     }
 
@@ -136,7 +136,7 @@ int binary_init(struct running_elf *relf, const char *name)
 {
     int ret = open_elf(&relf->info, name);
     if (ret) {
-        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
+        log_error("Failed to open file '%s'\n", name);
         return ret;
     }
 

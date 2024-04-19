@@ -57,7 +57,7 @@ static int lock_process(int pid)
 
 	fd = open(path, O_RDONLY);
 	if (fd < 0) {
-		log_error("Failed to open '%s'\n", path);
+		log_error("Failed to open file '%s'\n", path);
 		return -1;
 	}
 	log_debug("OK\n");
@@ -204,7 +204,7 @@ static void process_print_cmdline(struct upatch_process *proc)
 	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
 	int fd = open(buf, O_RDONLY);
 	if (fd == -1) {
-		log_error("Failed to open %s", buf);
+		log_error("Failed to open file '%s'\n", buf);
 		return;
 	}
 
@@ -255,7 +255,7 @@ int upatch_process_mem_open(struct upatch_process *proc, int mode)
 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
 	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
 	if (proc->memfd < 0) {
-		log_error("Failed to open %s", path);
+		log_error("Failed to open file '%s'\n", path);
 		return -1;
 	}
 
@@ -560,16 +560,9 @@ error:
 int upatch_process_map_object_files(struct upatch_process *proc,
 				    const char *patch_id)
 {
-	int ret;
-
-	ret = upatch_process_parse_proc_maps(proc);
-	if (ret < 0)
-		return -1;
-
 	// we can get plt/got table from mem's elf_segments
 	// Now we read them from the running file
-
-	return ret;
+	return upatch_process_parse_proc_maps(proc);
 }
 
 // static int process_has_thread_pid(struct upatch_proces *proc, int pid)
