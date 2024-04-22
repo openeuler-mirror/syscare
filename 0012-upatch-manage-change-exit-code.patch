@@ -1,0 +1,446 @@
+From e04ce4a7539a469091fef8c1566a85fe6050f728 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Fri, 19 Apr 2024 12:01:38 +0800
+Subject: [PATCH 12/13] upatch-manage: change exit code
+
+1. return more specific exit code
+2. change exit code from EEXIST to 0 when patching existing patch (uuid)
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch-manage/log.h            |  2 +-
+ upatch-manage/upatch-elf.c     | 10 ++---
+ upatch-manage/upatch-manage.c  |  7 ++--
+ upatch-manage/upatch-patch.c   | 70 ++++++++++++++++++++--------------
+ upatch-manage/upatch-process.c | 15 ++------
+ upatch-manage/upatch-ptrace.c  |  1 +
+ 6 files changed, 56 insertions(+), 49 deletions(-)
+
+diff --git a/upatch-manage/log.h b/upatch-manage/log.h
+index a41bfc8..32e9c56 100644
+--- a/upatch-manage/log.h
++++ b/upatch-manage/log.h
+@@ -52,7 +52,7 @@ enum exit_status {
+ /* it is time cost */
+ #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
+ #define log_normal(format, ...) log(NORMAL, format, ##__VA_ARGS__)
+-#define log_warn(format, ...) log(WARN, "%s: " format, logprefix, ##__VA_ARGS__)
++#define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
+ #define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
+ 
+ #define log(level, format, ...)                        \
+diff --git a/upatch-manage/upatch-elf.c b/upatch-manage/upatch-elf.c
+index 165f0cf..02444eb 100644
+--- a/upatch-manage/upatch-elf.c
++++ b/upatch-manage/upatch-elf.c
+@@ -54,20 +54,20 @@ static int open_elf(struct elf_info *einfo, const char *name)
+     fd = open(name, O_RDONLY);
+     if (fd == -1) {
+         ret = -errno;
+-        log_error("Failed to open file '%s', ret=%d\n", name, ret);
++        log_error("Failed to open file '%s'\n", name);
+         goto out;
+     }
+ 
+     ret = stat(name, &st);
+     if (ret != 0) {
+         ret = -errno;
+-        log_error("Failed to stat file '%s', ret=%d\n", name, ret);
++        log_error("Failed to stat file '%s'\n", name);
+         goto out;
+     }
+ 
+     ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
+     if (ret != 0) {
+-        log_error("Failed to read file '%s', ret=%d\n", name, ret);
++        log_error("Failed to read file '%s'\n", name);
+         goto out;
+     }
+ 
+@@ -112,7 +112,7 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
+ {
+     int ret = open_elf(&uelf->info, name);
+     if (ret) {
+-        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
++        log_error("Failed to open file '%s'\n", name);
+         return ret;
+     }
+ 
+@@ -136,7 +136,7 @@ int binary_init(struct running_elf *relf, const char *name)
+ {
+     int ret = open_elf(&relf->info, name);
+     if (ret) {
+-        log_error("Failed to open elf '%s', ret=%d\n", name, ret);
++        log_error("Failed to open file '%s'\n", name);
+         return ret;
+     }
+ 
+diff --git a/upatch-manage/upatch-manage.c b/upatch-manage/upatch-manage.c
+index e33eeb3..8a7ba60 100644
+--- a/upatch-manage/upatch-manage.c
++++ b/upatch-manage/upatch-manage.c
+@@ -146,7 +146,7 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
+ 
+ 	int ret = upatch_init(&uelf, upatch_path);
+ 	if (ret) {
+-		log_error("Failed to initialize patch, ret=%d\n", ret);
++		log_error("Failed to initialize patch, pid=%d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+ 
+@@ -155,7 +155,6 @@ int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_p
+ 		log_error("Failed to patch process, pid=%d, ret=%d\n", pid, ret);
+ 		goto out;
+ 	}
+-	log_normal("SUCCESS\n");
+ 
+ out:
+ 	upatch_close(&uelf);
+@@ -173,7 +172,6 @@ int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch
+ 		log_error("Failed to unpatch process, pid=%d, ret=%d\n", pid, ret);
+ 		return ret;
+ 	}
+-	log_normal("SUCCESS\n");
+ 
+ 	return 0;
+ }
+@@ -185,7 +183,6 @@ int info_upatch(const char *binary_path, const char *upatch_path, int pid)
+ 		log_error("Failed to get patch info, pid=%d, ret=%d\n", pid, ret);
+ 		return ret;
+ 	}
+-	log_normal("SUCCESS\n");
+ 
+ 	return 0;
+ }
+@@ -207,6 +204,7 @@ int main(int argc, char *argv[])
+ 	log_debug("Patch: %s\n", args.upatch);
+ 	log_debug("Binary: %s\n", args.binary);
+ 
++	args.pid = args.pid & INT32_MAX;
+ 	switch (args.cmd) {
+ 	case PATCH:
+ 		ret = patch_upatch(args.uuid, args.binary, args.upatch, args.pid);
+@@ -223,5 +221,6 @@ int main(int argc, char *argv[])
+ 		break;
+ 	}
+ 
++	(ret == 0) ? log_normal("SUCCESS\n\n") : log_error("FAILED\n\n");
+ 	return abs(ret);
+ }
+diff --git a/upatch-manage/upatch-patch.c b/upatch-manage/upatch-patch.c
+index 5e16002..5a8f927 100644
+--- a/upatch-manage/upatch-patch.c
++++ b/upatch-manage/upatch-patch.c
+@@ -291,7 +291,6 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
+ 				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
+ 				  0);
+ 	if (addr == 0) {
+-		log_error("Failed to alloc remote patch memory\n");
+ 		return NULL;
+ 	}
+ 
+@@ -308,7 +307,7 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
+ 	return (void *)addr;
+ }
+ 
+-static void __upatch_memfree(struct object_file *obj, void *base,
++static void upatch_free(struct object_file *obj, void *base,
+ 			     unsigned int size)
+ {
+ 	log_debug("Free patch memory %p\n", base);
+@@ -323,14 +322,13 @@ static int __alloc_memory(struct object_file *obj_file,
+ 	/* Do the allocs. */
+ 	layout->base = upatch_alloc(obj_file, layout->size);
+ 	if (!layout->base) {
+-		log_error("Failed to alloc patch core layout %p\n", layout->base);
+-		return -ENOMEM;
++		return -errno;
+ 	}
+ 
+ 	layout->kbase = malloc(layout->size);
+ 	if (!layout->kbase) {
+-		__upatch_memfree(obj_file, layout->base, layout->size);
+-		return -ENOMEM;
++		upatch_free(obj_file, layout->base, layout->size);
++		return -errno;
+ 	}
+ 
+ 	memset(layout->kbase, 0, layout->size);
+@@ -345,7 +343,6 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
+ 	/* Do the allocs. */
+ 	ret = __alloc_memory(obj, &uelf->core_layout);
+ 	if (ret) {
+-		log_error("Failed to alloc patch memory, ret=%d\n", ret);
+ 		return ret;
+ 	}
+ 
+@@ -634,11 +631,13 @@ static int upatch_apply_patches(struct upatch_process *proc,
+ 	 */
+ 	ret = alloc_memory(uelf, obj);
+ 	if (ret) {
++		log_error("Failed to alloc patch memory\n");
+ 		goto free;
+ 	}
+ 
+ 	ret = upatch_mprotect(uelf, obj);
+ 	if (ret) {
++		log_error("Failed to set patch memory permission\n");
+ 		goto free;
+ 	}
+ 
+@@ -675,7 +674,7 @@ static int upatch_apply_patches(struct upatch_process *proc,
+ 
+ // TODO: clear
+ free:
+-	__upatch_memfree(obj, uelf->core_layout.base, uelf->core_layout.size);
++	upatch_free(obj, uelf->core_layout.base, uelf->core_layout.size);
+ out:
+ 	return ret;
+ }
+@@ -708,15 +707,16 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
++		log_error("Failed to init process\n");
+ 		goto out;
+ 	}
+ 
+-	printf("Patch ");
++	printf("Patch '%s' to ", uuid);
+ 	upatch_process_print_short(&proc);
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+ 	if (ret < 0) {
++		log_error("Failed to open process memory\n");
+ 		goto out_free;
+ 	}
+ 
+@@ -731,15 +731,19 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 	 */
+ 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
+ 	ret = upatch_process_map_object_files(&proc, NULL);
+-	if (ret < 0)
++	if (ret < 0) {
++		log_error("Failed to read process memory mapping\n");
+ 		goto out_free;
++	}
+ 	ret = upatch_process_uuid_exist(&proc, uuid);
+ 	if (ret != 0) {
++		ret = 0;
++		log_error("Patch '%s' already exists\n", uuid);
+ 		goto out_free;
+ 	}
+ 	ret = binary_init(relf, binary_path);
+     if (ret) {
+-        log_error("Failed to load binary, ret=%d\n", ret);
++        log_error("Failed to load binary\n");
+         goto out_free;
+     }
+ 
+@@ -750,24 +754,27 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
+ 
+ 	/* Finally, attach to process */
+ 	ret = upatch_process_attach(&proc);
+-	if (ret < 0)
++	if (ret < 0) {
++		log_error("Failed to attach process\n");
+ 		goto out_free;
++	}
+ 
+ 	// TODO: 栈解析
+ 	// 应用
+ 	ret = upatch_apply_patches(&proc, uelf, uuid);
+-	if (ret < 0)
++	if (ret < 0) {
++		log_error("Failed to apply patch\n");
+ 		goto out_free;
+-
+-	ret = 0;
++	}
+ 
+ out_free:
+ 	upatch_process_detach(&proc);
++	gettimeofday(&end_tv, NULL);
++
+ 	upatch_process_destroy(&proc);
+ 
+ out:
+ 	if (is_calc_time) {
+-		gettimeofday(&end_tv, NULL);
+ 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+ 		log_normal("Process %d frozen time is %ld microsecond(s)\n",
+ 			pid, frozen_time);
+@@ -800,7 +807,7 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
+ 			}
+ 
+ 			log_debug("munmap upatch layout core:\n");
+-			__upatch_memfree(obj,
++			upatch_free(obj,
+ 				(void *)patch->uinfo->start,
+ 				patch->uinfo->end - patch->uinfo->start
+ 			);
+@@ -810,7 +817,7 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
+ 	}
+ 
+ 	if (!found) {
+-		log_debug("can't found patch info memory\n");
++		log_warn("Patch '%s' is not found\n", uuid);
+ 		goto out;
+ 	}
+ 
+@@ -831,16 +838,18 @@ int process_unpatch(int pid, const char *uuid)
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
++		log_error("Failed to init process\n");
+ 		goto out;
+ 	}
+ 
+-	printf("Unpatch ");
++	printf("Unpatch '%s' from ", uuid);
+ 	upatch_process_print_short(&proc);
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+-	if (ret < 0)
++	if (ret < 0) {
++		log_error("Failed to open process memory\n");
+ 		goto out_free;
++	}
+ 
+ 	// use uprobe to hack function. the program has been executed to the entry
+ 	// point
+@@ -853,8 +862,10 @@ int process_unpatch(int pid, const char *uuid)
+ 	 */
+ 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
+ 	ret = upatch_process_map_object_files(&proc, NULL);
+-	if (ret < 0)
++	if (ret < 0) {
++		log_error("Failed to read process memory mapping\n");
+ 		goto out_free;
++	}
+ 
+ 	is_calc_time = true;
+ 	gettimeofday(&start_tv, NULL);
+@@ -862,24 +873,25 @@ int process_unpatch(int pid, const char *uuid)
+ 	/* Finally, attach to process */
+ 	ret = upatch_process_attach(&proc);
+ 	if (ret < 0) {
++		log_error("Failed to attach process\n");
+ 		goto out_free;
+ 	}
+ 
+ 	// 应用
+ 	ret = upatch_unapply_patches(&proc, uuid);
+ 	if (ret < 0) {
++		log_error("Failed to remove patch\n");
+ 		goto out_free;
+ 	}
+ 
+-	ret = 0;
+-
+ out_free:
+ 	upatch_process_detach(&proc);
++	gettimeofday(&end_tv, NULL);
++
+ 	upatch_process_destroy(&proc);
+ 
+ out:
+ 	if (is_calc_time) {
+-		gettimeofday(&end_tv, NULL);
+ 		frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+ 		log_normal("Process %d frozen time is %ld microsecond(s)\n",
+ 			pid, frozen_time);
+@@ -924,23 +936,25 @@ int process_info(int pid)
+ 	// 查看process的信息，pid: maps, mem, cmdline, exe
+ 	ret = upatch_process_init(&proc, pid);
+ 	if (ret < 0) {
+-		log_error("Failed to init process %d, ret=%d\n", pid, ret);
++		log_error("Failed to init process\n");
+ 		goto out;
+ 	}
+ 
+ 	ret = upatch_process_mem_open(&proc, MEM_READ);
+ 	if (ret < 0) {
++		log_error("Failed to open process memory\n");
+ 		goto out_free;
+ 	}
+ 
+ 	ret = upatch_process_map_object_files(&proc, NULL);
+ 	if (ret < 0) {
++		log_error("Failed to read process memory mapping\n");
+ 		goto out_free;
+ 	}
+ 
+ 	ret = upatch_info(&proc);
+ 	if (ret) {
+-		status = "active";
++		status = "actived";
+ 	}
+ 	else {
+ 		status = "removed";
+diff --git a/upatch-manage/upatch-process.c b/upatch-manage/upatch-process.c
+index cd3f7e0..c368165 100644
+--- a/upatch-manage/upatch-process.c
++++ b/upatch-manage/upatch-process.c
+@@ -57,7 +57,7 @@ static int lock_process(int pid)
+ 
+ 	fd = open(path, O_RDONLY);
+ 	if (fd < 0) {
+-		log_error("Failed to open '%s'\n", path);
++		log_error("Failed to open file '%s'\n", path);
+ 		return -1;
+ 	}
+ 	log_debug("OK\n");
+@@ -204,7 +204,7 @@ static void process_print_cmdline(struct upatch_process *proc)
+ 	snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
+ 	int fd = open(buf, O_RDONLY);
+ 	if (fd == -1) {
+-		log_error("Failed to open %s", buf);
++		log_error("Failed to open file '%s'\n", buf);
+ 		return;
+ 	}
+ 
+@@ -255,7 +255,7 @@ int upatch_process_mem_open(struct upatch_process *proc, int mode)
+ 	snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
+ 	proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
+ 	if (proc->memfd < 0) {
+-		log_error("Failed to open %s", path);
++		log_error("Failed to open file '%s'\n", path);
+ 		return -1;
+ 	}
+ 
+@@ -560,16 +560,9 @@ error:
+ int upatch_process_map_object_files(struct upatch_process *proc,
+ 				    const char *patch_id)
+ {
+-	int ret;
+-
+-	ret = upatch_process_parse_proc_maps(proc);
+-	if (ret < 0)
+-		return -1;
+-
+ 	// we can get plt/got table from mem's elf_segments
+ 	// Now we read them from the running file
+-
+-	return ret;
++	return upatch_process_parse_proc_maps(proc);
+ }
+ 
+ // static int process_has_thread_pid(struct upatch_proces *proc, int pid)
+diff --git a/upatch-manage/upatch-ptrace.c b/upatch-manage/upatch-ptrace.c
+index 39e8f59..1309a6e 100644
+--- a/upatch-manage/upatch-ptrace.c
++++ b/upatch-manage/upatch-ptrace.c
+@@ -19,6 +19,7 @@
+  */
+ 
+ #include <errno.h>
++#include <signal.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <unistd.h>
+-- 
+2.41.0
+

@@ -1,0 +1,219 @@
+From a535e14a7db49df3c8aab017e32b92d8e5bb4087 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 10 Apr 2024 10:25:21 +0800
+Subject: [PATCH 02/13] daemon: fix 'cannot get file selinux xattr when selinux
+ is not enforcing' issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/kpatch/mod.rs | 10 +----
+ syscared/src/patch/driver/kpatch/sys.rs | 22 +++++-----
+ upatchd/src/hijacker/kmod.rs            | 57 +++++++++++++------------
+ upatchd/src/hijacker/mod.rs             |  4 +-
+ 4 files changed, 44 insertions(+), 49 deletions(-)
+
+diff --git a/syscared/src/patch/driver/kpatch/mod.rs b/syscared/src/patch/driver/kpatch/mod.rs
+index 72cbfc3..e6ab14e 100644
+--- a/syscared/src/patch/driver/kpatch/mod.rs
++++ b/syscared/src/patch/driver/kpatch/mod.rs
+@@ -17,7 +17,7 @@ use std::{
+     fmt::Write,
+ };
+ 
+-use anyhow::{ensure, Context, Result};
++use anyhow::{ensure, Result};
+ use indexmap::{indexset, IndexMap, IndexSet};
+ use log::debug;
+ 
+@@ -209,13 +209,7 @@ impl KernelPatchDriver {
+     }
+ 
+     pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
+-        let selinux_status = os::selinux::get_status()?;
+-        if selinux_status == os::selinux::Status::Enforcing {
+-            debug!("SELinux is enforcing");
+-            sys::set_security_attribute(&patch.patch_file)
+-                .context("Kpatch: Failed to set security attribute")?;
+-        }
+-
++        sys::selinux_relable_patch(patch)?;
+         sys::apply_patch(patch)
+     }
+ 
+diff --git a/syscared/src/patch/driver/kpatch/sys.rs b/syscared/src/patch/driver/kpatch/sys.rs
+index c5cde8c..5035d06 100644
+--- a/syscared/src/patch/driver/kpatch/sys.rs
++++ b/syscared/src/patch/driver/kpatch/sys.rs
+@@ -12,10 +12,7 @@
+  * See the Mulan PSL v2 for more details.
+  */
+ 
+-use std::{
+-    ffi::{CString, OsString},
+-    path::Path,
+-};
++use std::ffi::{CString, OsString};
+ 
+ use anyhow::{anyhow, bail, Context, Result};
+ use log::debug;
+@@ -39,15 +36,21 @@ pub fn list_kernel_modules() -> Result<Vec<OsString>> {
+     Ok(module_names)
+ }
+ 
+-pub fn set_security_attribute<P: AsRef<Path>>(patch_file: P) -> Result<()> {
++pub fn selinux_relable_patch(patch: &KernelPatch) -> Result<()> {
+     const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
+ 
+-    let file_path = patch_file.as_ref();
+-    let mut sec_context = os::selinux::get_security_context(file_path)?;
++    if os::selinux::get_status()? != os::selinux::Status::Enforcing {
++        return Ok(());
++    }
+ 
++    debug!(
++        "Relabeling patch module '{}'...",
++        patch.module_name.to_string_lossy()
++    );
++    let mut sec_context = os::selinux::get_security_context(&patch.patch_file)?;
+     if sec_context.kind != KPATCH_PATCH_SEC_TYPE {
+         sec_context.kind = OsString::from(KPATCH_PATCH_SEC_TYPE);
+-        os::selinux::set_security_context(file_path, sec_context)?;
++        os::selinux::set_security_context(&patch.patch_file, sec_context)?;
+     }
+ 
+     Ok(())
+@@ -85,12 +88,11 @@ fn write_patch_status(patch: &KernelPatch, value: &str) -> Result<()> {
+ }
+ 
+ pub fn apply_patch(patch: &KernelPatch) -> Result<()> {
+-    let patch_module = fs::open_file(&patch.patch_file)?;
+-
+     debug!(
+         "Inserting patch module '{}'...",
+         patch.module_name.to_string_lossy()
+     );
++    let patch_module = fs::open_file(&patch.patch_file)?;
+     kmod::finit_module(
+         &patch_module,
+         CString::new("")?.as_c_str(),
+diff --git a/upatchd/src/hijacker/kmod.rs b/upatchd/src/hijacker/kmod.rs
+index 1fe4def..fc89f5f 100644
+--- a/upatchd/src/hijacker/kmod.rs
++++ b/upatchd/src/hijacker/kmod.rs
+@@ -27,50 +27,49 @@ const KMOD_SYS_PATH: &str = "/sys/module";
+ /// An RAII guard of the kernel module.
+ pub struct HijackerKmodGuard {
+     kmod_name: String,
++    kmod_path: PathBuf,
+     sys_path: PathBuf,
+ }
+ 
+ impl HijackerKmodGuard {
+-    pub fn new<S: AsRef<str>, P: AsRef<Path>>(name: S, path: P) -> Result<Self> {
+-        let kmod_name = name.as_ref().to_string();
+-        let sys_path = Path::new(KMOD_SYS_PATH).join(name.as_ref());
+-        let kmod_path = path.as_ref().to_path_buf();
+-
+-        let instance: HijackerKmodGuard = Self {
+-            kmod_name,
+-            sys_path,
++    pub fn new<S: AsRef<str>, P: AsRef<Path>>(name: S, kmod_path: P) -> Result<Self> {
++        let instance = Self {
++            kmod_name: name.as_ref().to_string(),
++            kmod_path: kmod_path.as_ref().to_path_buf(),
++            sys_path: Path::new(KMOD_SYS_PATH).join(name.as_ref()),
+         };
+-        if !instance.is_installed() {
+-            instance.install(kmod_path)?;
+-        }
++        instance.selinux_relabel_kmod()?;
++        instance.install_kmod()?;
++
+         Ok(instance)
+     }
+ }
+ 
+ impl HijackerKmodGuard {
+-    #[inline]
+-    fn is_installed(&self) -> bool {
+-        self.sys_path.exists()
+-    }
+-
+-    fn selinux_relable_module<P: AsRef<Path>>(patch_file: P) -> Result<()> {
++    fn selinux_relabel_kmod(&self) -> Result<()> {
+         const KMOD_SECURITY_TYPE: &str = "modules_object_t";
+ 
+-        let file_path = patch_file.as_ref();
+-        let mut sec_context = os::selinux::get_security_context(file_path)?;
++        if os::selinux::get_status()? != os::selinux::Status::Enforcing {
++            return Ok(());
++        }
+ 
++        info!("Relabeling kernel module '{}'...", self.kmod_name);
++        let mut sec_context = os::selinux::get_security_context(&self.kmod_path)?;
+         if sec_context.kind != KMOD_SECURITY_TYPE {
+             sec_context.kind = OsString::from(KMOD_SECURITY_TYPE);
+-            os::selinux::set_security_context(file_path, sec_context)?;
++            os::selinux::set_security_context(&self.kmod_path, sec_context)?;
+         }
+ 
+         Ok(())
+     }
+ 
+-    fn install<P: AsRef<Path>>(&self, kmod_path: P) -> Result<()> {
++    fn install_kmod(&self) -> Result<()> {
++        if self.sys_path.exists() {
++            return Ok(());
++        }
++
+         info!("Installing kernel module '{}'...", self.kmod_name);
+-        Self::selinux_relable_module(&kmod_path)?;
+-        let ko_file = fs::open_file(kmod_path)?;
++        let ko_file = fs::open_file(&self.kmod_path)?;
+         kmod::finit_module(
+             &ko_file,
+             CString::new("")?.as_c_str(),
+@@ -79,7 +78,11 @@ impl HijackerKmodGuard {
+         .with_context(|| format!("Failed to install kernel module '{}'", self.kmod_name))
+     }
+ 
+-    fn remove(&self) -> Result<()> {
++    fn remove_kmod(&self) -> Result<()> {
++        if !self.sys_path.exists() {
++            return Ok(());
++        }
++
+         info!("Removing kernel module '{}'...", self.kmod_name);
+         kmod::delete_module(
+             CString::new(self.kmod_name.as_str())?.as_c_str(),
+@@ -91,10 +94,8 @@ impl HijackerKmodGuard {
+ 
+ impl Drop for HijackerKmodGuard {
+     fn drop(&mut self) {
+-        if self.is_installed() {
+-            if let Err(e) = self.remove() {
+-                error!("{:?}", e);
+-            }
++        if let Err(e) = self.remove_kmod() {
++            error!("{:?}", e);
+         }
+     }
+ }
+diff --git a/upatchd/src/hijacker/mod.rs b/upatchd/src/hijacker/mod.rs
+index 028a4c8..8ac12e7 100644
+--- a/upatchd/src/hijacker/mod.rs
++++ b/upatchd/src/hijacker/mod.rs
+@@ -98,9 +98,7 @@ impl Hijacker {
+         info!("Using elf mapping: {}", config);
+ 
+         debug!("Initializing hijacker kernel module...");
+-        let kmod_name = KMOD_NAME.to_string();
+-        let kmod_path = KMOD_FILE_PATH.to_string();
+-        let kmod = HijackerKmodGuard::new(kmod_name, kmod_path)?;
++        let kmod = HijackerKmodGuard::new(KMOD_NAME, KMOD_FILE_PATH)?;
+ 
+         debug!("Initializing hijacker ioctl channel...");
+         let ioctl = HijackerIoctl::new(KMOD_DEV_PATH)?;
+-- 
+2.41.0
+

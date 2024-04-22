@@ -1,0 +1,687 @@
+From 32c3d16175b93627504981d05a1a3e3ec603415e Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Wed, 10 Apr 2024 19:30:56 +0800
+Subject: [PATCH 04/13] syscared: fix 'cannot find process of dynlib patch'
+ issue
+
+1. For detecting process mapped dynamic library,
+   we use /proc/$pid/map_files instead.
+   We do readlink() to get it's real file path and then
+   read it's inode to judge if it's the file we want.
+2. For calculating processes to be actived / deactived, we
+   use IndexSet::difference() / IndexSet::intersection() between
+   all current target process and the recorded process set.
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/patch/driver/upatch/mod.rs     | 217 ++++++++++++++------
+ syscared/src/patch/driver/upatch/monitor.rs |  18 +-
+ syscared/src/patch/driver/upatch/process.rs | 126 +++++++-----
+ syscared/src/patch/driver/upatch/sys.rs     | 108 ++++------
+ 4 files changed, 270 insertions(+), 199 deletions(-)
+
+diff --git a/syscared/src/patch/driver/upatch/mod.rs b/syscared/src/patch/driver/upatch/mod.rs
+index 98fc54c..a7fa154 100644
+--- a/syscared/src/patch/driver/upatch/mod.rs
++++ b/syscared/src/patch/driver/upatch/mod.rs
+@@ -21,7 +21,7 @@ use std::{
+ 
+ use anyhow::{ensure, Context, Result};
+ use indexmap::{indexset, IndexMap, IndexSet};
+-use log::{debug, info};
++use log::{debug, error};
+ use parking_lot::Mutex;
+ use uuid::Uuid;
+ 
+@@ -38,31 +38,31 @@ mod target;
+ use monitor::UserPatchMonitor;
+ use target::PatchTarget;
+ 
+-pub(self) type ActivePatchMap = Arc<Mutex<IndexMap<PathBuf, ActivePatch>>>;
++type ElfPatchMap = Arc<Mutex<IndexMap<PathBuf, ElfPatchRecord>>>;
+ 
+ #[derive(Default)]
+-struct ActivePatch {
+-    patch_list: Vec<(Uuid, PathBuf)>, // Patch applied to target elf (uuid and patch file)
+-    process_list: IndexSet<i32>,      // Target elf process list
++struct ElfPatchRecord {
++    patch_map: IndexMap<Uuid, PathBuf>, // Patch applied to target elf (uuid and patch file)
++    processes: IndexSet<i32>,           // Target elf process list
+ }
+ 
+ pub struct UserPatchDriver {
+     patch_target_map: IndexMap<OsString, PatchTarget>,
+     patch_status_map: IndexMap<Uuid, PatchStatus>,
+-    active_patch_map: ActivePatchMap,
++    elf_patch_map: ElfPatchMap,
+     patch_monitor: UserPatchMonitor,
+ }
+ 
+ impl UserPatchDriver {
+     pub fn new() -> Result<Self> {
+-        let active_patch_map = Arc::new(Mutex::new(IndexMap::new()));
++        let elf_patch_map = Arc::new(Mutex::new(IndexMap::new()));
+         let patch_monitor =
+-            UserPatchMonitor::new(active_patch_map.clone(), Self::on_new_process_created)?;
++            UserPatchMonitor::new(elf_patch_map.clone(), Self::patch_new_process)?;
+ 
+         let instance = Self {
+             patch_target_map: IndexMap::new(),
+             patch_status_map: IndexMap::new(),
+-            active_patch_map,
++            elf_patch_map,
+             patch_monitor,
+         };
+         Ok(instance)
+@@ -168,36 +168,51 @@ impl UserPatchDriver {
+ }
+ 
+ impl UserPatchDriver {
+-    fn on_new_process_created(active_patch_map: ActivePatchMap, target_elf: &Path) -> Result<()> {
+-        // find actived patch
+-        if let Some(patch_record) = active_patch_map.lock().get_mut(target_elf) {
+-            let current_process_list = process::find_target_process(target_elf)?;
+-            let patched_process_list = &patch_record.process_list;
+-
+-            // Filter patched pid
+-            let pid_list = current_process_list
+-                .iter()
+-                .filter(|pid| !patched_process_list.contains(*pid))
+-                .copied()
+-                .collect::<Vec<_>>();
+-            if pid_list.is_empty() {
+-                return Ok(());
+-            }
++    fn patch_new_process(elf_patch_map: ElfPatchMap, target_elf: &Path) {
++        let process_list = match process::find_target_process(target_elf) {
++            Ok(processes) => processes,
++            Err(_) => return,
++        };
++
++        let mut patch_map = elf_patch_map.lock();
++        let patch_record = match patch_map.get_mut(target_elf) {
++            Some(record) => record,
++            None => return,
++        };
++
++        let need_active = process_list
++            .difference(&patch_record.processes)
++            .copied()
++            .collect::<Vec<_>>();
+ 
+-            for (uuid, patch_file) in &patch_record.patch_list {
+-                info!(
+-                    "Patching '{}' ({}) to process {:?}",
++        // Active patch
++        for (uuid, patch_file) in &patch_record.patch_map {
++            if !need_active.is_empty() {
++                debug!(
++                    "Upatch: Activating patch '{}' ({}) to process {:?}",
+                     uuid,
+                     target_elf.display(),
+-                    pid_list,
++                    need_active,
+                 );
+-                sys::active_patch(uuid, target_elf, patch_file, &pid_list)?;
+             }
+-
+-            patch_record.process_list = current_process_list;
++            for pid in &need_active {
++                if let Err(e) = sys::active_patch(uuid, *pid, target_elf, patch_file) {
++                    error!("{:?}", e);
++                    continue;
++                }
++                patch_record.processes.insert(*pid);
++            }
+         }
+ 
+-        Ok(())
++        // Remove process no longer exists
++        let need_remove = patch_record
++            .processes
++            .difference(&process_list)
++            .copied()
++            .collect::<Vec<_>>();
++        for pid in need_remove {
++            patch_record.processes.remove(&pid);
++        }
+     }
+ }
+ 
+@@ -246,7 +261,11 @@ impl UserPatchDriver {
+             "Upatch: Patch already exists"
+         );
+ 
+-        debug!("Upatch: Applying patch '{}'", patch_uuid);
++        debug!(
++            "Upatch: Applying patch '{}', patch_file: {}",
++            patch_uuid,
++            patch.patch_file.display()
++        );
+         self.patch_status_map
+             .insert(patch_uuid, PatchStatus::Deactived);
+ 
+@@ -261,15 +280,19 @@ impl UserPatchDriver {
+             "Upatch: Invalid patch status"
+         );
+ 
+-        debug!("Upatch: Removing patch '{}'", patch_uuid);
++        debug!(
++            "Upatch: Removing patch '{}', patch_file: {}",
++            patch_uuid,
++            patch.patch_file.display()
++        );
+         self.patch_status_map.remove(&patch_uuid);
+ 
+         Ok(())
+     }
+ 
+     pub fn active(&mut self, patch: &UserPatch) -> Result<()> {
+-        let patch_uuid = patch.uuid;
+-        let patch_status = self.get_patch_status(patch_uuid)?;
++        let uuid = patch.uuid;
++        let patch_status = self.get_patch_status(uuid)?;
+         ensure!(
+             patch_status == PatchStatus::Deactived,
+             "Upatch: Invalid patch status"
+@@ -277,29 +300,65 @@ impl UserPatchDriver {
+ 
+         let target_elf = patch.target_elf.as_path();
+         let patch_file = patch.patch_file.as_path();
+-        let pid_list = process::find_target_process(target_elf)?;
+-        sys::active_patch(&patch_uuid, target_elf, patch_file, &pid_list)?;
++        let process_list = process::find_target_process(target_elf)?;
++
++        let mut patch_map = self.elf_patch_map.lock();
++        let patch_record = patch_map.entry(target_elf.to_path_buf()).or_default();
++
++        let need_active = process_list
++            .difference(&patch_record.processes)
++            .copied()
++            .collect::<Vec<_>>();
++        let need_remove = patch_record
++            .processes
++            .difference(&process_list)
++            .copied()
++            .collect::<Vec<_>>();
++        let mut need_start_watch = false;
++
++        // Active patch
++        if !need_active.is_empty() {
++            debug!(
++                "Upatch: Activating patch '{}' ({}) to process {:?}",
++                uuid,
++                target_elf.display(),
++                need_active,
++            );
++        }
++        for pid in need_active {
++            if let Err(e) = sys::active_patch(&uuid, pid, target_elf, patch_file) {
++                error!("{:?}", e);
++            }
++            patch_record.processes.insert(pid);
++        }
+ 
+-        let mut active_patch_map = self.active_patch_map.lock();
+-        let active_patch = active_patch_map
+-            .entry(target_elf.to_path_buf())
+-            .or_default();
+-        let patch_list = &mut active_patch.patch_list;
++        // Remove process no longer exists
++        for pid in need_remove {
++            patch_record.processes.remove(&pid);
++        }
+ 
+-        patch_list.push((patch_uuid, patch_file.to_path_buf()));
+-        self.patch_monitor.watch_file(target_elf)?;
++        // If elf is not patched before, start watching it & add a new entry
++        if !patch_record.patch_map.contains_key(&uuid) {
++            patch_record
++                .patch_map
++                .insert(uuid, patch_file.to_path_buf());
++            need_start_watch = true;
++        }
+ 
+-        drop(active_patch_map);
++        drop(patch_map);
+ 
+-        self.set_patch_status(patch_uuid, PatchStatus::Actived)?;
++        if need_start_watch {
++            self.patch_monitor.watch_file(target_elf)?;
++        }
++        self.set_patch_status(uuid, PatchStatus::Actived)?;
+         self.add_patch_symbols(patch);
+ 
+         Ok(())
+     }
+ 
+     pub fn deactive(&mut self, patch: &UserPatch) -> Result<()> {
+-        let patch_uuid = patch.uuid;
+-        let patch_status = self.get_patch_status(patch_uuid)?;
++        let uuid = patch.uuid;
++        let patch_status = self.get_patch_status(uuid)?;
+         ensure!(
+             patch_status == PatchStatus::Actived,
+             "Upatch: Invalid patch status"
+@@ -307,24 +366,58 @@ impl UserPatchDriver {
+ 
+         let target_elf = patch.target_elf.as_path();
+         let patch_file = patch.patch_file.as_path();
+-        let pid_list = process::find_target_process(target_elf)?;
+-        sys::deactive_patch(&patch_uuid, target_elf, patch_file, &pid_list)?;
++        let process_list = process::find_target_process(target_elf)?;
+ 
+-        let mut active_patch_map = self.active_patch_map.lock();
+-        let active_patch = active_patch_map
+-            .entry(target_elf.to_path_buf())
+-            .or_default();
+-        let patch_list = &mut active_patch.patch_list;
++        let mut patch_map = self.elf_patch_map.lock();
++        let patch_record = patch_map
++            .get_mut(target_elf)
++            .context("Failed to find elf patch record")?;
+ 
+-        patch_list.pop();
+-        if patch_list.is_empty() {
+-            self.patch_monitor.ignore_file(target_elf)?;
+-            active_patch_map.remove(target_elf);
++        let need_deactive = process_list
++            .intersection(&patch_record.processes)
++            .copied()
++            .collect::<Vec<_>>();
++        let need_removed = patch_record
++            .processes
++            .difference(&process_list)
++            .copied()
++            .collect::<Vec<_>>();
++        let mut need_stop_watch = false;
++
++        // Deactive patch
++        if !need_deactive.is_empty() {
++            debug!(
++                "Upatch: Deactivating patch '{}' ({}) of process {:?}",
++                uuid,
++                target_elf.display(),
++                need_deactive,
++            );
++        }
++        for pid in need_deactive {
++            sys::deactive_patch(&uuid, pid, target_elf, patch_file)?;
++            patch_record.processes.remove(&pid); // remove process from record
+         }
+ 
+-        drop(active_patch_map);
++        // Remove process no longer exists
++        for pid in need_removed {
++            patch_record.processes.remove(&pid);
++        }
+ 
+-        self.set_patch_status(patch_uuid, PatchStatus::Deactived)?;
++        // Remove patch from elf patch record
++        patch_record.patch_map.remove(&uuid);
++
++        // If elf has no more patch, stop watching it & remove the entry
++        if patch_record.patch_map.is_empty() {
++            patch_map.remove(target_elf);
++            need_stop_watch = true;
++        }
++
++        drop(patch_map);
++
++        if need_stop_watch {
++            self.patch_monitor.ignore_file(target_elf)?;
++        }
++        self.set_patch_status(uuid, PatchStatus::Deactived)?;
+         self.remove_patch_symbols(patch);
+ 
+         Ok(())
+diff --git a/syscared/src/patch/driver/upatch/monitor.rs b/syscared/src/patch/driver/upatch/monitor.rs
+index 0dd4088..1dbb513 100644
+--- a/syscared/src/patch/driver/upatch/monitor.rs
++++ b/syscared/src/patch/driver/upatch/monitor.rs
+@@ -23,10 +23,10 @@ use std::{
+ use anyhow::{bail, Context, Result};
+ use indexmap::IndexMap;
+ use inotify::{EventMask, Inotify, WatchDescriptor, WatchMask};
+-use log::{error, info};
++use log::info;
+ use parking_lot::{Mutex, RwLock};
+ 
+-use super::ActivePatchMap;
++use super::ElfPatchMap;
+ 
+ const MONITOR_THREAD_NAME: &str = "upatch_monitor";
+ const MONITOR_CHECK_PERIOD: u64 = 100;
+@@ -40,9 +40,9 @@ pub(super) struct UserPatchMonitor {
+ }
+ 
+ impl UserPatchMonitor {
+-    pub fn new<F>(active_patch_map: ActivePatchMap, callback: F) -> Result<Self>
++    pub fn new<F>(elf_patch_map: ElfPatchMap, callback: F) -> Result<Self>
+     where
+-        F: Fn(ActivePatchMap, &Path) -> Result<()> + Send + 'static,
++        F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
+     {
+         let inotify = Arc::new(Mutex::new(Some(
+             Inotify::init().context("Failed to initialize inotify")?,
+@@ -52,7 +52,7 @@ impl UserPatchMonitor {
+         let monitor_thread = MonitorThread {
+             inotify: inotify.clone(),
+             target_map: target_map.clone(),
+-            active_patch_map,
++            elf_patch_map,
+             callback,
+         }
+         .run()?;
+@@ -115,13 +115,13 @@ impl UserPatchMonitor {
+ struct MonitorThread<F> {
+     inotify: Arc<Mutex<Option<Inotify>>>,
+     target_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
+-    active_patch_map: ActivePatchMap,
++    elf_patch_map: ElfPatchMap,
+     callback: F,
+ }
+ 
+ impl<F> MonitorThread<F>
+ where
+-    F: Fn(ActivePatchMap, &Path) -> Result<()> + Send + 'static,
++    F: Fn(ElfPatchMap, &Path) + Send + Sync + 'static,
+ {
+     fn run(self) -> Result<thread::JoinHandle<()>> {
+         thread::Builder::new()
+@@ -140,9 +140,7 @@ where
+                         continue;
+                     }
+                     if let Some(patch_file) = self.target_map.read().get(&event.wd) {
+-                        if let Err(e) = (self.callback)(self.active_patch_map.clone(), patch_file) {
+-                            error!("{:?}", e);
+-                        }
++                        (self.callback)(self.elf_patch_map.clone(), patch_file);
+                     }
+                 }
+             }
+diff --git a/syscared/src/patch/driver/upatch/process.rs b/syscared/src/patch/driver/upatch/process.rs
+index 597fc0e..9b2f6de 100644
+--- a/syscared/src/patch/driver/upatch/process.rs
++++ b/syscared/src/patch/driver/upatch/process.rs
+@@ -12,77 +12,89 @@
+  * See the Mulan PSL v2 for more details.
+  */
+ 
+-use std::{
+-    ffi::OsStr,
+-    path::{Path, PathBuf},
+-};
++use std::{ffi::OsStr, os::linux::fs::MetadataExt, path::Path};
+ 
+ use anyhow::Result;
+ use indexmap::IndexSet;
+ use syscare_common::fs;
+ 
+-use syscare_common::os::proc_maps::ProcMaps;
++const PROC_BLACK_LIST: [&str; 18] = [
++    "/usr/lib/systemd/systemd-journald",
++    "/usr/lib/systemd/systemd-logind",
++    "/usr/lib/systemd/systemd-udevd",
++    "/usr/lib/systemd/systemd-hostnamed",
++    "/usr/bin/udevadm",
++    "/usr/sbin/auditd",
++    "/usr/bin/syscare",
++    "/usr/bin/syscared",
++    "/usr/bin/upatchd",
++    "/usr/libexec/syscare/as-hijacker",
++    "/usr/libexec/syscare/cc-hijacker",
++    "/usr/libexec/syscare/c++-hijacker",
++    "/usr/libexec/syscare/gcc-hijacker",
++    "/usr/libexec/syscare/g++-hijacker",
++    "/usr/libexec/syscare/syscare-build",
++    "/usr/libexec/syscare/upatch-build",
++    "/usr/libexec/syscare/upatch-diff",
++    "/usr/libexec/syscare/upatch-manage",
++];
+ 
+ #[inline]
+-fn parse_process_id<P: AsRef<Path>>(path: P) -> Option<i32> {
+-    path.as_ref()
++fn is_blacklisted(file_path: &Path) -> bool {
++    PROC_BLACK_LIST
++        .iter()
++        .map(Path::new)
++        .any(|blacklist_path| blacklist_path == file_path)
++}
++
++#[inline]
++fn parse_process_id(proc_path: &Path) -> Option<i32> {
++    proc_path
+         .file_name()
+         .and_then(OsStr::to_str)
+         .map(str::parse)
+         .and_then(Result::ok)
+ }
+ 
+-#[inline]
+-fn parse_process_path(pid: i32) -> Option<(i32, PathBuf)> {
+-    const PROC_BLACK_LIST: [&str; 18] = [
+-        "/usr/lib/systemd/systemd-journald",
+-        "/usr/lib/systemd/systemd-logind",
+-        "/usr/lib/systemd/systemd-udevd",
+-        "/usr/lib/systemd/systemd-hostnamed",
+-        "/usr/bin/udevadm",
+-        "/usr/sbin/auditd",
+-        "/usr/bin/syscare",
+-        "/usr/bin/syscared",
+-        "/usr/bin/upatchd",
+-        "/usr/libexec/syscare/as-hijacker",
+-        "/usr/libexec/syscare/cc-hijacker",
+-        "/usr/libexec/syscare/c++-hijacker",
+-        "/usr/libexec/syscare/gcc-hijacker",
+-        "/usr/libexec/syscare/g++-hijacker",
+-        "/usr/libexec/syscare/syscare-build",
+-        "/usr/libexec/syscare/upatch-build",
+-        "/usr/libexec/syscare/upatch-diff",
+-        "/usr/libexec/syscare/upatch-manage",
+-    ];
+-
+-    fs::read_link(format!("/proc/{}/exe", pid))
+-        .ok()
+-        .filter(|path| {
+-            !PROC_BLACK_LIST
+-                .iter()
+-                .any(|blacklist_path| path.as_os_str() == *blacklist_path)
+-        })
+-        .map(|path| (pid, path))
+-}
+-
+ pub fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
+-    let target_file = fs::canonicalize(target_elf.as_ref())?;
+-    let target_path = target_file.as_path();
+-    let target_pids = fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })?
+-        .into_iter()
+-        .filter_map(self::parse_process_id)
+-        .filter_map(self::parse_process_path)
+-        .filter(|(pid, bin_path)| {
+-            if bin_path == target_path {
+-                return true;
+-            }
+-            if let Ok(mut mappings) = ProcMaps::new(*pid) {
+-                return mappings.any(|map| map.path_name == target_path);
+-            }
+-            false
+-        })
+-        .map(|(pid, _)| pid)
+-        .collect();
++    let mut target_pids = IndexSet::new();
++    let target_path = target_elf.as_ref();
++    let target_inode = target_path.metadata()?.st_ino();
++
++    for proc_path in fs::list_dirs("/proc", fs::TraverseOptions { recursive: false })? {
++        let pid = match self::parse_process_id(&proc_path) {
++            Some(pid) => pid,
++            None => continue,
++        };
++        let exec_path = match fs::read_link(format!("/proc/{}/exe", pid)) {
++            Ok(file_path) => file_path,
++            Err(_) => continue,
++        };
++        if is_blacklisted(&exec_path) {
++            continue;
++        }
++        // Try to match binary path
++        if exec_path == target_path {
++            target_pids.insert(pid);
++            continue;
++        }
++        // Try to match mapped files
++        let map_files = fs::list_symlinks(
++            format!("/proc/{}/map_files", pid),
++            fs::TraverseOptions { recursive: false },
++        )?;
++        for mapped_file in map_files {
++            if let Ok(mapped_inode) = mapped_file
++                .read_link()
++                .and_then(|file_path| Ok(file_path.metadata()?.st_ino()))
++            {
++                if mapped_inode == target_inode {
++                    target_pids.insert(pid);
++                    break;
++                }
++            };
++        }
++    }
+ 
+     Ok(target_pids)
+ }
+diff --git a/syscared/src/patch/driver/upatch/sys.rs b/syscared/src/patch/driver/upatch/sys.rs
+index bab2974..f0745f0 100644
+--- a/syscared/src/patch/driver/upatch/sys.rs
++++ b/syscared/src/patch/driver/upatch/sys.rs
+@@ -1,7 +1,7 @@
+ use std::path::Path;
+ 
+ use anyhow::{bail, Result};
+-use log::{debug, Level};
++use log::Level;
+ use nix::libc::EEXIST;
+ use uuid::Uuid;
+ 
+@@ -9,80 +9,48 @@ use syscare_common::process::Command;
+ 
+ const UPATCH_MANAGE_BIN: &str = "/usr/libexec/syscare/upatch-manage";
+ 
+-pub fn active_patch<'a, I>(
+-    uuid: &Uuid,
+-    target_elf: &Path,
+-    patch_file: &Path,
+-    pid_list: I,
+-) -> Result<()>
+-where
+-    I: IntoIterator<Item = &'a i32>,
+-{
+-    debug!(
+-        "Patching '{}' to {}",
+-        patch_file.display(),
+-        target_elf.display()
+-    );
+-
+-    for pid in pid_list {
+-        let exit_code = Command::new(UPATCH_MANAGE_BIN)
+-            .arg("patch")
+-            .arg("--uuid")
+-            .arg(uuid.to_string())
+-            .arg("--pid")
+-            .arg(pid.to_string())
+-            .arg("--binary")
+-            .arg(target_elf)
+-            .arg("--upatch")
+-            .arg(patch_file)
+-            .stdout(Level::Debug)
+-            .run_with_output()?
+-            .exit_code();
+-
+-        match exit_code {
+-            0 => {}
+-            EEXIST => {}
+-            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+-        }
++pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
++    let exit_code = Command::new(UPATCH_MANAGE_BIN)
++        .arg("patch")
++        .arg("--uuid")
++        .arg(uuid.to_string())
++        .arg("--pid")
++        .arg(pid.to_string())
++        .arg("--binary")
++        .arg(target_elf)
++        .arg("--upatch")
++        .arg(patch_file)
++        .stdout(Level::Debug)
++        .run_with_output()?
++        .exit_code();
++
++    match exit_code {
++        0 => {}
++        EEXIST => {}
++        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+     }
+ 
+     Ok(())
+ }
+ 
+-pub fn deactive_patch<'a, I>(
+-    uuid: &Uuid,
+-    target_elf: &Path,
+-    patch_file: &Path,
+-    pid_list: I,
+-) -> Result<()>
+-where
+-    I: IntoIterator<Item = &'a i32>,
+-{
+-    debug!(
+-        "Unpatching '{}' from {}",
+-        patch_file.display(),
+-        target_elf.display()
+-    );
+-
+-    for pid in pid_list {
+-        let exit_code = Command::new(UPATCH_MANAGE_BIN)
+-            .arg("unpatch")
+-            .arg("--uuid")
+-            .arg(uuid.to_string())
+-            .arg("--pid")
+-            .arg(pid.to_string())
+-            .arg("--binary")
+-            .arg(target_elf)
+-            .arg("--upatch")
+-            .arg(patch_file)
+-            .stdout(Level::Debug)
+-            .run_with_output()?
+-            .exit_code();
+-
+-        match exit_code {
+-            0 => {}
+-            _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+-        }
++pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
++    let exit_code = Command::new(UPATCH_MANAGE_BIN)
++        .arg("unpatch")
++        .arg("--uuid")
++        .arg(uuid.to_string())
++        .arg("--pid")
++        .arg(pid.to_string())
++        .arg("--binary")
++        .arg(target_elf)
++        .arg("--upatch")
++        .arg(patch_file)
++        .stdout(Level::Debug)
++        .run_with_output()?
++        .exit_code();
++
++    match exit_code {
++        0 => {}
++        _ => bail!("Upatch: {}", std::io::Error::from_raw_os_error(exit_code)),
+     }
+ 
+     Ok(())
+-- 
+2.41.0
+

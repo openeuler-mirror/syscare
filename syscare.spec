@@ -11,11 +11,25 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       1
+Release:       4
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
+
+Patch0001:     0001-upatch-hijacker-fix-compile-bug.patch
+Patch0002:     0002-daemon-fix-cannot-get-file-selinux-xattr-when-selinu.patch
+Patch0003:     0003-syscared-fix-syscare-check-command-does-not-check-sy.patch
+Patch0004:     0004-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
+Patch0005:     0005-syscared-optimize-patch-error-logic.patch
+Patch0006:     0006-syscared-optimize-transaction-creation-logic.patch
+Patch0007:     0007-upatch-manage-optimize-output.patch
+Patch0008:     0008-common-impl-CStr-from_bytes_with_next_nul.patch
+Patch0009:     0009-syscared-improve-patch-management.patch
+Patch0010:     0010-syscared-stop-activating-ignored-process-on-new-proc.patch
+Patch0011:     0011-syscared-adapt-upatch-manage-exit-code-change.patch
+Patch0012:     0012-upatch-manage-change-exit-code.patch
+Patch0013:     0013-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -164,6 +178,25 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4
+- syscared: stop activating ignored process on new process start
+- syscared: adapt upatch-manage exit code change
+- upatch-manage: change exit code
+- upatch-manage: change the way to calculate frozen time
+* Fri Apr 12 2024 ningyu<ningyu9@huawei.com> - 1.2.1-3
+- upatch-hijacker: fix compile bug
+- daemon: fix 'cannot get file selinux xattr when selinux is not enforcing' issue
+- syscared: fix 'syscare check command does not check symbol confiliction' issue
+- syscared: fix 'cannot find process of dynlib patch' issue
+- Change uuid type from string to uuid bytes
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- upatch-manage: optimize output
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- spec: fix "cannot find syscare service after upgrade" bug
+* Sun Apr 7 2024 ningyu<ningyu9@huawei.com> - 1.2.1-2
+- update to syscare.1.2.1-2
 * Thu Mar 28 2024 ningyu<ningyu9@huawei.com> - 1.2.1-1
 - update to 1.2.1
 * Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
