@@ -231,3 +231,51 @@ impl ExternCommandExitStatus {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::Error;
+    use crate::util::ext_cmd::{ExternCommand, ExternCommandArgs};
+
+    #[test]
+    fn test_execute() {
+        let extern_command = ExternCommand::new("cargo");
+        let extern_command_args = ExternCommandArgs::new().arg("--version");
+        let result = extern_command.execvp(extern_command_args);
+
+        assert!(result.is_ok(), "execute() should return Ok");
+
+        let exit_status = result.unwrap();
+
+        assert_eq!(exit_status.exit_code(), 0, "exit code should be 0");
+        assert!(!exit_status.stdout().is_empty(), "stdout should not be empty");
+        assert_eq!(exit_status.stderr().to_string_lossy(), "", "stderr should be empty");
+
+    }
+    #[test]
+    fn test_check_exit_code_success() -> Result<(), Error> {
+        let extern_command = ExternCommand::new("cargo");
+        let extern_command_args = ExternCommandArgs::new().arg("--version");
+        let exit_status = extern_command.execvp(extern_command_args).unwrap();
+
+        let exit_code = exit_status.check_exit_code();
+        assert!(exit_code.is_ok());
+        Ok(())
+    }
+    #[test]
+    fn test_check_exit_code_failed() -> Result<(), Error> {
+        let extern_command = ExternCommand::new("ls");
+        let extern_command_args = ExternCommandArgs::new().arg("exit_code_test");
+        let exit_status = extern_command.execvp(extern_command_args).unwrap();
+
+        // 调用 check_exit_code 方法，期望返回 Err(...)
+        let exit_code = exit_status.check_exit_code();
+        assert!(exit_code.is_err());
+
+        // 验证错误消息是否包含预期的信息
+        let err = exit_code.unwrap_err();
+        assert!(err.to_string().contains("Process \"ls\" exited unsuccessfully"));
+        assert!(err.to_string().contains("exit_code=2"));
+        Ok(())
+    }
+}
