@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       4
+Release:       5
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -38,6 +38,7 @@ Patch0017:     0017-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
+BuildRequires: kernel-devel
 Requires:      coreutils systemd
 Requires:      kpatch-runtime
 
@@ -184,6 +185,8 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Mon May 6 2024 Peng Haitao <htpengc@isoftstone.com> - 1.2.1-5
+- add BuildRequires: kernel-devel
 * Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4
 - common: impl CStr::from_bytes_with_next_nul()
 - syscared: improve patch management
