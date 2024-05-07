@@ -41,3 +41,44 @@ pub fn name() -> &'static OsStr {
     }
     PROCESS_NAME.as_os_str()
 }
+
+#[cfg(test)]
+mod tests_process {
+    use crate::os::process::{id, name, path};
+    use std::process::Command;
+    use std::{println, string::ToString};
+
+    fn build_commd(s: &str) -> String {
+        let mut cmd = "ps -ef |grep ".to_string();
+        cmd = cmd + s + "|grep -v grep";
+        let output = Command::new("bash").arg("-c").arg(cmd).output().unwrap();
+        String::from_utf8(output.stdout).unwrap()
+    }
+
+    #[test]
+    fn test_id() {
+        let process_id = id().to_string();
+        println!("This process id is {}", process_id);
+
+        let sys_proc = build_commd(&process_id);
+        assert!(!sys_proc.is_empty());
+    }
+
+    #[test]
+    fn test_path() {
+        let process_path = path().display().to_string();
+        println!("This path is {:#?}", process_path);
+
+        let sys_path = build_commd(&process_path);
+        assert!(!sys_path.is_empty());
+    }
+
+    #[test]
+    fn test_name() {
+        let process_name = name().to_string_lossy();
+        println!("This name is {:#?}", process_name);
+
+        let sys_name = build_commd(&process_name);
+        assert!(!sys_name.is_empty());
+    }
+}
