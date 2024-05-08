@@ -152,3 +152,33 @@ impl PackageSpecWriter for RpmSpecWriter {
         .context("Failed to write rpm spec file")
     }
 }
+
+#[test]
+fn tests_spec_writer() {
+    use std::fs::File;
+    use std::io::{Read, Write};
+
+    let mut specfile = File::create("/tmp/test.spec").unwrap();
+    specfile.write_all(b"Source: kerneltest-1.tar.gz").unwrap();
+    specfile.write_all(b"%description").unwrap();
+
+    specfile.sync_all().unwrap();
+    let filepath = PathBuf::from("/tmp/test.spec");
+
+    let test = RpmSpecWriter;
+    test.add_source_files(
+        &filepath,
+        vec![PathBuf::from("test1"), PathBuf::from("test2")],
+    )
+    .unwrap();
+
+    let mut fileread = File::open(&filepath).unwrap();
+    let mut content = String::new();
+    fileread.read_to_string(&mut content).unwrap();
+    assert!(content.contains("Source1: test1"));
+    assert!(content.contains("Source2: test2"));
+
+    if filepath.exists() {
+        fs::remove_file(filepath).unwrap();
+    }
+}
