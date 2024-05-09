@@ -22,7 +22,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{Context, Result};
 use gimli::{
     constants, Attribute, AttributeValue, EndianSlice, Endianity, Reader, RunTimeEndian, SectionId,
 };
@@ -63,26 +63,6 @@ impl Dwarf {
         };
 
         Self::get_files(&object, endian)
-    }
-
-    pub fn parse_source_file<P: AsRef<Path>>(object: P) -> Result<PathBuf> {
-        let source_files = Dwarf::parse(&object)
-            .with_context(|| format!("Failed to read dwarf of {}", object.as_ref().display()))?
-            .into_iter()
-            .filter_map(|dwarf| {
-                let file_path = dwarf.compile_dir.join(&dwarf.file_name);
-                match file_path.exists() {
-                    true => Some(file_path),
-                    false => None,
-                }
-            })
-            .collect::<IndexSet<_>>();
-
-        match source_files.len() {
-            1 => Ok(source_files[0].clone()),
-            0 => bail!("Object does not contain source file"),
-            _ => bail!("Object contains to too many source files"),
-        }
     }
 
     pub fn parse_compiler_versions<P: AsRef<Path>>(object: P) -> Result<IndexSet<OsString>> {
