@@ -21,7 +21,6 @@ use indexmap::{IndexMap, IndexSet};
 use syscare_common::{ffi::OsStrExt, fs};
 
 use super::{
-    dwarf::Dwarf,
     elf::{check_elf, read},
     pattern_path::glob,
 };
@@ -29,25 +28,32 @@ use super::{
 const UPATCH_SYM_PREFIX: &str = ".upatch_";
 const OBJECT_EXTENSION: &str = "o";
 
+/*
+ * The task of this class is to find out:
+ * 1. relationship between binary and debuginfo
+ * 2. relationship between output binaries and objects
+ * 3. relationship between original objects and patched objects
+ */
+
 #[derive(Debug)]
 pub struct FileRelation {
-    binary_debug_map: IndexMap<PathBuf, PathBuf>, // Binary -> Debuginfo
-    source_origin_map: IndexMap<PathBuf, PathBuf>, // Source file -> Original object
-    binary_patched_map: IndexMap<PathBuf, IndexSet<PathBuf>>, // Binary -> Patched objects
-    patched_original_map: IndexMap<PathBuf, PathBuf>, // Patched object -> Original object
+    debuginfo_map: IndexMap<PathBuf, PathBuf>, // Binary -> Debuginfo
+    symlink_map: IndexMap<PathBuf, PathBuf>,   // Symlink object -> Orignal object
+    patch_objects_map: IndexMap<PathBuf, IndexSet<PathBuf>>, // Binary -> Patched objects
+    original_object_map: IndexMap<PathBuf, PathBuf>, // Patched object -> Original object
 }
 
 impl FileRelation {
     pub fn new() -> Self {
         Self {
-            binary_debug_map: IndexMap::new(),
-            binary_patched_map: IndexMap::new(),
-            source_origin_map: IndexMap::new(),
-            patched_original_map: IndexMap::new(),
+            debuginfo_map: IndexMap::new(),
+            symlink_map: IndexMap::new(),
+            patch_objects_map: IndexMap::new(),
+            original_object_map: IndexMap::new(),
         }
     }
 
-    pub fn collect_outputs<I, J, P, Q>(&mut self, binaries: I, debuginfos: J) -> Result<()>
+    pub fn collect_debuginfo<I, J, P, Q>(&mut self, binaries: I, debuginfos: J) -> Result<()>
     where
         I: IntoIterator<Item = P>,
         J: IntoIterator<Item = Q>,
@@ -61,86 +67,99 @@ impl FileRelation {
             let binary = Self::find_binary_file(binary)?;
             let debuginfo = debuginfo.as_ref().to_path_buf();
 
-            self.binary_debug_map.insert(binary, debuginfo);
+            self.debuginfo_map.insert(binary, debuginfo);
         }
 
         Ok(())
     }
 
-    pub fn collect_original_build<P: AsRef<Path>>(&mut self, object_dir: P) -> Result<()> {
-        for (binary, _) in &self.binary_debug_map {
-            let upatch_ids = Self::parse_upatch_ids(binary)
-                .with_context(|| format!("Failed to parse upatch id of {}", binary.display()))?;
-
-            for upatch_id in upatch_ids {
-                let original_object = Self::find_object_file(&object_dir, &upatch_id)
-                    .with_context(|| {
-                        format!("Failed to find object of {}", upatch_id.to_string_lossy())
-                    })?;
-                let source_file =
-                    Dwarf::parse_source_file(&original_object).with_context(|| {
-                        format!(
-                            "Failed to parse source file of {}",
-                            original_object.display()
-                        )
-                    })?;
-
-                self.source_origin_map.insert(source_file, original_object);
+    pub fn collect_original_build<P, Q>(&mut self, object_dir: P, expected_dir: Q) -> Result<()>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let symlinks = fs::list_symlinks(&object_dir, fs::TraverseOptions { recursive: true })?;
+        for symlink in symlinks {
+            let object = fs::read_link(&symlink)?;
+            if !object.starts_with(expected_dir.as_ref().as_os_str()) {
+                continue;
             }
+            self.symlink_map.insert(symlink, object);
         }
+        ensure!(
+            !self.symlink_map.is_empty(),
+            "Cannot find any valid objects in {}",
+            object_dir.as_ref().display()
+        );
 
         Ok(())
     }
 
-    pub fn collect_patched_build<P: AsRef<Path>>(&mut self, object_dir: P) -> Result<()> {
-        for (binary, _) in &self.binary_debug_map {
+    pub fn collect_patched_build<P, Q>(&mut self, object_dir: P, expected_dir: Q) -> Result<()>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let mut symlink_map = IndexMap::new();
+        let symlinks = fs::list_symlinks(&object_dir, fs::TraverseOptions { recursive: true })?;
+        for symlink in symlinks {
+            let object = fs::read_link(&symlink)?;
+            if !object.starts_with(expected_dir.as_ref().as_os_str()) {
+                continue;
+            }
+            symlink_map.insert(object, symlink);
+        }
+        ensure!(
+            !self.symlink_map.is_empty(),
+            "Cannot find any valid objects in {}",
+            object_dir.as_ref().display()
+        );
+
+        for (binary, _) in &self.debuginfo_map {
+            let mut objects = IndexSet::new();
+
             let upatch_ids = Self::parse_upatch_ids(binary)
                 .with_context(|| format!("Failed to parse upatch id of {}", binary.display()))?;
-
-            let mut patched_objects = IndexSet::new();
             for upatch_id in upatch_ids {
-                let patched_object =
-                    Self::find_object_file(&object_dir, &upatch_id).with_context(|| {
-                        format!("Failed to find object of {}", upatch_id.to_string_lossy())
+                let patched_object = Self::get_object_file(&expected_dir, &upatch_id)
+                    .with_context(|| {
+                        format!("Failed to get object of {}", upatch_id.to_string_lossy())
                     })?;
-                let source_file = Dwarf::parse_source_file(&patched_object).with_context(|| {
-                    format!(
-                        "Failed to parse source file of {}",
-                        patched_object.display()
-                    )
-                })?;
-                let original_object =
-                    self.source_origin_map.get(&source_file).with_context(|| {
+                let original_object = symlink_map
+                    .get(&patched_object)
+                    .and_then(|path| self.symlink_map.get(path))
+                    .with_context(|| {
                         format!(
-                            "Failed to find original object of {}",
+                            "failed to find original object of {}",
                             patched_object.display()
                         )
-                    })?;
+                    })
+                    .cloned()?;
 
-                patched_objects.insert(patched_object.clone());
-                self.patched_original_map
-                    .insert(patched_object, original_object.to_path_buf());
+                // Update object relations
+                self.original_object_map
+                    .insert(patched_object.to_owned(), original_object);
+                objects.insert(patched_object);
             }
-
-            self.binary_patched_map
-                .insert(binary.to_path_buf(), patched_objects);
+            self.patch_objects_map.insert(binary.to_owned(), objects);
         }
+        self.symlink_map.clear(); // clear useless records
 
         Ok(())
     }
 
     pub fn get_files(&self) -> impl IntoIterator<Item = (&Path, &Path)> {
-        self.binary_debug_map
+        self.debuginfo_map
             .iter()
             .map(|(binary, debuginfo)| (binary.as_path(), debuginfo.as_path()))
     }
 
     pub fn get_patched_objects<P: AsRef<Path>>(&self, binary: P) -> Option<&IndexSet<PathBuf>> {
-        self.binary_patched_map.get(binary.as_ref())
+        self.patch_objects_map.get(binary.as_ref())
     }
 
     pub fn get_original_object<P: AsRef<Path>>(&self, object: P) -> Option<&Path> {
-        self.patched_original_map
+        self.original_object_map
             .get(object.as_ref())
             .map(|p| p.as_path())
     }
@@ -166,7 +185,7 @@ impl FileRelation {
         }
     }
 
-    fn find_object_file<P, S>(object_dir: P, upatch_id: S) -> Result<PathBuf>
+    fn get_object_file<P, S>(object_dir: P, upatch_id: S) -> Result<PathBuf>
     where
         P: AsRef<Path>,
         S: AsRef<OsStr>,

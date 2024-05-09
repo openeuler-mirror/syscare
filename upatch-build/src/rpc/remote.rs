@@ -56,7 +56,7 @@ impl RpcRemote {
         match error {
             Error::Transport(e) => {
                 anyhow!(
-                    "Cannot connect to syscare daemon at unix://{}, {}",
+                    "Cannot connect to upatch daemon at unix://{}, {}",
                     self.socket.display(),
                     e.source()
                         .map(|e| e.to_string())
