@@ -46,3 +46,25 @@ impl std::fmt::Display for PatchStatus {
         })
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fmt::{Debug, Display};
+    use crate::patch_status::{PATCH_STATUS_ACCEPTED, PATCH_STATUS_ACTIVED, PATCH_STATUS_DEACTIVED, PATCH_STATUS_NOT_APPLIED, PATCH_STATUS_UNKNOWN};
+    use crate::PatchStatus;
+
+    #[test]
+    fn test_patch_status() {
+        let status_mappings = [
+            (PatchStatus::Unknown, PATCH_STATUS_UNKNOWN),
+            (PatchStatus::NotApplied, PATCH_STATUS_NOT_APPLIED),
+            (PatchStatus::Deactived, PATCH_STATUS_DEACTIVED),
+            (PatchStatus::Actived, PATCH_STATUS_ACTIVED),
+            (PatchStatus::Accepted, PATCH_STATUS_ACCEPTED),
+        ];
+
+        for (status, expected_str) in &status_mappings {
+            assert_eq!(format!("The PatchStatus is {}", status), format!("The PatchStatus is {}", *expected_str));
+        }
+    }
+}
