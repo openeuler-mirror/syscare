@@ -169,7 +169,7 @@ impl Compiler {
 }
 
 impl Compiler {
-    pub fn parse<I, P, Q>(compilers: I, build_dir: Q) -> Result<Vec<Compiler>>
+    pub fn parse<I, P, Q>(compilers: I, temp_dir: Q) -> Result<Vec<Compiler>>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
@@ -183,7 +183,7 @@ impl Compiler {
                 .file_name()
                 .context("Failed to parse compiler name")?;
 
-            let output_dir = build_dir.as_ref().join(compiler_name);
+            let output_dir = temp_dir.as_ref().join(compiler_name);
             fs::create_dir_all(&output_dir)?;
 
             debug!("- Checking {}", compiler.display());

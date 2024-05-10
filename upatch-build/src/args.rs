@@ -23,6 +23,8 @@ use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 const DEFAULT_BUILD_ROOT: &str = "./upatch";
+const DEFAULT_ELF_DIR: &str = "";
+const DEFAULT_OBJECT_DIR: &str = "";
 const DEFAULT_CMD: &str = "";
 const DEFAULT_COMPILERS: &str = "cc";
 const DEFAULT_OUTPUT_DIR: &str = ".";
@@ -66,9 +68,13 @@ pub struct Arguments {
     #[clap(short, long, multiple = true, required = true)]
     pub debuginfo: Vec<PathBuf>,
 
-    /// Specify the directory of searching elf [default: <SOURCE_DIR>]
-    #[clap(long, default_value = "", hide_default_value = true)]
+    /// Specify the directory for searching elf [default: <SOURCE_DIR>]
+    #[clap(long, default_value = DEFAULT_ELF_DIR, hide_default_value = true)]
     pub elf_dir: PathBuf,
+
+    /// Specify the directory for searching object [default: <SOURCE_DIR>]
+    #[clap(long, default_value = DEFAULT_OBJECT_DIR, hide_default_value = true)]
+    pub object_dir: PathBuf,
 
     /// Specify elf's relative path relate to 'elf' or absolute patch list
     #[clap(long, multiple = true, required = true)]
@@ -111,6 +117,10 @@ impl Arguments {
             false => fs::normalize(&args.elf_dir)?,
             true => args.source_dir.clone(),
         };
+        args.object_dir = match args.object_dir.as_os_str().is_empty() {
+            false => fs::normalize(&args.object_dir)?,
+            true => args.source_dir.clone(),
+        };
 
         for elf_path in &mut args.elf {
             *elf_path = args.elf_dir.join(&elf_path);
@@ -124,6 +134,7 @@ impl Arguments {
         self.build_root = fs::normalize(self.build_root)?;
         self.source_dir = fs::normalize(&self.source_dir)?;
         self.elf_dir = fs::normalize(&self.elf_dir)?;
+        self.object_dir = fs::normalize(&self.object_dir)?;
         self.output_dir = fs::normalize(&self.output_dir)?;
 
         for debuginfo in &mut self.debuginfo {
@@ -148,6 +159,10 @@ impl Arguments {
         ensure!(
             self.elf_dir.is_dir(),
             format!("Cannot find elf directory {}", self.elf_dir.display())
+        );
+        ensure!(
+            self.object_dir.is_dir(),
+            format!("Cannot find object directory {}", self.object_dir.display())
         );
         for debuginfo in &self.debuginfo {
             ensure!(

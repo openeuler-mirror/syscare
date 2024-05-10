@@ -46,7 +46,7 @@ pub struct Project<'a> {
 impl<'a> Project<'a> {
     pub fn new(args: &'a Arguments, build_root: &'a BuildRoot) -> Self {
         let root_dir = args.source_dir.as_path();
-        let build_dir = build_root.output_dir.as_path();
+        let build_dir = build_root.temp_dir.as_path();
         let original_dir = build_root.original_dir.as_path();
         let patched_dir = build_root.patched_dir.as_path();
 

@@ -49,7 +49,7 @@ use file_relation::FileRelation;
 use hijacker::Hijacker;
 use project::Project;
 
-const CLI_NAME: &str = "syscare build";
+const CLI_NAME: &str = "upatch build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
@@ -59,7 +59,7 @@ const LOG_FILE_NAME: &str = "build";
 struct BuildInfo {
     files: FileRelation,
     linker: PathBuf,
-    build_dir: PathBuf,
+    temp_dir: PathBuf,
     output_dir: PathBuf,
     verbose: bool,
 }
@@ -256,11 +256,11 @@ impl UpatchBuild {
         let debuginfo_name = debuginfo
             .file_name()
             .context("Failed to parse debuginfo name")?;
-        let output_dir = build_info.build_dir.join(binary_name);
-        let new_debuginfo = output_dir.join(debuginfo_name);
+        let temp_dir = build_info.temp_dir.join(binary_name);
+        let new_debuginfo = temp_dir.join(debuginfo_name);
 
         debug!("- Preparing to build patch");
-        fs::create_dir_all(&output_dir)?;
+        fs::create_dir_all(&temp_dir)?;
         fs::copy(debuginfo, &new_debuginfo)?;
         fs::set_permissions(&new_debuginfo, Permissions::from_mode(0o644))?;
 
@@ -288,7 +288,7 @@ impl UpatchBuild {
                 original_object,
                 patched_object,
                 &new_debuginfo,
-                &output_dir,
+                &temp_dir,
                 build_info.verbose,
             )
             .with_context(|| format!("Failed to create diff objects for {}", binary.display()))?;
@@ -296,7 +296,7 @@ impl UpatchBuild {
 
         debug!("- Collecting changes");
         let mut changed_objects = fs::list_files_by_ext(
-            &output_dir,
+            &temp_dir,
             OBJECT_EXTENSION,
             fs::TraverseOptions { recursive: false },
         )?;
@@ -306,7 +306,7 @@ impl UpatchBuild {
         }
 
         debug!("- Creating patch notes");
-        let notes_object = output_dir.join(NOTES_OBJECT_NAME);
+        let notes_object = temp_dir.join(NOTES_OBJECT_NAME);
         Self::create_note(&new_debuginfo, &notes_object).context("Failed to create patch notes")?;
         changed_objects.push(notes_object);
 
@@ -332,10 +332,10 @@ impl UpatchBuild {
             };
             let output_file = build_info.output_dir.join(&patch_name);
 
-            info!("Generating patch {}", patch_name.to_string_lossy());
+            info!("Generating patch for '{}'", patch_name.to_string_lossy());
             self.build_patch(&build_info, binary, debuginfo, &output_file)
                 .with_context(|| {
-                    format!("Failed to build patch {}", patch_name.to_string_lossy())
+                    format!("Failed to build patch '{}'", patch_name.to_string_lossy())
                 })?;
         }
 
@@ -346,11 +346,12 @@ impl UpatchBuild {
         let work_dir = self.args.work_dir.as_path();
         let name = self.args.name.as_os_str();
         let output_dir = self.args.output_dir.as_path();
+        let object_dir = self.args.object_dir.as_path();
         let binaries = self.args.elf.as_slice();
         let debuginfos = self.args.debuginfo.as_slice();
         let verbose = self.args.verbose;
 
-        let build_dir = self.build_root.output_dir.as_path();
+        let temp_dir = self.build_root.temp_dir.as_path();
         let original_dir = self.build_root.original_dir.as_path();
         let patched_dir = self.build_root.patched_dir.as_path();
 
@@ -359,7 +360,7 @@ impl UpatchBuild {
         info!("==============================");
         info!("Checking compiler(s)");
 
-        let compilers = Compiler::parse(&self.args.compiler, build_dir)?;
+        let compilers = Compiler::parse(&self.args.compiler, temp_dir)?;
         let linker = compilers
             .iter()
             .map(|c| c.linker.clone())
@@ -406,8 +407,8 @@ impl UpatchBuild {
             .with_context(|| format!("Failed to build {}", project))?;
 
         info!("Collecting file relations");
-        files.collect_outputs(binaries, debuginfos)?;
-        files.collect_original_build(original_dir)?;
+        files.collect_debuginfo(binaries, debuginfos)?;
+        files.collect_original_build(object_dir, original_dir)?;
 
         info!("Preparing {}", project);
         project
@@ -425,7 +426,7 @@ impl UpatchBuild {
             .with_context(|| format!("Failed to rebuild {}", project))?;
 
         info!("Collecting file relations");
-        files.collect_patched_build(patched_dir)?;
+        files.collect_patched_build(object_dir, patched_dir)?;
 
         // Unhack compilers
         drop(hijacker);
@@ -433,7 +434,7 @@ impl UpatchBuild {
         let build_info = BuildInfo {
             linker,
             files,
-            build_dir: build_dir.to_path_buf(),
+            temp_dir: temp_dir.to_path_buf(),
             output_dir: output_dir.to_path_buf(),
             verbose,
         };
