@@ -21,7 +21,7 @@ pub struct BuildRoot {
     pub path: PathBuf,
     pub original_dir: PathBuf,
     pub patched_dir: PathBuf,
-    pub output_dir: PathBuf,
+    pub temp_dir: PathBuf,
     pub log_file: PathBuf,
 }
 
@@ -30,19 +30,19 @@ impl BuildRoot {
         let path = path.as_ref().to_path_buf();
         let original_dir = path.join("original");
         let patched_dir = path.join("patched");
-        let output_dir = path.join("output");
+        let temp_dir = path.join("temp");
         let log_file = path.join("build.log");
 
         fs::create_dir_all(&path)?;
         fs::create_dir_all(&original_dir)?;
         fs::create_dir_all(&patched_dir)?;
-        fs::create_dir_all(&output_dir)?;
+        fs::create_dir_all(&temp_dir)?;
 
         Ok(Self {
             path,
             original_dir,
             patched_dir,
-            output_dir,
+            temp_dir,
             log_file,
         })
     }
