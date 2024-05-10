@@ -65,3 +65,49 @@ pub fn unblock(signals: &[i32]) {
 pub fn unblock_all() {
     modify_signal_flags(SIGNAL_FLAG_MAP.read().unwrap().values(), true)
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    const SIGINT: i32 = 2;
+    const SIGTERM: i32 = 15;
+
+    fn get_atomic_bool_value(flag: &Arc<AtomicBool>) -> bool {
+        flag.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    #[test]
+    fn test_block_and_unblock_signals() {
+        let signals = vec![SIGINT, SIGTERM];
+
+        block(&signals).unwrap();
+
+        for signal in &signals {
+            let flag = get_signal_flags(&[*signal])[0].clone();
+            assert_eq!(get_atomic_bool_value(&flag), false);
+        }
+
+        unblock(&signals);
+
+        for signal in &signals {
+            let flag = get_signal_flags(&[*signal])[0].clone();
+            assert_eq!(get_atomic_bool_value(&flag), true);
+        }
+
+        unblock_all();
+    }
+
+    #[test]
+    fn test_unblock_all_signals() {
+        let signals = vec![SIGINT, SIGTERM];
+
+        block(&signals).unwrap();
+
+        unblock_all();
+
+        for signal in &signals {
+            let flag = get_signal_flags(&[*signal])[0].clone();
+            assert_eq!(get_atomic_bool_value(&flag), true);
+        }
+    }
+}
