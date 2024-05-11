@@ -30,6 +30,7 @@
 
 #define SYMTAB_NAME ".symtab"
 #define DYNSYM_NAME ".dynsym"
+#define DYNAMIC_NAME ".dynamic"
 #define GOT_RELA_NAME ".rela.dyn"
 #define PLT_RELA_NAME ".rela.plt"
 #define BUILD_ID_NAME ".note.gnu.build-id"
@@ -95,6 +96,8 @@ struct elf_info {
 	char *shstrtab;
 
 	unsigned int num_build_id;
+	bool is_pie;
+	bool is_dyn;
 };
 
 struct running_elf {
@@ -111,7 +114,7 @@ struct running_elf {
 	struct {
 		unsigned int sym, str;
 		unsigned int rela_dyn, rela_plt;
-		unsigned int dynsym, dynstr;
+		unsigned int dynsym, dynstr, dynamic;
 	} index;
 
 	/* load bias, used to handle ASLR */
