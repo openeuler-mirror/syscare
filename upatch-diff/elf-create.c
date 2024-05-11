@@ -135,8 +135,9 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
 
     /* find changed func */
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent)
+        if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent) {
             continue;
+        }
         nr++;
     }
 
@@ -146,24 +147,27 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
     funcs = sec->data->d_buf;
 
     strsym = find_symbol_by_name(&uelf->symbols, ".upatch.strings");
-    if (!strsym)
-        ERROR("can't find .upatch.strings symbol.");
+    if (!strsym) {
+        ERROR("Cannot find symbol '.upatch.strings'");
+    }
 
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent)
+        if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent) {
             continue;
+        }
 
-        if (!lookup_relf(relf, sym, &symbol))
-            ERROR("lookup_relf failed.");
+        if (!lookup_relf(relf, sym, &symbol)) {
+            ERROR("Cannot find symbol '%s' in %s", sym->name, g_relf_name);
+        }
 
-        if (sym->bind == STB_LOCAL && symbol.global)
-            ERROR("can't find local symbol '%s' in symbol table.", sym->name);
+        if (sym->bind == STB_LOCAL && symbol.global) {
+            ERROR("Cannot find local symbol '%s' in symbol table.", sym->name);
+        }
 
-        log_debug("lookup for %s: symbol name %s sympos=%lu size=%lu .\n",
+        log_debug("lookup for %s: symbol name %s sympos=%lu size=%lu.\n",
             sym->name, symbol.symbol->name, symbol.sympos, symbol.symbol->size);
 
         /* ATTENTION: kpatch convert global symbols to local symbols here. */
-
         funcs[index].old_addr = symbol.symbol->addr;
         funcs[index].old_size = symbol.symbol->size;
         funcs[index].new_size = sym->sym.st_size;
