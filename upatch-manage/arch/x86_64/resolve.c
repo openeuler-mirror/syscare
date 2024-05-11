@@ -123,9 +123,19 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
 		goto out;
 	}
 
-	elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
+	if (uelf->relf->info.is_dyn && !uelf->relf->info.is_pie) {
+		elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
 
-	log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
+		log_debug("0x%lx: jmp_addr=0x%lx\n", elf_addr, jmp_addr);
+
+	} else {
+		/*
+		 * For non-dynamic library files, global variables are not placed in the GOT table
+		 */
+		elf_addr = jmp_addr;
+		log_debug("For non-dynamic library: jmp_addr=0x%lx\n", jmp_addr);
+	}
+
 
 out:
 	return elf_addr;
