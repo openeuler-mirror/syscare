@@ -22,6 +22,7 @@ use syscare_common::fs;
 
 use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
 
+const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
 const DEFAULT_DATA_ROOT: &str = "/usr/lib/syscare";
 const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
@@ -41,6 +42,10 @@ pub struct Arguments {
     /// Run as a daemon
     #[clap(short, long)]
     pub daemon: bool,
+
+    /// Daemon config directory
+    #[clap(long, default_value=DEFAULT_CONFIG_DIR)]
+    pub config_dir: PathBuf,
 
     /// Daemon data directory
     #[clap(long, default_value = DEFAULT_DATA_ROOT)]
@@ -65,8 +70,9 @@ impl Arguments {
     }
 
     fn normalize_path(mut self) -> Result<Self> {
-        self.work_dir = fs::normalize(&self.work_dir)?;
+        self.config_dir = fs::normalize(&self.config_dir)?;
         self.data_dir = fs::normalize(&self.data_dir)?;
+        self.work_dir = fs::normalize(&self.work_dir)?;
         self.log_dir = fs::normalize(&self.log_dir)?;
 
         Ok(self)

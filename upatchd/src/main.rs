@@ -22,16 +22,19 @@ use flexi_logger::{
 };
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
-use log::{error, info, LevelFilter, Record};
+use log::{debug, error, info, warn, LevelFilter, Record};
+use nix::unistd::{chown, Gid, Uid};
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
 
 use syscare_common::{fs, os};
 
 mod args;
+mod config;
 mod hijacker;
 mod rpc;
 
 use args::Arguments;
+use config::Config;
 use rpc::{Skeleton, SkeletonImpl};
 
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
@@ -46,17 +49,19 @@ const SOCKET_FILE_NAME: &str = "upatchd.sock";
 const CONFIG_DIR_PERM: u32 = 0o700;
 const WORK_DIR_PERM: u32 = 0o755;
 const LOG_DIR_PERM: u32 = 0o700;
-const SOCKET_FILE_PERM: u32 = 0o666;
+const SOCKET_FILE_PERM: u32 = 0o660;
+const SOCKET_FILE_PERM_STRICT: u32 = 0o600;
 
 const MAIN_THREAD_NAME: &str = "main";
 const UNNAMED_THREAD_NAME: &str = "<unnamed>";
 const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
-struct UpatchDaemon {
+struct Daemon {
     args: Arguments,
+    config: Config,
 }
 
-impl UpatchDaemon {
+impl Daemon {
     fn format_log(
         w: &mut dyn std::io::Write,
         now: &mut DeferredNow,
@@ -133,14 +138,28 @@ impl UpatchDaemon {
             .start()
             .context("Failed to initialize logger")?;
 
+        // Initialize config
+        debug!("Initializing configuation...");
+        let config_file = args.config_dir.join(CONFIG_FILE_NAME);
+        let config = match Config::parse(&config_file) {
+            Ok(config) => config,
+            Err(e) => {
+                warn!("{:?}", e);
+                info!("Using default configuration...");
+                let config = Config::default();
+                config.write(&config_file)?;
+
+                config
+            }
+        };
+
         // Print panic to log incase it really happens
         panic::set_hook(Box::new(|info| error!("{}", info)));
-
-        Ok(Self { args })
+        Ok(Self { args, config })
     }
 }
 
-impl UpatchDaemon {
+impl Daemon {
     fn daemonize(&self) -> Result<()> {
         if !self.args.daemon {
             return Ok(());
@@ -156,10 +175,11 @@ impl UpatchDaemon {
     }
 
     fn initialize_skeleton(&self) -> Result<IoHandler> {
-        let mut io_handler = IoHandler::new();
+        let config = self.config.hijacker.clone();
+        let methods = SkeletonImpl::new(config)?.to_delegate();
 
-        let config_file = self.args.config_dir.join(CONFIG_FILE_NAME);
-        io_handler.extend_with(SkeletonImpl::new(config_file)?.to_delegate());
+        let mut io_handler = IoHandler::new();
+        io_handler.extend_with(methods);
 
         Ok(io_handler)
     }
@@ -173,7 +193,17 @@ impl UpatchDaemon {
                 .context("Failed to convert socket path to string")?,
         )?;
 
-        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERM))?;
+        let socket_owner = Uid::from_raw(self.config.daemon.socket.uid);
+        let socket_group = Gid::from_raw(self.config.daemon.socket.gid);
+        chown(&socket_file, Some(socket_owner), Some(socket_group))?;
+
+        fs::set_permissions(
+            &socket_file,
+            match socket_owner.as_raw() == socket_group.as_raw() {
+                true => Permissions::from_mode(SOCKET_FILE_PERM_STRICT),
+                false => Permissions::from_mode(SOCKET_FILE_PERM),
+            },
+        )?;
 
         Ok(server)
     }
@@ -183,6 +213,7 @@ impl UpatchDaemon {
         info!("Upatch Daemon - {}", DAEMON_VERSION);
         info!("================================");
         info!("Start with {:#?}", self.args);
+        info!("Using {:#?}", self.config);
         self.daemonize()?;
 
         info!("Initializing skeleton...");
@@ -213,7 +244,7 @@ impl UpatchDaemon {
 }
 
 fn main() {
-    let daemon = match UpatchDaemon::new() {
+    let daemon = match Daemon::new() {
         Ok(instance) => instance,
         Err(e) => {
             eprintln!("Error: {:?}", e);
