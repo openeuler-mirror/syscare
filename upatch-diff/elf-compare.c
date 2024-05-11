@@ -177,7 +177,7 @@ bool upatch_handle_redis_line(const char *symname)
 /* TODO: let user support this list or generate by the compiler ? */
 bool check_line_func(struct upatch_elf *uelf, const char *symname)
 {
-	if (!strncmp(basename(upatch_elf_name), "redis-server", 12))
+	if (!strncmp(basename(g_relf_name), "redis-server", 12))
 		return upatch_handle_redis_line(symname);
 
 	return false;

@@ -206,7 +206,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
         if (skip)
             continue;
 
-        log_debug("offset %d, type %d, %s %s %ld \n", rela->offset,
+        log_debug("offset %d, type %d, %s %s %ld", rela->offset,
             rela->type, rela->sym->name,
             (rela->addend < 0) ? "-" : "+", labs(rela->addend));
         if (rela->string)  // rela->string is not utf8

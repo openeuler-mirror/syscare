@@ -35,12 +35,12 @@
 struct symbol;
 
 struct lookup_result {
-    struct object_symbol *symbol;
+    struct debug_symbol *symbol;
 	unsigned long sympos;
 	bool global;
 };
 
-struct object_symbol {
+struct debug_symbol {
     char *name;
     unsigned char type, bind;
     unsigned int shndx;
@@ -50,7 +50,7 @@ struct object_symbol {
 
 struct running_elf {
     int obj_nr;
-    struct object_symbol *obj_syms;
+    struct debug_symbol *obj_syms;
     int fd;
     Elf *elf;
     bool is_exec;
