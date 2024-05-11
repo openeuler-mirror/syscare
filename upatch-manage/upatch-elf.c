@@ -132,6 +132,31 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
     return 0;
 }
 
+static bool is_pie_elf(struct running_elf *relf)
+{
+    GElf_Shdr *shdr = &relf->info.shdrs[relf->index.dynamic];
+    GElf_Dyn *dyns = (void *)relf->info.hdr + shdr->sh_offset;
+    if (relf->index.dynamic == 0) {
+        return false;
+    }
+    for (Elf64_Xword i = 0; i < shdr->sh_size / sizeof(GElf_Dyn); i++) {
+        log_debug("Syminfo %lx, %lx\n", dyns[i].d_tag, dyns[i].d_un.d_val);
+        if (dyns[i].d_tag == DT_FLAGS_1) {
+            if ((dyns[i].d_un.d_val & DF_1_PIE) != 0)
+                return true;
+            break;
+        }
+    }
+    return false;
+}
+
+static bool is_dyn_elf(struct running_elf *relf)
+{
+    GElf_Ehdr *ehdr = relf->info.hdr;
+   
+    return ehdr->e_type == ET_DYN;
+}
+
 int binary_init(struct running_elf *relf, const char *name)
 {
     int ret = open_elf(&relf->info, name);
@@ -156,7 +181,8 @@ int binary_init(struct running_elf *relf, const char *name)
             relf->dynstrtab = (char *)relf->info.hdr +
                               relf->info.shdrs[relf->info.shdrs[i].sh_link].sh_offset;
         } else if (relf->info.shdrs[i].sh_type == SHT_DYNAMIC) {
-            /* Currently, we don't utilize it */
+	    log_debug("Found section '%s', idx=%d\n", DYNAMIC_NAME, i);
+            relf->index.dynamic = i;
         } else if (streql(sec_name, PLT_RELA_NAME) &&
                    relf->info.shdrs[i].sh_type == SHT_RELA) {
             log_debug("Found section '%s', idx=%d\n", PLT_RELA_NAME, i);
@@ -177,7 +203,9 @@ int binary_init(struct running_elf *relf, const char *name)
             break;
         }
     }
-
+ 
+    relf->info.is_pie = is_pie_elf(relf);
+    relf->info.is_dyn = is_dyn_elf(relf);
     return 0;
 }
 
