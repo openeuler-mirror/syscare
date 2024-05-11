@@ -14,7 +14,7 @@ anyhow             = { version = "1.0" }
 clap               = { version = "3.2", features = ["cargo", "derive"] }
 daemonize          = { version = "0.5" }
 flexi_logger       = { version = "0.24", features = ["compress"] }
-indexmap           = { version = "1.9" }
+indexmap           = { version = "1.9", features = ["serde"] }
 jsonrpc-core       = { version = "18.0" }
 jsonrpc-derive     = { version = "18.0" }
 jsonrpc-ipc-server = { version = "18.0" }
