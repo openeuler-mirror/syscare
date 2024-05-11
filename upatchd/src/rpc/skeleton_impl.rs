@@ -12,12 +12,12 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use crate::hijacker::Hijacker;
+use crate::hijacker::{Hijacker, HijackerConfig};
 
 use super::{
     function::{RpcFunction, RpcResult},
@@ -29,10 +29,10 @@ pub struct SkeletonImpl {
 }
 
 impl SkeletonImpl {
-    pub fn new<P: AsRef<Path>>(config_path: P) -> Result<Self> {
+    pub fn new(config: HijackerConfig) -> Result<Self> {
         debug!("Initializing hijacker...");
         Ok(Self {
-            hijacker: Hijacker::new(config_path).context("Failed to initialize hijacker")?,
+            hijacker: Hijacker::new(config).context("Failed to initialize hijacker")?,
         })
     }
 }

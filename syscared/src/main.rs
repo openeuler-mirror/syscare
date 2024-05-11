@@ -22,7 +22,8 @@ use flexi_logger::{
 };
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
-use log::{error, info, LevelFilter, Record};
+use log::{debug, error, info, warn, LevelFilter, Record};
+use nix::unistd::{chown, Gid, Uid};
 use parking_lot::RwLock;
 use patch::manager::PatchManager;
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
@@ -30,38 +31,45 @@ use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_nam
 use syscare_common::{fs, os};
 
 mod args;
+mod config;
 mod fast_reboot;
 mod patch;
 mod rpc;
 
 use args::Arguments;
+use config::Config;
+use patch::monitor::PatchMonitor;
 use rpc::{
     skeleton::{FastRebootSkeleton, PatchSkeleton},
     skeleton_impl::{FastRebootSkeletonImpl, PatchSkeletonImpl},
 };
-
-use crate::patch::monitor::PatchMonitor;
 
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const DAEMON_UMASK: u32 = 0o077;
 
+const CONFIG_FILE_NAME: &str = "syscared.yaml";
+const PID_FILE_NAME: &str = "syscared.pid";
+const SOCKET_FILE_NAME: &str = "syscared.sock";
+
+const CONFIG_DIR_PERM: u32 = 0o700;
 const DATA_DIR_PERM: u32 = 0o700;
 const WORK_DIR_PERM: u32 = 0o755;
 const LOG_DIR_PERM: u32 = 0o700;
-const PID_FILE_NAME: &str = "syscared.pid";
-const SOCKET_FILE_NAME: &str = "syscared.sock";
+const SOCKET_FILE_PERM: u32 = 0o660;
+const SOCKET_FILE_PERM_STRICT: u32 = 0o600;
 
 const MAIN_THREAD_NAME: &str = "main";
 const UNNAMED_THREAD_NAME: &str = "<unnamed>";
 const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
 
-struct SyscareDaemon {
+struct Daemon {
     args: Arguments,
+    config: Config,
 }
 
-impl SyscareDaemon {
+impl Daemon {
     fn format_log(
         w: &mut dyn std::io::Write,
         now: &mut DeferredNow,
@@ -101,9 +109,11 @@ impl SyscareDaemon {
         os::umask::set_umask(DAEMON_UMASK);
 
         let args = Arguments::new()?;
+        fs::create_dir_all(&args.config_dir)?;
         fs::create_dir_all(&args.data_dir)?;
         fs::create_dir_all(&args.work_dir)?;
         fs::create_dir_all(&args.log_dir)?;
+        fs::set_permissions(&args.config_dir, Permissions::from_mode(CONFIG_DIR_PERM))?;
         fs::set_permissions(&args.data_dir, Permissions::from_mode(DATA_DIR_PERM))?;
         fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERM))?;
         fs::set_permissions(&args.log_dir, Permissions::from_mode(LOG_DIR_PERM))?;
@@ -138,14 +148,29 @@ impl SyscareDaemon {
             .start()
             .context("Failed to initialize logger")?;
 
+        // Initialize config
+        debug!("Initializing configuation...");
+        let config_file = args.config_dir.join(CONFIG_FILE_NAME);
+        let config = match Config::parse(&config_file) {
+            Ok(config) => config,
+            Err(e) => {
+                warn!("{:?}", e);
+                info!("Using default configuration...");
+                let config = Config::default();
+                config.write(&config_file)?;
+
+                config
+            }
+        };
+
         // Print panic to log incase it really happens
         panic::set_hook(Box::new(|info| error!("{}", info)));
 
-        Ok(Self { args })
+        Ok(Self { args, config })
     }
 }
 
-impl SyscareDaemon {
+impl Daemon {
     fn daemonize(&self) -> Result<()> {
         if !self.args.daemon {
             return Ok(());
@@ -171,13 +196,24 @@ impl SyscareDaemon {
 
     fn start_rpc_server(&self, io_handler: IoHandler) -> Result<Server> {
         let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
-        let server = ServerBuilder::new(io_handler)
-            .set_client_buffer_size(1)
-            .start(
-                socket_file
-                    .to_str()
-                    .context("Failed to convert socket path to string")?,
-            )?;
+        let builder = ServerBuilder::new(io_handler).set_client_buffer_size(1);
+        let server = builder.start(
+            socket_file
+                .to_str()
+                .context("Failed to convert socket path to string")?,
+        )?;
+
+        let socket_owner = Uid::from_raw(self.config.daemon.socket.uid);
+        let socket_group = Gid::from_raw(self.config.daemon.socket.gid);
+        chown(&socket_file, Some(socket_owner), Some(socket_group))?;
+
+        fs::set_permissions(
+            &socket_file,
+            match socket_owner.as_raw() == socket_group.as_raw() {
+                true => Permissions::from_mode(SOCKET_FILE_PERM_STRICT),
+                false => Permissions::from_mode(SOCKET_FILE_PERM),
+            },
+        )?;
 
         Ok(server)
     }
@@ -227,7 +263,7 @@ impl SyscareDaemon {
 }
 
 fn main() {
-    let daemon = match SyscareDaemon::new() {
+    let daemon = match Daemon::new() {
         Ok(instance) => instance,
         Err(e) => {
             eprintln!("Error: {:?}", e);
