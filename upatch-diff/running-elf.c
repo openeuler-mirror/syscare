@@ -113,55 +113,34 @@ int relf_destroy(struct running_elf *relf)
     return 0;
 }
 
-bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
-                 struct lookup_result *result)
+bool lookup_relf(struct running_elf *relf,
+    struct symbol *lookup_sym, struct lookup_result *result)
 {
-    int i;
-    struct debug_symbol *sym;
+    struct debug_symbol *symbol = NULL;
     unsigned long sympos = 0;
-    bool in_file = false;
 
+    log_debug("looking up symbol '%s'\n", lookup_sym->name);
     memset(result, 0, sizeof(*result));
 
-    for (i = 0; i < relf->obj_nr; i ++) {
-        sym = &relf->obj_syms[i];
-        if (sym->bind == STB_LOCAL && !strcmp(sym->name, lookup_sym->name))
-            sympos ++;
+    for (int i = 0; i < relf->obj_nr; i++) {
+        symbol = &relf->obj_syms[i];
+        sympos++;
 
-        if (lookup_sym->relf_sym == sym) {
-            in_file = true;
+        if (strcmp(symbol->name, lookup_sym->name) != 0) {
             continue;
         }
-
-        if (!in_file)
-            continue;
-
-        if (sym->type == STT_FILE)
-            break;
-
-        if (sym->bind == STB_LOCAL && !strcmp(sym->name, lookup_sym->name)) {
-            if (result->symbol)
-                ERROR("duplicate local symbol found for %s", lookup_sym->name);
-
-            result->symbol = sym;
-            result->sympos = sympos;
-            result->global = false;
+        if ((result->symbol != NULL) &&
+            (result->symbol->bind == symbol->bind)) {
+            ERROR("Found duplicate symbol '%s' in %s",
+                lookup_sym->name, g_relf_name);
         }
+
+        result->symbol = symbol;
+        result->sympos = sympos;
+        result->global =
+            ((symbol->bind == STB_GLOBAL) || (symbol->bind == STB_WEAK));
+        log_normal("found symbol '%s'\n", lookup_sym->name);
     }
 
-    if (!!result->symbol)
-        return !!result->symbol;
-
-    for (i = 0; i < relf->obj_nr; i ++) {
-        sym = &relf->obj_syms[i];
-        if ((sym->bind == STB_GLOBAL || sym->bind == STB_WEAK) &&
-                !strcmp(sym->name, lookup_sym->name)) {
-            if (result->symbol)
-                ERROR("duplicated global symbol for %s \n", lookup_sym->name);
-            result->symbol = sym;
-            result->global = true;
-        }
-    }
-
-    return !!result->symbol;
+    return (result->symbol != NULL);
 }
