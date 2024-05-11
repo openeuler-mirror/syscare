@@ -32,7 +32,7 @@
 #include "list.h"
 #include "running-elf.h"
 
-extern char *upatch_elf_name;
+extern char *g_relf_name;
 
 // these data structs contain each other
 struct section;
@@ -102,7 +102,7 @@ struct symbol {
 	struct section *sec;
 	GElf_Sym sym;
 	char *name;
-	struct object_symbol *lookup_running_file_sym;
+	struct debug_symbol *relf_sym;
 	unsigned int index;
 	unsigned char bind;
 	unsigned char type;
