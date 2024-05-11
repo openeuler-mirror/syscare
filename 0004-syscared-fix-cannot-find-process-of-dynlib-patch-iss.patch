@@ -1,7 +1,7 @@
-From 729f32db079e2aace7cf355d480627b0bbf37e8c Mon Sep 17 00:00:00 2001
+From 32c3d16175b93627504981d05a1a3e3ec603415e Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Wed, 10 Apr 2024 19:30:56 +0800
-Subject: [PATCH 06/17] syscared: fix 'cannot find process of dynlib patch'
+Subject: [PATCH 04/20] syscared: fix 'cannot find process of dynlib patch'
  issue
 
 1. For detecting process mapped dynamic library,
@@ -21,7 +21,7 @@ Signed-off-by: renoseven <dev@renoseven.net>
  4 files changed, 270 insertions(+), 199 deletions(-)
 
 diff --git a/syscared/src/patch/driver/upatch/mod.rs b/syscared/src/patch/driver/upatch/mod.rs
-index 98b1e34..a7fa154 100644
+index 98fc54c..a7fa154 100644
 --- a/syscared/src/patch/driver/upatch/mod.rs
 +++ b/syscared/src/patch/driver/upatch/mod.rs
 @@ -21,7 +21,7 @@ use std::{
@@ -37,7 +37,7 @@ index 98b1e34..a7fa154 100644
  use monitor::UserPatchMonitor;
  use target::PatchTarget;
  
--type ActivePatchMap = Arc<Mutex<IndexMap<PathBuf, ActivePatch>>>;
+-pub(self) type ActivePatchMap = Arc<Mutex<IndexMap<PathBuf, ActivePatch>>>;
 +type ElfPatchMap = Arc<Mutex<IndexMap<PathBuf, ElfPatchRecord>>>;
  
  #[derive(Default)]
@@ -683,5 +683,5 @@ index bab2974..f0745f0 100644
  
      Ok(())
 -- 
-2.41.0
+2.34.1
 

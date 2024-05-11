@@ -1,8 +1,9 @@
-From b53cb3d2903ea8ee3667f892b813648da7bc59a7 Mon Sep 17 00:00:00 2001
+From c2fc4243ed918717bbcaa4a0c1b400051c7eded7 Mon Sep 17 00:00:00 2001
 From: ningyu <ningyu9@huawei.com>
 Date: Tue, 9 Apr 2024 09:21:35 +0000
-Subject: [PATCH 04/17] Change uuid type to Uuid
+Subject: [PATCH 14/20] abi: change uuid string to uuid bytes
 
+Signed-off-by: ningyu <ningyu9@huawei.com>
 ---
  Cargo.lock                                             | 1 +
  syscare-abi/Cargo.toml                                 | 1 +
@@ -12,8 +13,8 @@ Subject: [PATCH 04/17] Change uuid type to Uuid
  syscare-build/src/patch/metadata.rs                    | 4 +++-
  syscare-build/src/patch/user_patch/upatch_builder.rs   | 4 ++--
  syscared/src/patch/resolver/kpatch.rs                  | 4 +---
- syscared/src/patch/resolver/upatch.rs                  | 5 ++---
- 9 files changed, 19 insertions(+), 16 deletions(-)
+ syscared/src/patch/resolver/upatch.rs                  | 4 +---
+ 9 files changed, 18 insertions(+), 16 deletions(-)
 
 diff --git a/Cargo.lock b/Cargo.lock
 index 1d13df6..e6d830b 100644
@@ -165,12 +166,12 @@ index ad8710b..1e0e6b6 100644
              kind: ubuild_params.patch_type,
              version: ubuild_params.patch_version.to_owned(),
 diff --git a/syscared/src/patch/resolver/kpatch.rs b/syscared/src/patch/resolver/kpatch.rs
-index 7de81b3..50711eb 100644
+index 8738225..524482e 100644
 --- a/syscared/src/patch/resolver/kpatch.rs
 +++ b/syscared/src/patch/resolver/kpatch.rs
-@@ -16,13 +16,11 @@ use std::{
-     ffi::OsString,
-     os::unix::ffi::OsStringExt,
+@@ -15,13 +15,11 @@
+ use std::{
+     ffi::{CStr, OsString},
      path::{Path, PathBuf},
 -    str::FromStr,
      sync::Arc,
@@ -181,8 +182,8 @@ index 7de81b3..50711eb 100644
 -use uuid::Uuid;
  
  use syscare_abi::{PatchEntity, PatchInfo, PatchType};
- use syscare_common::{concat_os, ffi::OsStrExt, fs};
-@@ -194,7 +192,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
+ use syscare_common::{
+@@ -201,7 +199,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
              .join(KPATCH_SYS_FILE_NAME);
  
          let mut patch = KernelPatch {
@@ -192,23 +193,24 @@ index 7de81b3..50711eb 100644
                  patch_info.target.short_name(),
                  "/",
 diff --git a/syscared/src/patch/resolver/upatch.rs b/syscared/src/patch/resolver/upatch.rs
-index 507bf8e..15c7363 100644
+index 985b8f1..5df11db 100644
 --- a/syscared/src/patch/resolver/upatch.rs
 +++ b/syscared/src/patch/resolver/upatch.rs
-@@ -12,11 +12,10 @@
-  * See the Mulan PSL v2 for more details.
-  */
- 
--use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, str::FromStr, sync::Arc};
-+use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::Path, sync::Arc};
+@@ -15,13 +15,11 @@
+ use std::{
+     ffi::{CStr, OsString},
+     path::Path,
+-    str::FromStr,
+     sync::Arc,
+ };
  
  use anyhow::{anyhow, Context, Result};
  use object::{NativeFile, Object, ObjectSection};
 -use uuid::Uuid;
  
  use syscare_abi::{PatchEntity, PatchInfo, PatchType};
- use syscare_common::{concat_os, fs};
-@@ -152,7 +151,7 @@ impl PatchResolverImpl for UpatchResolverImpl {
+ use syscare_common::{concat_os, ffi::CStrExt, fs};
+@@ -164,7 +162,7 @@ impl PatchResolverImpl for UpatchResolverImpl {
          patch_entity: &PatchEntity,
      ) -> Result<Patch> {
          let mut patch = UserPatch {
@@ -218,5 +220,5 @@ index 507bf8e..15c7363 100644
                  patch_info.target.short_name(),
                  "/",
 -- 
-2.41.0
+2.34.1
 
