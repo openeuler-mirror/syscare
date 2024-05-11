@@ -1,7 +1,7 @@
-From b64fa8df5ef916510e345cdd0382c32364d0c255 Mon Sep 17 00:00:00 2001
+From cc090b31139bb9aa0158e50a8a620fc41b23231c Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Tue, 16 Apr 2024 12:44:11 +0800
-Subject: [PATCH 12/17] common: impl CStr::from_bytes_with_next_nul()
+Subject: [PATCH 08/20] common: impl CStr::from_bytes_with_next_nul()
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -43,5 +43,5 @@ index 060149a..4f3f26d 100644
  #[test]
  fn test_cstr() {
 -- 
-2.41.0
+2.34.1
 

@@ -1,7 +1,7 @@
-From ce0702b2da3820a3e872fd6563d5ce9e51cab130 Mon Sep 17 00:00:00 2001
+From ff07e664cb475fa74b4f6531d8e709a5dd9b55dd Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 19 Apr 2024 14:19:27 +0800
-Subject: [PATCH 17/17] upatch-manage: change the way to calculate frozen time
+Subject: [PATCH 13/20] upatch-manage: change the way to calculate frozen time
 
 Signed-off-by: renoseven <dev@renoseven.net>
 ---
@@ -136,5 +136,5 @@ index 5a8f927..ab972ac 100644
  }
  
 -- 
-2.41.0
+2.34.1
 

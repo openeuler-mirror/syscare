@@ -1,7 +1,7 @@
-From 10dc2c5843156d032277cc0a3a85e2e8df3a5146 Mon Sep 17 00:00:00 2001
+From e04ce4a7539a469091fef8c1566a85fe6050f728 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 19 Apr 2024 12:01:38 +0800
-Subject: [PATCH 16/17] upatch-manage: change exit code
+Subject: [PATCH 12/20] upatch-manage: change exit code
 
 1. return more specific exit code
 2. change exit code from EEXIST to 0 when patching existing patch (uuid)
@@ -442,5 +442,5 @@ index 39e8f59..1309a6e 100644
  #include <string.h>
  #include <unistd.h>
 -- 
-2.41.0
+2.34.1
 

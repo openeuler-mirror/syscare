@@ -1,7 +1,7 @@
-From 96ccd901456d950761835befde8979519575778d Mon Sep 17 00:00:00 2001
+From 4ad0b0369cd039b64635d2c405fa244b6c6afb59 Mon Sep 17 00:00:00 2001
 From: renoseven <dev@renoseven.net>
 Date: Fri, 19 Apr 2024 12:02:23 +0800
-Subject: [PATCH 15/17] syscared: adapt upatch-manage exit code change
+Subject: [PATCH 11/20] syscared: adapt upatch-manage exit code change
 
 1. upatch driver treats EEXIST as an error
 
@@ -31,5 +31,5 @@ index bfeb1b8..a388bc6 100644
      }
  }
 -- 
-2.41.0
+2.34.1
 
