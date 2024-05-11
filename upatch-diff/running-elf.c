@@ -84,7 +84,7 @@ void relf_init(char *elf_name, struct running_elf *relf)
         ERROR("elf_getdata with error %s", elf_errmsg(0));
 
     relf->obj_nr = shdr.sh_size / shdr.sh_entsize;
-    relf->obj_syms = calloc(relf->obj_nr, sizeof(struct object_symbol));
+    relf->obj_syms = calloc(relf->obj_nr, sizeof(struct debug_symbol));
     if (!relf->obj_syms)
         ERROR("calloc with errno = %d", errno);
 
@@ -117,7 +117,7 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
                  struct lookup_result *result)
 {
     int i;
-    struct object_symbol *sym;
+    struct debug_symbol *sym;
     unsigned long sympos = 0;
     bool in_file = false;
 
@@ -128,7 +128,7 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
         if (sym->bind == STB_LOCAL && !strcmp(sym->name, lookup_sym->name))
             sympos ++;
 
-        if (lookup_sym->lookup_running_file_sym == sym) {
+        if (lookup_sym->relf_sym == sym) {
             in_file = true;
             continue;
         }

@@ -62,9 +62,10 @@
 
 #define PROG_VERSION "upatch-diff "BUILD_VERSION
 
-enum loglevel loglevel = NORMAL;
-char *logprefix;
-char *upatch_elf_name;
+enum LogLevel g_loglevel = NORMAL;
+char *g_logprefix;
+char *g_uelf_name;
+char *g_relf_name;
 
 struct arguments {
     char *source_obj;
@@ -334,72 +335,87 @@ enum LOCAL_MATCH {
     EMPTY,
 };
 
-static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
-    struct symbol *file_sym, struct list_head *sym_list)
+static enum LOCAL_MATCH locals_match(
+    struct upatch_elf *uelf, struct running_elf *relf,
+    struct symbol *file_sym, int file_sym_idx)
 {
-    struct symbol *sym;
-    struct object_symbol *running_sym;
-    int i;
+    struct symbol *uelf_sym = NULL;
+    struct debug_symbol *relf_sym = NULL;
     enum LOCAL_MATCH found = EMPTY;
 
-    for (i = idx + 1; i < relf->obj_nr; ++i) {
-        running_sym = &relf->obj_syms[i];
-        if (running_sym->type == STT_FILE)
-            break;
-        if (running_sym->bind != STB_LOCAL)
+    for (int i = file_sym_idx + 1; i < relf->obj_nr; i++) {
+        relf_sym = &relf->obj_syms[i];
+
+        if (relf_sym->type == STT_FILE) {
+            break; // find until next file
+        }
+        if (relf_sym->bind != STB_LOCAL) {
             continue;
-        if (running_sym->type != STT_FUNC && running_sym->type != STT_OBJECT)
+        }
+        if ((relf_sym->type != STT_FUNC) &&
+            (relf_sym->type != STT_OBJECT)) {
             continue;
+        }
 
         found = NOT_FOUND;
-        sym = file_sym;
-        list_for_each_entry_continue(sym, sym_list, list) {
-            if (sym->type == STT_FILE)
-                break;
-            if(sym->bind != STB_LOCAL)
+        uelf_sym = file_sym;
+        list_for_each_entry_continue(uelf_sym, &uelf->symbols, list) {
+            if (uelf_sym->type == STT_FILE) {
+                break; // find until next file
+            }
+            if(uelf_sym->bind != STB_LOCAL) {
                 continue;
-
-            if (sym->type == running_sym->type &&
-                !strcmp(sym->name, running_sym->name)) {
-                    found = FOUND;
-                    break;
+            }
+            if ((uelf_sym->type == relf_sym->type) &&
+                (strcmp(uelf_sym->name, relf_sym->name) == 0)) {
+                found = FOUND;
+                break;
             }
         }
 
         if (found == NOT_FOUND) {
-            log_warn("Cannot find symbol '%s' in running binary\n", running_sym->name);
+            log_warn("Cannot find symbol '%s' in %s\n",
+                relf_sym->name, g_relf_name);
             return NOT_FOUND;
         }
     }
 
-    sym = file_sym;
-    list_for_each_entry_continue(sym, sym_list, list) {
-        if (sym->type == STT_FILE)
-            break;
-        if(sym->bind != STB_LOCAL)
+    uelf_sym = file_sym;
+    list_for_each_entry_continue(uelf_sym, &uelf->symbols, list) {
+        if (uelf_sym->type == STT_FILE) {
+            break; // find until next file
+        }
+        if(uelf_sym->bind != STB_LOCAL) {
             continue;
-        if (sym->type != STT_FUNC && sym->type != STT_OBJECT)
+        }
+        if ((relf_sym->type != STT_FUNC) &&
+            (relf_sym->type != STT_OBJECT)) {
             continue;
-        if (discarded_sym(relf, sym))
+        }
+        if (discarded_sym(relf, uelf_sym)) {
             continue;
+        }
 
         found = NOT_FOUND;
-        for (i = idx + 1; i < relf->obj_nr; ++i) {
-            running_sym = &relf->obj_syms[i];
-            if (running_sym->type == STT_FILE)
-                break;
-            if (running_sym->bind != STB_LOCAL)
-                continue;
+        for (int i = file_sym_idx + 1; i < relf->obj_nr; i++) {
+            relf_sym = &relf->obj_syms[i];
 
-            if (sym->type == running_sym->type &&
-                !strcmp(sym->name, running_sym->name)) {
-                    found = FOUND;
-                    break;
+            if (relf_sym->type == STT_FILE) {
+                break; // find until next file
+            }
+            if (relf_sym->bind != STB_LOCAL) {
+                continue;
+            }
+            if ((uelf_sym->type == relf_sym->type) &&
+                (strcmp(uelf_sym->name, relf_sym->name) == 0)) {
+                found = FOUND;
+                break;
             }
         }
 
-        if (found == NOT_FOUND){
-            log_warn("Cannot find symbol '%s' in object\n", sym->name);
+        if (found == NOT_FOUND) {
+            log_warn("Cannot find symbol '%s' in %s\n",
+                uelf_sym->name, g_uelf_name);
             return NOT_FOUND;
         }
     }
@@ -407,41 +423,48 @@ static enum LOCAL_MATCH locals_match(struct running_elf *relf, int idx,
     return found;
 }
 
-static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
-    struct list_head *sym_list)
+static void find_local_syms(struct upatch_elf *uelf, struct running_elf *relf,
+    struct symbol *file_sym)
 {
-    struct object_symbol *running_sym;
-    struct object_symbol *lookup_running_file_sym = NULL;
-    int i;
+    struct debug_symbol *relf_sym = NULL;
+    struct debug_symbol *found_sym = NULL;
     enum LOCAL_MATCH found;
 
-    for (i = 0; i < relf->obj_nr; ++i) {
-        running_sym = &relf->obj_syms[i];
-        if (running_sym->type != STT_FILE)
+    for (int i = 0; i < relf->obj_nr; i++) {
+        relf_sym = &relf->obj_syms[i];
+
+        if (relf_sym->type != STT_FILE) {
             continue;
-        if (strcmp(file_sym->name, running_sym->name))
+        }
+        if (strcmp(file_sym->name, relf_sym->name)) {
             continue;
-        found = locals_match(relf, i, file_sym, sym_list);
+        }
+
+        found = locals_match(uelf, relf, file_sym, i);
         if (found == NOT_FOUND) {
             continue;
-        } else if (found == EMPTY) {
-            lookup_running_file_sym = running_sym;
+        }
+        else if (found == EMPTY) {
+            found_sym = relf_sym;
             break;
-        } else {
-            if (lookup_running_file_sym)
-                ERROR("Found duplicate local symbols in '%s'", file_sym->name);
-
-            lookup_running_file_sym = running_sym;
+        }
+        else {
+            if (found_sym) {
+                ERROR("Found duplicate local symbols in '%s'", g_relf_name);
+            }
+            found_sym = relf_sym;
         }
     }
 
-    if (!lookup_running_file_sym)
-        ERROR("Cannot find a local symbol in '%s'", file_sym->name);
+    if (!found_sym) {
+        ERROR("Cannot find local symbol in '%s'", g_relf_name);
+    }
 
-    list_for_each_entry_continue(file_sym, sym_list, list) {
-        if (file_sym->type == STT_FILE)
+    list_for_each_entry_continue(file_sym, &uelf->symbols, list) {
+        if (file_sym->type == STT_FILE) {
             break;
-        file_sym->lookup_running_file_sym = lookup_running_file_sym;
+        }
+        file_sym->relf_sym = found_sym;
     }
 }
 
@@ -453,13 +476,14 @@ static void find_local_syms(struct running_elf *relf, struct symbol *file_sym,
  * We then compare local symbol lists from both blocks and store the pointer
  * to STT_FILE symbol in running elf for later using.
  */
-static void find_file_symbol(struct upatch_elf *uelf, struct running_elf *relf)
+static void find_debug_symbol(struct upatch_elf *uelf, struct running_elf *relf)
 {
-    struct symbol *sym;
+    struct symbol *file_sym = NULL;
 
-    list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->type == STT_FILE)
-            find_local_syms(relf, sym, &uelf->symbols);
+    list_for_each_entry(file_sym, &uelf->symbols, list) {
+        if (file_sym->type == STT_FILE) {
+            find_local_syms(uelf, relf, file_sym);
+        }
     }
 }
 
@@ -735,7 +759,7 @@ static int include_changed_functions(struct upatch_elf *uelf)
         if (sym->status == CHANGED &&
             sym->type == STT_SECTION &&
             sym->sec && is_except_section(sym->sec)) {
-            log_warn("Exeception section '%s' is changed\n", sym->sec->name);
+            log_warn("Exception section '%s' is changed\n", sym->sec->name);
             changed_nr++;
             include_symbol(sym);
         }
@@ -886,15 +910,16 @@ int main(int argc, char*argv[])
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 
     if (arguments.debug)
-        loglevel = DEBUG;
-    logprefix = basename(arguments.source_obj);
+        g_loglevel = DEBUG;
+    g_logprefix = basename(arguments.source_obj);
     show_program_info(&arguments);
 
     if (elf_version(EV_CURRENT) ==  EV_NONE)
         ERROR("ELF library initialization failed");
 
     /* TODO: with debug info, this may changed */
-    upatch_elf_name = arguments.running_elf;
+    g_uelf_name = arguments.source_obj;
+    g_relf_name = arguments.running_elf;
 
     /* check error in log, since errno may be from libelf */
     upatch_elf_open(&uelf_source, arguments.source_obj);
@@ -912,7 +937,7 @@ int main(int argc, char*argv[])
     detect_child_functions(&uelf_source);
     detect_child_functions(&uelf_patched);
 
-    find_file_symbol(&uelf_source, &relf);
+    find_debug_symbol(&uelf_source, &relf);
 
     mark_grouped_sections(&uelf_patched);
 

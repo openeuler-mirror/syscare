@@ -40,8 +40,8 @@ static void correlate_symbol(struct symbol *sym_orig, struct symbol *sym_patched
         if (!sym_patched->name)
             ERROR("strdup");
     }
-	if (sym_orig->lookup_running_file_sym && !sym_patched->lookup_running_file_sym)
-		sym_patched->lookup_running_file_sym = sym_orig->lookup_running_file_sym;
+	if (sym_orig->relf_sym && !sym_patched->relf_sym)
+		sym_patched->relf_sym = sym_orig->relf_sym;
 }
 
 void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
