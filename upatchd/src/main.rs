@@ -43,8 +43,10 @@ const CONFIG_FILE_NAME: &str = "upatchd.yaml";
 const PID_FILE_NAME: &str = "upatchd.pid";
 const SOCKET_FILE_NAME: &str = "upatchd.sock";
 
-const WORK_DIR_PERMISSION: u32 = 0o755;
-const SOCKET_FILE_PERMISSION: u32 = 0o666;
+const CONFIG_DIR_PERM: u32 = 0o700;
+const WORK_DIR_PERM: u32 = 0o755;
+const LOG_DIR_PERM: u32 = 0o700;
+const SOCKET_FILE_PERM: u32 = 0o666;
 
 const MAIN_THREAD_NAME: &str = "main";
 const UNNAMED_THREAD_NAME: &str = "<unnamed>";
@@ -97,7 +99,10 @@ impl UpatchDaemon {
         fs::create_dir_all(&args.config_dir)?;
         fs::create_dir_all(&args.work_dir)?;
         fs::create_dir_all(&args.log_dir)?;
-        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERMISSION))?;
+        fs::set_permissions(&args.config_dir, Permissions::from_mode(CONFIG_DIR_PERM))?;
+        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERM))?;
+        fs::set_permissions(&args.log_dir, Permissions::from_mode(LOG_DIR_PERM))?;
+
         std::env::set_current_dir(&args.work_dir).with_context(|| {
             format!(
                 "Failed to change current directory to {}",
@@ -168,7 +173,7 @@ impl UpatchDaemon {
                 .context("Failed to convert socket path to string")?,
         )?;
 
-        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERMISSION))?;
+        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERM))?;
 
         Ok(server)
     }

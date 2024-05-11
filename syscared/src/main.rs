@@ -47,7 +47,9 @@ const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const DAEMON_UMASK: u32 = 0o077;
 
-const WORK_DIR_PERMISSION: u32 = 0o755;
+const DATA_DIR_PERM: u32 = 0o700;
+const WORK_DIR_PERM: u32 = 0o755;
+const LOG_DIR_PERM: u32 = 0o700;
 const PID_FILE_NAME: &str = "syscared.pid";
 const SOCKET_FILE_NAME: &str = "syscared.sock";
 
@@ -102,7 +104,10 @@ impl SyscareDaemon {
         fs::create_dir_all(&args.data_dir)?;
         fs::create_dir_all(&args.work_dir)?;
         fs::create_dir_all(&args.log_dir)?;
-        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERMISSION))?;
+        fs::set_permissions(&args.data_dir, Permissions::from_mode(DATA_DIR_PERM))?;
+        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERM))?;
+        fs::set_permissions(&args.log_dir, Permissions::from_mode(LOG_DIR_PERM))?;
+
         std::env::set_current_dir(&args.work_dir).with_context(|| {
             format!(
                 "Failed to change current directory to {}",
