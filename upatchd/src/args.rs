@@ -22,8 +22,8 @@ use syscare_common::fs;
 
 use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
 
-const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
+const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
 const DEFAULT_LOG_LEVEL: &str = "info";
 
