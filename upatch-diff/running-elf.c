@@ -139,7 +139,7 @@ bool lookup_relf(struct running_elf *relf,
         result->sympos = sympos;
         result->global =
             ((symbol->bind == STB_GLOBAL) || (symbol->bind == STB_WEAK));
-        log_normal("found symbol '%s'\n", lookup_sym->name);
+        log_debug("found symbol '%s'\n", lookup_sym->name);
     }
 
     return (result->symbol != NULL);

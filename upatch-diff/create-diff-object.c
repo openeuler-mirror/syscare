@@ -481,8 +481,28 @@ static void find_debug_symbol(struct upatch_elf *uelf, struct running_elf *relf)
     struct symbol *file_sym = NULL;
 
     list_for_each_entry(file_sym, &uelf->symbols, list) {
-        if (file_sym->type == STT_FILE) {
+        if ((file_sym->type == STT_FILE) && (file_sym->status == CHANGED)) {
+            log_debug("file '%s' is CHANGED\n", file_sym->name);
             find_local_syms(uelf, relf, file_sym);
+        }
+    }
+}
+
+static void mark_file_symbols(struct upatch_elf *uelf)
+{
+    struct symbol *curr_sym = NULL;
+    struct symbol *file_sym = NULL;
+
+    list_for_each_entry(curr_sym, &uelf->symbols, list) {
+        if (curr_sym->type == STT_FILE) {
+            file_sym = curr_sym;
+            continue;
+        }
+        if ((file_sym == NULL) || (file_sym->status == CHANGED)) {
+            continue;
+        }
+        if (curr_sym->status == CHANGED) {
+            file_sym->status = CHANGED;
         }
     }
 }
@@ -937,8 +957,6 @@ int main(int argc, char*argv[])
     detect_child_functions(&uelf_source);
     detect_child_functions(&uelf_patched);
 
-    find_debug_symbol(&uelf_source, &relf);
-
     mark_grouped_sections(&uelf_patched);
 
     replace_section_syms(&uelf_source);
@@ -952,6 +970,8 @@ int main(int argc, char*argv[])
     mark_ignored_sections(&uelf_patched);
 
     upatch_compare_correlated_elements(&uelf_patched);
+    mark_file_symbols(&uelf_source);
+    find_debug_symbol(&uelf_source, &relf);
 
     mark_ignored_functions_same(&uelf_patched);
     mark_ignored_sections_same(&uelf_patched);

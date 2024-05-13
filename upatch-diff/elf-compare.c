@@ -336,38 +336,45 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 	return false;
 }
 
+static inline void update_section_status(struct section *sec, enum status status)
+{
+	if (sec == NULL) {
+		return;
+	}
+	if (sec->twin != NULL) {
+		sec->twin->status = status;
+	}
+	if (is_rela_section(sec)) {
+		if ((sec->base != NULL) &&
+			(sec->base->sym != NULL)) {
+			sec->base->sym->status = status;
+		}
+	}
+	else {
+		if (sec->sym != NULL) {
+			sec->sym->status = status;
+		}
+	}
+}
+
 void upatch_compare_sections(struct upatch_elf *uelf)
 {
-	struct section *sec;
-	struct list_head *seclist = &uelf->sections;
+	struct section *sec = NULL;
 
-	/* compare all sections */
-	list_for_each_entry(sec, seclist, list) {
-		if (sec->twin)
-			compare_correlated_section(sec, sec->twin);
-		else
+	list_for_each_entry(sec, &uelf->sections, list) {
+		if (sec->twin == NULL) {
 			sec->status = NEW;
-	}
-
-	/* exclude WARN-only, might_sleep changes */
-	list_for_each_entry(sec, seclist, list) {
+		}
+		else {
+			compare_correlated_section(sec, sec->twin);
+		}
+		/* exclude WARN-only, might_sleep changes */
 		if (line_macro_change_only(uelf, sec)) {
 			log_debug("reverting macro / line number section %s status to SAME\n", sec->name);
 			sec->status = SAME;
 		}
-	}
-
-	/* sync symbol status */
-	list_for_each_entry(sec, seclist, list) {
-		if (is_rela_section(sec)) {
-            /* sync bundleable symbol for relocation section */
-			if (sec->base->sym && sec->base->sym->status != CHANGED)
-				sec->base->sym->status = sec->status;
-		} else {
-			struct symbol *sym = sec->sym;
-			if (sym && sym->status != CHANGED)
-				sym->status = sec->status;
-                /* TODO: handle child func */
-		}
+		/* sync status */
+		update_section_status(sec, sec->status);
+		update_section_status(sec->twin, sec->status);
 	}
 }
