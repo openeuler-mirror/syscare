@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       5
+Release:       6
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -20,20 +20,23 @@ Source0:       %{name}-%{version}.tar.gz
 Patch0001:     0001-upatch-hijacker-fix-compile-bug.patch
 Patch0002:     0002-daemon-fix-cannot-get-file-selinux-xattr-when-selinu.patch
 Patch0003:     0003-syscared-fix-syscare-check-command-does-not-check-sy.patch
-Patch0004:     0004-Change-uuid-type-to-Uuid.patch
-Patch0005:     0005-fix-clippy-warning.patch
-Patch0006:     0006-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
-Patch0007:     0007-syscared-optimize-patch-error-logic.patch
-Patch0008:     0008-syscared-optimize-transaction-creation-logic.patch
-Patch0009:     0009-upatch-manage-optimize-output.patch
-Patch0010:     0010-syscared-optimize-patch-error-logic.patch
-Patch0011:     0011-syscared-optimize-transaction-creation-logic.patch
-Patch0012:     0012-common-impl-CStr-from_bytes_with_next_nul.patch
-Patch0013:     0013-syscared-improve-patch-management.patch
-Patch0014:     0014-syscared-stop-activating-ignored-process-on-new-proc.patch
-Patch0015:     0015-syscared-adapt-upatch-manage-exit-code-change.patch
-Patch0016:     0016-upatch-manage-change-exit-code.patch
-Patch0017:     0017-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
+Patch0004:     0004-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
+Patch0005:     0005-syscared-optimize-patch-error-logic.patch
+Patch0006:     0006-syscared-optimize-transaction-creation-logic.patch
+Patch0007:     0007-upatch-manage-optimize-output.patch
+Patch0008:     0008-common-impl-CStr-from_bytes_with_next_nul.patch
+Patch0009:     0009-syscared-improve-patch-management.patch
+Patch0010:     0010-syscared-stop-activating-ignored-process-on-new-proc.patch
+Patch0011:     0011-syscared-adapt-upatch-manage-exit-code-change.patch
+Patch0012:     0012-upatch-manage-change-exit-code.patch
+Patch0013:     0013-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
+Patch0014:     0014-abi-change-uuid-string-to-uuid-bytes.patch
+Patch0015:     0015-upatch-build-fix-file-detection-cause-build-failure-.patch
+Patch0016:     0016-upatch-diff-optimize-log-output.patch
+Patch0017:     0017-security-change-directory-permission.patch
+Patch0018:     0018-security-change-daemon-socket-permission.patch
+Patch0019:     0019-upatch-manage-Fixed-the-core-dump-issue-after-applyi.patch
+Patch0020:     0020-upatch-diff-fix-lookup_relf-failed-issue.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -110,10 +113,10 @@ fi
 %files
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare.service
-%attr(755,root,root) /usr/bin/syscared
-%attr(755,root,root) /usr/bin/syscare
-%attr(755,root,root) /usr/libexec/syscare/upatch-manage
+%attr(550,root,root) /usr/lib/systemd/system/syscare.service
+%attr(550,root,root) /usr/libexec/syscare/upatch-manage
+%attr(550,root,root) /usr/bin/syscared
+%attr(555,root,root) /usr/bin/syscare
 
 ############################################
 ########## Package syscare-build ###########
@@ -167,24 +170,31 @@ fi
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/upatch.service
-%attr(755,root,root) /usr/bin/upatchd
-%attr(755,root,root) /usr/libexec/syscare/syscare-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-diff
-%attr(755,root,root) /usr/libexec/syscare/as-hijacker
-%attr(755,root,root) /usr/libexec/syscare/cc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/c++-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/g++-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gnu-as-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
-%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker.ko
+%attr(550,root,root) /usr/lib/systemd/system/upatch.service
+%attr(550,root,root) /usr/bin/upatchd
+%attr(440,root,root) /usr/libexec/syscare/upatch_hijacker.ko
+%attr(555,root,root) /usr/libexec/syscare/syscare-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-diff
+%attr(555,root,root) /usr/libexec/syscare/as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/cc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/c++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gcc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/g++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
 
 ############################################
 ################ Change log ################
 ############################################
 %changelog
+* Sat May 11 2024 renoseven<dev@renoseven.net> - 1.2.1-6
+- upatch-diff: fix 'lookup_elf failed' issue
+- upatch-manage: fixed the core dump issue after applying hot patches to nginx on x86_64 architecture
+- security: change daemon socket permission
+- security: change directory permission
+- upatch-build: fix 'file detection cause build failure' issue
+- syscared: stop activating ignored process on new process start
 * Mon May 6 2024 Peng Haitao <htpengc@isoftstone.com> - 1.2.1-5
 - add BuildRequires: kernel-devel
 * Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4
