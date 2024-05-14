@@ -181,8 +181,6 @@ void upatch_rebuild_eh_frame(struct section *sec)
             if (found_rela)
                 break;
         }
-        if (!found_rela)
-            ERROR("No FDE found for relocation at 0x%x \n", offset);
     }
 
     /*
