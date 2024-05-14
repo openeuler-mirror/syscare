@@ -1,0 +1,165 @@
+From 2d711186e1c134b069102e72d6d451942c931eb5 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Mon, 13 May 2024 21:27:13 +0800
+Subject: [PATCH 21/22] upatch-diff: only check changed file symbols
+
+1. sync compare results (SAME/NEW/CHANGED) to correlated objects
+2. mark file changes by looking up symbol changes
+3. check orignal object & debuginfo when file changes were detected
+4. defer symbol check until after calculation changes
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch-diff/create-diff-object.c | 26 +++++++++++++--
+ upatch-diff/elf-compare.c        | 57 ++++++++++++++++++--------------
+ upatch-diff/running-elf.c        |  2 +-
+ 3 files changed, 56 insertions(+), 29 deletions(-)
+
+diff --git a/upatch-diff/create-diff-object.c b/upatch-diff/create-diff-object.c
+index 01c58b8..1a05869 100644
+--- a/upatch-diff/create-diff-object.c
++++ b/upatch-diff/create-diff-object.c
+@@ -481,12 +481,32 @@ static void find_debug_symbol(struct upatch_elf *uelf, struct running_elf *relf)
+     struct symbol *file_sym = NULL;
+ 
+     list_for_each_entry(file_sym, &uelf->symbols, list) {
+-        if (file_sym->type == STT_FILE) {
++        if ((file_sym->type == STT_FILE) && (file_sym->status == CHANGED)) {
++            log_debug("file '%s' is CHANGED\n", file_sym->name);
+             find_local_syms(uelf, relf, file_sym);
+         }
+     }
+ }
+ 
++static void mark_file_symbols(struct upatch_elf *uelf)
++{
++    struct symbol *curr_sym = NULL;
++    struct symbol *file_sym = NULL;
++
++    list_for_each_entry(curr_sym, &uelf->symbols, list) {
++        if (curr_sym->type == STT_FILE) {
++            file_sym = curr_sym;
++            continue;
++        }
++        if ((file_sym == NULL) || (file_sym->status == CHANGED)) {
++            continue;
++        }
++        if (curr_sym->status == CHANGED) {
++            file_sym->status = CHANGED;
++        }
++    }
++}
++
+ static void mark_grouped_sections(struct upatch_elf *uelf)
+ {
+     struct section *groupsec, *sec;
+@@ -937,8 +957,6 @@ int main(int argc, char*argv[])
+     detect_child_functions(&uelf_source);
+     detect_child_functions(&uelf_patched);
+ 
+-    find_debug_symbol(&uelf_source, &relf);
+-
+     mark_grouped_sections(&uelf_patched);
+ 
+     replace_section_syms(&uelf_source);
+@@ -952,6 +970,8 @@ int main(int argc, char*argv[])
+     mark_ignored_sections(&uelf_patched);
+ 
+     upatch_compare_correlated_elements(&uelf_patched);
++    mark_file_symbols(&uelf_source);
++    find_debug_symbol(&uelf_source, &relf);
+ 
+     mark_ignored_functions_same(&uelf_patched);
+     mark_ignored_sections_same(&uelf_patched);
+diff --git a/upatch-diff/elf-compare.c b/upatch-diff/elf-compare.c
+index 9b857b1..ef8dd23 100644
+--- a/upatch-diff/elf-compare.c
++++ b/upatch-diff/elf-compare.c
+@@ -336,38 +336,45 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
+ 	return false;
+ }
+ 
++static inline void update_section_status(struct section *sec, enum status status)
++{
++	if (sec == NULL) {
++		return;
++	}
++	if (sec->twin != NULL) {
++		sec->twin->status = status;
++	}
++	if (is_rela_section(sec)) {
++		if ((sec->base != NULL) &&
++			(sec->base->sym != NULL)) {
++			sec->base->sym->status = status;
++		}
++	}
++	else {
++		if (sec->sym != NULL) {
++			sec->sym->status = status;
++		}
++	}
++}
++
+ void upatch_compare_sections(struct upatch_elf *uelf)
+ {
+-	struct section *sec;
+-	struct list_head *seclist = &uelf->sections;
++	struct section *sec = NULL;
+ 
+-	/* compare all sections */
+-	list_for_each_entry(sec, seclist, list) {
+-		if (sec->twin)
+-			compare_correlated_section(sec, sec->twin);
+-		else
++	list_for_each_entry(sec, &uelf->sections, list) {
++		if (sec->twin == NULL) {
+ 			sec->status = NEW;
+-	}
+-
+-	/* exclude WARN-only, might_sleep changes */
+-	list_for_each_entry(sec, seclist, list) {
++		}
++		else {
++			compare_correlated_section(sec, sec->twin);
++		}
++		/* exclude WARN-only, might_sleep changes */
+ 		if (line_macro_change_only(uelf, sec)) {
+ 			log_debug("reverting macro / line number section %s status to SAME\n", sec->name);
+ 			sec->status = SAME;
+ 		}
+-	}
+-
+-	/* sync symbol status */
+-	list_for_each_entry(sec, seclist, list) {
+-		if (is_rela_section(sec)) {
+-            /* sync bundleable symbol for relocation section */
+-			if (sec->base->sym && sec->base->sym->status != CHANGED)
+-				sec->base->sym->status = sec->status;
+-		} else {
+-			struct symbol *sym = sec->sym;
+-			if (sym && sym->status != CHANGED)
+-				sym->status = sec->status;
+-                /* TODO: handle child func */
+-		}
++		/* sync status */
++		update_section_status(sec, sec->status);
++		update_section_status(sec->twin, sec->status);
+ 	}
+ }
+\ No newline at end of file
+diff --git a/upatch-diff/running-elf.c b/upatch-diff/running-elf.c
+index 3bb35e7..676880f 100644
+--- a/upatch-diff/running-elf.c
++++ b/upatch-diff/running-elf.c
+@@ -139,7 +139,7 @@ bool lookup_relf(struct running_elf *relf,
+         result->sympos = sympos;
+         result->global =
+             ((symbol->bind == STB_GLOBAL) || (symbol->bind == STB_WEAK));
+-        log_normal("found symbol '%s'\n", lookup_sym->name);
++        log_debug("found symbol '%s'\n", lookup_sym->name);
+     }
+ 
+     return (result->symbol != NULL);
+-- 
+2.41.0
+
