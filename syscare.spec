@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       5
+Release:       7
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -30,6 +30,14 @@ Patch0010:     0010-syscared-stop-activating-ignored-process-on-new-proc.patch
 Patch0011:     0011-syscared-adapt-upatch-manage-exit-code-change.patch
 Patch0012:     0012-upatch-manage-change-exit-code.patch
 Patch0013:     0013-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
+Patch0014:     0014-upatch-build-fix-file-detection-cause-build-failure-.patch
+Patch0015:     0015-upatch-diff-optimize-log-output.patch
+Patch0016:     0016-security-change-directory-permission.patch
+Patch0017:     0017-security-change-daemon-socket-permission.patch
+Patch0018:     0018-upatch-manage-Fixed-the-core-dump-issue-after-applyi.patch
+Patch0019:     0019-upatch-diff-fix-lookup_relf-failed-issue.patch
+Patch0020:     0020-upatch-diff-only-check-changed-file-symbols.patch
+Patch0021:     0021-upatch-diff-remove-rela-check-while-build-rebuilding.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -104,10 +112,10 @@ fi
 %files
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare.service
-%attr(755,root,root) /usr/bin/syscared
-%attr(755,root,root) /usr/bin/syscare
-%attr(755,root,root) /usr/libexec/syscare/upatch-manage
+%attr(550,root,root) /usr/lib/systemd/system/syscare.service
+%attr(550,root,root) /usr/bin/syscared
+%attr(555,root,root) /usr/bin/syscare
+%attr(550,root,root) /usr/libexec/syscare/upatch-manage
 
 ############################################
 ########## Package syscare-build ###########
@@ -161,24 +169,34 @@ fi
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/upatch.service
-%attr(755,root,root) /usr/bin/upatchd
-%attr(755,root,root) /usr/libexec/syscare/syscare-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-diff
-%attr(755,root,root) /usr/libexec/syscare/as-hijacker
-%attr(755,root,root) /usr/libexec/syscare/cc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/c++-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/g++-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gnu-as-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
-%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker.ko
+%attr(550,root,root) /usr/lib/systemd/system/upatch.service
+%attr(550,root,root) /usr/bin/upatchd
+%attr(555,root,root) /usr/libexec/syscare/syscare-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-diff
+%attr(555,root,root) /usr/libexec/syscare/as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/cc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/c++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gcc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/g++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
+%attr(440,root,root) /usr/libexec/syscare/upatch_hijacker.ko
 
 ############################################
 ################ Change log ################
 ############################################
 %changelog
+* Tue May 14 2024 ningyu<ningyu9@huawei.com> - 1.2.1-7
+- upatch-diff: remove rela check while build rebuilding .eh_frame
+- upatch-diff: only check changed file symbols
+* Sat May 11 2024 renoseven<dev@renoseven.net> - 1.2.1-6
+- upatch-diff: fix 'lookup_elf failed' issue
+- upatch-manage: fixed the core dump issue after applying hot patches to nginx on x86_64 architecture
+- security: change daemon socket permission
+- security: change directory permission
+- upatch-build: fix 'file detection cause build failure' issue
+- syscared: stop activating ignored process on new process start
 * Mon May 6 2024 Peng Haitao <htpengc@isoftstone.com> - 1.2.1-5
 - add BuildRequires: kernel-devel
 * Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4

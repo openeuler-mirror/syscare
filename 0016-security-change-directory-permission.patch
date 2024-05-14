@@ -1,0 +1,99 @@
+From 4626c401b541c46debd18e1a326a323f4f85f69d Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Sat, 11 May 2024 08:28:48 +0800
+Subject: [PATCH 16/21] security: change directory permission
+
+1. config_dir /etc/syscare     drwx------.
+2. data_dir   /usr/lib/syscare drwx------.
+3. log_dir    /var/log/syscare drwx------.
+4. work_dir   /var/run/syscare drwxr-xr-x.
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscared/src/main.rs |  9 +++++++--
+ upatchd/src/args.rs  |  2 +-
+ upatchd/src/main.rs  | 13 +++++++++----
+ 3 files changed, 17 insertions(+), 7 deletions(-)
+
+diff --git a/syscared/src/main.rs b/syscared/src/main.rs
+index 74bd488..22f01df 100644
+--- a/syscared/src/main.rs
++++ b/syscared/src/main.rs
+@@ -47,7 +47,9 @@ const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
+ const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
+ const DAEMON_UMASK: u32 = 0o077;
+ 
+-const WORK_DIR_PERMISSION: u32 = 0o755;
++const DATA_DIR_PERM: u32 = 0o700;
++const WORK_DIR_PERM: u32 = 0o755;
++const LOG_DIR_PERM: u32 = 0o700;
+ const PID_FILE_NAME: &str = "syscared.pid";
+ const SOCKET_FILE_NAME: &str = "syscared.sock";
+ 
+@@ -102,7 +104,10 @@ impl SyscareDaemon {
+         fs::create_dir_all(&args.data_dir)?;
+         fs::create_dir_all(&args.work_dir)?;
+         fs::create_dir_all(&args.log_dir)?;
+-        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERMISSION))?;
++        fs::set_permissions(&args.data_dir, Permissions::from_mode(DATA_DIR_PERM))?;
++        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERM))?;
++        fs::set_permissions(&args.log_dir, Permissions::from_mode(LOG_DIR_PERM))?;
++
+         std::env::set_current_dir(&args.work_dir).with_context(|| {
+             format!(
+                 "Failed to change current directory to {}",
+diff --git a/upatchd/src/args.rs b/upatchd/src/args.rs
+index 9311047..0b9029b 100644
+--- a/upatchd/src/args.rs
++++ b/upatchd/src/args.rs
+@@ -22,8 +22,8 @@ use syscare_common::fs;
+ 
+ use super::{DAEMON_ABOUT, DAEMON_NAME, DAEMON_VERSION};
+ 
+-const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+ const DEFAULT_CONFIG_DIR: &str = "/etc/syscare";
++const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
+ const DEFAULT_LOG_DIR: &str = "/var/log/syscare";
+ const DEFAULT_LOG_LEVEL: &str = "info";
+ 
+diff --git a/upatchd/src/main.rs b/upatchd/src/main.rs
+index 86e2052..1007ebb 100644
+--- a/upatchd/src/main.rs
++++ b/upatchd/src/main.rs
+@@ -43,8 +43,10 @@ const CONFIG_FILE_NAME: &str = "upatchd.yaml";
+ const PID_FILE_NAME: &str = "upatchd.pid";
+ const SOCKET_FILE_NAME: &str = "upatchd.sock";
+ 
+-const WORK_DIR_PERMISSION: u32 = 0o755;
+-const SOCKET_FILE_PERMISSION: u32 = 0o666;
++const CONFIG_DIR_PERM: u32 = 0o700;
++const WORK_DIR_PERM: u32 = 0o755;
++const LOG_DIR_PERM: u32 = 0o700;
++const SOCKET_FILE_PERM: u32 = 0o666;
+ 
+ const MAIN_THREAD_NAME: &str = "main";
+ const UNNAMED_THREAD_NAME: &str = "<unnamed>";
+@@ -97,7 +99,10 @@ impl UpatchDaemon {
+         fs::create_dir_all(&args.config_dir)?;
+         fs::create_dir_all(&args.work_dir)?;
+         fs::create_dir_all(&args.log_dir)?;
+-        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERMISSION))?;
++        fs::set_permissions(&args.config_dir, Permissions::from_mode(CONFIG_DIR_PERM))?;
++        fs::set_permissions(&args.work_dir, Permissions::from_mode(WORK_DIR_PERM))?;
++        fs::set_permissions(&args.log_dir, Permissions::from_mode(LOG_DIR_PERM))?;
++
+         std::env::set_current_dir(&args.work_dir).with_context(|| {
+             format!(
+                 "Failed to change current directory to {}",
+@@ -168,7 +173,7 @@ impl UpatchDaemon {
+                 .context("Failed to convert socket path to string")?,
+         )?;
+ 
+-        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERMISSION))?;
++        fs::set_permissions(&socket_file, Permissions::from_mode(SOCKET_FILE_PERM))?;
+ 
+         Ok(server)
+     }
+-- 
+2.41.0
+
