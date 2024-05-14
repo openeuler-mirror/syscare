@@ -1,0 +1,27 @@
+From 8103b361db40350131bdb7b01124ce1d0f23e09a Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Tue, 14 May 2024 14:10:05 +0800
+Subject: [PATCH 21/21] upatch-diff: remove rela check while build rebuilding
+ .eh_frame
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ upatch-diff/elf-debug.c | 2 --
+ 1 file changed, 2 deletions(-)
+
+diff --git a/upatch-diff/elf-debug.c b/upatch-diff/elf-debug.c
+index 6b5fc53..f9c5327 100644
+--- a/upatch-diff/elf-debug.c
++++ b/upatch-diff/elf-debug.c
+@@ -181,8 +181,6 @@ void upatch_rebuild_eh_frame(struct section *sec)
+             if (found_rela)
+                 break;
+         }
+-        if (!found_rela)
+-            ERROR("No FDE found for relocation at 0x%x \n", offset);
+     }
+ 
+     /*
+-- 
+2.41.0
+

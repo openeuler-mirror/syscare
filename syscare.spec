@@ -5,25 +5,44 @@
 
 %define pkg_kmod       %{name}-kmod
 %define pkg_build      %{name}-build
-%define pkg_build_kmod %{pkg_build}-kmod
-%define pkg_build_ebpf %{pkg_build}-ebpf
 
 ############################################
 ############ Package syscare ###############
 ############################################
 Name:          syscare
-Version:       1.2.0
-Release:       10
+Version:       1.2.1
+Release:       7
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
 Source0:       %{name}-%{version}.tar.gz
 
-Patch0001:     0001-upatch-fix-memory-leak.patch
+Patch0001:     0001-upatch-hijacker-fix-compile-bug.patch
+Patch0002:     0002-daemon-fix-cannot-get-file-selinux-xattr-when-selinu.patch
+Patch0003:     0003-syscared-fix-syscare-check-command-does-not-check-sy.patch
+Patch0004:     0004-syscared-fix-cannot-find-process-of-dynlib-patch-iss.patch
+Patch0005:     0005-syscared-optimize-patch-error-logic.patch
+Patch0006:     0006-syscared-optimize-transaction-creation-logic.patch
+Patch0007:     0007-upatch-manage-optimize-output.patch
+Patch0008:     0008-common-impl-CStr-from_bytes_with_next_nul.patch
+Patch0009:     0009-syscared-improve-patch-management.patch
+Patch0010:     0010-syscared-stop-activating-ignored-process-on-new-proc.patch
+Patch0011:     0011-syscared-adapt-upatch-manage-exit-code-change.patch
+Patch0012:     0012-upatch-manage-change-exit-code.patch
+Patch0013:     0013-upatch-manage-change-the-way-to-calculate-frozen-tim.patch
+Patch0014:     0014-upatch-build-fix-file-detection-cause-build-failure-.patch
+Patch0015:     0015-upatch-diff-optimize-log-output.patch
+Patch0016:     0016-security-change-directory-permission.patch
+Patch0017:     0017-security-change-daemon-socket-permission.patch
+Patch0018:     0018-upatch-manage-Fixed-the-core-dump-issue-after-applyi.patch
+Patch0019:     0019-upatch-diff-fix-lookup_relf-failed-issue.patch
+Patch0020:     0020-upatch-diff-only-check-changed-file-symbols.patch
+Patch0021:     0021-upatch-diff-remove-rela-check-while-build-rebuilding.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
 BuildRequires: gcc gcc-c++
+BuildRequires: kernel-devel
 Requires:      coreutils systemd
 Requires:      kpatch-runtime
 
@@ -53,9 +72,6 @@ make
 %install
 cd build
 %make_install
-
-mkdir -p %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
-mv -f %{buildroot}/usr/libexec/syscare/upatch_hijacker.ko %{buildroot}/lib/modules/%{kernel_name}/extra/syscare
 
 ############### PostInstall ################
 %post
@@ -96,10 +112,10 @@ fi
 %files
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/syscare.service
-%attr(755,root,root) /usr/bin/syscared
-%attr(755,root,root) /usr/bin/syscare
-%attr(755,root,root) /usr/libexec/syscare/upatch-manage
+%attr(550,root,root) /usr/lib/systemd/system/syscare.service
+%attr(550,root,root) /usr/bin/syscared
+%attr(555,root,root) /usr/bin/syscare
+%attr(550,root,root) /usr/libexec/syscare/upatch-manage
 
 ############################################
 ########## Package syscare-build ###########
@@ -107,8 +123,6 @@ fi
 %package build
 Summary: Syscare build tools.
 BuildRequires: elfutils-libelf-devel
-Suggests: %{pkg_build_kmod}
-Requires: (%{pkg_build_kmod} >= %{build_version} or %{pkg_build_ebpf} >= %{build_version})
 Requires: coreutils
 Requires: patch
 Requires: kpatch
@@ -155,80 +169,57 @@ fi
 %files build
 %defattr(-,root,root,-)
 %dir /usr/libexec/syscare
-%attr(644,root,root) /usr/lib/systemd/system/upatch.service
-%attr(755,root,root) /usr/bin/upatchd
-%attr(755,root,root) /usr/libexec/syscare/syscare-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-build
-%attr(755,root,root) /usr/libexec/syscare/upatch-diff
-%attr(755,root,root) /usr/libexec/syscare/as-hijacker
-%attr(755,root,root) /usr/libexec/syscare/cc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/c++-hijacker
-%attr(755,root,root) /usr/libexec/syscare/gcc-hijacker
-%attr(755,root,root) /usr/libexec/syscare/g++-hijacker
-
-############################################
-######## Package syscare-build-kmod ########
-############################################
-%package build-kmod
-Summary: Kernel module for syscare patch build tools.
-BuildRequires: make gcc
-BuildRequires: kernel-devel
-Requires: kernel >= %{kernel_version}
-
-############### Description ################
-%description build-kmod
-Syscare build dependency - kernel module.
-
-############### PostInstall ################
-%post build-kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --add-module --no-initramfs
-depmod > /dev/null 2>&1
-
-############### PreUninstall ###############
-%preun build-kmod
-# Nothing
-
-############## PostUninstall ###############
-%postun build-kmod
-echo "/lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko" | /sbin/weak-modules --remove-module --no-initramfs
-depmod > /dev/null 2>&1
-
-################## Files ###################
-%files build-kmod
-%dir /lib/modules/%{kernel_name}/extra/syscare
-%attr(640,root,root) /lib/modules/%{kernel_name}/extra/syscare/upatch_hijacker.ko
-
-############################################
-######## Package syscare-build-ebpf ########
-############################################
-%package build-ebpf
-Summary: eBPF for syscare patch build tools.
-BuildRequires: make llvm clang bpftool
-BuildRequires: libbpf libbpf-devel libbpf-static
-
-############### Description ################
-%description build-ebpf
-Syscare build dependency - eBPF.
-
-############### PostInstall ################
-%post build-ebpf
-
-############### PreUninstall ###############
-%preun build-ebpf
-# Nothing
-
-############## PostUninstall ###############
-%postun build-ebpf
-# Nothing
-
-################## Files ###################
-%files build-ebpf
-%attr(755,root,root) /usr/libexec/syscare/upatch_hijacker
+%attr(550,root,root) /usr/lib/systemd/system/upatch.service
+%attr(550,root,root) /usr/bin/upatchd
+%attr(555,root,root) /usr/libexec/syscare/syscare-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-build
+%attr(555,root,root) /usr/libexec/syscare/upatch-diff
+%attr(555,root,root) /usr/libexec/syscare/as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/cc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/c++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gcc-hijacker
+%attr(555,root,root) /usr/libexec/syscare/g++-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-as-hijacker
+%attr(555,root,root) /usr/libexec/syscare/gnu-compiler-hijacker
+%attr(440,root,root) /usr/libexec/syscare/upatch_hijacker.ko
 
 ############################################
 ################ Change log ################
 ############################################
 %changelog
+* Tue May 14 2024 ningyu<ningyu9@huawei.com> - 1.2.1-7
+- upatch-diff: remove rela check while build rebuilding .eh_frame
+- upatch-diff: only check changed file symbols
+* Sat May 11 2024 renoseven<dev@renoseven.net> - 1.2.1-6
+- upatch-diff: fix 'lookup_elf failed' issue
+- upatch-manage: fixed the core dump issue after applying hot patches to nginx on x86_64 architecture
+- security: change daemon socket permission
+- security: change directory permission
+- upatch-build: fix 'file detection cause build failure' issue
+- syscared: stop activating ignored process on new process start
+* Mon May 6 2024 Peng Haitao <htpengc@isoftstone.com> - 1.2.1-5
+- add BuildRequires: kernel-devel
+* Fri Apr 19 2024 ningyu<ningyu9@huawei.com> - 1.2.1-4
+- syscared: stop activating ignored process on new process start
+- syscared: adapt upatch-manage exit code change
+- upatch-manage: change exit code
+- upatch-manage: change the way to calculate frozen time
+* Fri Apr 12 2024 ningyu<ningyu9@huawei.com> - 1.2.1-3
+- upatch-hijacker: fix compile bug
+- daemon: fix 'cannot get file selinux xattr when selinux is not enforcing' issue
+- syscared: fix 'syscare check command does not check symbol confiliction' issue
+- syscared: fix 'cannot find process of dynlib patch' issue
+- Change uuid type from string to uuid bytes
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- upatch-manage: optimize output
+- syscared: optimize patch error logic
+- syscared: optimize transaction creation logic
+- spec: fix "cannot find syscare service after upgrade" bug
+* Sun Apr 7 2024 ningyu<ningyu9@huawei.com> - 1.2.1-2
+- update to syscare.1.2.1-2
+* Thu Mar 28 2024 ningyu<ningyu9@huawei.com> - 1.2.1-1
+- update to 1.2.1
 * Tue Dec 26 2023 ningyu<ningyu9@huawei.com> - 1.2.0-10
 - fix memory leak
 * Fri Dec 22 2023 ningyu<ningyu9@huawei.com> - 1.2.0-9
