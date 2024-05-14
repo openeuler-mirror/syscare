@@ -75,3 +75,97 @@ impl KernelPatchHelper {
         )
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::fs::{self, File};
+    use std::path::{Path, PathBuf};
+
+    use crate::patch::kernel_patch::kpatch_helper::KernelPatchHelper;
+
+    fn create_temp_dir(path: &str) -> Result<PathBuf, std::io::Error> {
+        let temp_dir = std::env::temp_dir().join(path);
+        if !temp_dir.exists() {
+            fs::create_dir(&temp_dir).expect("Failed to create test directory")
+        }
+        Ok(temp_dir)
+    }
+
+    fn create_temp_file<P: AsRef<Path>>(dir: P, filename: &str) -> Result<PathBuf, std::io::Error> {
+        let file_path = dir.as_ref().join(filename);
+        File::create(&file_path)?;
+        Ok(file_path)
+    }
+
+    fn cleanup_temp_dir(dir: &Path) {
+        if dir.exists() {
+            fs::remove_dir_all(dir).unwrap();
+        }
+    }
+    #[test]
+    fn test_generate_defconfig() {
+        let temp_dir = create_temp_dir("test_defconfig").expect("Failed to create temporary directory");
+
+        let source_dir = temp_dir.join("source_dir");
+
+        fs::create_dir(&source_dir).expect("Failed to create source directory");
+        let _defconfig_file = create_temp_file(&source_dir, "openeuler_defconfig")
+            .expect("Failed to create defconfig file");
+
+        let makefile_contents = ".PHONY: all openeuler_defconfig clean
+openeuler_defconfig:
+\techo \"make openeuler_defconfig\"
+        ";
+        let makefile_path = source_dir.join("Makefile");
+        fs::write(&makefile_path, makefile_contents).expect("Failed to write Makefile");
+
+        KernelPatchHelper::generate_defconfig(&source_dir).expect("generate_defconfig failed");
+
+        cleanup_temp_dir(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_kernel_config() {
+        let temp_dir = create_temp_dir("test_kernel_config").expect("Failed to create temporary directory");
+
+        let _kernel_config_path = create_temp_file(&temp_dir, ".config")
+            .expect("Failed to create kernel config file");
+
+        KernelPatchHelper::find_kernel_config(&temp_dir).expect("Failed to find kernel config");
+
+        cleanup_temp_dir(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_vmlinux() {
+        let temp_dir = create_temp_dir("test_vmlinux").expect("Failed to create temporary directory");
+
+        let _vmlinux_path = create_temp_file(&temp_dir, "vmlinux")
+            .expect("Failed to create vmlinux file");
+
+        KernelPatchHelper::find_vmlinux(&temp_dir).expect("Failed to find vmlinux file");
+
+        cleanup_temp_dir(&temp_dir);
+    }
+
+    #[test]
+    fn test_find_kernel_modules() {
+        let temp_dir = create_temp_dir("test_kernel_modules").expect("Failed to create temporary directory");
+
+        let module1_path = create_temp_file(&temp_dir, "module1.ko")
+            .expect("Failed to create module1.ko file");
+
+        let module2_path = create_temp_file(&temp_dir, "module2.ko")
+            .expect("Failed to create module2.ko file");
+
+        let result = KernelPatchHelper::find_kernel_modules(&temp_dir);
+        let result_paths = result.unwrap();
+
+        assert_eq!(result_paths.len(), 2);
+        assert!(result_paths.contains(&module1_path));
+        assert!(result_paths.contains(&module2_path));
+
+        cleanup_temp_dir(&temp_dir);
+    }
+}
+
