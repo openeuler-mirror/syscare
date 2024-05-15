@@ -64,3 +64,19 @@ impl std::fmt::Display for PackageInfo {
         Ok(())
     }
 }
+
+#[test]
+fn test_packageinfo () {
+    let packinfo = PackageInfo {
+        name: "testpackage".to_string(),
+        kind: PackageType::BinaryPackage,
+        arch: "x86_64".to_string(),
+        epoch: "None".to_string(),
+        version: "1".to_string(),
+        release: "1".to_string(),
+        license: "GPL".to_string(),
+        source_pkg: "source".to_string(),
+    };
+    assert_eq!(packinfo.short_name(), "testpackage-1-1".to_string());
+    assert_eq!(packinfo.full_name(), "testpackage-1-1.x86_64".to_string());
+}
