@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       7
+Release:       8
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -38,6 +38,7 @@ Patch0018:     0018-upatch-manage-Fixed-the-core-dump-issue-after-applyi.patch
 Patch0019:     0019-upatch-diff-fix-lookup_relf-failed-issue.patch
 Patch0020:     0020-upatch-diff-only-check-changed-file-symbols.patch
 Patch0021:     0021-upatch-diff-remove-rela-check-while-build-rebuilding.patch
+Patch0022:     0022-syscared-fix-apply-kernel-module-patch-failure-issue.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -187,6 +188,8 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Mon May 20 2024 ningyu<ningyu9@huawei.com> - 1.2.1-8
+- syscared: fix apply kernel module patch failure issue
 * Tue May 14 2024 ningyu<ningyu9@huawei.com> - 1.2.1-7
 - upatch-diff: remove rela check while build rebuilding .eh_frame
 - upatch-diff: only check changed file symbols
