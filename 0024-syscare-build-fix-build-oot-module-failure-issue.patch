@@ -1,0 +1,40 @@
+From bf34a1c52841e9b33a6239405b7e15b42ddfe8b3 Mon Sep 17 00:00:00 2001
+From: renoseven <dev@renoseven.net>
+Date: Thu, 23 May 2024 09:18:08 +0800
+Subject: [PATCH] syscare-build: fix 'build oot module failure' issue
+
+Signed-off-by: renoseven <dev@renoseven.net>
+---
+ syscare-build/src/package/rpm/pkg_builder.rs           | 1 +
+ syscare-build/src/patch/kernel_patch/kpatch_builder.rs | 3 +++
+ 2 files changed, 4 insertions(+)
+
+diff --git a/syscare-build/src/package/rpm/pkg_builder.rs b/syscare-build/src/package/rpm/pkg_builder.rs
+index 5d7ae54..37f4444 100644
+--- a/syscare-build/src/package/rpm/pkg_builder.rs
++++ b/syscare-build/src/package/rpm/pkg_builder.rs
+@@ -97,6 +97,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
+             .arg("--define")
+             .arg("__spec_install_post %{__arch_install_post}")
+             .arg("--nocheck")
++            .arg("--noclean")
+             .arg("-bb")
+             .arg(spec_file)
+             .run()?
+diff --git a/syscare-build/src/patch/kernel_patch/kpatch_builder.rs b/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
+index ba49661..bcae962 100644
+--- a/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
++++ b/syscare-build/src/patch/kernel_patch/kpatch_builder.rs
+@@ -227,6 +227,9 @@ impl KernelPatchBuilder {
+ 
+         if let Some(oot_module) = &kbuild_entity.module_path {
+             cmd_args.arg("--oot-module").arg(oot_module);
++            cmd_args
++                .arg("--oot-module-src")
++                .arg(&kbuild_entity.source_dir);
+         }
+         cmd_args.args(kbuild_params.patch_files.iter().map(|patch| &patch.path));
+ 
+-- 
+2.41.0
+
