@@ -32,17 +32,13 @@ use syscare_common::{concat_os, fs, os};
 
 mod args;
 mod config;
-mod fast_reboot;
 mod patch;
 mod rpc;
 
 use args::Arguments;
 use config::Config;
 use patch::monitor::PatchMonitor;
-use rpc::{
-    skeleton::{FastRebootSkeleton, PatchSkeleton},
-    skeleton_impl::{FastRebootSkeletonImpl, PatchSkeletonImpl},
-};
+use rpc::{skeleton::PatchSkeleton, skeleton_impl::PatchSkeletonImpl};
 
 const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -195,7 +191,6 @@ impl Daemon {
         let mut io_handler = IoHandler::new();
 
         io_handler.extend_with(PatchSkeletonImpl::new(patch_manager).to_delegate());
-        io_handler.extend_with(FastRebootSkeletonImpl.to_delegate());
 
         Ok(io_handler)
     }
