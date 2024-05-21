@@ -50,9 +50,3 @@ impl PackageRoot {
         })
     }
 }
-
-impl AsRef<Path> for PackageRoot {
-    fn as_ref(&self) -> &Path {
-        &self.path
-    }
-}

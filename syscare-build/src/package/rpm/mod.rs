@@ -60,10 +60,6 @@ impl RpmPackage {
 }
 
 impl Package for RpmPackage {
-    fn extension(&self) -> &'static str {
-        PKG_FILE_EXT
-    }
-
     fn parse_package_info(&self, pkg_path: &Path) -> Result<PackageInfo> {
         let query_result = Self::query_package_info(
             pkg_path,

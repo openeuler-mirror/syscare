@@ -13,8 +13,6 @@
  */
 
 pub mod cpu;
-pub mod disk;
-pub mod grub;
 pub mod kernel;
 pub mod platform;
 pub mod proc_maps;

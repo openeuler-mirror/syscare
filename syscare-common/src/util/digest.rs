@@ -45,10 +45,3 @@ where
 
     Ok(format!("{:#x}", hasher.finalize()))
 }
-
-pub fn dir<P: AsRef<Path>>(directory: P) -> std::io::Result<String> {
-    file_list(fs::list_files(
-        directory,
-        fs::TraverseOptions { recursive: true },
-    )?)
-}
