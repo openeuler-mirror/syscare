@@ -33,7 +33,6 @@ pub use spec_writer::*;
 pub use tar::*;
 
 trait Package {
-    fn extension(&self) -> &'static str;
     fn parse_package_info(&self, pkg_path: &Path) -> Result<PackageInfo>;
     fn query_package_files(&self, pkg_path: &Path) -> Result<Vec<PathBuf>>;
     fn extract_package(&self, pkg_path: &Path, output_dir: &Path) -> Result<()>;

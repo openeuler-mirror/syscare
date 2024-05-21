@@ -44,9 +44,3 @@ impl PatchRoot {
         })
     }
 }
-
-impl AsRef<Path> for PatchRoot {
-    fn as_ref(&self) -> &Path {
-        &self.path
-    }
-}

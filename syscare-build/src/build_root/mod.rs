@@ -12,11 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::OsStr,
-    ops::Deref,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use anyhow::Result;
 use syscare_common::fs;
@@ -59,19 +55,5 @@ impl BuildRoot {
         fs::remove_dir_all(&self.path)?;
 
         Ok(())
-    }
-}
-
-impl Deref for BuildRoot {
-    type Target = Path;
-
-    fn deref(&self) -> &Self::Target {
-        &self.path
-    }
-}
-
-impl AsRef<OsStr> for BuildRoot {
-    fn as_ref(&self) -> &OsStr {
-        self.as_os_str()
     }
 }
