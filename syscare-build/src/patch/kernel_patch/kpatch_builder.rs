@@ -227,6 +227,9 @@ impl KernelPatchBuilder {
 
         if let Some(oot_module) = &kbuild_entity.module_path {
             cmd_args.arg("--oot-module").arg(oot_module);
+            cmd_args
+                .arg("--oot-module-src")
+                .arg(&kbuild_entity.source_dir);
         }
         cmd_args.args(kbuild_params.patch_files.iter().map(|patch| &patch.path));
 

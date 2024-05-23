@@ -97,6 +97,7 @@ impl PackageBuilder for RpmPackageBuilder<'_> {
             .arg("--define")
             .arg("__spec_install_post %{__arch_install_post}")
             .arg("--nocheck")
+            .arg("--noclean")
             .arg("-bb")
             .arg(spec_file)
             .run()?
