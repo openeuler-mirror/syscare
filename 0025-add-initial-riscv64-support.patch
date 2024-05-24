@@ -1,0 +1,1245 @@
+From efa6f03405bb8da550bf0c206d714230b2ab354c Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 20:47:18 +0800
+Subject: [PATCH 1/8] riscv64: upatch-diff adapt common arch data
+
+1. RISC-V has mapping symbol like ARM.
+
+2. not support line_macro_change_only. It's less
+value compared to the big complexity.
+---
+ upatch-diff/create-diff-object.c | 4 +++-
+ upatch-diff/elf-common.c         | 3 ++-
+ upatch-diff/elf-common.h         | 2 ++
+ upatch-diff/elf-compare.c        | 3 +++
+ upatch-diff/elf-insn.c           | 6 ++++++
+ upatch-diff/upatch-elf.c         | 5 +++++
+ upatch-diff/upatch-elf.h         | 1 +
+ 7 files changed, 22 insertions(+), 2 deletions(-)
+
+diff --git a/upatch-diff/create-diff-object.c b/upatch-diff/create-diff-object.c
+index 215ff36..12f4537 100644
+--- a/upatch-diff/create-diff-object.c
++++ b/upatch-diff/create-diff-object.c
+@@ -538,7 +538,9 @@ static void replace_section_syms(struct upatch_elf *uelf)
+                 /* text section refer other sections */
+                 if (is_text_section(relasec->base) &&
+                     !is_text_section(sym->sec) &&
+-                    (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 || rela->type == R_AARCH64_ABS64) &&
++                    (((uelf->arch == X86_64) && (rela->type == R_X86_64_32S || rela->type == R_X86_64_32)) ||
++                     ((uelf->arch == AARCH64) && (rela->type == R_AARCH64_ABS64)) ||
++                     ((uelf->arch == RISCV64) && (rela->type == R_RISCV_64))) &&
+                     rela->addend == (long)sym->sec->sh.sh_size &&
+                     end == (long)sym->sec->sh.sh_size)
+                     ERROR("Relocation refer end of data sections.");
+diff --git a/upatch-diff/elf-common.c b/upatch-diff/elf-common.c
+index f895e9b..2d3a40b 100644
+--- a/upatch-diff/elf-common.c
++++ b/upatch-diff/elf-common.c
+@@ -100,6 +100,7 @@ int offset_of_string(struct list_head *list, char *name)
+ bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
+ {
+ 	switch(uelf->arch) {
++	case RISCV64:
+ 	case AARCH64:
+ 		return false;
+ 	case X86_64:
+@@ -112,7 +113,7 @@ bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
+ 
+ bool is_mapping_symbol(struct upatch_elf *uelf, struct symbol *sym)
+ {
+-	if (uelf->arch != AARCH64)
++	if ((uelf->arch != AARCH64) && (uelf->arch != RISCV64))
+ 		return false;
+ 
+ 	if (sym->name && sym->name[0] == '$'
+diff --git a/upatch-diff/elf-common.h b/upatch-diff/elf-common.h
+index 9e44a7c..2577407 100644
+--- a/upatch-diff/elf-common.h
++++ b/upatch-diff/elf-common.h
+@@ -217,6 +217,8 @@ static inline unsigned int absolute_rela_type(struct upatch_elf *uelf)
+ 		return R_AARCH64_ABS64;
+ 	case X86_64:
+ 		return R_X86_64_64;
++	case RISCV64:
++		return R_RISCV_64;
+ 	default:
+ 		ERROR("unsupported arch");
+ 	}
+diff --git a/upatch-diff/elf-compare.c b/upatch-diff/elf-compare.c
+index 054f16a..7b32318 100644
+--- a/upatch-diff/elf-compare.c
++++ b/upatch-diff/elf-compare.c
+@@ -330,6 +330,9 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
+ 		return _line_macro_change_only_aarch64(uelf, sec);
+ 	case X86_64:
+ 		return _line_macro_change_only(uelf, sec);
++	case RISCV64:
++		/* TODO: not support*/
++		break;
+ 	default:
+ 		ERROR("unsupported arch");
+ 	}
+diff --git a/upatch-diff/elf-insn.c b/upatch-diff/elf-insn.c
+index 41252fe..4ee8de2 100644
+--- a/upatch-diff/elf-insn.c
++++ b/upatch-diff/elf-insn.c
+@@ -60,6 +60,7 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
+     struct section *sec = relasec->base;
+ 
+     switch(uelf->arch) {
++    case RISCV64:
+     case AARCH64:
+         add_off = 0;
+         break;
+@@ -99,6 +100,11 @@ unsigned int insn_length(struct upatch_elf *uelf, void *addr)
+         insn_init(&decoded_insn, addr, 1);
+         insn_get_length(&decoded_insn);
+         return decoded_insn.length;
++    case RISCV64:
++	    /* LSB 2 bits distinguish insn size. Now only RV32, RVC supported. */
++        if ((*(char *)addr & 0x3) == 0x3)
++            return 4;
++        return 2;
+     default:
+         ERROR("unsupported arch");
+     }
+diff --git a/upatch-diff/upatch-elf.c b/upatch-diff/upatch-elf.c
+index e39fb6a..db14969 100644
+--- a/upatch-diff/upatch-elf.c
++++ b/upatch-diff/upatch-elf.c
+@@ -257,6 +257,11 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
+     case EM_X86_64:
+         uelf->arch = X86_64;
+         break;
++    case EM_RISCV:
++        if (ehdr.e_ident[EI_CLASS] == ELFCLASS64) {
++            uelf->arch = RISCV64;
++            break;
++        } else // fall through
+     default:
+         ERROR("unsupported architecture here");
+     }
+diff --git a/upatch-diff/upatch-elf.h b/upatch-diff/upatch-elf.h
+index 2f7c777..689c552 100644
+--- a/upatch-diff/upatch-elf.h
++++ b/upatch-diff/upatch-elf.h
+@@ -116,6 +116,7 @@ struct symbol {
+ enum architecture {
+ 	X86_64 = 0x1 << 0,
+ 	AARCH64 = 0x1 << 1,
++	RISCV64 = 0x1 << 2,
+ };
+ 
+ struct upatch_elf {
+-- 
+2.39.2
+
+
+From 109f14c70ea5d2fee27c91d6f2d3d1c2ad10d295 Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 20:52:41 +0800
+Subject: [PATCH 2/8] riscv64: upatch-diff ignore unmatched CSWTCH symbol
+
+They are generated by gcc for switch/case usage. See
+
+       https://github.com/dynup/kpatch/issues/519
+---
+ upatch-diff/elf-correlate.c | 3 ++-
+ 1 file changed, 2 insertions(+), 1 deletion(-)
+
+diff --git a/upatch-diff/elf-correlate.c b/upatch-diff/elf-correlate.c
+index f25f252..3ff0091 100644
+--- a/upatch-diff/elf-correlate.c
++++ b/upatch-diff/elf-correlate.c
+@@ -388,7 +388,8 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, str
+ 			patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
+ 			if (bundled != patched_bundled)
+ 				ERROR("bundle mismatch for symbol %s", sym->name);
+-			if (!bundled && sym->sec->twin != patched_sym->sec)
++			/* ignore unmatched, gcc generated CSWTCH... symbols */
++			if (!bundled && sym->sec->twin != patched_sym->sec && strncmp(sym->name, "CSWTCH.", 7))
+ 				ERROR("sections %s and %s aren't correlated for symbol %s",
+ 				      sym->sec->name, patched_sym->sec->name, sym->name);
+ 
+-- 
+2.39.2
+
+
+From 4bee12884973f8b8b27992b76cd6606b79d14430 Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 20:26:18 +0800
+Subject: [PATCH 3/8] riscv64: upatch-diff adapt .L local symbols
+
+RISC-V object file has a lot of .L local symbols. They
+mostly act as labels into the sections, and named as
+".L" + "class prefix" + "number" which the number might
+change due to code changes.
+
+1. Compare their names only the "class prefix" part.
+
+2. Don't allow correlate .L symbols change section.
+
+3. Include their sections if they are included.
+---
+ upatch-diff/create-diff-object.c |  5 +++++
+ upatch-diff/elf-common.c         | 31 +++++++++++++++++++++++++++++++
+ upatch-diff/elf-correlate.c      |  5 +++++
+ 3 files changed, 41 insertions(+)
+
+diff --git a/upatch-diff/create-diff-object.c b/upatch-diff/create-diff-object.c
+index 12f4537..f0df9f2 100644
+--- a/upatch-diff/create-diff-object.c
++++ b/upatch-diff/create-diff-object.c
+@@ -678,6 +678,11 @@ static void include_symbol(struct symbol *sym)
+      */
+     if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME))
+         include_section(sym->sec);
++#ifdef __riscv
++    /* .L symbols not exist in EXE. If they are included, so are their sections. */
++    else if (sym->sec && !sym->sec->include && !strncmp(sym->name, ".L", 2))
++        include_section(sym->sec);
++#endif
+ }
+ 
+ static void include_section(struct section *sec)
+diff --git a/upatch-diff/elf-common.c b/upatch-diff/elf-common.c
+index 2d3a40b..f40d428 100644
+--- a/upatch-diff/elf-common.c
++++ b/upatch-diff/elf-common.c
+@@ -26,6 +26,32 @@
+ 
+ #include "elf-common.h"
+ 
++#ifdef __riscv
++/*
++ * .L local symbols are named as ".L" + "class prefix" + "number".
++ * The numbers are volatile due to code change.
++ * Compare class prefix(composed of letters) only.
++ */
++static int mangled_strcmp_dot_L(char *str1, char *str2)
++{
++	if (!*str2 || strncmp(str2, ".L", 2))
++		return 1;
++
++	/* RISCV_FAKE_LABEL_NAME matched exactly */
++	if (!strcmp(str1, ".L0 ") || !strcmp(str2, ".L0 "))
++		return strcmp(str1, str2);
++
++	char *p = str1 + 2;
++	char *q = str2 + 2;
++	while (*p < '0' || *p > '9') p++;
++	while (*q < '0' || *q > '9') q++;
++	if ((p - str1 != q - str2) || strncmp(str1, str2, p - str1))
++		return 1;
++
++	return 0;
++}
++#endif
++
+ int mangled_strcmp(char *str1, char *str2)
+ {
+     /*
+@@ -34,6 +60,11 @@ int mangled_strcmp(char *str1, char *str2)
+ 	if (strstr(str1, ".str1."))
+ 		return strcmp(str1, str2);
+ 
++#ifdef __riscv
++	if (!strncmp(str1, ".L", 2))
++		return mangled_strcmp_dot_L(str1, str2);
++#endif
++
+ 	while (*str1 == *str2) {
+ 		if (!*str2)
+ 			return 0;
+diff --git a/upatch-diff/elf-correlate.c b/upatch-diff/elf-correlate.c
+index 3ff0091..1096a9a 100644
+--- a/upatch-diff/elf-correlate.c
++++ b/upatch-diff/elf-correlate.c
+@@ -79,6 +79,11 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf
+ 			    sym_orig->sec->twin != sym_patched->sec)
+ 				continue;
+ 
++			/* .L symbols should not change section */
++			if (uelf_source->arch == RISCV64 && !strncmp(sym_orig->name, ".L", 2) &&
++			    sym_orig->sec && sym_orig->sec->twin != sym_patched->sec)
++				continue;
++
+ 			correlate_symbol(sym_orig, sym_patched);
+ 			break;
+ 		}
+-- 
+2.39.2
+
+
+From adacd6a503ee86bc4b3e42c11df5950d2393a78c Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 20:41:09 +0800
+Subject: [PATCH 4/8] riscv64: updatch-diff drop useless relocations
+
+R_RISCV_RELAX is for linker optimization. R_RISCV_ALIGN
+is for memory layout. They are useless for us, and they
+have no associated symbols which would trigger error when
+do lookup_relf() later. Drop them.
+---
+ upatch-diff/create-diff-object.c | 25 +++++++++++++++++++++++--
+ 1 file changed, 23 insertions(+), 2 deletions(-)
+
+diff --git a/upatch-diff/create-diff-object.c b/upatch-diff/create-diff-object.c
+index f0df9f2..014533c 100644
+--- a/upatch-diff/create-diff-object.c
++++ b/upatch-diff/create-diff-object.c
+@@ -843,6 +843,23 @@ static void verify_patchability(struct upatch_elf *uelf)
+         DIFF_FATAL("%d, Unsupported section changes", errs);
+ }
+ 
++/*
++ * These types are for linker optimization and memory layout.
++ * They have no associated symbols and their names are empty
++ * string which would mismatch running-elf symbols in later
++ * lookup_relf(). Drop these useless items now.
++ */
++static void rv_drop_useless_rela(struct section *relasec)
++{
++    struct rela *rela, *saferela;
++    list_for_each_entry_safe(rela, saferela, &relasec->relas, list)
++        if (rela->type == R_RISCV_RELAX || rela->type == R_RISCV_ALIGN) {
++            list_del(&rela->list);
++            memset(rela, 0, sizeof(*rela));
++            free(rela);
++        }
++}
++
+ static void migrate_included_elements(struct upatch_elf *uelf_patched, struct upatch_elf *uelf_out)
+ {
+     struct section *sec, *safesec;
+@@ -863,8 +880,12 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched, struct up
+         list_del(&sec->list);
+         list_add_tail(&sec->list, &uelf_out->sections);
+         sec->index = 0;
+-        if (!is_rela_section(sec) && sec->secsym && !sec->secsym->include)
+-            sec->secsym = NULL; // break link to non-included section symbol
++        if (!is_rela_section(sec)) {
++            if  (sec->secsym && !sec->secsym->include)
++                sec->secsym = NULL; // break link to non-included section symbol
++		} else if (uelf_patched->arch == RISCV64) {
++            rv_drop_useless_rela(sec);
++		}
+     }
+ 
+     /* migrate included symbols from kelf to out */
+-- 
+2.39.2
+
+
+From 7990432fb528913d631b093f65ad60c5339e6676 Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 21:04:02 +0800
+Subject: [PATCH 5/8] riscv64: upatch-manage avoid matching 0 r_addend
+
+When resolve symbols through .rela.dyn, for no-symbol
+relas, the r_addend might matching patch-sym's value
+to do the resolving, such as R_X86_64_IRELATIVE.
+But when r_addend and patch-sym's value are both 0,
+that is not. Forbid this scenaro.
+---
+ upatch-manage/upatch-resolve.c | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/upatch-manage/upatch-resolve.c b/upatch-manage/upatch-resolve.c
+index 0e992da..65461f7 100644
+--- a/upatch-manage/upatch-resolve.c
++++ b/upatch-manage/upatch-resolve.c
+@@ -50,7 +50,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
+              * some rela don't have the symbol index, use the symbol's value and
+              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
+              */
+-            if (rela_dyn[i].r_addend != patch_sym->st_value) {
++            if ((rela_dyn[i].r_addend != patch_sym->st_value) || !patch_sym->st_value){
+                 continue;
+             }
+         }
+-- 
+2.39.2
+
+
+From 50edbbb5dc87676b4acd416da60993bd0684b30d Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 20:59:43 +0800
+Subject: [PATCH 6/8] riscv64: upatch-manage do range check when patching
+
+On RISC-V, to jump to arbitrary address, there must be
+at least 12 bytes to hold 3 instructors. Upatch_info
+new_insn field has only 8 bytes and we can only jump
+into +-2G ranges. For safety, do the range check before
+patching.
+---
+ upatch-manage/upatch-patch.c | 15 +++++++++++++++
+ 1 file changed, 15 insertions(+)
+
+diff --git a/upatch-manage/upatch-patch.c b/upatch-manage/upatch-patch.c
+index 83c088a..74cd3b7 100644
+--- a/upatch-manage/upatch-patch.c
++++ b/upatch-manage/upatch-patch.c
+@@ -428,6 +428,21 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
+ 		upatch_func->old_addr =
+ 			upatch_funcs_addr[i].old_addr + uelf->relf->load_bias;
+ 		upatch_func->new_addr = upatch_funcs_addr[i].new_addr;
++
++#ifdef __riscv
++		/*
++		 * On RISC-V, to jump to arbitrary address, there must be
++		 * at least 12 bytes to hold 3 instructors. Struct upatch_info
++		 * new_insn field is only 8 bytes. We can only jump into
++		 * +-2G ranges. Here do the check.
++		 */
++		long offset = upatch_func->new_addr - upatch_func->old_addr;
++		if (offset >= (1L<<31) || offset < -(1L<<31)) {
++			log_error("new_addr=%lx old_addr=%lx exceed +-2G range\n", upatch_func->new_addr, upatch_func->old_addr);
++			goto out;
++		}
++#endif
++
+ 		ret = upatch_process_mem_read(obj->proc, upatch_func->old_addr,
+ 					      &upatch_func->old_insn,
+ 					      get_origin_insn_len());
+-- 
+2.39.2
+
+
+From a872b49ecbd5f8ba3a8c2e57584d59fd7935bd97 Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 21:15:06 +0800
+Subject: [PATCH 7/8] riscv64: upatch-manage adapt arch code
+
+Add ptrace.c relocations.c resolve.c
+---
+ upatch-manage/arch/riscv64/insn.h       | 130 +++++++++++++
+ upatch-manage/arch/riscv64/process.h    |  28 +++
+ upatch-manage/arch/riscv64/ptrace.c     | 186 ++++++++++++++++++
+ upatch-manage/arch/riscv64/relocation.c | 242 ++++++++++++++++++++++++
+ upatch-manage/arch/riscv64/resolve.c    | 154 +++++++++++++++
+ upatch-manage/upatch-ptrace.c           |   4 +
+ 6 files changed, 744 insertions(+)
+ create mode 100644 upatch-manage/arch/riscv64/insn.h
+ create mode 100644 upatch-manage/arch/riscv64/process.h
+ create mode 100644 upatch-manage/arch/riscv64/ptrace.c
+ create mode 100644 upatch-manage/arch/riscv64/relocation.c
+ create mode 100644 upatch-manage/arch/riscv64/resolve.c
+
+diff --git a/upatch-manage/arch/riscv64/insn.h b/upatch-manage/arch/riscv64/insn.h
+new file mode 100644
+index 0000000..8e32b85
+--- /dev/null
++++ b/upatch-manage/arch/riscv64/insn.h
+@@ -0,0 +1,130 @@
++// SPDX-License-Identifier: GPL-2.0-only
++/*
++ * Copyright (C) 2024 laokz <zhangkai@iscas.ac.cn>
++ */
++
++#ifndef _ARCH_RISCV64_INSN_H
++#define _ARCH_RISCV64_INSN_H
++
++static inline unsigned
++set_utype_imm(unsigned ins, unsigned long imm)
++{
++    /* + imm[11] to counteract lo12 sign extension in next instruction */
++    imm += (imm & 0x800) << 1;
++    return (imm & 0xfffff000) | (ins & 0xfff);
++}
++
++static inline unsigned
++set_itype_imm(unsigned ins, unsigned long imm)
++{
++    return ((imm & 0xfff) << 20) | (ins & 0xfffff);
++}
++
++static inline unsigned
++set_stype_imm(unsigned ins, unsigned long imm)
++{
++    /*                             rs2        rs1   func              opcode
++       ins:       imm[11-8,7-5]   1,1111,   1111,1  111,  imm[4-1,0]  111,1111
++       ins mask       0        1      f       f    f         0        7    f
++
++       imm bit no.  11-----5   4---0
++                    1111,111   1,1111
++       imm mask     fe0        1f
++
++    ==>imm bit no.  31----25   11--7
++     */
++    return (ins & 0x1fff07f) |
++           ((imm & 0xfe0) << (31-11)) | ((imm & 0x1f) << (11-4));
++}
++
++static inline unsigned
++set_jtype_imm(unsigned ins, unsigned long imm)
++{
++    /*
++       imm bit no.  20       19------12    11      10---------1
++                    1,       1111,1111,    1       111,1111,111  0
++       mask         100000   ff000         800     7fe
++
++    ==>imm bit no.  31       19------12    20      30---------21
++     */
++    return (ins & 0xfff) |
++           ((imm & 0x100000) << (31-20)) | (imm & 0xff000) |
++           ((imm & 0x800) << (20-11)) | ((imm & 0x7fe) << (30-10));
++}
++
++static inline unsigned
++set_btype_imm(unsigned ins, unsigned long imm)
++{
++    /*                                rs2        rs1   func                opcode
++       ins:       imm[12 10-8,7-5]   1,1111,   1111,1  111,  imm[4-1,11]  111,1111
++       ins mask          0         1     f       f    f        0         7      f
++
++       imm bit no.  12       11     10----5     4--1
++                    1,       1      111,111     1,111  0
++       imm mask     1000     800    7e0         1e
++
++    ==>imm bit no.  31       7      30---25     11-8
++     */
++    return (ins & 0x01fff07f) |
++           ((imm & 0x1000) << (31-12)) | ((imm & 0x800) >> (11-7)) |
++           ((imm & 0x7e0) << (30-10)) | ((imm & 0x1e) << (11-4));
++}
++
++static inline unsigned short
++set_cjtype_imm(unsigned short ins, unsigned long imm)
++{
++    /*             funct3       imm                          opcode
++       ins:         111    offset[11,4 9 8 10, 6 7 3 2, 1 5]  11
++       ins mask       e                 0         0            3
++
++       imm bit no.  11  10    9-8   7  6  5  4   3-1
++                     1   1    11,   1  1  1  1,  111    0
++       imm mask     800  400  300   80 40 20 10   e
++
++    ==>imm bit no.  12   8    10-9  6  7  2  11  5-3
++     */
++    return (ins & 0xe003) |
++           ((imm & 0x800) << (12-11)) | ((imm & 0x400) >> (10-8)) |
++           ((imm & 0x300) << (10-9)) | ((imm & 0x80) >> (7-6)) |
++           ((imm & 0x40) << (7-6)) | ((imm & 0x20) >> (5-2)) |
++           ((imm & 0x10) << (11-4)) | ((imm & 0xe) << (5-3));
++}
++
++/* only support C.LUI */
++static inline unsigned short
++set_citype_imm(unsigned short ins, unsigned long imm)
++{
++    /*             funct3  imm[17]     rd       imm[16:12]      opcode
++       ins:         111    imm[17],  1111,1  imm[16-14,13-12]     11
++       ins mask         e             f       8                 3
++
++       imm bit no.  17     16--12
++                     1     1,1111
++       imm mask     20000  1f000
++
++    ==>imm bit no.  12     6---2
++     */
++    return (ins & 0xef83) |
++           ((imm & 0x20000) >> (17-12)) | ((imm & 0x1f000) >> (16-6));
++}
++
++/* only support C.BEQZ C.BNEZ*/
++static inline unsigned short
++set_cbtype_imm(unsigned short ins, unsigned long imm)
++{
++    /*             funct3  imm[8 4 3]     rs  imm[7 6 2 1 5]      opcode
++       ins:         111        0,0 0     11,1     0 0 0,0 0         11
++       ins mask         e             3       8                 3
++
++       imm bit no.   8   , 7 6   5   4,3   2 1     0
++       imm mask      100   c0    20  18     6
++
++    ==>imm bit no.  12     6-5   2  11-10  4-3
++     */
++    return (ins & 0xe383) |
++           ((imm & 0x100) << (12-8)) | ((imm & 0xc0) >> (7-6)) |
++		   ((imm & 0x20) >> (5-2)) | ((imm & 0x18) << (11-4)) |
++		   ((imm & 0x6) << (4-2));
++}
++
++#endif
+diff --git a/upatch-manage/arch/riscv64/process.h b/upatch-manage/arch/riscv64/process.h
+new file mode 100644
+index 0000000..91926fa
+--- /dev/null
++++ b/upatch-manage/arch/riscv64/process.h
+@@ -0,0 +1,28 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * upatch-manage
++ * Copyright (C) 2024 ISCAS
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#ifndef __PROCESS__
++#define __PROCESS__
++
++#ifndef MAX_DISTANCE
++#define MAX_DISTANCE 0x80000000
++#endif
++
++#endif
+diff --git a/upatch-manage/arch/riscv64/ptrace.c b/upatch-manage/arch/riscv64/ptrace.c
+new file mode 100644
+index 0000000..b605df5
+--- /dev/null
++++ b/upatch-manage/arch/riscv64/ptrace.c
+@@ -0,0 +1,186 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * upatch-manage
++ * Copyright (C) 2024 ISCAS
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include <sys/ptrace.h>
++#include <sys/socket.h>
++#include <sys/syscall.h>
++#include <asm/ptrace.h>
++
++#include "upatch-ptrace.h"
++
++static long read_gregs(int pid, struct user_regs_struct *regs)
++{
++    struct iovec data = {regs, sizeof(*regs)};
++    if (ptrace(PTRACE_GETREGSET, pid, NT_PRSTATUS, &data) == -1) {
++        log_error("ptrace(PTRACE_GETREGSET)");
++        return -1;
++    }
++    return 0;
++}
++
++static long write_gregs(int pid, struct user_regs_struct *regs)
++{
++    struct iovec data = {regs, sizeof(*regs)};
++    if (ptrace(PTRACE_SETREGSET, pid, NT_PRSTATUS, &data) == -1) {
++        log_error("ptrace(PTRACE_SETREGSET)");
++        return -1;
++    }
++    return 0;
++}
++
++int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
++			       unsigned long arg1, unsigned long arg2,
++			       unsigned long arg3, unsigned long arg4,
++			       unsigned long arg5, unsigned long arg6,
++			       unsigned long *res)
++{
++	struct user_regs_struct regs;
++	unsigned char syscall[] = {
++		0x73, 0x00, 0x00, 0x00, // ecall
++		0x73, 0x00, 0x10, 0x00, // ebreak
++	};
++	int ret;
++
++	log_debug("Executing syscall %d (pid %d)...\n", nr, pctx->pid);
++	regs.a7 = (unsigned long)nr;
++	regs.a0 = arg1;
++	regs.a1 = arg2;
++	regs.a2 = arg3;
++	regs.a3 = arg4;
++	regs.a4 = arg5;
++	regs.a5 = arg6;
++
++	ret = upatch_execute_remote(pctx, syscall, sizeof(syscall), &regs);
++	if (ret == 0)
++		*res = regs.a0;
++
++	return ret;
++}
++
++int upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
++				    const unsigned char *code, size_t codelen,
++				    struct user_regs_struct *pregs,
++				    int (*func)(struct upatch_ptrace_ctx *pctx,
++						const void *data),
++				    const void *data)
++{
++	struct user_regs_struct orig_regs, regs;
++	unsigned char orig_code[codelen];
++	int ret;
++	struct upatch_process *proc = pctx->proc;
++	unsigned long libc_base = proc->libc_base;
++
++	ret = read_gregs(pctx->pid, &orig_regs);
++	if (ret < 0)
++		return -1;
++	ret = upatch_process_mem_read(proc, libc_base,
++						(unsigned long *)orig_code, codelen);
++	if (ret < 0) {
++		log_error("can't peek original code - %d\n", pctx->pid);
++		return -1;
++	}
++	ret = upatch_process_mem_write(proc, (unsigned long *)code, libc_base,
++						codelen);
++	if (ret < 0) {
++		log_error("can't poke syscall code - %d\n", pctx->pid);
++		goto poke_back;
++	}
++
++	regs = orig_regs;
++	regs.pc = libc_base;
++
++	copy_regs(&regs, pregs);
++
++	ret = write_gregs(pctx->pid, &regs);
++	if (ret < 0)
++		goto poke_back;
++
++	ret = func(pctx, data);
++	if (ret < 0) {
++		log_error("failed call to func\n");
++		goto poke_back;
++	}
++
++	ret = read_gregs(pctx->pid, &regs);
++	if (ret < 0)
++		goto poke_back;
++
++	ret = write_gregs(pctx->pid, &orig_regs);
++	if (ret < 0)
++		goto poke_back;
++
++	*pregs = regs;
++
++poke_back:
++	upatch_process_mem_write(proc, (unsigned long *)orig_code, libc_base,
++				 codelen);
++	return ret;
++}
++
++void copy_regs(struct user_regs_struct *dst, struct user_regs_struct *src)
++{
++#define COPY_REG(x) dst->x = src->x
++       COPY_REG(a0);
++       COPY_REG(a1);
++       COPY_REG(a2);
++       COPY_REG(a3);
++       COPY_REG(a4);
++       COPY_REG(a5);
++       COPY_REG(a6);
++       COPY_REG(a7);
++#undef COPY_REG
++}
++
++#define UPATCH_INSN_LEN 8
++#define UPATCH_ADDR_LEN 8
++#define ORIGIN_INSN_LEN (UPATCH_INSN_LEN + UPATCH_ADDR_LEN)
++
++size_t get_origin_insn_len()
++{
++	return ORIGIN_INSN_LEN;
++}
++
++size_t get_upatch_insn_len()
++{
++	return UPATCH_INSN_LEN;
++}
++
++size_t get_upatch_addr_len()
++{
++	return UPATCH_ADDR_LEN;
++}
++
++/*
++ * On RISC-V, there must be 3 instructors(12 bytes) to jump to
++ * arbitrary address. The core upatch-manage limit jump instructor
++ * to one long(8 bytes), for us is +-2G range.
++ */
++unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
++                           unsigned long new_addr)
++{
++	unsigned long offset;
++	unsigned int insn0, insn4;
++
++	offset = new_addr - old_addr;
++	offset += (offset & 0x800) << 1;
++	insn0 = 0xf97 | (offset & 0xfffff000);        // auipc t6, off[20]
++	insn4 = 0xf8067 | ((offset & 0xfff) << 20);   // jalr zero, off[12](t6)
++	return (unsigned long)(insn0 | ((unsigned long)insn4 << 32));
++}
+diff --git a/upatch-manage/arch/riscv64/relocation.c b/upatch-manage/arch/riscv64/relocation.c
+new file mode 100644
+index 0000000..bd49a42
+--- /dev/null
++++ b/upatch-manage/arch/riscv64/relocation.c
+@@ -0,0 +1,242 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * upatch-manage
++ * Copyright (C) 2024 ISCAS
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include <errno.h>
++
++#include "insn.h"
++#include "upatch-relocation.h"
++#include "upatch-resolve.h"
++
++/*
++ * In PCREL_LO12 relocation entity, its corresponding symbol's value
++ * points to the ..._HI20 instruction, where the LO12 part of the
++ * immediate is part of the ..._HI20 symbol value.
++ */
++static unsigned long
++find_pcrel_hi_value(GElf_Rela *r, int idx, GElf_Sym *st, unsigned long v)
++{
++    int i = idx;
++    r--;
++    for (; i > 0; i--, r--) {
++        if ((r->r_offset == v) &&
++                ((GELF_R_TYPE(r->r_info) == R_RISCV_PCREL_HI20) ||
++				 (GELF_R_TYPE(r->r_info) == R_RISCV_TLS_GOT_HI20) ||
++				 (GELF_R_TYPE(r->r_info) == R_RISCV_TLS_GD_HI20) ||
++				 (GELF_R_TYPE(r->r_info) == R_RISCV_GOT_HI20)))
++            return st[GELF_R_SYM(r->r_info)].st_value;
++    }
++
++    /* should never happen */
++    log_error("Not found no. %d rela's corresponding HI20\n", idx);
++    return 0;
++}
++
++/*
++ * The patch is a .o file, has only static relocations, all symbols
++ * have been resolved with our jump table act as got/plt. 
++ */
++int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
++		       unsigned int relsec)
++{
++	unsigned int i;
++	GElf_Sym *sym, *symtab;
++	char const *sym_name;
++	unsigned long uloc_sec;
++	void *loc;
++	void *uloc;
++	u64 val;
++	GElf_Shdr *shdrs = (void *)uelf->info.shdrs;
++	GElf_Rela *rel = (void *)shdrs[relsec].sh_addr;
++	
++	symtab = (GElf_Sym *)shdrs[symindex].sh_addr;
++	for (i = 0; i < shdrs[relsec].sh_size / sizeof(*rel); i++) {
++		/* loc corresponds to P in the kernel space */
++		loc = (void *)shdrs[shdrs[relsec].sh_info].sh_addr +
++		      rel[i].r_offset;
++
++		/* uloc corresponds P in user space */
++		uloc_sec = shdrs[shdrs[relsec].sh_info].sh_addralign;
++		uloc = (void *)uloc_sec + rel[i].r_offset;
++
++		/* sym is the ELF symbol we're referring to */
++		sym = symtab + GELF_R_SYM(rel[i].r_info);
++		if (GELF_ST_TYPE(sym->st_info) == STT_SECTION &&
++		    sym->st_shndx < uelf->info.hdr->e_shnum)
++			sym_name = uelf->info.shstrtab +
++				   shdrs[sym->st_shndx].sh_name;
++		else
++			sym_name = uelf->strtab + sym->st_name;
++
++		/* val corresponds to (S + A) */
++		val = (s64)(sym->st_value + rel[i].r_addend);
++		log_debug(
++			"upatch: reloc symbol, name=%s, k_addr=0x%lx, u_addr=0x%lx, "
++			"r_offset=0x%lx, st_value=0x%lx, r_addend=0x%lx \n",
++			sym_name, shdrs[shdrs[relsec].sh_info].sh_addr,
++			uloc_sec, rel[i].r_offset, sym->st_value, rel[i].r_addend);
++
++		/* Perform the static relocation. */
++		switch (GELF_R_TYPE(rel[i].r_info)) {
++        case R_RISCV_NONE:
++        case R_RISCV_TPREL_ADD:
++            break;
++
++        case R_RISCV_64:
++            *(unsigned long *)loc = val;
++            break;
++
++		/* seems no need to recalculate as it should confined in the same func */
++        case R_RISCV_BRANCH:
++            val -= (unsigned long)uloc;
++			if ((signed)val >= 4096 || (signed)val < -4096)
++				goto overflow;
++            *(unsigned *)loc = set_btype_imm(*(unsigned *)loc, val);
++            break;
++
++        case R_RISCV_JAL:
++            val -= (unsigned long)uloc;
++			if ((signed)val >= (1<<20) || (signed)val < -(1<<20))
++				goto overflow;
++            *(unsigned *)loc = set_jtype_imm(*(unsigned *)loc, val);
++            break;
++
++        case R_RISCV_CALL:
++        case R_RISCV_CALL_PLT: // in our jump table, must not overflow
++            val -= (unsigned long)uloc;
++            *(unsigned *)loc = set_utype_imm(*(unsigned *)loc, val);
++            *(unsigned *)(loc + 4) = set_itype_imm(*(unsigned *)(loc + 4), val);
++            break;
++
++        case R_RISCV_GOT_HI20:
++        case R_RISCV_TLS_GOT_HI20:
++		case R_RISCV_TLS_GD_HI20:
++        case R_RISCV_PCREL_HI20:
++            val -= (unsigned long)uloc;	// fall through
++        case R_RISCV_HI20:
++        case R_RISCV_TPREL_HI20:
++            if ((long)val != (long)(int)val)
++				goto overflow;
++            *(unsigned *)loc = set_utype_imm(*(unsigned *)loc, val);
++            break;
++
++        case R_RISCV_PCREL_LO12_I:
++            val = find_pcrel_hi_value(rel + i, i, symtab, sym->st_value - uloc_sec);
++            if (val == 0)
++				goto overflow;
++            val -= sym->st_value;	// fall through
++        case R_RISCV_LO12_I:
++        case R_RISCV_TPREL_LO12_I:
++            *(unsigned *)loc = set_itype_imm(*(unsigned *)loc, val);
++            break;
++
++        case R_RISCV_PCREL_LO12_S:
++            val = find_pcrel_hi_value(rel + i, i, symtab, sym->st_value - uloc_sec);
++            if (val == 0)
++                goto overflow;
++            val -= sym->st_value;	// fall through
++        case R_RISCV_LO12_S:
++        case R_RISCV_TPREL_LO12_S:
++            *(unsigned *)loc = set_stype_imm(*(unsigned *)loc, val);
++            break;
++
++        /* inner function label calculation, must not overflow */
++        case R_RISCV_ADD8:
++		    *(char *)loc += val;
++			break;
++        case R_RISCV_ADD16:
++		    *(short *)loc += val;
++			break;
++        case R_RISCV_ADD32:
++		    *(int *)loc += val;
++			break;
++        case R_RISCV_ADD64:
++		    *(long *)loc += val;
++			break;
++
++        case R_RISCV_SUB8:
++		    *(char *)loc -= val;
++			break;
++        case R_RISCV_SUB16:
++		    *(short *)loc -= val;
++			break;
++        case R_RISCV_SUB32:
++		    *(int *)loc -= val;
++			break;
++        case R_RISCV_SUB64:
++		    *(long *)loc -= val;
++			break;
++
++        case R_RISCV_RVC_BRANCH:
++            val -= (unsigned long)uloc;
++            if ((signed)val >= 256 || (signed)val < -256)
++				goto overflow;
++            *(unsigned short *)loc = set_cbtype_imm(*(unsigned short *)loc, val);
++			break;
++
++        case R_RISCV_RVC_JUMP:
++            val -= (unsigned long)uloc;
++            if ((signed)val >= 2048 || (signed)val < -2048)
++				goto overflow;
++            *(unsigned short *)loc = set_cjtype_imm(*(unsigned short *)loc, val);
++            break;
++
++        case R_RISCV_RVC_LUI:
++            if ((signed)val >= (1<<17) || (signed)val < -(1<<17) || (val & 0x3f000) == 0)
++				goto overflow;
++            *(unsigned short *)loc = set_citype_imm(*(unsigned short *)loc, val);
++            break;
++
++        case R_RISCV_SET8:
++            *(char *)loc = val;
++            break;
++        case R_RISCV_SET16:
++            *(short *)loc = val;
++            break;
++        case R_RISCV_32_PCREL:
++        case R_RISCV_PLT32:
++            val -= (unsigned long)uloc; // fall through
++        case R_RISCV_32:
++        case R_RISCV_SET32:
++            if ((long)val != (long)(int)val)
++				goto overflow;
++            *(int *)loc = val;
++            break;
++
++        case R_RISCV_SUB6:
++		    char w6 = (*(char *)loc - (char)val) & 0x3f;
++            *(char *)loc = (*(char *)loc & 0xc0) | w6;
++            break;
++        case R_RISCV_SET6:
++            *(char *)loc = (*(char *)loc & 0xc0) | (val & 0x3f);
++            break;
++
++		default:
++			log_error("upatch: unsupported RELA relocation: %lu\n",
++				  GELF_R_TYPE(rel[i].r_info));
++			return -ENOEXEC;
++		}
++	}
++	return 0;
++
++overflow:
++	log_error("upatch: overflow in relocation type %d val %lx\n",
++		  (int)GELF_R_TYPE(rel[i].r_info), val);
++	return -ENOEXEC;
++}
+diff --git a/upatch-manage/arch/riscv64/resolve.c b/upatch-manage/arch/riscv64/resolve.c
+new file mode 100644
+index 0000000..2586bd3
+--- /dev/null
++++ b/upatch-manage/arch/riscv64/resolve.c
+@@ -0,0 +1,154 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * upatch-manage
++ * Copyright (C) 2024 ISCAS
++ *
++ * This program is free software; you can redistribute it and/or modify
++ * it under the terms of the GNU General Public License as published by
++ * the Free Software Foundation; either version 2 of the License, or
++ * (at your option) any later version.
++ *
++ * This program is distributed in the hope that it will be useful,
++ * but WITHOUT ANY WARRANTY; without even the implied warranty of
++ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++ * GNU General Public License for more details.
++ *
++ * You should have received a copy of the GNU General Public License along
++ * with this program; if not, write to the Free Software Foundation, Inc.,
++ * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++ */
++
++#include <gelf.h>
++#include <asm/ptrace.h>
++
++#include "log.h"
++#include "upatch-ptrace.h"
++#include "upatch-resolve.h"
++
++/*
++ * auipc   t6,0x0
++ * ld      t6,16(t6) # addr
++ * jr      t6
++ * undefined
++ */
++#define RISCV64_JMP_TABLE_JUMP0  0x010fbf8300000f97
++#define RISCV64_JMP_TABLE_JUMP1  0x000f8067
++
++struct upatch_jmp_table_entry {
++	unsigned long inst[2];
++	unsigned long addr[2];
++};
++
++unsigned int get_jmp_table_entry()
++{
++	return sizeof(struct upatch_jmp_table_entry);
++}
++
++static unsigned long setup_jmp_table(struct upatch_elf *uelf,
++				     unsigned long jmp_addr,
++				     unsigned long origin_addr)
++{
++	struct upatch_jmp_table_entry *table =
++		uelf->core_layout.kbase + uelf->jmp_offs;
++	unsigned int index = uelf->jmp_cur_entry;
++	if (index >= uelf->jmp_max_entry) {
++		log_error("jmp table overflow\n");
++		return 0;
++	}
++
++	table[index].inst[0] = RISCV64_JMP_TABLE_JUMP0;
++	table[index].inst[1] = RISCV64_JMP_TABLE_JUMP1;
++	table[index].addr[0] = jmp_addr;
++	table[index].addr[1] = origin_addr;
++	uelf->jmp_cur_entry++;
++	return (unsigned long)(uelf->core_layout.base + uelf->jmp_offs +
++			       index * sizeof(struct upatch_jmp_table_entry));
++}
++
++static unsigned long setup_got_table(struct upatch_elf *uelf,
++				     unsigned long jmp_addr,
++				     unsigned long tls_addr)
++{
++	struct upatch_jmp_table_entry *table =
++		uelf->core_layout.kbase + uelf->jmp_offs;
++	unsigned int index = uelf->jmp_cur_entry;
++
++	if (index >= uelf->jmp_max_entry) {
++		log_error("got table overflow\n");
++		return 0;
++	}
++
++	table[index].inst[0] = jmp_addr;
++	table[index].inst[1] = tls_addr;
++	table[index].addr[0] = 0xffffffff;
++	table[index].addr[1] = 0xffffffff;
++	uelf->jmp_cur_entry++;
++	return (unsigned long)(uelf->core_layout.base + uelf->jmp_offs +
++			       index * sizeof(struct upatch_jmp_table_entry));
++}
++
++unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
++			       unsigned long r_type, unsigned long addr)
++{
++	unsigned long jmp_addr = 0xffffffff;
++	unsigned long tls_addr = 0xffffffff;
++	unsigned long elf_addr = 0;
++
++	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
++				    sizeof(jmp_addr))) {
++		log_error("copy address failed\n");
++		goto out;
++	}
++
++	elf_addr = setup_jmp_table(uelf, jmp_addr, (unsigned long)addr);
++
++	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n", elf_addr,
++		  jmp_addr, tls_addr);
++
++out:
++	return elf_addr;
++}
++
++unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
++			       unsigned long r_type, unsigned long addr)
++{
++	unsigned long jmp_addr = 0xffffffff;
++	unsigned long tls_addr = 0xffffffff;
++	unsigned long elf_addr = 0;
++
++	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
++				    sizeof(jmp_addr))) {
++		log_error("copy address failed\n");
++		goto out;
++	}
++
++    /*
++	 * Addr with this type means the symbol is a dynamic TLS variable.
++	 * Addr points to a GOT entry(16 bytes) having type
++	 * 
++	 * typedef struct {
++	 *		unsigned long int ti_module;
++	 *		unsigned long int ti_offset;
++	 * } tls_index;
++	 * 
++ 	 * We also need copy ti_offset to our jump table.
++	 * 
++	 * The corresponding symbol will associate with TLS_GD_HI20
++	 * relocation type, using this tls_index as argument to call
++	 * `void *__tls_get_addr (tls_index *ti)` to resolve the real address.
++	 */
++	if (r_type == R_RISCV_TLS_DTPMOD64 &&
++	    upatch_process_mem_read(obj->proc, addr + sizeof(unsigned long),
++				    &tls_addr, sizeof(tls_addr))) {
++		log_error("copy address failed\n");
++		goto out;
++	}
++
++	elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
++
++	log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n", elf_addr,
++		  jmp_addr, tls_addr);
++
++out:
++	return elf_addr;
++}
+diff --git a/upatch-manage/upatch-ptrace.c b/upatch-manage/upatch-ptrace.c
+index 39e8f59..f4e6553 100644
+--- a/upatch-manage/upatch-ptrace.c
++++ b/upatch-manage/upatch-ptrace.c
+@@ -26,6 +26,10 @@
+ #include <asm/unistd.h>
+ #include <sys/ptrace.h>
+ #include <sys/wait.h>
++#ifdef __riscv
++/* user_regs_struct defined here */
++#include <asm/ptrace.h>
++#endif
+ 
+ #include "upatch-common.h"
+ #include "upatch-ptrace.h"
+-- 
+2.39.2
+
+
+From 3d9413abc77aaa1ad9b758e5463ccd4a3730ff89 Mon Sep 17 00:00:00 2001
+From: laokz <zhangkai@iscas.ac.cn>
+Date: Wed, 6 Mar 2024 21:18:35 +0800
+Subject: [PATCH 8/8] riscv64: upatch-hijacker add arg register
+
+---
+ upatch-hijacker/ko/uprobe.c | 4 ++++
+ 1 file changed, 4 insertions(+)
+
+diff --git a/upatch-hijacker/ko/uprobe.c b/upatch-hijacker/ko/uprobe.c
+index bc3c639..c6522d6 100644
+--- a/upatch-hijacker/ko/uprobe.c
++++ b/upatch-hijacker/ko/uprobe.c
+@@ -42,6 +42,10 @@
+ #define _reg_argv0 regs->regs[0]
+ #endif
+ 
++#ifdef __riscv
++#define _reg_argv0 regs->a0
++#endif
++
+ /* Uprobe private interface */
+ static inline char* read_user_str(char *dst, const char __user *src, size_t count)
+ {
+-- 
+2.39.2
+

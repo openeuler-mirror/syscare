@@ -11,7 +11,7 @@
 ############################################
 Name:          syscare
 Version:       1.2.1
-Release:       8
+Release:       9
 Summary:       System hot-fix service
 License:       MulanPSL-2.0 and GPL-2.0-only
 URL:           https://gitee.com/openeuler/syscare
@@ -41,6 +41,7 @@ Patch0021:     0021-upatch-diff-only-check-changed-file-symbols.patch
 Patch0022:     0022-upatch-diff-remove-rela-check-while-build-rebuilding.patch
 Patch0023:     0023-syscared-fix-apply-kernel-module-patch-failure-issue.patch
 Patch0024:     0024-syscare-build-fix-build-oot-module-failure-issue.patch
+Patch0025:     0025-add-initial-riscv64-support.patch
 
 BuildRequires: cmake >= 3.14 make
 BuildRequires: rust >= 1.51 cargo >= 1.51
@@ -192,6 +193,8 @@ fi
 ################ Change log ################
 ############################################
 %changelog
+* Fri May 24 2024 laokz <zhangkai@iscas.ac.cn> - 1.2.1-9
+- add initial riscv64 support
 * Mon May 20 2024 ningyu<ningyu9@huawei.com> - 1.2.1-8
 - syscared: fix apply kernel module patch failure issue
 - syscare-build: fix build oot module failure issue
