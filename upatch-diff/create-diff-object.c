@@ -847,6 +847,19 @@ static void include_debug_sections(struct upatch_elf *uelf)
 /* currently, there si no special section need to be handled */
 static void process_special_sections(void) {}
 
+static bool has_tls_included(struct upatch_elf *uelf)
+{
+    struct symbol *sym;
+
+    list_for_each_entry(sym, &uelf->symbols, list) {
+        if (sym->include == 1 && sym->type == STT_TLS) {
+            log_normal("TLS symbol '%s' included, but it's not supported", sym->name);
+            return true;
+        }
+    }
+    return false;
+}
+
 static void verify_patchability(struct upatch_elf *uelf)
 {
     struct section *sec;
@@ -878,6 +891,10 @@ static void verify_patchability(struct upatch_elf *uelf)
 
     if (errs)
         DIFF_FATAL("%d, Unsupported section changes", errs);
+
+    if (has_tls_included(uelf)) {
+        DIFF_FATAL("Unsupported symbol included");
+    }
 }
 
 static void migrate_included_elements(struct upatch_elf *uelf_patched, struct upatch_elf *uelf_out)
