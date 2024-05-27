@@ -62,3 +62,25 @@ pub fn find_by_partuuid<S: AsRef<OsStr>>(name: S) -> std::io::Result<PathBuf> {
 pub fn find_by_path<S: AsRef<OsStr>>(name: S) -> std::io::Result<PathBuf> {
     find_disk("/dev/disk/by-path", name)
 }
+
+#[cfg(test)]
+
+
+
+
+use crate::util::ext_cmd::{ExternCommand,ExternCommandArgs};
+
+
+#[test]
+fn test() {
+    let get_uuid = ExternCommand::new("ls");
+    let get_uuid_args = ExternCommandArgs::new().arg("/dev/disk/by-uuid");
+    if let Ok(result_uuid) = get_uuid.execvp(get_uuid_args).unwrap().stdout().to_os_string().into_string() {
+       let uuids: Vec<&str> = result_uuid.split_whitespace().collect();
+       for uuid in uuids {
+         let disk_by_uuid = find_by_uuid(uuid);
+         println!("disk_by_uuid:  {}", disk_by_uuid.is_ok());
+         assert!(disk_by_uuid.is_ok());
+       }
+    }
+}
