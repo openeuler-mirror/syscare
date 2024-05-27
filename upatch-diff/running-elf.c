@@ -125,9 +125,15 @@ bool lookup_relf(struct running_elf *relf,
         symbol = &relf->obj_syms[i];
         sympos++;
 
-        if (strcmp(symbol->name, lookup_sym->name) != 0) {
+        if (result->symbol != NULL && symbol->type == STT_FILE) {
+            break;
+        }
+
+        if (strcmp(symbol->name, lookup_sym->name) != 0 ||
+            symbol->bind != lookup_sym->bind) {
             continue;
         }
+
         if ((result->symbol != NULL) &&
             (result->symbol->bind == symbol->bind)) {
             ERROR("Found duplicate symbol '%s' in %s",
