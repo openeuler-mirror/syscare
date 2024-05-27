@@ -64,13 +64,7 @@ pub fn find_by_path<S: AsRef<OsStr>>(name: S) -> std::io::Result<PathBuf> {
 }
 
 #[cfg(test)]
-
-
-
-
 use crate::util::ext_cmd::{ExternCommand,ExternCommandArgs};
-
-
 #[test]
 fn test() {
     let get_uuid = ExternCommand::new("ls");
