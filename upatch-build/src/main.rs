@@ -13,6 +13,7 @@
  */
 
 use std::{
+    env,
     ffi::OsStr,
     fs::Permissions,
     os::unix::fs::PermissionsExt,
@@ -54,6 +55,9 @@ const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
+const PATH_ENV_NAME: &str = "PATH";
+const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
+
 const LOG_FILE_NAME: &str = "build";
 
 struct BuildInfo {
@@ -83,6 +87,9 @@ impl UpatchBuild {
     fn new() -> Result<Self> {
         // Initialize arguments & prepare environments
         os::umask::set_umask(CLI_UMASK);
+        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
+            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+        }
 
         let args = Arguments::new()?;
         let build_root = BuildRoot::new(&args.build_root)?;
@@ -196,7 +203,7 @@ impl UpatchBuild {
         output_dir: &Path,
         verbose: bool,
     ) -> Result<()> {
-        const UPATCH_DIFF_BIN: &str = "/usr/libexec/syscare/upatch-diff";
+        const UPATCH_DIFF_BIN: &str = "upatch-diff";
 
         let ouput_name = original_object.file_name().with_context(|| {
             format!(

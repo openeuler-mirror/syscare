@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{fs::Permissions, os::unix::fs::PermissionsExt, panic, process, sync::Arc};
+use std::{env, fs::Permissions, os::unix::fs::PermissionsExt, panic, process, sync::Arc};
 
 use anyhow::{ensure, Context, Result};
 use daemonize::Daemonize;
@@ -28,7 +28,7 @@ use parking_lot::RwLock;
 use patch::manager::PatchManager;
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
 
-use syscare_common::{fs, os};
+use syscare_common::{concat_os, fs, os};
 
 mod args;
 mod config;
@@ -48,6 +48,9 @@ const DAEMON_NAME: &str = env!("CARGO_PKG_NAME");
 const DAEMON_VERSION: &str = env!("CARGO_PKG_VERSION");
 const DAEMON_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const DAEMON_UMASK: u32 = 0o077;
+
+const PATH_ENV_NAME: &str = "PATH";
+const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
 
 const CONFIG_FILE_NAME: &str = "syscared.yaml";
 const PID_FILE_NAME: &str = "syscared.pid";
@@ -107,6 +110,9 @@ impl Daemon {
 
         // Initialize arguments & prepare environments
         os::umask::set_umask(DAEMON_UMASK);
+        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
+            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+        }
 
         let args = Arguments::new()?;
         fs::create_dir_all(&args.config_dir)?;

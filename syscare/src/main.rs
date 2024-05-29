@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{process, rc::Rc};
+use std::{env, process, rc::Rc};
 
 use anyhow::{Context, Result};
 use flexi_logger::{DeferredNow, LogSpecification, Logger, LoggerHandle, WriteMode};
@@ -25,12 +25,15 @@ mod rpc;
 use args::Arguments;
 use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, CommandExecutor};
 use rpc::{RpcProxy, RpcRemote};
-use syscare_common::os;
+use syscare_common::{concat_os, os};
 
 pub const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o077;
+
+const PATH_ENV_NAME: &str = "PATH";
+const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
 
 const SOCKET_FILE_NAME: &str = "syscared.sock";
 const PATCH_OP_LOCK_NAME: &str = "patch_op.lock";
@@ -52,6 +55,9 @@ impl SyscareCLI {
     fn new() -> Result<Self> {
         // Initialize arguments & prepare environments
         os::umask::set_umask(CLI_UMASK);
+        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
+            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+        }
 
         let args = Arguments::new()?;
 

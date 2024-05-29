@@ -19,22 +19,21 @@ use anyhow::{bail, Context, Result};
 use super::CommandExecutor;
 use crate::args::SubCommand;
 
-const SYSCARE_BUILD_PATH: &str = "/usr/libexec/syscare/syscare-build";
+const SYSCARE_BUILD_BIN: &str = "syscare-build";
 
 pub struct BuildCommandExecutor;
 
 impl CommandExecutor for BuildCommandExecutor {
     fn invoke(&self, command: &SubCommand) -> Result<Option<i32>> {
         if let SubCommand::Build { args } = command {
-            let e = Command::new(SYSCARE_BUILD_PATH).args(args).exec();
+            let e = Command::new(SYSCARE_BUILD_BIN).args(args).exec();
 
             match e.kind() {
                 std::io::ErrorKind::NotFound => {
                     bail!("Package syscare-build is not installed");
                 }
                 _ => {
-                    return Err(e)
-                        .with_context(|| format!("Failed to start {}", SYSCARE_BUILD_PATH))
+                    return Err(e).with_context(|| format!("Failed to start {}", SYSCARE_BUILD_BIN))
                 }
             }
         }
