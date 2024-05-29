@@ -6,7 +6,7 @@ use uuid::Uuid;
 
 use syscare_common::process::Command;
 
-const UPATCH_MANAGE_BIN: &str = "/usr/libexec/syscare/upatch-manage";
+const UPATCH_MANAGE_BIN: &str = "upatch-manage";
 
 pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
     let exit_code = Command::new(UPATCH_MANAGE_BIN)

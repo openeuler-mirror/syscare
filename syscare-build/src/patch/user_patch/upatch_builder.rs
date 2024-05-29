@@ -34,7 +34,7 @@ use crate::{build_params::BuildParameters, package::PackageImpl, patch::PatchBui
 
 use super::{elf_relation::ElfRelation, DEBUGINFO_FILE_EXT};
 
-const UPATCH_BUILD_BIN: &str = "/usr/libexec/syscare/upatch-build";
+const UPATCH_BUILD_BIN: &str = "upatch-build";
 const RPMBUILD_BIN: &str = "rpmbuild";
 
 struct UBuildParameters {

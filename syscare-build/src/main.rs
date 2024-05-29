@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{process, sync::Arc};
+use std::{env, process, sync::Arc};
 
 use anyhow::{bail, ensure, Context, Result};
 use flexi_logger::{
@@ -22,7 +22,7 @@ use lazy_static::lazy_static;
 use log::{error, info, LevelFilter, Record};
 
 use syscare_abi::{PackageInfo, PackageType, PatchInfo, PatchType};
-use syscare_common::{fs, os};
+use syscare_common::{concat_os, fs, os};
 
 mod args;
 mod build_params;
@@ -43,6 +43,9 @@ const CLI_NAME: &str = "syscare build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
+
+const PATH_ENV_NAME: &str = "PATH";
+const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
 
 const LOG_FILE_NAME: &str = "build";
 const KERNEL_PKG_NAME: &str = "kernel";
@@ -70,6 +73,9 @@ impl SyscareBuild {
     fn new() -> Result<Self> {
         // Initialize arguments & prepare environments
         os::umask::set_umask(CLI_UMASK);
+        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
+            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+        }
 
         let args = Arguments::new()?;
         let build_root = BuildRoot::new(&args.build_root)?;
