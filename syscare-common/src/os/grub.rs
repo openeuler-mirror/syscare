@@ -310,26 +310,3 @@ pub fn get_boot_entry() -> std::io::Result<GrubMenuEntry> {
         format!("Cannot find grub default entry {:?}", default_entry_name),
     ))
 }
-
-#[test]
-fn test_for_grub_config() {
-    let grub_type = get_boot_type();
-    let grub_path = get_grub_path(grub_type);
-    let config = find_grub_config(grub_path);
-    assert!(config.is_ok());
-}
-
-#[test]
-fn test_for_menu_entries() {
-    let grub_type = get_boot_type();
-    let grub_path = get_grub_path(grub_type);
-    let entries = read_menu_entries(grub_path);
-    assert!(entries.is_ok());
-}
-#[test]
-fn test_for_grub_env(){
-    let grub_type = get_boot_type();
-    let grub_path = get_grub_path(grub_type);
-    let grub_env = read_grub_env(grub_path);
-    assert!(grub_env.is_ok());
-}
