@@ -12,6 +12,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
+pub use uuid::Uuid;
+
 mod package_info;
 mod patch_info;
 mod patch_status;
