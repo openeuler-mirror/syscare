@@ -106,7 +106,7 @@ static void create_symbol_list(struct upatch_elf *uelf)
         INIT_LIST_HEAD(&sym->children);
 
         sym->index = index;
-        if (!gelf_getsym(symtab->data, index, &sym->sym))
+        if (!gelf_getsym(symtab->data, (int)index, &sym->sym))
             ERROR("gelf_getsym with error %s", elf_errmsg(0));
 
         index ++;
@@ -122,7 +122,7 @@ static void create_symbol_list(struct upatch_elf *uelf)
         /* releated section located in extended header */
         if (shndx == SHN_XINDEX &&
             !gelf_getsymshndx(symtab->data, uelf->symtab_shndx,
-                sym->index, &sym->sym, &shndx))
+                (int)sym->index, &sym->sym, &shndx))
             ERROR("gelf_getsymshndx with error %s", elf_errmsg(0));
 
         if ((sym->sym.st_shndx > SHN_UNDEF && sym->sym.st_shndx < SHN_LORESERVE) ||
@@ -206,7 +206,7 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
         if (skip)
             continue;
 
-        log_debug("offset %d, type %d, %s %s %ld", rela->offset,
+        log_debug("offset %ld, type %d, %s %s %ld", rela->offset,
             rela->type, rela->sym->name,
             (rela->addend < 0) ? "-" : "+", labs(rela->addend));
         if (rela->string)  // rela->string is not utf8

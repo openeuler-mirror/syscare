@@ -37,7 +37,7 @@
 
 /* create text and relocation sections */
 static struct section *create_section_pair(struct upatch_elf *uelf, char *name,
-    int entsize, int nr)
+    unsigned int entsize, unsigned int nr)
 {
     char *relaname;
     struct section *sec, *relasec;
@@ -131,7 +131,7 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
     struct upatch_patch_func *funcs;
     struct rela *rela;
     struct lookup_result symbol;
-    int nr = 0, index = 0;
+    unsigned int nr = 0, index = 0;
 
     /* find changed func */
     list_for_each_entry(sym, &uelf->symbols, list) {
@@ -197,7 +197,7 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
         ERROR("sanity check failed in funcs sections. \n");
 }
 
-static bool need_dynrela(struct upatch_elf *uelf, struct running_elf *relf,
+static bool need_dynrela(struct running_elf *relf,
     struct section *relasec, struct rela *rela)
 {
     struct lookup_result symbol;
@@ -234,7 +234,7 @@ void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running
     struct upatch_symbol *usyms;
     struct upatch_relocation *urelas;
     struct symbol *strsym, *usym_sec_sym;
-    int nr = 0, index = 0;
+    unsigned int nr = 0, index = 0;
 
     list_for_each_entry(relasec, &uelf->sections, list) {
         if (!is_rela_section(relasec))
@@ -245,7 +245,7 @@ void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running
 
         list_for_each_entry(rela, &relasec->relas, list) {
             nr++;
-            if (need_dynrela(uelf, relf, relasec, rela)){
+            if (need_dynrela(relf, relasec, rela)){
                 rela->need_dynrela = 1;
             }
         }
@@ -401,7 +401,7 @@ static void rebuild_rela_section_data(struct section *sec)
     struct rela *rela;
     GElf_Rela *relas;
     size_t size;
-    int nr = 0, index = 0;
+    unsigned int nr = 0, index = 0;
 
     list_for_each_entry(rela, &sec->relas, list)
         nr++;
@@ -438,13 +438,13 @@ void upatch_rebuild_relocations(struct upatch_elf *uelf)
     list_for_each_entry(relasec, &uelf->sections, list) {
         if (!is_rela_section(relasec))
             continue;
-        relasec->sh.sh_link = symtab->index;
-        relasec->sh.sh_info = relasec->base->index;
+        relasec->sh.sh_link = (Elf64_Word)symtab->index;
+        relasec->sh.sh_info = (Elf64_Word)relasec->base->index;
         rebuild_rela_section_data(relasec);
     }
 }
 
-void upatch_check_relocations(struct upatch_elf *uelf)
+void upatch_check_relocations(void)
 {
     log_debug("upatch_check_relocations does not work now.\n");
     return;
@@ -558,7 +558,7 @@ void upatch_create_symtab(struct upatch_elf *uelf)
     struct symbol *sym;
     size_t size;
     char *buf;
-    int nr = 0, nr_local = 0;
+    unsigned int nr = 0, nr_local = 0;
     unsigned long offset = 0;
 
     symtab = find_section_by_name(&uelf->sections, ".symtab");
@@ -591,7 +591,7 @@ void upatch_create_symtab(struct upatch_elf *uelf)
     if (!strtab)
         ERROR("missing .strtab section in create symtab.");
 
-    symtab->sh.sh_link = strtab->index;
+    symtab->sh.sh_link = (Elf64_Word)strtab->index;
     symtab->sh.sh_info = nr_local;
 }
 
