@@ -64,8 +64,8 @@ enum aarch64_insn_imm_type {
 u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type, u32 insn,
 				  u64 imm);
 
-u64 extract_insn_imm(s64, int, int);
+s64 extract_insn_imm(s64, int, int);
 
-u32 insert_insn_imm(enum aarch64_insn_imm_type, void *, u64);
+s32 insert_insn_imm(enum aarch64_insn_imm_type, void *, u64);
 
 #endif /* _ARCH_AARCH64_INSN_H */

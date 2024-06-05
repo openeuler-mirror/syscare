@@ -58,9 +58,10 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf 
 			    sym_orig->type != sym_patched->type || sym_patched->twin)
 				continue;
 
-			if (is_special_static(sym_orig))
-				continue;
-
+		   	/*
+			 * TODO: Special static local variables should never be correlated and should always
+			 * be included if they are referenced by an included function.
+			 */
 			/*
 			 * The .LCx symbols point to string literals in
 			 * '.rodata.<func>.str1.*' sections.  They get included
@@ -140,11 +141,10 @@ void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf
 			    sec_patched->twin)
 				continue;
 
-			if (is_special_static(is_rela_section(sec_orig) ?
-					      sec_orig->base->secsym :
-					      sec_orig->secsym))
-				continue;
-
+			/*
+			 * TODO: Special static local variables should never be correlated and should always
+			 * be included if they are referenced by an included function.
+			 */
 			/*
 			 * Group sections must match exactly to be correlated.
 			 */

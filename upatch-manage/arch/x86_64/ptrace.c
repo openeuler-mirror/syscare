@@ -19,6 +19,7 @@
  */
 
 #include <string.h>
+#include <stdlib.h>
 
 #include <sys/ptrace.h>
 #include <sys/socket.h>
@@ -26,7 +27,7 @@
 
 #include "upatch-ptrace.h"
 
-int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
+long upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 			       unsigned long arg1, unsigned long arg2,
 			       unsigned long arg3, unsigned long arg4,
 			       unsigned long arg5, unsigned long arg6,
@@ -38,11 +39,11 @@ int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 		0x0f, 0x05, /* syscall */
 		0xcc, /* int3 */
 	};
-	int ret;
+	long ret;
 
 	memset(&regs, 0, sizeof(struct user_regs_struct));
 	log_debug("Executing syscall %d (pid %d)...\n", nr, pctx->pid);
-	regs.rax = (unsigned long)nr;
+	regs.rax = (unsigned long long)nr;
 	regs.rdi = arg1;
 	regs.rsi = arg2;
 	regs.rdx = arg3;
@@ -57,7 +58,7 @@ int upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 	return ret;
 }
 
-int upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
+long upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
 				    const unsigned char *code, size_t codelen,
 				    struct user_regs_struct *pregs,
 				    int (*func)(struct upatch_ptrace_ctx *pctx,
@@ -65,23 +66,30 @@ int upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
 				    const void *data)
 {
 	struct user_regs_struct orig_regs, regs;
-	unsigned char orig_code[codelen];
-	int ret;
+	long ret;
 	struct upatch_process *proc = pctx->proc;
 	unsigned long libc_base = proc->libc_base;
 
+	unsigned char *orig_code = (unsigned char *)malloc(sizeof(*orig_code) * codelen);
+
+	if (orig_code == NULL) {
+		log_error("Malloc orig_code failed\n");
+		return -1;
+	}
 	ret = ptrace(PTRACE_GETREGS, pctx->pid, NULL, &orig_regs);
 	if (ret < 0) {
 		log_error("can't get regs - %d\n", pctx->pid);
+		free(orig_code);
 		return -1;
 	}
 	ret = upatch_process_mem_read(proc, libc_base,
 				      (unsigned long *)orig_code, codelen);
 	if (ret < 0) {
 		log_error("can't peek original code - %d\n", pctx->pid);
+		free(orig_code);
 		return -1;
 	}
-	ret = upatch_process_mem_write(proc, (unsigned long *)code, libc_base,
+	ret = upatch_process_mem_write(proc, code, libc_base,
 				       codelen);
 	if (ret < 0) {
 		log_error("can't poke syscall code - %d\n", pctx->pid);
@@ -122,6 +130,7 @@ int upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
 poke_back:
 	upatch_process_mem_write(proc, (unsigned long *)orig_code, libc_base,
 				 codelen);
+	free(orig_code);
 	return ret;
 }
 
@@ -165,22 +174,8 @@ size_t get_upatch_addr_len()
 }
 
 
-unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
-               unsigned long new_addr)
+unsigned long get_new_insn(void)
 {
 	char jmp_insn[] = { 0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
 	return *(unsigned long *)jmp_insn;
 }
-
-#if 0
-unsigned long get_new_insn(struct object_file *obj, unsigned long old_addr,
-			   unsigned long new_addr)
-{
-	char jmp_insn[] = { 0xe9, 0x00, 0x00, 0x00, 0x00 }; /* jmp IMM */
-
-	*(unsigned int *)(jmp_insn + 1) =
-		(unsigned int)(new_addr - old_addr - 5);
-
-	return *(unsigned long *)jmp_insn;
-}
-#endif

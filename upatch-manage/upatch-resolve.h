@@ -29,7 +29,7 @@
 /* jmp table, solve limit for the jmp instruction, Used for both PLT/GOT */
 struct upatch_jmp_table_entry;
 
-unsigned int get_jmp_table_entry();
+unsigned int get_jmp_table_entry(void);
 
 unsigned long insert_plt_table(struct upatch_elf *, struct object_file *,
 			       unsigned long, unsigned long);

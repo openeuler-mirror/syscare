@@ -133,7 +133,7 @@ void upatch_process_print_short(struct upatch_process *);
 
 int upatch_process_mem_open(struct upatch_process *, int);
 
-int upatch_process_map_object_files(struct upatch_process *, const char *);
+int upatch_process_map_object_files(struct upatch_process *);
 
 int upatch_process_attach(struct upatch_process *);
 

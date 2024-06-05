@@ -175,7 +175,7 @@ bool upatch_handle_redis_line(const char *symname)
 }
 
 /* TODO: let user support this list or generate by the compiler ? */
-bool check_line_func(struct upatch_elf *uelf, const char *symname)
+bool check_line_func(const char *symname)
 {
 	if (!strncmp(basename(g_relf_name), "redis-server", 12))
 		return upatch_handle_redis_line(symname);
@@ -247,7 +247,7 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
 				continue;
 
 			/* TODO: we may need black list ? */
-			if (check_line_func(uelf, rela->sym->name)) {
+			if (check_line_func(rela->sym->name)) {
 				found = true;
 				break;
 			}
@@ -292,8 +292,8 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
 			continue;
 
 		/* verify it's a mov immediate to w1 */
-		if ((*(int *)(start1 + offset) & ~mov_imm_mask) !=
-				(*(int *)(start2 + offset) & ~mov_imm_mask))
+		if ((*(unsigned int *)(start1 + offset) & ~mov_imm_mask) !=
+				(*(unsigned int *)(start2 + offset) & ~mov_imm_mask))
 			return false;
 
 		found = false;
@@ -304,7 +304,7 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
 				continue;
 
 			/* TODO: we may need black list ? */
-			if (check_line_func(uelf, rela->sym->name)) {
+			if (check_line_func(rela->sym->name)) {
 				found = true;
 				break;
 			}

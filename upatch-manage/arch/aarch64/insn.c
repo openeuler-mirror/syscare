@@ -97,17 +97,17 @@ u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type, u32 insn,
 
 	/* Update the immediate field. */
 	insn &= ~(mask << shift);
-	insn |= (imm & mask) << shift;
+	insn |= (u32)(imm & mask) << shift;
 
 	return insn;
 }
 
-u64 extract_insn_imm(s64 sval, int len, int lsb)
+s64 extract_insn_imm(s64 sval, int len, int lsb)
 {
-	u64 imm, imm_mask;
+	s64 imm, imm_mask;
 
 	imm = sval >> lsb;
-	imm_mask = (BIT(lsb + len) - 1) >> lsb;
+	imm_mask = (s64)((BIT(lsb + len) - 1) >> lsb);
 	imm = imm & imm_mask;
 
 	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n", sval,
@@ -115,7 +115,7 @@ u64 extract_insn_imm(s64 sval, int len, int lsb)
 	return imm;
 }
 
-u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
+s32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
 {
 	u32 insn, new_insn;
 
@@ -126,5 +126,5 @@ u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
 		"upatch: insert imm, P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, "
 		"new_insn=0x%x\n",
 		(u64)place, insn, imm_type, imm, new_insn);
-	return new_insn;
+	return (s32)new_insn;
 }

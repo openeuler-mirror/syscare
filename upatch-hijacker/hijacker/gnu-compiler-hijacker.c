@@ -16,7 +16,7 @@
 
 #include "hijacker.h"
 
-static const char* APPEND_ARGS[] = {
+static char* APPEND_ARGS[] = {
     "-gdwarf", /* obatain debug information */
     "-ffunction-sections",
     "-fdata-sections",
@@ -52,7 +52,7 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     int new_argc = argc + APPEND_ARG_LEN + 1; // include terminator NULL
-    const char **new_argv = calloc(1, new_argc * sizeof(char *));
+    char **new_argv = calloc(1, (unsigned long)new_argc * sizeof(char *));
     if (new_argv == NULL) {
         return execve(filename, argv, envp);
     }

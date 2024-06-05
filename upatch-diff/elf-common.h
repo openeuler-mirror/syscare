@@ -103,7 +103,7 @@ static inline bool is_debug_section(struct section *sec)
 		!strncmp(name, ".eh_frame", 9);
 }
 
-static inline struct symbol *find_symbol_by_index(struct list_head *list, size_t index)
+static inline struct symbol *find_symbol_by_index(struct list_head *list, unsigned int index)
 {
 	struct symbol *sym;
 
@@ -174,16 +174,6 @@ static inline bool has_digit_tail(char *tail)
  */
 int mangled_strcmp(char *, char *);
 
-
-/*
- * TODO: Special static local variables should never be correlated and should always
- * be included if they are referenced by an included function.
- */
-static inline bool is_special_static(struct symbol *sym){
-    /* Not need it now. */
-    return false;
-}
-
 bool is_normal_static_local(struct symbol *);
 
 static inline char *section_function_name(struct section *sec)
@@ -243,7 +233,7 @@ static inline bool is_local_sym(struct symbol *sym)
 	return sym->bind == STB_LOCAL;
 }
 
-bool is_gcc6_localentry_bundled_sym(struct upatch_elf *, struct symbol *);
+bool is_gcc6_localentry_bundled_sym(struct upatch_elf *);
 
 /*
  * Mapping symbols are used to mark and label the transitions between code and

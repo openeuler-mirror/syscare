@@ -30,14 +30,14 @@
 #include "upatch-elf.h"
 #include "upatch-ptrace.h"
 
-static int read_from_offset(int fd, void **buf, int len, off_t offset)
+static int read_from_offset(int fd, void **buf, unsigned long len, off_t offset)
 {
     *buf = malloc(len);
     if (*buf == NULL) {
         return -errno;
     }
 
-    int size = pread(fd, *buf, len, offset);
+    ssize_t size = pread(fd, *buf, len, offset);
     if (size == -1) {
         return -errno;
     }
@@ -47,7 +47,7 @@ static int read_from_offset(int fd, void **buf, int len, off_t offset)
 
 static int open_elf(struct elf_info *einfo, const char *name)
 {
-    int ret = 0, fd = -1, i;
+    int ret = 0, fd = -1;
     char *sec_name;
     struct stat st;
 
@@ -65,7 +65,7 @@ static int open_elf(struct elf_info *einfo, const char *name)
         goto out;
     }
 
-    ret = read_from_offset(fd, (void **)&einfo->patch_buff, st.st_size, 0);
+    ret = read_from_offset(fd, (void **)&einfo->patch_buff, (unsigned long)st.st_size, 0);
     if (ret != 0) {
         log_error("Failed to read file '%s'\n", name);
         goto out;
@@ -73,7 +73,7 @@ static int open_elf(struct elf_info *einfo, const char *name)
 
     einfo->name = name;
     einfo->inode = st.st_ino;
-    einfo->patch_size = st.st_size;
+    einfo->patch_size = (unsigned long)st.st_size;
     einfo->hdr = (void *)einfo->patch_buff;
     einfo->shdrs = (void *)einfo->hdr + einfo->hdr->e_shoff;
     einfo->shstrtab = (void *)einfo->hdr + einfo->shdrs[einfo->hdr->e_shstrndx].sh_offset;
@@ -85,7 +85,7 @@ static int open_elf(struct elf_info *einfo, const char *name)
         goto out;
     }
 
-    for (i = 0; i < einfo->hdr->e_shnum; ++i) {
+    for (unsigned int i = 0; i < einfo->hdr->e_shnum; ++i) {
         sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
         if (streql(sec_name, BUILD_ID_NAME) && einfo->shdrs[i].sh_type == SHT_NOTE) {
             einfo->num_build_id = i;
@@ -116,7 +116,7 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
         return ret;
     }
 
-    for (int i = 1; i < uelf->info.hdr->e_shnum; ++i) {
+    for (unsigned int i = 1; i < uelf->info.hdr->e_shnum; ++i) {
         char *sec_name = uelf->info.shstrtab + uelf->info.shdrs[i].sh_name;
         if (uelf->info.shdrs[i].sh_type == SHT_SYMTAB) {
             uelf->num_syms = uelf->info.shdrs[i].sh_size / sizeof(GElf_Sym);
@@ -165,7 +165,7 @@ int binary_init(struct running_elf *relf, const char *name)
         return ret;
     }
 
-    for (int i = 1; i < relf->info.hdr->e_shnum; i++) {
+    for (unsigned int i = 1; i < relf->info.hdr->e_shnum; i++) {
         char *sec_name = relf->info.shstrtab + relf->info.shdrs[i].sh_name;
         if (relf->info.shdrs[i].sh_type == SHT_SYMTAB) {
             log_debug("Found section '%s', idx=%d\n", SYMTAB_NAME, i);

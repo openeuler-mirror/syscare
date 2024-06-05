@@ -37,16 +37,16 @@ int upatch_process_mem_read(struct upatch_process *proc, unsigned long src,
 {
 	ssize_t r = pread(proc->memfd, dst, size, (off_t)src);
 
-	return r != size ? -1 : 0;
+	return r != (ssize_t)size ? -1 : 0;
 }
 
 static int upatch_process_mem_write_ptrace(struct upatch_process *proc,
-	void *src, unsigned long dst, size_t size)
+	const void *src, unsigned long dst, size_t size)
 {
-	int ret;
+	long ret;
 
 	while (ROUND_DOWN(size, sizeof(long)) != 0) {
-		ret = ptrace(PTRACE_POKEDATA, proc->pid, dst, *(unsigned long *)src);
+		ret = ptrace(PTRACE_POKEDATA, proc->pid, dst, *(const unsigned long *)src);
 		if (ret) {
 			return -1;
 		}
@@ -56,10 +56,10 @@ static int upatch_process_mem_write_ptrace(struct upatch_process *proc,
 	}
 
 	if (size) {
-		unsigned long tmp;
+		long tmp;
 
 		tmp = ptrace(PTRACE_PEEKDATA, proc->pid, dst, NULL);
-		if (tmp == (unsigned long)-1 && errno) {
+		if (tmp == -1 && errno) {
 			return -1;
 		}
 		memcpy(&tmp, src, size);
@@ -73,7 +73,7 @@ static int upatch_process_mem_write_ptrace(struct upatch_process *proc,
 	return 0;
 }
 
-int upatch_process_mem_write(struct upatch_process *proc, void *src,
+int upatch_process_mem_write(struct upatch_process *proc, const void *src,
 	unsigned long dst, size_t size)
 {
 	static int use_pwrite = 1;
@@ -87,7 +87,7 @@ int upatch_process_mem_write(struct upatch_process *proc, void *src,
 		return upatch_process_mem_write_ptrace(proc, src, dst, size);
 	}
 
-	return w != size ? -1 : 0;
+	return w != (ssize_t)size ? -1 : 0;
 }
 
 static struct upatch_ptrace_ctx* upatch_ptrace_ctx_alloc(
@@ -168,19 +168,20 @@ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
 
 int wait_for_stop(struct upatch_ptrace_ctx *pctx, const void *data)
 {
-	int ret, status = 0, pid = (int)(uintptr_t)data ?: pctx->pid;
+	long ret;
+	int status = 0, pid = (int)(uintptr_t)data ?: pctx->pid;
 	log_debug("wait_for_stop(pctx->pid=%d, pid=%d)\n", pctx->pid, pid);
 
 	while (1) {
 		ret = ptrace(PTRACE_CONT, pctx->pid, NULL, (void *)(uintptr_t)status);
 		if (ret < 0) {
-			log_error("Cannot start tracee %d, ret=%d\n", pctx->pid, ret);
+			log_error("Cannot start tracee %d, ret=%ld\n", pctx->pid, ret);
 			return -1;
 		}
 
 		ret = waitpid(pid, &status, __WALL);
 		if (ret < 0) {
-			log_error("Cannot wait tracee %d, ret=%d\n", pid, ret);
+			log_error("Cannot wait tracee %d, ret=%ld\n", pid, ret);
 			return -1;
 		}
 
@@ -217,7 +218,7 @@ int upatch_ptrace_detach(struct upatch_ptrace_ctx *pctx)
 	return 0;
 }
 
-int upatch_execute_remote(struct upatch_ptrace_ctx *pctx,
+long upatch_execute_remote(struct upatch_ptrace_ctx *pctx,
 	const unsigned char *code, size_t codelen,
 	struct user_regs_struct *pregs)
 {
@@ -226,13 +227,13 @@ int upatch_execute_remote(struct upatch_ptrace_ctx *pctx,
 }
 
 unsigned long upatch_mmap_remote(struct upatch_ptrace_ctx *pctx,
-	unsigned long addr, size_t length, int prot,
-	int flags, int fd, off_t offset)
+	unsigned long addr, size_t length, unsigned long prot,
+	unsigned long flags, unsigned long fd, unsigned long offset)
 {
-	int ret;
+	long ret;
 	unsigned long res = 0;
 
-	log_debug("mmap_remote: 0x%lx+%lx, %x, %x, %d, %lx\n", addr, length,
+	log_debug("mmap_remote: 0x%lx+%lx, %lx, %lx, %lu, %lx\n", addr, length,
 		  prot, flags, fd, offset);
 	ret = upatch_arch_syscall_remote(pctx, __NR_mmap, (unsigned long)addr,
 					 length, prot, flags, fd, offset, &res);
@@ -240,16 +241,16 @@ unsigned long upatch_mmap_remote(struct upatch_ptrace_ctx *pctx,
 		return 0;
 	}
 	if (ret == 0 && res >= (unsigned long)-MAX_ERRNO) {
-		errno = -(long)res;
+		errno = -(int)res;
 		return 0;
 	}
 	return res;
 }
 
 int upatch_mprotect_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
-	size_t length, int prot)
+	size_t length, unsigned long prot)
 {
-	int ret;
+	long ret;
 	unsigned long res;
 
 	log_debug("mprotect_remote: 0x%lx+%lx\n", addr, length);
@@ -259,7 +260,7 @@ int upatch_mprotect_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
 	if (ret < 0)
 		return -1;
 	if (ret == 0 && res >= (unsigned long)-MAX_ERRNO) {
-		errno = -(long)res;
+		errno = -(int)res;
 		return -1;
 	}
 
@@ -269,7 +270,7 @@ int upatch_mprotect_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
 int upatch_munmap_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
 	size_t length)
 {
-	int ret;
+	long ret;
 	unsigned long res;
 
 	log_debug("munmap_remote: 0x%lx+%lx\n", addr, length);
@@ -278,7 +279,7 @@ int upatch_munmap_remote(struct upatch_ptrace_ctx *pctx, unsigned long addr,
 	if (ret < 0)
 		return -1;
 	if (ret == 0 && res >= (unsigned long)-MAX_ERRNO) {
-		errno = -(long)res;
+		errno = -(int)res;
 		return -1;
 	}
 	return 0;

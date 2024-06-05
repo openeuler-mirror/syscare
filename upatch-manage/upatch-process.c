@@ -65,7 +65,7 @@ static int lock_process(int pid)
 	return fd;
 }
 
-static void unlock_process(int pid, int fdmaps)
+static void unlock_process(int fdmaps)
 {
 	int errsv = errno;
 	close(fdmaps);
@@ -141,7 +141,7 @@ int upatch_process_init(struct upatch_process *proc, int pid)
 	return 0;
 
 out_unlock:
-	unlock_process(pid, fdmaps);
+	unlock_process(fdmaps);
 out_err:
 	return -1;
 }
@@ -192,7 +192,7 @@ static void upatch_process_memfree(struct upatch_process *proc)
 
 void upatch_process_destroy(struct upatch_process *proc)
 {
-	unlock_process(proc->pid, proc->fdmaps);
+	unlock_process(proc->fdmaps);
 	upatch_process_memfree(proc);
 }
 
@@ -345,12 +345,12 @@ static int object_add_vm_area(struct object_file *o, struct vm_area *vma,
 }
 
 static struct object_file *
-process_new_object(struct upatch_process *proc, dev_t dev, int inode,
+process_new_object(struct upatch_process *proc, dev_t dev, ino_t inode,
 		   const char *name, struct vm_area *vma, struct vm_hole *hole)
 {
 	struct object_file *o;
 
-	log_debug("Creating object file '%s' for %lx:%d...", name, dev, inode);
+	log_debug("Creating object file '%s' for %lx:%lu...", name, dev, inode);
 
 	o = malloc(sizeof(*o));
 	if (!o) {
@@ -389,7 +389,7 @@ process_new_object(struct upatch_process *proc, dev_t dev, int inode,
  * Returns: 0 if everything is ok, -1 on error.
  */
 static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
-				  int inode, char *name, struct vm_area *vma,
+				  ino_t inode, char *name, struct vm_area *vma,
 				  struct vm_hole *hole)
 {
 	int object_type;
@@ -407,7 +407,7 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
 		 */
 		list_for_each_entry_reverse(o, &proc->objs, list) {
 			if ((dev && inode && o->dev == dev &&
-			     o->inode == inode) ||
+			     o->inode == (ino_t)inode) ||
 			    (dev == 0 && !strcmp(o->name, name))) {
 				return object_add_vm_area(o, vma, hole);
 			}
@@ -512,9 +512,9 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
 		vma.prot = perms2prot(perms);
 
 		/* Hole must be at least 2 pages for guardians */
-		if (start - hole_start > 2 * PAGE_SIZE) {
-			hole = process_add_vm_hole(proc, hole_start + PAGE_SIZE,
-						   start - PAGE_SIZE);
+		if (start - hole_start > (unsigned long)(2 * PAGE_SIZE)) {
+			hole = process_add_vm_hole(proc, hole_start + (unsigned long)PAGE_SIZE,
+						   start - (unsigned long)PAGE_SIZE);
 			if (hole == NULL) {
 				log_error("Failed to add vma hole");
 				goto error;
@@ -557,8 +557,7 @@ error:
 	return -1;
 }
 
-int upatch_process_map_object_files(struct upatch_process *proc,
-				    const char *patch_id)
+int upatch_process_map_object_files(struct upatch_process *proc)
 {
 	// we can get plt/got table from mem's elf_segments
 	// Now we read them from the running file
@@ -618,7 +617,7 @@ static int process_list_threads(struct upatch_process *proc, int **ppids,
 
 	*ppids = pids;
 
-	return *npids;
+	return (int)*npids;
 
 dealloc:
 	if (dir) {
@@ -761,8 +760,10 @@ static inline unsigned long hole_size(struct vm_hole *hole)
 int vm_hole_split(struct vm_hole *hole, unsigned long alloc_start,
 		  unsigned long alloc_end)
 {
-	alloc_start = ROUND_DOWN(alloc_start, PAGE_SIZE) - PAGE_SIZE;
-	alloc_end = ROUND_UP(alloc_end, PAGE_SIZE) + PAGE_SIZE;
+	unsigned long page_size = (unsigned long)PAGE_SIZE;
+
+	alloc_start = ROUND_DOWN(alloc_start, page_size) - page_size;
+	alloc_end = ROUND_UP(alloc_end, page_size) + page_size;
 
 	if (alloc_start > hole->start) {
 		struct vm_hole *left = NULL;
@@ -856,7 +857,7 @@ unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
 		return -1UL;
 	}
 
-	region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
+	region_start = (region_start >> (unsigned long)PAGE_SHIFT) << (unsigned long)PAGE_SHIFT;
 	log_debug("Found patch region for '%s' at 0x%lx\n", obj->name,
 		  region_start);
 

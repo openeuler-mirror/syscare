@@ -76,11 +76,11 @@ struct arguments {
 };
 
 static struct argp_option options[] = {
-    {"debug", 'd', NULL, 0, "Show debug output"},
-    {"source", 's', "source", 0, "Source object"},
-    {"patched", 'p', "patched", 0, "Patched object"},
-    {"running", 'r', "running", 0, "Running binary file"},
-    {"output", 'o', "output", 0, "Output object"},
+    {"debug", 'd', NULL, 0, "Show debug output", 0},
+    {"source", 's', "source", 0, "Source object", 0},
+    {"patched", 'p', "patched", 0, "Patched object", 0},
+    {"running", 'r', "running", 0, "Running binary file", 0},
+    {"output", 'o', "output", 0, "Output object", 0},
     {NULL}
 };
 
@@ -136,7 +136,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
     return 0;
 }
 
-static struct argp argp = {options, parse_opt, args_doc, program_doc};
+static struct argp argp = {options, parse_opt, args_doc, program_doc, NULL, NULL, NULL};
 
 /*
  * Key point for chreate-diff-object:
@@ -266,7 +266,7 @@ static void bundle_symbols(struct upatch_elf *uelf)
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (is_bundleable(sym)) {
             if (sym->sym.st_value != 0 &&
-                is_gcc6_localentry_bundled_sym(uelf, sym)) {
+                is_gcc6_localentry_bundled_sym(uelf)) {
                 ERROR("Symbol '%s' at offset %lu within section '%s', expected 0.",
                     sym->name, sym->sym.st_value, sym->sec->name);
             }
@@ -301,7 +301,7 @@ static void detect_child_functions(struct upatch_elf *uelf)
         if (!childstr)
             continue;
 
-        pname = strndup(sym->name, childstr - sym->name);
+        pname = strndup(sym->name, (size_t)(childstr - sym->name));
         log_debug("symbol '%s', pname: '%s'\n", sym->name, pname);
         if (!pname)
             ERROR("detect_child_functions strndup failed.");
@@ -576,8 +576,8 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 if (sym->type == STT_SECTION || sym->sec != rela->sym->sec)
                     continue;
 
-                start = sym->sym.st_value;
-                end = sym->sym.st_value + sym->sym.st_size;
+                start = (long)sym->sym.st_value;
+                end = (long)(sym->sym.st_value + sym->sym.st_size);
 
                 /* text section refer other sections */
                 if (is_text_section(relasec->base) &&
@@ -638,7 +638,7 @@ static void replace_section_syms(struct upatch_elf *uelf)
             if (!found && !is_string_literal_section(rela->sym->sec) &&
                 strncmp(rela->sym->name, ".rodata", strlen(".rodata")) &&
                 strncmp(rela->sym->name, ".data", strlen(".data"))) {
-                ERROR("%s+0x%x: Cannot find replacement symbol for '%s+%ld' reference.",
+                ERROR("%s+0x%lx: Cannot find replacement symbol for '%s+%ld' reference.",
                 relasec->base->name, rela->offset, rela->sym->name, rela->addend);
             }
         }
@@ -662,8 +662,8 @@ static void mark_ignored_sections(struct upatch_elf *uelf)
 }
 
 /*  TODO: we do not handle it now */
-static void mark_ignored_functions_same(struct upatch_elf *uelf) {}
-static void mark_ignored_sections_same(struct upatch_elf *uelf) {}
+static void mark_ignored_functions_same(void) {}
+static void mark_ignored_sections_same(void) {}
 
 /*
 * For a local symbol referenced in the rela list of a changing function,
@@ -845,7 +845,7 @@ static void include_debug_sections(struct upatch_elf *uelf)
 }
 
 /* currently, there si no special section need to be handled */
-static void process_special_sections(struct upatch_elf *uelf) {}
+static void process_special_sections(void) {}
 
 static void verify_patchability(struct upatch_elf *uelf)
 {
@@ -973,8 +973,8 @@ int main(int argc, char*argv[])
     mark_file_symbols(&uelf_source);
     find_debug_symbol(&uelf_source, &relf);
 
-    mark_ignored_functions_same(&uelf_patched);
-    mark_ignored_sections_same(&uelf_patched);
+    mark_ignored_functions_same();
+    mark_ignored_sections_same();
 
     upatch_elf_teardown(&uelf_source);
     upatch_elf_free(&uelf_source);
@@ -990,7 +990,7 @@ int main(int argc, char*argv[])
 
     include_debug_sections(&uelf_patched);
 
-    process_special_sections(&uelf_patched);
+    process_special_sections();
 
     upatch_print_changes(&uelf_patched);
 
@@ -1011,7 +1011,7 @@ int main(int argc, char*argv[])
 
     upatch_create_intermediate_sections(&uelf_out, &relf);
 
-    create_kpatch_arch_section(&uelf_out);
+    create_kpatch_arch_section();
 
     upatch_build_strings_section_data(&uelf_out);
 
@@ -1029,7 +1029,7 @@ int main(int argc, char*argv[])
 
     upatch_rebuild_relocations(&uelf_out);
 
-    upatch_check_relocations(&uelf_out);
+    upatch_check_relocations();
 
     upatch_create_shstrtab(&uelf_out);
 
