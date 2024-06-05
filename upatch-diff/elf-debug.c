@@ -60,7 +60,7 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
                 goto next;
             log_debug("rela section expansion\n");
             list_for_each_entry(rela, &sec->relas, list) {
-                log_debug("sym %d, offset %d, type %d, %s %s %ld \n",
+                log_debug("sym %d, offset %ld, type %d, %s %s %ld \n",
                     rela->sym->index, rela->offset,
                     rela->type, rela->sym->name,
                     (rela->addend < 0) ? "-" : "+",
@@ -107,7 +107,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
     struct rela *rela;
     unsigned char *data, *data_end;
     unsigned int hdr_length, hdr_id;
-    unsigned int current_offset;
+    unsigned long current_offset;
     unsigned int count = 0;
 
     /* sanity check */
@@ -136,13 +136,13 @@ void upatch_rebuild_eh_frame(struct section *sec)
     /* 8 is the offset of PC begin */
     current_offset = 8;
     list_for_each_entry(rela, &sec->rela->relas, list) {
-        unsigned int offset = rela->offset;
+        unsigned long offset = rela->offset;
         bool found_rela = false;
-        log_debug("handle relocaton offset at 0x%x \n", offset);
+        log_debug("handle relocaton offset at 0x%lx \n", offset);
         while (data != data_end) {
             void *__src = data;
 
-            log_debug("current handle offset is 0x%x \n", current_offset);
+            log_debug("current handle offset is 0x%lx \n", current_offset);
 
             REQUIRE(skip_bytes(&data, data_end, 4), "no length to be read");
             hdr_length = *(unsigned int *)(data - 4);
@@ -166,13 +166,13 @@ void upatch_rebuild_eh_frame(struct section *sec)
                 /* update rela offset to point to new offset, and also hdr_id */
                 if (found_rela) {
                     /* 4 is the offset of hdr_id and 8 is the offset of PC begin */
-                    *(unsigned int *)(eh_frame + frame_size + 4) = frame_size + 4;
+                    *(unsigned long *)(eh_frame + frame_size + 4) = frame_size + 4;
                     rela->offset = frame_size + 8;
                 }
 
                 frame_size += (hdr_length + 4);
             } else {
-                log_debug("remove FDE at 0x%x \n", current_offset);
+                log_debug("remove FDE at 0x%lx \n", current_offset);
             }
 
             /* hdr_length(value) + hdr_length(body) */

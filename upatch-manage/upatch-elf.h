@@ -56,7 +56,7 @@ struct upatch_info {
 	unsigned long size; // upatch_info and upatch_info_func size
 	unsigned long start; // upatch vma start
 	unsigned long end; // upatch vma end
-	unsigned int changed_func_num;
+	unsigned long changed_func_num;
 	// upatch_header_func
 };
 
@@ -65,15 +65,15 @@ struct upatch_layout {
 	void *kbase;
 	void *base;
 	/* Total size. */
-	unsigned int size;
+	unsigned long size;
 	/* The size of the executable code.  */
-	unsigned int text_size;
+	unsigned long text_size;
 	/* Size of RO section of the module (text+rodata) */
-	unsigned int ro_size;
+	unsigned long ro_size;
 	/* Size of RO after init section, not use it now */
-	unsigned int ro_after_init_size;
+	unsigned long ro_after_init_size;
 	/* The size of the info.  */
-	unsigned int info_size;
+	unsigned long info_size;
 };
 
 struct upatch_patch_func {

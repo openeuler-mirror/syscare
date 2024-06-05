@@ -74,8 +74,10 @@ bool is_normal_static_local(struct symbol *sym)
 	if (!strchr(sym->name, '.'))
 		return false;
 
-	if (is_special_static(sym))
-		return false;
+	/*
+	 * TODO: Special static local variables should never be correlated and should always
+	 * be included if they are referenced by an included function.
+	 */
 
 	return true;
 }
@@ -97,7 +99,7 @@ int offset_of_string(struct list_head *list, char *name)
 }
 
 // no need for X86
-bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf, struct symbol *sym)
+bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf)
 {
 	switch(uelf->arch) {
 	case AARCH64:

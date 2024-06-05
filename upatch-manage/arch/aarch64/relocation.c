@@ -39,15 +39,15 @@ static inline s64 calc_reloc(enum aarch64_reloc_op op, void *place, u64 val)
 	switch (op) {
 	case RELOC_OP_ABS:
 		// S + A
-		sval = val;
+		sval = (s64)val;
 		break;
 	case RELOC_OP_PREL:
 		// S + A - P
-		sval = val - (u64)place;
+		sval = (s64)(val - (u64)place);
 		break;
 	case RELOC_OP_PAGE:
 		// Page(S + A) - Page(P)
-		sval = (val & ~0xfff) - ((u64)place & ~0xfff);
+		sval = (s64)((val & ~(u64)0xfff) - ((u64)place & ~(u64)0xfff));
 		break;
 	default:
 		log_error("upatch: unknown relocation operation %d\n", op);
@@ -92,7 +92,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			sym_name = uelf->strtab + sym->st_name;
 
 		/* val corresponds to (S + A) */
-		val = (s64)(sym->st_value + rel[i].r_addend);
+		val = (unsigned long)sym->st_value + (unsigned long)rel[i].r_addend;
 		log_debug(
 			"upatch: reloc symbol, name=%s, k_addr=0x%lx, u_addr=0x%lx, "
 			"r_offset=0x%lx, st_value=0x%lx, r_addend=0x%lx \n",
@@ -113,13 +113,13 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			if (result < -(s64)BIT(31) || result >= (s64)BIT(32))
 				goto overflow;
-			*(s32 *)loc = result;
+			*(s32 *)loc = (s32)result;
 			break;
 		case R_AARCH64_ABS16:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			if (result < -(s64)BIT(15) || result >= (s64)BIT(16))
 				goto overflow;
-			*(s16 *)loc = result;
+			*(s16 *)loc = (s16)result;
 			break;
 		case R_AARCH64_PREL64:
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
@@ -129,13 +129,13 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
 			if (result < -(s64)BIT(31) || result >= (s64)BIT(32))
 				goto overflow;
-			*(s32 *)loc = result;
+			*(s32 *)loc = (s32)result;
 			break;
 		case R_AARCH64_PREL16:
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
 			if (result < -(s64)BIT(15) || result >= (s64)BIT(16))
 				goto overflow;
-			*(s16 *)loc = result;
+			*(s16 *)loc = (s16)result;
 			break;
 		/* Immediate instruction relocations. */
 		case R_AARCH64_LD_PREL_LO19:
@@ -144,8 +144,8 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 19, 2);
 			result = insert_insn_imm(AARCH64_INSN_IMM_19, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_ADR_PREL_LO21:
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
@@ -153,8 +153,8 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 21, 0);
 			result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_ADR_PREL_PG_HI21:
 			result = calc_reloc(RELOC_OP_PAGE, uloc, val);
@@ -162,51 +162,51 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 21, 12);
 			result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_ADR_PREL_PG_HI21_NC:
 			result = calc_reloc(RELOC_OP_PAGE, uloc, val);
 			result = extract_insn_imm(result, 21, 12);
 			result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_ADD_ABS_LO12_NC:
 		case R_AARCH64_LDST8_ABS_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 12, 0);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_LDST16_ABS_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 11, 1);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_LDST32_ABS_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 10, 2);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_LDST64_ABS_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 9, 3);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_LDST128_ABS_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 8, 4);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TSTBR14:
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
@@ -214,15 +214,15 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 14, 2);
 			result = insert_insn_imm(AARCH64_INSN_IMM_14, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_CONDBR19:
 			result = calc_reloc(RELOC_OP_PREL, uloc, val);
 			result = extract_insn_imm(result, 19, 2);
 			result = insert_insn_imm(AARCH64_INSN_IMM_19, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_JUMP26:
 		case R_AARCH64_CALL26:
@@ -243,8 +243,8 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			}
 			result = extract_insn_imm(result, 26, 2);
 			result = insert_insn_imm(AARCH64_INSN_IMM_26, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_ADR_GOT_PAGE:
 			result = calc_reloc(RELOC_OP_PAGE, uloc, val);
@@ -252,8 +252,8 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 21, 12);
 			result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_LD64_GOT_LO12_NC:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
@@ -261,24 +261,24 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			// sometimes, result & 7 != 0, it works fine.
 			result = extract_insn_imm(result, 9, 3);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSLE_ADD_TPREL_HI12:
-			result = ALIGN(TCB_SIZE, uelf->relf->tls_align) + val;
-			if (result < 0 || result >= BIT(24))
+			result = (long)(ALIGN(TCB_SIZE, uelf->relf->tls_align) + val);
+			if (result < 0 || result >= (s64)BIT(24))
 				goto overflow;
 			result = extract_insn_imm(result, 12, 12);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSLE_ADD_TPREL_LO12_NC:
-			result = ALIGN(TCB_SIZE, uelf->relf->tls_align) + val;
+			result = (long)(ALIGN(TCB_SIZE, uelf->relf->tls_align) + val);
 			result = extract_insn_imm(result, 12, 0);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSDESC_ADR_PAGE21:
 			result = calc_reloc(RELOC_OP_PAGE, uloc, val);
@@ -286,23 +286,23 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 				goto overflow;
 			result = extract_insn_imm(result, 21, 12);
 			result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSDESC_LD64_LO12:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			// don't check result & 7 == 0.
 			result = extract_insn_imm(result, 9, 3);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSDESC_ADD_LO12:
 			result = calc_reloc(RELOC_OP_ABS, uloc, val);
 			result = extract_insn_imm(result, 12, 0);
 			result = insert_insn_imm(AARCH64_INSN_IMM_12, loc,
-						 result);
-			*(__le32 *)loc = cpu_to_le32(result);
+						 (unsigned long)result);
+			*(__le32 *)loc = cpu_to_le32((__le32)result);
 			break;
 		case R_AARCH64_TLSDESC_CALL:
 			// this is a blr instruction, don't need to modify

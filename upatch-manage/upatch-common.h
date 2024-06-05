@@ -33,7 +33,7 @@
 			list_add(&(_new)->list, (_list)); \
 	}
 
-static inline int page_shift(int n)
+static inline int page_shift(long n)
 {
 	int res = -1;
 
@@ -52,7 +52,7 @@ static inline int page_shift(int n)
 #endif
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ALIGN(x, a) (((x) + (a)-1) & (~((a)-1)))
-#define PAGE_ALIGN(x) ALIGN((x), PAGE_SIZE)
+#define PAGE_ALIGN(x) ALIGN((x), (unsigned long)PAGE_SIZE)
 
 #define ROUND_DOWN(x, m) ((x) & ~((m)-1))
 #define ROUND_UP(x, m) (((x) + (m)-1) & ~((m)-1))

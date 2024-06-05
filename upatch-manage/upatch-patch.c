@@ -51,7 +51,7 @@ static GElf_Off calculate_load_address(struct running_elf *relf,
 				       bool check_code)
 {
 	int i;
-	GElf_Off min_addr = -1;
+	GElf_Off min_addr = (unsigned long)-1;
 
 	/* TODO: for ET_DYN, consider check PIE */
 	if (relf->info.hdr->e_type != ET_EXEC &&
@@ -78,7 +78,7 @@ out:
 static unsigned long calculate_mem_load(struct object_file *obj)
 {
 	struct obj_vm_area *ovma;
-	unsigned long load_addr = -1;
+	unsigned long load_addr = (unsigned long)-1;
 
 	list_for_each_entry(ovma, &obj->vma, list) {
 		if (ovma->inmem.prot & PROT_EXEC) {
@@ -120,29 +120,20 @@ static int rewrite_section_headers(struct upatch_elf *uelf)
 	return 0;
 }
 
-/* Additional bytes needed by arch in front of individual sections */
-unsigned int arch_mod_section_prepend(struct upatch_elf *uelf,
-				      unsigned int section)
+static unsigned long get_offset(unsigned long *size,
+		       GElf_Shdr *sechdr)
 {
-	/* default implementation just returns zero */
-	return 0;
-}
+	unsigned long ret;
 
-static long get_offset(struct upatch_elf *uelf, unsigned int *size,
-		       GElf_Shdr *sechdr, unsigned int section)
-{
-	long ret;
-
-	*size += arch_mod_section_prepend(uelf, section);
-	ret = ALIGN(*size, sechdr->sh_addralign ?: 1);
-	*size = ret + sechdr->sh_size;
+	ret = ALIGN(*size, (unsigned long)(sechdr->sh_addralign ?: 1));
+	*size = (unsigned long)ret + sechdr->sh_size;
 	return ret;
 }
 
 static void layout_upatch_info(struct upatch_elf *uelf)
 {
 	GElf_Shdr *upatch_func = uelf->info.shdrs + uelf->index.upatch_funcs;
-	int num = upatch_func->sh_size / sizeof(struct upatch_patch_func);
+	unsigned long num = upatch_func->sh_size / sizeof(struct upatch_patch_func);
 
 	uelf->core_layout.info_size = uelf->core_layout.size;
 	uelf->core_layout.size += sizeof(struct upatch_info) +
@@ -189,7 +180,7 @@ static void layout_sections(struct upatch_elf *uelf)
 				continue;
 
 			s->sh_entsize =
-				get_offset(uelf, &uelf->core_layout.size, s, i);
+				get_offset(&uelf->core_layout.size, s);
 			log_debug("\tm = %d; %s: sh_entsize: 0x%lx\n", m, sname,
 				  s->sh_entsize);
 		}
@@ -214,13 +205,14 @@ static void layout_sections(struct upatch_elf *uelf)
 			uelf->core_layout.size =
 				PAGE_ALIGN(uelf->core_layout.size);
 			break;
+		default:
+			break;
 		}
 	}
 }
 
 /* TODO: only included used symbol */
-static bool is_upatch_symbol(const GElf_Sym *src, const GElf_Shdr *sechdrs,
-			     unsigned int shnum)
+static bool is_upatch_symbol(void)
 {
 	return true;
 }
@@ -237,12 +229,11 @@ static void layout_symtab(struct upatch_elf *uelf)
 	GElf_Shdr *strsect = uelf->info.shdrs + uelf->index.str;
 	/* TODO: only support same arch as kernel now */
 	const GElf_Sym *src;
-	unsigned int i, nsrc, ndst, strtab_size = 0;
+	unsigned long i, nsrc, ndst, strtab_size = 0;
 
 	/* Put symbol section at end of init part of module. */
 	symsect->sh_flags |= SHF_ALLOC;
-	symsect->sh_entsize = get_offset(uelf, &uelf->core_layout.size, symsect,
-					 uelf->index.sym);
+	symsect->sh_entsize = get_offset(&uelf->core_layout.size, symsect);
 	log_debug("\t%s\n", uelf->info.shstrtab + symsect->sh_name);
 
 	src = (void *)uelf->info.hdr + symsect->sh_offset;
@@ -250,8 +241,7 @@ static void layout_symtab(struct upatch_elf *uelf)
 
 	/* Compute total space required for the symbols' strtab. */
 	for (ndst = i = 0; i < nsrc; i++) {
-		if (i == 0 || is_upatch_symbol(src + i, uelf->info.shdrs,
-					       uelf->info.hdr->e_shnum)) {
+		if (i == 0 || is_upatch_symbol()) {
 			strtab_size +=
 				strlen(&uelf->strtab[src[i].st_name]) + 1;
 			ndst++;
@@ -270,8 +260,7 @@ static void layout_symtab(struct upatch_elf *uelf)
 
 	/* Put string table section at end of init part of module. */
 	strsect->sh_flags |= SHF_ALLOC;
-	strsect->sh_entsize = get_offset(uelf, &uelf->core_layout.size, strsect,
-					 uelf->index.str);
+	strsect->sh_entsize = get_offset(&uelf->core_layout.size, strsect);
 	uelf->core_layout.size = PAGE_ALIGN(uelf->core_layout.size);
 	log_debug("\t%s\n", uelf->info.shstrtab + strsect->sh_name);
 }
@@ -288,8 +277,8 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 
 	addr = upatch_mmap_remote(proc2pctx(obj->proc), addr, sz,
 				  PROT_READ | PROT_WRITE | PROT_EXEC,
-				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS, -1,
-				  0);
+				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
+				  (unsigned long)-1, 0);
 	if (addr == 0) {
 		return NULL;
 	}
@@ -308,7 +297,7 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 }
 
 static void upatch_free(struct object_file *obj, void *base,
-			     unsigned int size)
+			     unsigned long size)
 {
 	log_debug("Free patch memory %p\n", base);
 	if (upatch_munmap_remote(proc2pctx(obj->proc), (unsigned long)base, size)) {
@@ -378,7 +367,7 @@ static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
 {
 	int ret = 0;
 
-	log_debug("Post kbase %lx(%x) to base %lx\n",
+	log_debug("Post kbase %lx(%lx) to base %lx\n",
 		  (unsigned long)uelf->core_layout.kbase,
 		  uelf->core_layout.size,
 		  (unsigned long)uelf->core_layout.base);
@@ -396,7 +385,7 @@ out:
 
 static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const char *uuid)
 {
-	int ret = 0, i;
+	int ret = 0;
 	struct upatch_info *uinfo =
 		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
 	struct upatch_patch_func *upatch_funcs_addr =
@@ -414,7 +403,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 	memcpy(uinfo->id, uuid, strlen(uuid));
 
 	log_normal("Changed insn:\n");
-	for (i = 0; i < uinfo->changed_func_num; ++i) {
+	for (unsigned int i = 0; i < uinfo->changed_func_num; ++i) {
 		struct upatch_info_func *upatch_func =
 			(void *)uelf->core_layout.kbase +
 			uelf->core_layout.info_size +
@@ -433,8 +422,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 			goto out;
 		}
 
-		upatch_func->new_insn = get_new_insn(obj, upatch_func->old_addr,
-						     upatch_func->new_addr);
+		upatch_func->new_insn = get_new_insn();
 
 		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", upatch_func->old_addr,
 			  upatch_func->old_insn[0], upatch_func->new_insn);
@@ -446,10 +434,10 @@ out:
 
 static int unapply_patch(struct object_file *obj,
 			 struct upatch_info_func *funcs,
-			 unsigned int changed_func_num)
+			 unsigned long changed_func_num)
 {
 	log_normal("Changed insn:\n");
-	for (int i = 0; i < changed_func_num; ++i) {
+	for (unsigned int i = 0; i < changed_func_num; ++i) {
 		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
 			  funcs[i].new_insn, funcs[i].old_insn[0]);
 
@@ -467,7 +455,8 @@ static int unapply_patch(struct object_file *obj,
 
 static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 {
-	int ret = 0, i;
+	int ret = 0;
+	unsigned int i;
 	struct upatch_info *uinfo =
 		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
 
@@ -617,10 +606,10 @@ static int upatch_apply_patches(struct upatch_process *proc,
 	layout_symtab(uelf);
 	layout_upatch_info(uelf);
 
-	log_debug("calculate core layout = %x\n", uelf->core_layout.size);
+	log_debug("calculate core layout = %lx\n", uelf->core_layout.size);
 	log_debug(
-		"Core layout: text_size = %x, ro_size = %x, ro_after_init_size = "
-		"%x, info = %x, size = %x\n",
+		"Core layout: text_size = %lx, ro_size = %lx, ro_after_init_size = "
+		"%lx, info = %lx, size = %lx\n",
 		uelf->core_layout.text_size, uelf->core_layout.ro_size,
 		uelf->core_layout.ro_after_init_size,
 		uelf->core_layout.info_size, uelf->core_layout.size);
@@ -699,7 +688,7 @@ static void upatch_time_tick(int pid) {
 		return;
 	}
 
-	unsigned long frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+	long frozen_time = GET_MICROSECONDS(end_tv, start_tv);
 	log_normal("Process %d frozen time is %ld microsecond(s)\n",
 		pid, frozen_time);
 }
@@ -751,7 +740,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 	 * stored in the patch are valid for the original object.
 	 */
 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
-	ret = upatch_process_map_object_files(&proc, NULL);
+	ret = upatch_process_map_object_files(&proc);
 	if (ret < 0) {
 		log_error("Failed to read process memory mapping\n");
 		goto out_free;
@@ -871,7 +860,7 @@ int process_unpatch(int pid, const char *uuid)
 	 * stored in the patch are valid for the original object.
 	 */
 	// 解析process的mem-maps，获得各个块的内存映射以及phdr
-	ret = upatch_process_map_object_files(&proc, NULL);
+	ret = upatch_process_map_object_files(&proc);
 	if (ret < 0) {
 		log_error("Failed to read process memory mapping\n");
 		goto out_free;
@@ -950,7 +939,7 @@ int process_info(int pid)
 		goto out_free;
 	}
 
-	ret = upatch_process_map_object_files(&proc, NULL);
+	ret = upatch_process_map_object_files(&proc);
 	if (ret < 0) {
 		log_error("Failed to read process memory mapping\n");
 		goto out_free;

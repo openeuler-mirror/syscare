@@ -33,7 +33,7 @@ void upatch_create_patches_sections(struct upatch_elf *, struct running_elf *);
 
 void upatch_create_intermediate_sections(struct upatch_elf *, struct running_elf *);
 
-static inline void create_kpatch_arch_section(struct upatch_elf *uelf) {}
+static inline void create_kpatch_arch_section(void) {}
 
 void upatch_build_strings_section_data(struct upatch_elf *);
 
@@ -45,7 +45,7 @@ void upatch_reindex_elements(struct upatch_elf *);
 
 void upatch_rebuild_relocations(struct upatch_elf *);
 
-void upatch_check_relocations(struct upatch_elf *);
+void upatch_check_relocations(void);
 
 void upatch_create_shstrtab(struct upatch_elf *);
 

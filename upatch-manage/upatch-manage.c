@@ -54,14 +54,14 @@ struct arguments {
 };
 
 static struct argp_option options[] = {
-	{ "verbose", 'v', NULL, 0, "Show verbose output" },
-	{ "uuid", 'U', "uuid", 0, "the uuid of the upatch" },
-	{ "pid", 'p', "pid", 0, "the pid of the user-space process" },
-	{ "upatch", 'u', "upatch", 0, "the upatch file" },
-	{ "binary", 'b', "binary", 0, "the binary file" },
-	{ "cmd", 0, "patch", 0, "Apply a upatch file to a user-space process" },
+	{ "verbose", 'v', NULL, 0, "Show verbose output", 0 },
+	{ "uuid", 'U', "uuid", 0, "the uuid of the upatch", 0 },
+	{ "pid", 'p', "pid", 0, "the pid of the user-space process", 0 },
+	{ "upatch", 'u', "upatch", 0, "the upatch file", 0 },
+	{ "binary", 'b', "binary", 0, "the binary file", 0 },
+	{ "cmd", 0, "patch", 0, "Apply a upatch file to a user-space process", 0 },
 	{ "cmd", 0, "unpatch", 0,
-	  "Unapply a upatch file to a user-space process" },
+	  "Unapply a upatch file to a user-space process", 0 },
 	{ NULL }
 };
 
@@ -135,7 +135,7 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
 	return 0;
 }
 
-static struct argp argp = { options, parse_opt, args_doc, program_doc };
+static struct argp argp = { options, parse_opt, args_doc, program_doc, NULL, NULL, NULL };
 
 int patch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
 {
@@ -163,7 +163,7 @@ out:
 	return ret;
 }
 
-int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch_path, int pid)
+int unpatch_upatch(const char *uuid, int pid)
 {
 	int ret = 0;
 
@@ -176,7 +176,7 @@ int unpatch_upatch(const char *uuid, const char *binary_path, const char *upatch
 	return 0;
 }
 
-int info_upatch(const char *binary_path, const char *upatch_path, int pid)
+int info_upatch(int pid)
 {
 	int ret = process_info(pid);
 	if (ret != 0) {
@@ -210,10 +210,10 @@ int main(int argc, char *argv[])
 		ret = patch_upatch(args.uuid, args.binary, args.upatch, args.pid);
 		break;
 	case UNPATCH:
-		ret = unpatch_upatch(args.uuid, args.binary, args.upatch, args.pid);
+		ret = unpatch_upatch(args.uuid, args.pid);
 		break;
 	case INFO:
-		ret = info_upatch(args.binary, args.upatch, args.pid);
+		ret = info_upatch(args.pid);
 		break;
 	default:
 		ERROR("Unknown command");

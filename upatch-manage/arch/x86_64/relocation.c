@@ -63,7 +63,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			  (int)GELF_R_TYPE(rel[i].r_info), sym->st_value,
 			  rel[i].r_addend, (u64)loc);
 
-		val = sym->st_value + rel[i].r_addend;
+		val = sym->st_value + (unsigned long)rel[i].r_addend;
 		switch (GELF_R_TYPE(rel[i].r_info)) {
 		case R_X86_64_NONE:
 			break;
@@ -95,7 +95,8 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
 			if (sym->st_value == 0)
 				goto overflow;
 			/* G + GOT + A*/
-			val = sym->st_value + rel[i].r_addend;
+			val = sym->st_value + (unsigned long)rel[i].r_addend;
+			/* fallthrough*/
 		case R_X86_64_PC32:
 		case R_X86_64_PLT32:
 			if (*(u32 *)loc != 0)

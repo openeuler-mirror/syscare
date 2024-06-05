@@ -28,7 +28,7 @@ static const char *OUTPUT_FLAG_NAME = "-o";
 
 static char g_filename[PATH_MAX] = { 0 };
 
-static inline char* get_current_exec()
+static inline char* get_current_exec(void)
 {
     ssize_t path_len = readlink(EXEC_SELF_PATH, (char *)g_filename, PATH_MAX);
     if (path_len == -1) {
@@ -39,7 +39,7 @@ static inline char* get_current_exec()
     return (char *)g_filename;
 }
 
-static inline const char* get_hijacker_env()
+static inline const char* get_hijacker_env(void)
 {
     return getenv(UPATCH_ENV_NAME);
 }

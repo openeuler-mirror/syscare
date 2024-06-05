@@ -50,7 +50,7 @@ void rela_insn(const struct section *sec, const struct rela *rela, struct insn *
             return;
     }
 
-    ERROR("can't find instruction for rela at %s+0x%x",
+    ERROR("can't find instruction for rela at %s+0x%lx",
         sec->name, rela->offset);
 }
 
@@ -75,7 +75,7 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
             rela_insn(sec, rela, &insn);
             add_off = (long)insn.next_byte -
                         (long)sec->data->d_buf -
-                        rela->offset;
+                        (long)rela->offset;
         } else {
             ERROR("unable to handle rela type %d \n", rela->type);
         }

@@ -38,7 +38,7 @@
 /* TODO: need to judge whether running_elf is a Position-Independent Executable file
  * https://github.com/bminor/binutils-gdb/blob/master/binutils/readelf.c
  */
-static bool is_pie(struct Elf *elf)
+static bool is_pie(void)
 {
     return true;
 }
@@ -50,7 +50,7 @@ static bool is_exec(struct Elf *elf)
     if (!gelf_getehdr(elf, &ehdr))
         ERROR("gelf_getehdr running_file failed for %s.", elf_errmsg(0));
 
-    return ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && is_pie(elf));
+    return ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && is_pie());
 }
 
 void relf_init(char *elf_name, struct running_elf *relf)
@@ -59,7 +59,6 @@ void relf_init(char *elf_name, struct running_elf *relf)
     Elf_Scn *scn = NULL;
     Elf_Data *data;
     GElf_Sym sym;
-    unsigned int i;
 
     relf->fd = open(elf_name, O_RDONLY);
     if (relf->fd == -1)
@@ -83,12 +82,12 @@ void relf_init(char *elf_name, struct running_elf *relf)
     if (!data)
         ERROR("elf_getdata with error %s", elf_errmsg(0));
 
-    relf->obj_nr = shdr.sh_size / shdr.sh_entsize;
-    relf->obj_syms = calloc(relf->obj_nr, sizeof(struct debug_symbol));
+    relf->obj_nr = (int)(shdr.sh_size / shdr.sh_entsize);
+    relf->obj_syms = calloc((size_t)relf->obj_nr, sizeof(struct debug_symbol));
     if (!relf->obj_syms)
         ERROR("calloc with errno = %d", errno);
 
-    for (i = 0; i < relf->obj_nr; i ++) {
+    for (int i = 0; i < relf->obj_nr; i ++) {
         if (!gelf_getsym(data, i, &sym))
             ERROR("gelf_getsym with error %s", elf_errmsg(0));
         relf->obj_syms[i].name = elf_strptr(relf->elf, shdr.sh_link, sym.st_name);

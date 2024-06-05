@@ -30,7 +30,7 @@ struct upatch_jmp_table_entry {
 	unsigned long addr;
 };
 
-unsigned int get_jmp_table_entry()
+unsigned int get_jmp_table_entry(void)
 {
 	return sizeof(struct upatch_jmp_table_entry);
 }
@@ -84,6 +84,7 @@ unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
 	unsigned long jmp_addr;
 	unsigned long elf_addr = 0;
 
+	(void)r_type;
 	if (upatch_process_mem_read(obj->proc, addr, &jmp_addr,
 				    sizeof(jmp_addr))) {
 		log_error("copy address failed\n");

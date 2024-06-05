@@ -50,7 +50,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
              * some rela don't have the symbol index, use the symbol's value and
              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
              */
-            if (rela_dyn[i].r_addend != patch_sym->st_value) {
+            if (rela_dyn[i].r_addend != (long)patch_sym->st_value) {
                 continue;
             }
         }
@@ -110,7 +110,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
              * some rela don't have the symbol index, use the symbol's value and
              * rela's addend to find the symbol. for example, R_X86_64_IRELATIVE.
              */
-            if (rela_plt[i].r_addend != patch_sym->st_value) {
+            if (rela_plt[i].r_addend != (long)patch_sym->st_value) {
                 continue;
             }
         } else {
@@ -140,7 +140,7 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
 }
 
 static unsigned long resolve_dynsym(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
+    struct object_file *obj, const char *name)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -178,8 +178,7 @@ static unsigned long resolve_dynsym(struct upatch_elf *uelf,
     return elf_addr;
 }
 
-static unsigned long resolve_sym(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
+static unsigned long resolve_sym(struct upatch_elf *uelf, const char *name)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -217,7 +216,7 @@ static unsigned long resolve_sym(struct upatch_elf *uelf,
 }
 
 static unsigned long resolve_patch_sym(struct upatch_elf *uelf,
-    struct object_file *obj, const char *name, GElf_Sym *patch_sym)
+    const char *name, GElf_Sym *patch_sym)
 {
     unsigned long elf_addr = 0;
     struct running_elf *relf = uelf->relf;
@@ -265,17 +264,17 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
 
 	/* resolve from dynsym */
     if (!elf_addr) {
-        elf_addr = resolve_dynsym(uelf, obj, name, &patch_sym);
+        elf_addr = resolve_dynsym(uelf, obj, name);
     }
 
 	/* resolve from sym */
     if (!elf_addr) {
-        elf_addr = resolve_sym(uelf, obj, name, &patch_sym);
+        elf_addr = resolve_sym(uelf, name);
     }
 
 	/* resolve from patch sym */
     if (!elf_addr) {
-        elf_addr = resolve_patch_sym(uelf, obj, name, &patch_sym);
+        elf_addr = resolve_patch_sym(uelf, name, &patch_sym);
     }
 
     if (!elf_addr) {

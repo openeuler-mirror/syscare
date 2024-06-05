@@ -28,11 +28,9 @@
 
 #define DEFSYM_MAX 64
 
-static const char *DEFSYM_FLAG = "--defsym";
-static const char *DEFSYM_VALUE = ".upatch_0x%x=";
+static char *DEFSYM_FLAG = "--defsym";
 static const int APPEND_ARG_LEN = 2;
 
-static const char *OUTPUT_PATH = "%s/0x%x.o";
 static const char *NULL_DEV_PATH = "/dev/null";
 
 static char g_defsym[DEFSYM_MAX] = { 0 };
@@ -81,7 +79,7 @@ int main(int argc, char *argv[], char *envp[])
     }
 
     int new_argc = argc + APPEND_ARG_LEN + 1; // include terminator NULL
-    const char **new_argv = calloc(1, new_argc * sizeof(char *));
+    char **new_argv = calloc(1, (unsigned long)new_argc * sizeof(char *));
     if (new_argv == NULL) {
         return execve(filename, argv, envp);
     }
@@ -100,13 +98,13 @@ int main(int argc, char *argv[], char *envp[])
     char *defsym_value = (char *)g_defsym;
     char *new_output_file = (char *)g_new_output_file;
 
-    snprintf(defsym_value, DEFSYM_MAX, DEFSYM_VALUE, tid);
+    snprintf(defsym_value, DEFSYM_MAX, ".upatch_0x%x=", tid);
     new_argv[new_argc++] = DEFSYM_FLAG;
     new_argv[new_argc++] = defsym_value;
     new_argv[new_argc] = NULL;
 
     // Handle output file
-    snprintf(new_output_file, PATH_MAX, OUTPUT_PATH, output_dir, tid);
+    snprintf(new_output_file, PATH_MAX, "%s/0x%x.o", output_dir, tid);
     new_argv[output_index] = new_output_file;
 
     if (access(output_file, F_OK) == 0) {

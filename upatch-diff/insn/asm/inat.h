@@ -171,9 +171,9 @@ static inline int inat_group_id(insn_attr_t attr)
 	return (attr & INAT_GRP_MASK) >> INAT_GRP_OFFS;
 }
 
-static inline int inat_group_common_attribute(insn_attr_t attr)
+static inline insn_attr_t inat_group_common_attribute(insn_attr_t attr)
 {
-	return attr & ~INAT_GRP_MASK;
+	return attr & ~(insn_attr_t)INAT_GRP_MASK;
 }
 
 static inline int inat_has_immediate(insn_attr_t attr)

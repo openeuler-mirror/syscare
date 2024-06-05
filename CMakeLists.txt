@@ -54,8 +54,15 @@ message("---------------------------------------------------------")
 
 # Compile options
 add_compile_options(-DBUILD_VERSION="${BUILD_VERSION}")
-add_compile_options(-g -Wall -O2 -fPIE)
-
+add_compile_options(-std=gnu99 -g -Wall -D_FORTIFY_SOURCE=2 -O2 -Werror -Wextra
+    -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time -Wstack-usage=8192
+    -Wfloat-equal -Wswitch-default -Wshadow -Wconversion -Wcast-qual -Wcast-align
+    -Wunused -Wundef -funsigned-char -fstack-protector-all -fpic -fpie -ftrapv
+    -fstack-check -freg-struct-return -fno-canonical-system-headers -pipe
+    -fdebug-prefix-map=old=new)
+set(LINK_FLAGS "-pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack -rdynamic -Wl,-Bsymbolic -Wl,-no-undefined")
+set(CMAKE_SHARED_LINKER_FLAGS "${LINK_FLAGS}")
+set(CMAKE_EXE_LINKER_FLAGS "${LINK_FLAGS}")
 # Subdirectories
 add_subdirectory(upatch-diff)
 add_subdirectory(upatch-manage)
@@ -67,7 +74,7 @@ add_custom_target(rust-executables ALL
     COMMENT "Building rust executables..."
     COMMAND ${CMAKE_COMMAND} -E env
         "BUILD_VERSION=${BUILD_VERSION}"
-        "RUSTFLAGS=--cfg unsound_local_offset"
+        "RUSTFLAGS=--cfg unsound_local_offset -C relocation_model=pic -D warnings -C link-arg=-s -C overflow_checks -W rust_2021_incompatible_closure_captures"
         cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
