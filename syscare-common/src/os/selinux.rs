@@ -59,7 +59,13 @@ pub fn set_status(value: Status) -> Result<()> {
     if (value != Status::Permissive) && (value != Status::Enforcing) {
         bail!("Status {} is invalid", value);
     }
-    fs::write(SELINUX_SYS_FILE, value.to_string())?;
+    fs::write(
+        SELINUX_SYS_FILE,
+        match value {
+            Status::Enforcing => "1",
+            _ => "0",
+        },
+    )?;
 
     Ok(())
 }
