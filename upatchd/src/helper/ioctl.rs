@@ -21,20 +21,20 @@ use syscare_common::{ffi::OsStrExt, fs};
 const KMOD_IOCTL_MAGIC: u16 = 0xE5;
 
 ioctl_write_ptr!(
-    ioctl_enable_hijacker,
+    ioctl_enable_hook,
     KMOD_IOCTL_MAGIC,
     0x1,
     UpatchEnableRequest
 );
-ioctl_none!(ioctl_disable_hijacker, KMOD_IOCTL_MAGIC, 0x2);
+ioctl_none!(ioctl_disable_hook, KMOD_IOCTL_MAGIC, 0x2);
 ioctl_write_ptr!(
-    ioctl_register_hijacker,
+    ioctl_register_hooker,
     KMOD_IOCTL_MAGIC,
     0x3,
     UpatchRegisterRequest
 );
 ioctl_write_ptr!(
-    ioctl_unregister_hijacker,
+    ioctl_unregister_hooker,
     KMOD_IOCTL_MAGIC,
     0x4,
     UpatchRegisterRequest
@@ -51,18 +51,18 @@ pub struct UpatchRegisterRequest {
     jump_path: [u8; PATH_MAX as usize],
 }
 
-pub struct HijackerIoctl {
+pub struct UpatchHelperIoctl {
     dev: File,
 }
 
-impl HijackerIoctl {
+impl UpatchHelperIoctl {
     pub fn new<P: AsRef<Path>>(dev_path: P) -> Result<Self> {
         Ok(Self {
             dev: fs::open_file(dev_path)?,
         })
     }
 
-    pub fn enable_hijacker<P: AsRef<Path>>(&self, lib_path: P, offset: u64) -> Result<()> {
+    pub fn enable_hook<P: AsRef<Path>>(&self, lib_path: P, offset: u64) -> Result<()> {
         let mut msg = UpatchEnableRequest {
             path: [0; PATH_MAX as usize],
             offset: 0,
@@ -74,23 +74,23 @@ impl HijackerIoctl {
         msg.offset = offset;
 
         unsafe {
-            ioctl_enable_hijacker(self.dev.as_raw_fd(), &msg)
+            ioctl_enable_hook(self.dev.as_raw_fd(), &msg)
                 .map_err(|e| anyhow!("Ioctl error, ret={}", e))?
         };
 
         Ok(())
     }
 
-    pub fn disable_hijacker(&self) -> Result<()> {
+    pub fn disable_hook(&self) -> Result<()> {
         unsafe {
-            ioctl_disable_hijacker(self.dev.as_raw_fd())
+            ioctl_disable_hook(self.dev.as_raw_fd())
                 .map_err(|e| anyhow!("Ioctl error, ret={}", e))?
         };
 
         Ok(())
     }
 
-    pub fn register_hijacker<P, Q>(&self, exec_path: P, jump_path: Q) -> Result<()>
+    pub fn register_hooker<P, Q>(&self, exec_path: P, jump_path: Q) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -108,14 +108,14 @@ impl HijackerIoctl {
             .write_all(jump_path.as_ref().to_cstring()?.to_bytes_with_nul())?;
 
         unsafe {
-            ioctl_register_hijacker(self.dev.as_raw_fd(), &msg)
+            ioctl_register_hooker(self.dev.as_raw_fd(), &msg)
                 .map_err(|e| anyhow!("Ioctl error, {}", e.desc()))?
         };
 
         Ok(())
     }
 
-    pub fn unregister_hijacker<P, Q>(&self, exec_path: P, jump_path: Q) -> Result<()>
+    pub fn unregister_hooker<P, Q>(&self, exec_path: P, jump_path: Q) -> Result<()>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -133,7 +133,7 @@ impl HijackerIoctl {
             .write_all(jump_path.as_ref().to_cstring()?.to_bytes_with_nul())?;
 
         unsafe {
-            ioctl_unregister_hijacker(self.dev.as_raw_fd(), &msg)
+            ioctl_unregister_hooker(self.dev.as_raw_fd(), &msg)
                 .map_err(|e| anyhow!("Ioctl error, {}", e.desc()))?
         };
 

@@ -730,7 +730,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 		goto out_free;
 	}
 
-	// use uprobe to hack function. the program has been executed to the entry
+	// use uprobe to interpose function. the program has been executed to the entry
 	// point
 
 	/*
@@ -850,7 +850,7 @@ int process_unpatch(int pid, const char *uuid)
 		goto out_free;
 	}
 
-	// use uprobe to hack function. the program has been executed to the entry
+	// use uprobe to interpose function. the program has been executed to the entry
 	// point
 
 	/*

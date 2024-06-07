@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,22 +18,22 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_HIJACKER_KO_IOCTL_H
-#define _UPATCH_HIJACKER_KO_IOCTL_H
+#ifndef _UPATCH_HELPER_KO_IOCTL_H
+#define _UPATCH_HELPER_KO_IOCTL_H
 
 #include <linux/types.h>
 #include <linux/limits.h>
 
-#define UPATCH_HIJACKER_DEV_NAME "upatch-hijacker"
-#define UPATCH_HIJACKER_DEV_MODE 0600
+#define UPATCH_HELPER_DEV_NAME "upatch-helper"
+#define UPATCH_HELPER_DEV_MODE 0600
 
-#define UPATCH_HIJACKER_IOC_MAGIC 0xE5
-#define UPATCH_HIJACKER_ENABLE _IOW(UPATCH_HIJACKER_IOC_MAGIC, 0x1, \
+#define UPATCH_HELPER_IOC_MAGIC 0xE5
+#define UPATCH_HELPER_ENABLE _IOW(UPATCH_HELPER_IOC_MAGIC, 0x1, \
     upatch_enable_request_t)
-#define UPATCH_HIJACKER_DISABLE _IO(UPATCH_HIJACKER_IOC_MAGIC, 0x2)
-#define UPATCH_HIJACKER_REGISTER _IOW(UPATCH_HIJACKER_IOC_MAGIC, 0x3, \
+#define UPATCH_HELPER_DISABLE _IO(UPATCH_HELPER_IOC_MAGIC, 0x2)
+#define UPATCH_HELPER_REGISTER _IOW(UPATCH_HELPER_IOC_MAGIC, 0x3, \
     upatch_register_request_t)
-#define UPATCH_HIJACKER_UNREGISTER _IOW(UPATCH_HIJACKER_IOC_MAGIC, 0x4, \
+#define UPATCH_HELPER_UNREGISTER _IOW(UPATCH_HELPER_IOC_MAGIC, 0x4, \
     upatch_register_request_t)
 
 typedef struct {
@@ -52,4 +52,4 @@ int ioctl_init(void);
 void ioctl_exit(void);
 long handle_ioctl(struct file *file, unsigned int cmd, unsigned long arg);
 
-#endif /* _UPATCH_HIJACKER_KO_IOCTL_H */
+#endif /* _UPATCH_HELPER_KO_IOCTL_H */

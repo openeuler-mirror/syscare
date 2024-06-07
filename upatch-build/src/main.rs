@@ -36,7 +36,7 @@ mod compiler;
 mod dwarf;
 mod elf;
 mod file_relation;
-mod hijacker;
+mod helper;
 mod pattern_path;
 mod project;
 mod resolve;
@@ -47,7 +47,7 @@ use build_root::BuildRoot;
 use compiler::Compiler;
 use dwarf::Dwarf;
 use file_relation::FileRelation;
-use hijacker::Hijacker;
+use helper::UpatchHelper;
 use project::Project;
 
 const CLI_NAME: &str = "upatch build";
@@ -401,7 +401,8 @@ impl UpatchBuild {
         }
 
         let mut files = FileRelation::new();
-        let hijacker = Hijacker::new(&compilers, work_dir).context("Failed to hack compilers")?;
+        let upatch_helper =
+            UpatchHelper::new(&compilers, work_dir).context("Failed to hook compilers")?;
 
         info!("Preparing {}", project);
         project
@@ -435,8 +436,8 @@ impl UpatchBuild {
         info!("Collecting file relations");
         files.collect_patched_build(object_dir, patched_dir)?;
 
-        // Unhack compilers
-        drop(hijacker);
+        // Restore compilers
+        drop(upatch_helper);
 
         let build_info = BuildInfo {
             linker,

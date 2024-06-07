@@ -28,7 +28,7 @@ use syscare_common::{fs, process::Command};
 use crate::{args::Arguments, build_root::BuildRoot};
 
 const PATCH_BIN: &str = "patch";
-const COMPILER_CMD_ENV: &str = "UPATCH_HIJACKER";
+const COMPILER_CMD_ENV: &str = "UPATCH_HELPER";
 
 const PREPARE_SCRIPT_NAME: &str = "prepare.sh";
 const BUILD_SCRIPT_NAME: &str = "build.sh";

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,16 +18,20 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_HIJACKER_KO_LOG_H
-#define _UPATCH_HIJACKER_KO_LOG_H
+#ifndef _UPATCH_HELPER_KO_CONTEXT_H
+#define _UPATCH_HELPER_KO_CONTEXT_H
 
-#include <linux/module.h>
-#include <linux/printk.h>
+#include <linux/types.h>
 
-#ifdef pr_fmt
-#undef pr_fmt
-#endif
+struct map;
 
-#define pr_fmt(fmt) "%s: " fmt, THIS_MODULE->name
+int context_init(void);
+void context_exit(void);
 
-#endif /* _UPATCH_HIJACKER_KO_LOG_H */
+int build_helper_context(const char *path, loff_t offset);
+void destroy_helper_context(void);
+size_t helper_context_count(void);
+
+struct map *get_helper_map(void);
+
+#endif /* _UPATCH_HELPER_KO_CONTEXT_H */

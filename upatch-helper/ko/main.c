@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -26,7 +26,7 @@
 #include "context.h"
 #include "ioctl.h"
 
-static int __init upatch_hijacker_init(void)
+static int __init upatch_helper_init(void)
 {
     int ret = 0;
 
@@ -52,17 +52,17 @@ static int __init upatch_hijacker_init(void)
     return 0;
 }
 
-static void __exit upatch_hijacker_exit(void)
+static void __exit upatch_helper_exit(void)
 {
     ioctl_exit();
     cache_exit();
     context_exit();
 }
 
-module_init(upatch_hijacker_init);
-module_exit(upatch_hijacker_exit);
+module_init(upatch_helper_init);
+module_exit(upatch_helper_exit);
 
 MODULE_AUTHOR("renoseven (dev@renoseven.net)");
-MODULE_DESCRIPTION("upatch compiler hijacker");
+MODULE_DESCRIPTION("upatch compiler helper");
 MODULE_LICENSE("GPL");
 MODULE_VERSION(BUILD_VERSION);

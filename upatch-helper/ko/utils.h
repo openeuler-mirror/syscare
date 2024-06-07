@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,26 +18,33 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_HIJACKER_KO_MAP_H
-#define _UPATCH_HIJACKER_KO_MAP_H
+#ifndef _UPATCH_HELPER_KO_UTILS_H
+#define _UPATCH_HELPER_KO_UTILS_H
 
-#include <linux/types.h>
+#include <linux/fs.h>
+#include <linux/namei.h>
+#include <linux/path.h>
+#include <linux/pid_namespace.h>
 
-typedef bool (*find_value_fn)(const void *value, const void *param);
-typedef void (*free_value_fn)(void *value);
+static inline struct inode* path_inode(const char *path)
+{
+    struct path kpath;
 
-struct map_ops {
-    find_value_fn find_value;
-    free_value_fn free_value;
-};
-struct map;
+    if (kern_path(path, LOOKUP_NO_SYMLINKS, &kpath) != 0) {
+        return NULL;
+    }
+    return kpath.dentry->d_inode;
+}
 
-int new_map(struct map **map, size_t capacity, const struct map_ops *ops);
-void free_map(struct map *map);
+static inline bool inode_equal(const struct inode *lhs, const struct inode *rhs)
+{
+    return (lhs->i_ino == rhs->i_ino);
+}
 
-int map_insert(struct map *map, void *value);
-void map_remove(struct map *map, const void *param);
-void *map_get(struct map *map, const void *param);
-size_t map_size(const struct map *map);
+static inline bool ns_equal(const struct pid_namespace *lhs,
+    const struct pid_namespace *rhs)
+{
+    return (lhs->ns.inum == rhs->ns.inum);
+}
 
-#endif /* _UPATCH_HIJACKER_KO_MAP_H */
+#endif /* _UPATCH_HELPER_KO_UTILS_H */

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,8 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_HIJACKER_KO_ENTITY_H
-#define _UPATCH_HIJACKER_KO_ENTITY_H
+#ifndef _UPATCH_HELPER_KO_ENTITY_H
+#define _UPATCH_HELPER_KO_ENTITY_H
 
 #include <linux/types.h>
 #include <linux/limits.h>
@@ -36,7 +36,7 @@ struct uprobe_record {
     struct uprobe_consumer *uc;
 };
 
-struct hijacker_record {
+struct helper_record {
     struct inode *exec_inode;
     struct inode *jump_inode;
     char exec_path[PATH_MAX];
@@ -47,10 +47,10 @@ int new_uprobe_record(struct uprobe_record **record,
     uprobe_handler handler, const char *path, loff_t offset);
 void free_uprobe_record(struct uprobe_record *record);
 
-int create_hijacker_record(struct hijacker_record **record,
+int create_helper_record(struct helper_record **record,
     const char *exec_path, const char *jump_path);
-void free_hijacker_record(struct hijacker_record *record);
-bool find_hijacker_record(const struct hijacker_record *record,
+void free_helper_record(struct helper_record *record);
+bool find_helper_record(const struct helper_record *record,
     const struct inode *inode);
 
-#endif /* _UPATCH_HIJACKER_KO_ENTITY_H */
+#endif /* _UPATCH_HELPER_KO_ENTITY_H */
