@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Mulan PSL v2
 /*
  * Copyright (c) 2024 Huawei Technologies Co., Ltd.
- * gnu-compiler-hijacker is licensed under Mulan PSL v2.
+ * gnu-compiler-helper is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *         http://license.coscl.org.cn/MulanPSL2
@@ -14,7 +14,7 @@
 
 #include <stdio.h>
 
-#include "hijacker.h"
+#include "helper.h"
 
 static char* APPEND_ARGS[] = {
     "-gdwarf", /* obatain debug information */
@@ -27,8 +27,8 @@ static const int APPEND_ARG_LEN = (int)(sizeof(APPEND_ARGS) / sizeof(char *));
 /*
  * The whole part:
  * 1. Someone called execve() to run a compiler (inode).
- * 2. If the inode was registered, under layer would rewrite argv[0] to hijacker path.
- * 3. Hijacker would add some arguments and calls execve() again.
+ * 2. If the inode was registered, under layer would rewrite argv[0] to helper path.
+ * 3. Helper would add some arguments and calls execve() again.
  * 4. Under layer redirects argv[0] to original path.
  * Pid would keep same.
  */
@@ -40,13 +40,13 @@ int main(int argc, char *argv[], char *envp[])
         return -ENOENT;
     }
 
-    // If there is no env, stop hijack
-    const char *hijacker_env = get_hijacker_env();
-    if (hijacker_env == NULL) {
+    // If there is no env, stop helper
+    const char *helper_env = get_helper_env();
+    if (helper_env == NULL) {
         return execve(filename, argv, envp);
     }
 
-    // If there is no output, stop hijack
+    // If there is no output, stop helper
     if (find_output_flag(argc, argv) < 0) {
         return execve(filename, argv, envp);
     }

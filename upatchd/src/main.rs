@@ -30,7 +30,7 @@ use syscare_common::{fs, os};
 
 mod args;
 mod config;
-mod hijacker;
+mod helper;
 mod rpc;
 
 use args::Arguments;
@@ -175,7 +175,7 @@ impl Daemon {
     }
 
     fn initialize_skeleton(&self) -> Result<IoHandler> {
-        let config = self.config.hijacker.clone();
+        let config = self.config.helper.clone();
         let methods = SkeletonImpl::new(config)?.to_delegate();
 
         let mut io_handler = IoHandler::new();

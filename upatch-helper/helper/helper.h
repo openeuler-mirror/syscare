@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Mulan PSL v2
 /*
  * Copyright (c) 2024 Huawei Technologies Co., Ltd.
- * gnu-compiler-hijacker is licensed under Mulan PSL v2.
+ * gnu-compiler-helper is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *         http://license.coscl.org.cn/MulanPSL2
@@ -12,8 +12,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-#ifndef __UPATCH_HIJACKER_COMMON_H
-#define __UPATCH_HIJACKER_COMMON_H
+#ifndef __UPATCH_HELPER_COMMON_H
+#define __UPATCH_HELPER_COMMON_H
 
 #include <errno.h>
 #include <stdlib.h>
@@ -22,7 +22,7 @@
 
 #include <linux/limits.h>
 
-static const char *UPATCH_ENV_NAME = "UPATCH_HIJACKER";
+static const char *UPATCH_ENV_NAME = "UPATCH_HELPER";
 static const char *EXEC_SELF_PATH = "/proc/self/exe";
 static const char *OUTPUT_FLAG_NAME = "-o";
 
@@ -39,7 +39,7 @@ static inline char* get_current_exec(void)
     return (char *)g_filename;
 }
 
-static inline const char* get_hijacker_env(void)
+static inline const char* get_helper_env(void)
 {
     return getenv(UPATCH_ENV_NAME);
 }
@@ -58,4 +58,4 @@ static inline int find_output_flag(int argc, char* const argv[])
     return -EINVAL;
 }
 
-#endif /* __UPATCH_HIJACKER_COMMON_H */
+#endif /* __UPATCH_HELPER_COMMON_H */

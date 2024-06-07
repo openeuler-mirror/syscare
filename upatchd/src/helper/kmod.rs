@@ -25,13 +25,13 @@ use syscare_common::{fs, os};
 const KMOD_SYS_PATH: &str = "/sys/module";
 
 /// An RAII guard of the kernel module.
-pub struct HijackerKmodGuard {
+pub struct UpatchHelperKmodGuard {
     kmod_name: String,
     kmod_path: PathBuf,
     sys_path: PathBuf,
 }
 
-impl HijackerKmodGuard {
+impl UpatchHelperKmodGuard {
     pub fn new<S: AsRef<str>, P: AsRef<Path>>(name: S, kmod_path: P) -> Result<Self> {
         let instance = Self {
             kmod_name: name.as_ref().to_string(),
@@ -45,7 +45,7 @@ impl HijackerKmodGuard {
     }
 }
 
-impl HijackerKmodGuard {
+impl UpatchHelperKmodGuard {
     fn selinux_relabel_kmod(&self) -> Result<()> {
         const KMOD_SECURITY_TYPE: &str = "modules_object_t";
 
@@ -92,7 +92,7 @@ impl HijackerKmodGuard {
     }
 }
 
-impl Drop for HijackerKmodGuard {
+impl Drop for UpatchHelperKmodGuard {
     fn drop(&mut self) {
         if let Err(e) = self.remove_kmod() {
             error!("{:?}", e);

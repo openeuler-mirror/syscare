@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -76,10 +76,10 @@ void free_uprobe_record(struct uprobe_record *record)
     kfree(record);
 }
 
-int create_hijacker_record(struct hijacker_record **record,
+int create_helper_record(struct helper_record **record,
     const char *exec_path, const char *jump_path)
 {
-    struct hijacker_record *new_record = NULL;
+    struct helper_record *new_record = NULL;
     struct inode *exec_inode = NULL;
     struct inode *jump_inode = NULL;
 
@@ -99,7 +99,7 @@ int create_hijacker_record(struct hijacker_record **record,
         return -ENOENT;
     }
 
-    new_record = kzalloc(sizeof(struct hijacker_record), GFP_KERNEL);
+    new_record = kzalloc(sizeof(struct helper_record), GFP_KERNEL);
     if (record == NULL) {
         return -ENOMEM;
     }
@@ -113,7 +113,7 @@ int create_hijacker_record(struct hijacker_record **record,
     return 0;
 }
 
-void free_hijacker_record(struct hijacker_record *record)
+void free_helper_record(struct helper_record *record)
 {
     if (record == NULL) {
         return;
@@ -124,7 +124,7 @@ void free_hijacker_record(struct hijacker_record *record)
     kfree(record);
 }
 
-bool find_hijacker_record(const struct hijacker_record *record,
+bool find_helper_record(const struct helper_record *record,
     const struct inode *inode)
 {
     return (inode_equal(record->exec_inode, inode) ||

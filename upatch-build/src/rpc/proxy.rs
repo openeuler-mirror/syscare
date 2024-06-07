@@ -30,7 +30,7 @@ impl UpatchProxy {
     }
 
     #[named]
-    pub fn enable_hijack<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
+    pub fn hook_compiler<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
         self.remote.call_with_args(
             function_name!(),
             RpcArguments::new().arg(exec_path.as_ref().to_path_buf()),
@@ -38,7 +38,7 @@ impl UpatchProxy {
     }
 
     #[named]
-    pub fn disable_hijack<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
+    pub fn unhook_compiler<P: AsRef<Path>>(&self, exec_path: P) -> Result<()> {
         self.remote.call_with_args(
             function_name!(),
             RpcArguments::new().arg(exec_path.as_ref().to_path_buf()),
