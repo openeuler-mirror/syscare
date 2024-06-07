@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,8 +18,8 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_HIJACKER_KO_CACHE_H
-#define _UPATCH_HIJACKER_KO_CACHE_H
+#ifndef _UPATCH_HELPER_KO_CACHE_H
+#define _UPATCH_HELPER_KO_CACHE_H
 
 int cache_init(void);
 void cache_exit(void);
@@ -27,4 +27,4 @@ void cache_exit(void);
 char *path_buf_alloc(void);
 void path_buf_free(char *buff);
 
-#endif /* _UPATCH_HIJACKER_KO_CACHE_H */
+#endif /* _UPATCH_HELPER_KO_CACHE_H */

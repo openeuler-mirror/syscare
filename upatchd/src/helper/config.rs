@@ -23,26 +23,26 @@ const GCC_BINARY: &str = "/usr/bin/gcc";
 const GXX_BINARY: &str = "/usr/bin/g++";
 const AS_BINARY: &str = "/usr/bin/as";
 
-const CC_HIJACKER: &str = "/usr/libexec/syscare/cc-hijacker";
-const CXX_HIJACKER: &str = "/usr/libexec/syscare/c++-hijacker";
-const GCC_HIJACKER: &str = "/usr/libexec/syscare/gcc-hijacker";
-const GXX_HIJACKER: &str = "/usr/libexec/syscare/g++-hijacker";
-const AS_HIJACKER: &str = "/usr/libexec/syscare/as-hijacker";
+const CC_HELPER: &str = "/usr/libexec/syscare/cc-helper";
+const CXX_HELPER: &str = "/usr/libexec/syscare/c++-helper";
+const GCC_HELPER: &str = "/usr/libexec/syscare/gcc-helper";
+const GXX_HELPER: &str = "/usr/libexec/syscare/g++-helper";
+const AS_HELPER: &str = "/usr/libexec/syscare/as-helper";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct HijackerConfig {
+pub struct UpatchHelperConfig {
     pub mapping: IndexMap<PathBuf, PathBuf>,
 }
 
-impl Default for HijackerConfig {
+impl Default for UpatchHelperConfig {
     fn default() -> Self {
         Self {
             mapping: indexmap! {
-                PathBuf::from(CC_BINARY)  => PathBuf::from(CC_HIJACKER),
-                PathBuf::from(CXX_BINARY) => PathBuf::from(CXX_HIJACKER),
-                PathBuf::from(GCC_BINARY) => PathBuf::from(GCC_HIJACKER),
-                PathBuf::from(GXX_BINARY) => PathBuf::from(GXX_HIJACKER),
-                PathBuf::from(AS_BINARY)  => PathBuf::from(AS_HIJACKER),
+                PathBuf::from(CC_BINARY)  => PathBuf::from(CC_HELPER),
+                PathBuf::from(CXX_BINARY) => PathBuf::from(CXX_HELPER),
+                PathBuf::from(GCC_BINARY) => PathBuf::from(GCC_HELPER),
+                PathBuf::from(GXX_BINARY) => PathBuf::from(GXX_HELPER),
+                PathBuf::from(AS_BINARY)  => PathBuf::from(AS_HELPER),
             },
         }
     }

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -74,7 +74,7 @@ static inline const char __user *new_user_str(const char *src, size_t len)
     return (const char __user *)addr;
 }
 
-static inline const char *select_jump_path(const struct hijacker_record *record,
+static inline const char *select_jump_path(const struct helper_record *record,
     const struct inode *inode)
 {
     if (inode_equal(inode, record->exec_inode)) {
@@ -92,8 +92,8 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
     const char __user *argv0 = (const char __user *)_reg_argv0;
     const char __user *new_argv0 = NULL;
 
-    struct map *hijacker_map = get_hijacker_map();
-    const struct hijacker_record *record = NULL;
+    struct map *helper_map = get_helper_map();
+    const struct helper_record *record = NULL;
 
     const char *elf_path = NULL;
     const char *jump_path = NULL;
@@ -102,11 +102,11 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
     char *path_buff = NULL;
     size_t path_len = 0;
 
-    if ((argv0 == NULL) || (hijacker_context_count() == 0)) {
+    if ((argv0 == NULL) || (helper_context_count() == 0)) {
         return 0;
     }
 
-    if (map_size(hijacker_map) == 0) {
+    if (map_size(helper_map) == 0) {
         return 0;
     }
 
@@ -129,7 +129,7 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
         return 0;
     }
 
-    record = (const struct hijacker_record *)map_get(hijacker_map, inode);
+    record = (const struct helper_record *)map_get(helper_map, inode);
     if (record == NULL) {
         pr_debug("record not found, elf_path=%s\n", elf_path);
         path_buf_free(path_buff);
@@ -143,7 +143,7 @@ int handle_uprobe(struct uprobe_consumer *self, struct pt_regs *regs)
         return 0;
     }
     path_len = strnlen(jump_path, PATH_MAX) + 1;
-    pr_debug("[hijacked] elf_path=%s, jump_path=%s\n", elf_path, jump_path);
+    pr_debug("[helped] elf_path=%s, jump_path=%s\n", elf_path, jump_path);
 
     new_argv0 = new_user_str(jump_path, path_len);
     if (new_argv0 == NULL) {

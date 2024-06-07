@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Mulan PSL v2
 /*
  * Copyright (c) 2024 Huawei Technologies Co., Ltd.
- * gnu-as-hijacker is licensed under Mulan PSL v2.
+ * gnu-as-helper is licensed under Mulan PSL v2.
  * You can use this software according to the terms and conditions of the Mulan PSL v2.
  * You may obtain a copy of Mulan PSL v2 at:
  *         http://license.coscl.org.cn/MulanPSL2
@@ -20,7 +20,7 @@
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
-#include "hijacker.h"
+#include "helper.h"
 
 #ifndef SYS_gettid
 #error "SYS_gettid is unavailable on this system"
@@ -39,8 +39,8 @@ static char g_new_output_file[PATH_MAX] = { 0 };
 /*
  * The whole part:
  * 1. Someone called execve() to run a compiler (inode).
- * 2. If the inode was registered, under layer would rewrite argv[0] to hijacker path.
- * 3. Hijacker would add some arguments and calls execve() again.
+ * 2. If the inode was registered, under layer would rewrite argv[0] to helper path.
+ * 3. Helper would add some arguments and calls execve() again.
  * 4. Under layer redirects argv[0] to original path.
  * Pid would keep same.
  */
@@ -53,27 +53,27 @@ int main(int argc, char *argv[], char *envp[])
         return -ENOENT;
     }
 
-    // If there is no env, stop hijack
-    const char *output_dir = get_hijacker_env();
+    // If there is no env, stop helper
+    const char *output_dir = get_helper_env();
     if (output_dir == NULL) {
         return execve(filename, argv, envp);
     }
 
-    // If output dir is not a directory, stop hijack
+    // If output dir is not a directory, stop helper
     struct stat output_dir_stat;
     if ((stat(output_dir, &output_dir_stat) != 0) ||
         (!S_ISDIR(output_dir_stat.st_mode))) {
         return execve(filename, argv, envp);
     }
 
-    // If there is no output, stop hijack
+    // If there is no output, stop helper
     int output_index = find_output_flag(argc, argv);
     if (output_index < 0) {
         return execve(filename, argv, envp);
     }
     output_index += 1;
 
-    // If the output is null device, stop hijack
+    // If the output is null device, stop helper
     const char *output_file = argv[output_index];
     if (strncmp(output_file, NULL_DEV_PATH, strlen(NULL_DEV_PATH)) == 0) {
         return execve(filename, argv, envp);

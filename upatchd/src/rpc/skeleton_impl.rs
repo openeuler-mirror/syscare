@@ -17,7 +17,7 @@ use std::path::PathBuf;
 use anyhow::{Context, Result};
 use log::{debug, info};
 
-use crate::hijacker::{Hijacker, HijackerConfig};
+use crate::helper::{UpatchHelper, UpatchHelperConfig};
 
 use super::{
     function::{RpcFunction, RpcResult},
@@ -25,34 +25,34 @@ use super::{
 };
 
 pub struct SkeletonImpl {
-    hijacker: Hijacker,
+    helper: UpatchHelper,
 }
 
 impl SkeletonImpl {
-    pub fn new(config: HijackerConfig) -> Result<Self> {
-        debug!("Initializing hijacker...");
+    pub fn new(config: UpatchHelperConfig) -> Result<Self> {
+        debug!("Initializing upatch helper...");
         Ok(Self {
-            hijacker: Hijacker::new(config).context("Failed to initialize hijacker")?,
+            helper: UpatchHelper::new(config).context("Failed to initialize upatch helper")?,
         })
     }
 }
 
 impl Skeleton for SkeletonImpl {
-    fn enable_hijack(&self, elf_path: PathBuf) -> RpcResult<()> {
+    fn hook_compiler(&self, elf_path: PathBuf) -> RpcResult<()> {
         RpcFunction::call(|| {
-            info!("Enable hijack: {}", elf_path.display());
-            self.hijacker
-                .register(&elf_path)
-                .with_context(|| format!("Failed to register hijack {}", elf_path.display()))
+            info!("Hook compiler: {}", elf_path.display());
+            self.helper
+                .register_hooker(&elf_path)
+                .with_context(|| format!("Failed to hook helper {}", elf_path.display()))
         })
     }
 
-    fn disable_hijack(&self, elf_path: PathBuf) -> RpcResult<()> {
+    fn unhook_compiler(&self, elf_path: PathBuf) -> RpcResult<()> {
         RpcFunction::call(|| {
-            info!("Disable hijack: {}", elf_path.display());
-            self.hijacker
-                .unregister(&elf_path)
-                .with_context(|| format!("Failed to unregister hijack {}", elf_path.display()))
+            info!("Unhook compiler: {}", elf_path.display());
+            self.helper
+                .unregister_hooker(&elf_path)
+                .with_context(|| format!("Failed to unhook compiler {}", elf_path.display()))
         })
     }
 }

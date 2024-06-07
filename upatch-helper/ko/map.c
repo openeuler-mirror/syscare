@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * upatch-hijacker kernel module
+ * upatch-helper kernel module
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify

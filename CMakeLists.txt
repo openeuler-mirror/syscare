@@ -66,7 +66,7 @@ set(CMAKE_EXE_LINKER_FLAGS "${LINK_FLAGS}")
 # Subdirectories
 add_subdirectory(upatch-diff)
 add_subdirectory(upatch-manage)
-add_subdirectory(upatch-hijacker)
+add_subdirectory(upatch-helper)
 add_subdirectory(misc)
 
 # Build rust executables

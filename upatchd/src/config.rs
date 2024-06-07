@@ -18,7 +18,7 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use syscare_common::fs;
 
-use crate::hijacker::HijackerConfig;
+use crate::helper::UpatchHelperConfig;
 
 const DEFAULT_SOCKET_UID: u32 = 0;
 const DEFAULT_SOCKET_GID: u32 = 0;
@@ -46,7 +46,7 @@ pub struct DaemonConfig {
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub daemon: DaemonConfig,
-    pub hijacker: HijackerConfig,
+    pub helper: UpatchHelperConfig,
 }
 
 impl Config {

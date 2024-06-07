@@ -1,4 +1,4 @@
-module_name ?= upatch_hijacker
+module_name ?= upatch_helper
 module_version ?= "1.0-dev"
 kernel ?= /lib/modules/$(shell uname -r)/build
 
