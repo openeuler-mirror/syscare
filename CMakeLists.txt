@@ -8,7 +8,12 @@ project(syscare)
 include(GNUInstallDirs)
 find_package(Git QUIET)
 
-# Version
+# Build type
+if(NOT CMAKE_BUILD_TYPE)
+    set(CMAKE_BUILD_TYPE RelWithDebInfo)
+endif()
+
+# Build version
 if(NOT DEFINED BUILD_VERSION)
     execute_process(
         COMMAND sh -c "cat syscare/Cargo.toml | grep -F 'version' | head -n 1 | awk -F '\"' '{print $2}'"
@@ -27,12 +32,55 @@ if(GIT_FOUND)
         ERROR_QUIET
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
-    set(BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
+    set(PROJECT_BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
 else()
-    set(BUILD_VERSION "${BUILD_VERSION}")
+    set(PROJECT_BUILD_VERSION "${BUILD_VERSION}")
 endif()
 
-# Set install directories
+# Build configurations
+if(ENABLE_ASAN)
+    set(PROJECT_BUILD_VERSION "${PROJECT_BUILD_VERSION}-asan")
+    list(APPEND PROJECT_C_BUILD_FLAGS -fsanitize=address -fno-omit-frame-pointer)
+    list(APPEND PROJECT_C_LIBRARIES asan)
+endif()
+
+if(ENABLE_GCOV)
+    set(PROJECT_BUILD_VERSION "${PROJECT_BUILD_VERSION}-gcov")
+    list(APPEND PROJECT_C_BUILD_FLAGS -ftest-coverage -fprofile-arcs)
+    list(APPEND PROJECT_RUST_FLAGS -C instrument-coverage)
+    list(APPEND PROJECT_C_LIBRARIES gcov)
+endif()
+
+# Build flags
+list(APPEND PROJECT_C_BUILD_FLAGS
+    -std=gnu99 -g -Wall -O2 -Werror -Wextra
+    -DBUILD_VERSION="${PROJECT_BUILD_VERSION}" -D_FORTIFY_SOURCE=2
+    -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time
+    -Wstack-usage=8192 -Wfloat-equal -Wswitch-default
+    -Wshadow -Wconversion -Wcast-qual -Wcast-align -Wunused -Wundef
+    -funsigned-char -fstack-protector-all -fpic -fpie -ftrapv
+    -fstack-check -freg-struct-return -fno-canonical-system-headers
+    -pipe -fdebug-prefix-map=old=new
+)
+list(APPEND PROJECT_RUST_FLAGS
+    --cfg unsound_local_offset
+    -C relocation_model=pic
+    -D warnings
+    -C link-arg=-s
+    -C overflow_checks
+    -W rust_2021_incompatible_closure_captures
+)
+
+# Link flags
+list(APPEND PROJECT_C_LINK_FLAGS
+    -pie
+    -Wl,-z,relro,-z,now
+    -Wl,-z,noexecstack -rdynamic
+    -Wl,-Bsymbolic
+    -Wl,-no-undefined
+)
+
+# Install directories
 set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_FULL_BINDIR}")
 set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/syscare")
 set(SYSCARE_SERVICE_DIR "${CMAKE_INSTALL_PREFIX}/lib/systemd/system")
@@ -46,48 +94,53 @@ message("╚════██║  ╚██╔╝  ╚════██║█�
 message("███████║   ██║   ███████║╚██████╗██║  ██║██║  ██║███████╗")
 message("╚══════╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
 message("---------------------------------------------------------")
-message("-- Verion: ${BUILD_VERSION}")
+message("-- Verion: ${PROJECT_BUILD_VERSION}")
+message("-- Rust flags: ${PROJECT_RUST_FLAGS}")
+message("-- Build flags: ${PROJECT_C_BUILD_FLAGS}")
+message("-- Link flags: ${PROJECT_C_LINK_FLAGS}")
+message("-- Link libraries: ${PROJECT_C_LIBRARIES}")
 message("-- Binary  directory: ${SYSCARE_BINARY_DIR}")
 message("-- Libexec directory: ${SYSCARE_LIBEXEC_DIR}")
 message("-- Service directory: ${SYSCARE_SERVICE_DIR}")
 message("---------------------------------------------------------")
 
-# Compile options
-add_compile_options(-DBUILD_VERSION="${BUILD_VERSION}")
-add_compile_options(-std=gnu99 -g -Wall -D_FORTIFY_SOURCE=2 -O2 -Werror -Wextra
-    -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time -Wstack-usage=8192
-    -Wfloat-equal -Wswitch-default -Wshadow -Wconversion -Wcast-qual -Wcast-align
-    -Wunused -Wundef -funsigned-char -fstack-protector-all -fpic -fpie -ftrapv
-    -fstack-check -freg-struct-return -fno-canonical-system-headers -pipe
-    -fdebug-prefix-map=old=new)
-set(LINK_FLAGS "-pie -Wl,-z,relro,-z,now -Wl,-z,noexecstack -rdynamic -Wl,-Bsymbolic -Wl,-no-undefined")
-set(CMAKE_SHARED_LINKER_FLAGS "${LINK_FLAGS}")
-set(CMAKE_EXE_LINKER_FLAGS "${LINK_FLAGS}")
-# Subdirectories
-add_subdirectory(upatch-diff)
-add_subdirectory(upatch-manage)
-add_subdirectory(upatch-helper)
-add_subdirectory(misc)
+# Apply all flags
+add_compile_options(${PROJECT_C_BUILD_FLAGS})
+add_link_options(${PROJECT_C_LINK_FLAGS})
+link_libraries(${PROJECT_C_LIBRARIES})
 
 # Build rust executables
-add_custom_target(rust-executables ALL
+foreach(FLAG IN LISTS PROJECT_RUST_FLAGS)
+     set(RUSTFLAGS "${RUSTFLAGS} ${FLAG}")
+endforeach()
+
+add_custom_target(rust-build ALL
     COMMENT "Building rust executables..."
     COMMAND ${CMAKE_COMMAND} -E env
-        "BUILD_VERSION=${BUILD_VERSION}"
-        "RUSTFLAGS=--cfg unsound_local_offset -C relocation_model=pic -D warnings -C link-arg=-s -C overflow_checks -W rust_2021_incompatible_closure_captures"
-        cargo build --release --target-dir ${CMAKE_CURRENT_BINARY_DIR}
+        "BUILD_VERSION=${PROJECT_BUILD_VERSION}"
+        "RUSTFLAGS=${RUSTFLAGS}"
+        cargo build --release --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
 )
 
 # Install rust binaries
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/release/upatchd
-        ${CMAKE_CURRENT_BINARY_DIR}/release/syscared
-        ${CMAKE_CURRENT_BINARY_DIR}/release/syscare
+        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/upatchd
+        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscared
     PERMISSIONS
-        OWNER_EXECUTE OWNER_WRITE OWNER_READ
-        GROUP_EXECUTE GROUP_READ
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+    DESTINATION
+        ${SYSCARE_BINARY_DIR}
+)
+
+install(
+    PROGRAMS
+        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscare
+    PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
         WORLD_READ WORLD_EXECUTE
     DESTINATION
         ${SYSCARE_BINARY_DIR}
@@ -95,12 +148,18 @@ install(
 
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/release/upatch-build
-        ${CMAKE_CURRENT_BINARY_DIR}/release/syscare-build
+        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/upatch-build
+        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscare-build
     PERMISSIONS
-        OWNER_EXECUTE OWNER_WRITE OWNER_READ
-        GROUP_EXECUTE GROUP_READ
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
         WORLD_READ WORLD_EXECUTE
     DESTINATION
         ${SYSCARE_LIBEXEC_DIR}
 )
+
+# Build other components
+add_subdirectory(upatch-diff)
+add_subdirectory(upatch-manage)
+add_subdirectory(upatch-helper)
+add_subdirectory(misc)
