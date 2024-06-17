@@ -71,8 +71,6 @@ impl PatchInfo {
 
 impl std::fmt::Display for PatchInfo {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        const LIST_DISPLAY_LIMIT: usize = 9;
-
         writeln!(f, "name:        {}", self.name)?;
         writeln!(f, "version:     {}", self.version)?;
         writeln!(f, "release:     {}", self.release)?;
@@ -84,10 +82,6 @@ impl std::fmt::Display for PatchInfo {
         if !self.entities.is_empty() {
             writeln!(f, "entities:")?;
             for (entity_idx, entity) in self.entities.iter().enumerate() {
-                if entity_idx >= LIST_DISPLAY_LIMIT {
-                    writeln!(f, "* ......")?;
-                    break;
-                }
                 writeln!(f, "* {}", entity.patch_name.to_string_lossy())?;
             }
         }
@@ -96,18 +90,9 @@ impl std::fmt::Display for PatchInfo {
             writeln!(f, "patches:")?;
             let last_idx = self.patches.len() - 1;
             for (patch_idx, patch_file) in self.patches.iter().enumerate() {
-                if patch_idx != last_idx {
-                    if patch_idx >= LIST_DISPLAY_LIMIT {
-                        writeln!(f, "* ......")?;
-                        break;
-                    }
-                    writeln!(f, "* {}", patch_file.name.to_string_lossy())?
-                } else {
-                    if patch_idx >= LIST_DISPLAY_LIMIT {
-                        write!(f, "* ......")?;
-                        break;
-                    }
-                    write!(f, "* {}", patch_file.name.to_string_lossy())?
+                match patch_idx == last_idx {
+                    false => writeln!(f, "* {}", patch_file.name.to_string_lossy())?,
+                    true => write!(f, "* {}", patch_file.name.to_string_lossy())?,
                 }
             }
         }
