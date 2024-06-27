@@ -33,8 +33,8 @@ pub struct PatchMetadata {
 }
 
 impl PatchMetadata {
-    pub fn new<P: AsRef<Path>>(root_dir: P) -> Self {
-        let root_dir = root_dir.as_ref().to_path_buf();
+    pub fn new<P: AsRef<Path>>(directory: P) -> Self {
+        let root_dir = directory.as_ref().to_path_buf();
         let metadata_dir = root_dir.join(METADATA_DIR_NAME);
         let package_path = root_dir.join(METADATA_PKG_NAME);
         let metadata_path = metadata_dir.join(METADATA_FILE_NAME);

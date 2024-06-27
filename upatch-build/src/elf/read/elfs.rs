@@ -19,10 +19,10 @@ use anyhow::bail;
 use anyhow::Result;
 use memmap2::{Mmap, MmapOptions};
 
-use super::super::*;
-use super::Header;
-use super::SectionHeaderTable;
-use super::SymbolHeaderTable;
+use super::{
+    super::{check_elf, check_header, Endian, HeaderRead, SectionRead, SymbolHeader64, SHT_SYMTAB},
+    Header, SectionHeaderTable, SymbolHeaderTable,
+};
 
 #[derive(Debug)]
 pub struct Elf {
@@ -61,7 +61,7 @@ impl Elf {
 
     pub fn symbols(&self) -> Result<SymbolHeaderTable> {
         let sections = self.sections()?;
-        for section in sections {
+        for section in sections.clone() {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
                 let offset = section.get_sh_offset() as usize;
                 let size_sum = section.get_sh_size() as usize;

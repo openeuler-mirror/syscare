@@ -48,10 +48,6 @@ pub trait HeaderWrite: OperateWrite {
     fn set_e_ident(&mut self, e_ident: u128) {
         self.set(offset_of!(FileHeader64, e_ident), e_ident)
     }
-
-    fn set_e_shnum(&mut self, e_shnum: u16) {
-        self.set(offset_of!(FileHeader64, e_shnum), e_shnum)
-    }
 }
 
 #[repr(C)]

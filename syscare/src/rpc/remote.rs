@@ -61,27 +61,22 @@ impl RpcRemote {
 impl RpcRemote {
     fn parse_error(&self, error: Error) -> anyhow::Error {
         match error {
-            Error::Transport(e) => {
+            Error::Transport(err) => {
                 anyhow!(
                     "Cannot connect to syscare daemon at unix://{}, {}",
                     self.socket.display(),
-                    e.source()
+                    err.source()
                         .map(|e| e.to_string())
                         .unwrap_or_else(|| "Connection timeout".to_string())
                 )
             }
-            Error::Json(e) => {
-                debug!("Json parse error: {:?}", e);
+            Error::Json(err) => {
+                debug!("Json parse error: {:?}", err);
                 anyhow!("Failed to parse response")
             }
-            Error::Rpc(ref e) => match e.message == "Method not found" {
-                true => {
-                    anyhow!("Method is unimplemented")
-                }
-                false => {
-                    anyhow!("{}", e.message)
-                }
-            },
+            Error::Rpc(err) => {
+                anyhow!("{}", err.message)
+            }
             _ => {
                 debug!("{:?}", error);
                 anyhow!("Response is invalid")

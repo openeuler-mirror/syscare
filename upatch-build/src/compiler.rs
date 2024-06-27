@@ -178,23 +178,28 @@ impl Compiler {
         let mut result = Vec::new();
 
         for compiler in compilers {
-            let compiler = compiler.as_ref();
-            let compiler_name = compiler
+            let compiler_path = compiler.as_ref();
+            let compiler_name = compiler_path
                 .file_name()
                 .context("Failed to parse compiler name")?;
 
             let output_dir = temp_dir.as_ref().join(compiler_name);
             fs::create_dir_all(&output_dir)?;
 
-            debug!("- Checking {}", compiler.display());
-            let assembler_name =
-                Self::get_component_name(compiler, ASSEMBLER_NAME).with_context(|| {
-                    format!("Failed to get assembler name of {}", compiler.display())
+            debug!("- Checking {}", compiler_path.display());
+            let assembler_name = Self::get_component_name(compiler_path, ASSEMBLER_NAME)
+                .with_context(|| {
+                    format!(
+                        "Failed to get assembler name of {}",
+                        compiler_path.display()
+                    )
                 })?;
-            let linker_name = Self::get_component_name(compiler, LINKER_NAME)
-                .with_context(|| format!("Failed to get linker name of {}", compiler.display()))?;
+            let linker_name =
+                Self::get_component_name(compiler_path, LINKER_NAME).with_context(|| {
+                    format!("Failed to get linker name of {}", compiler_path.display())
+                })?;
 
-            let path = compiler.to_path_buf();
+            let path = compiler_path.to_path_buf();
             let assembler = which(assembler_name.trim()).with_context(|| {
                 format!("Cannot find assembler {}", assembler_name.to_string_lossy())
             })?;
@@ -202,17 +207,17 @@ impl Compiler {
                 .with_context(|| format!("Cannot find linker {}", linker_name.to_string_lossy()))?;
             let versions = IndexSet::new();
 
-            let mut compiler = Self {
+            let mut instance = Self {
                 path,
                 assembler,
                 linker,
                 versions,
             };
-            compiler
+            instance
                 .fetch_versions(output_dir)
                 .context("Failed to fetch supported versions")?;
 
-            result.push(compiler);
+            result.push(instance);
         }
 
         Ok(result)

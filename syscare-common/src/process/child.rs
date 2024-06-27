@@ -20,7 +20,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{anyhow, ensure, Context, Result};
 use log::trace;
 
 use super::{Stdio, StdioLevel};
@@ -81,7 +81,9 @@ impl Child {
     pub fn wait_with_output(&mut self) -> Result<Output> {
         let stdio_thread = self.capture_stdio()?;
         let status = self.wait()?;
-        let (stdout, stderr) = stdio_thread.join().expect("Failed to join stdio thread");
+        let (stdout, stderr) = stdio_thread
+            .join()
+            .map_err(|_| anyhow!("Failed to join stdio thread"))?;
 
         Ok(Output {
             status,

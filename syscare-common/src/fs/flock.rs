@@ -57,9 +57,10 @@ impl FileLock {
 impl FileLock {
     pub fn new<P: AsRef<Path>>(path: P, kind: FileLockType) -> Result<Self> {
         let file_path = path.as_ref();
-        let inner = match file_path.exists() {
-            true => File::open(file_path),
-            false => File::create(file_path),
+        let inner = if file_path.exists() {
+            File::open(file_path)
+        } else {
+            File::create(file_path)
         }
         .with_context(|| format!("Failed to create flock on {}", file_path.display()))?;
 

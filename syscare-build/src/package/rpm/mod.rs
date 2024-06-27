@@ -74,9 +74,10 @@ impl Package for RpmPackage {
         }
 
         let name = pkg_info[0].to_owned();
-        let kind = match pkg_info[6] == SPEC_TAG_VALUE_NONE {
-            true => PackageType::SourcePackage,
-            false => PackageType::BinaryPackage,
+        let kind = if pkg_info[6] == SPEC_TAG_VALUE_NONE {
+            PackageType::SourcePackage
+        } else {
+            PackageType::BinaryPackage
         };
         let arch = pkg_info[1].to_owned();
         let epoch = pkg_info[2].to_owned();

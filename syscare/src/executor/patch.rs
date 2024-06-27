@@ -14,7 +14,7 @@
 
 use std::{fmt::Write, path::PathBuf};
 
-use anyhow::{anyhow, Error, Result};
+use anyhow::{anyhow, Context, Error, Result};
 use log::info;
 
 use syscare_abi::{PackageInfo, PatchInfo, PatchListRecord, PatchStateRecord};
@@ -39,7 +39,7 @@ impl PatchCommandExecutor {
     fn check_error(mut error_list: Vec<Error>) -> Result<()> {
         match error_list.len() {
             0 => Ok(()),
-            1 => Err(error_list.pop().unwrap()),
+            1 => Err(error_list.pop().context("Invalid error")?),
             _ => {
                 let mut err_msg = String::new();
                 for (idx, e) in error_list.into_iter().enumerate() {

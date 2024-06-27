@@ -87,8 +87,6 @@ mod ffi {
     }
 }
 
-use ffi::*;
-
 const UPATCH_FUNCS_SECTION: &str = ".upatch.funcs";
 const UPATCH_STRINGS_SECTION: &str = ".upatch.strings";
 
@@ -117,9 +115,9 @@ impl UpatchResolverImpl {
 
         // Resolve patch functions
         let patch_functions = &mut patch.functions;
-        let upatch_function_slice = object::slice_from_bytes::<UpatchFunction>(
+        let upatch_function_slice = object::slice_from_bytes::<ffi::UpatchFunction>(
             function_data,
-            function_data.len() / UPATCH_FUNCTION_SIZE,
+            function_data.len() / ffi::UPATCH_FUNCTION_SIZE,
         )
         .map(|(f, _)| f)
         .map_err(|_| anyhow!("Invalid data format"))
@@ -136,11 +134,11 @@ impl UpatchResolverImpl {
         }
 
         // Relocate patch functions
-        for relocation in UpatchRelocationIterator::new(function_section.relocations()) {
+        for relocation in ffi::UpatchRelocationIterator::new(function_section.relocations()) {
             let (name_reloc_offset, name_reloc) = relocation.name;
 
-            let name_index =
-                (name_reloc_offset as usize - UPATCH_FUNCTION_OFFSET) / UPATCH_FUNCTION_SIZE;
+            let name_index = (name_reloc_offset as usize - ffi::UPATCH_FUNCTION_OFFSET)
+                / ffi::UPATCH_FUNCTION_SIZE;
             let name_function = patch_functions
                 .get_mut(name_index)
                 .context("Failed to find patch function")?;

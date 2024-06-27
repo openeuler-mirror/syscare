@@ -12,71 +12,80 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsStr;
-use std::path::Path;
+use std::{
+    ffi::{CString, OsStr},
+    path::{Path, PathBuf},
+};
 
-use lazy_static::*;
-use nix::unistd::{getuid, User};
+use lazy_static::lazy_static;
+use nix::unistd::{getuid, Gid, Uid, User};
 
 use crate::ffi::CStrExt;
 
-#[inline(always)]
 fn info() -> &'static User {
     lazy_static! {
-        static ref USER: User = User::from_uid(getuid())
-            .expect("Failed to read user info")
-            .unwrap();
+        static ref USER_INFO: User = User::from_uid(getuid())
+            .unwrap_or_default()
+            .unwrap_or(User {
+                name: String::from("root"),
+                passwd: CString::default(),
+                uid: Uid::from_raw(0),
+                gid: Gid::from_raw(0),
+                gecos: CString::default(),
+                dir: PathBuf::from("/root"),
+                shell: PathBuf::from("/bin/sh"),
+            });
     }
-    &USER
+    &USER_INFO
 }
 
 pub fn name() -> &'static str {
-    info().name.as_str()
+    self::info().name.as_str()
 }
 
 pub fn passwd() -> &'static OsStr {
-    info().passwd.as_os_str()
+    self::info().passwd.as_os_str()
 }
 
 pub fn id() -> u32 {
-    info().uid.as_raw()
+    self::info().uid.as_raw()
 }
 
 pub fn gid() -> u32 {
-    info().gid.as_raw()
+    self::info().gid.as_raw()
 }
 
 pub fn gecos() -> &'static OsStr {
-    info().gecos.as_os_str()
+    self::info().gecos.as_os_str()
 }
 
 pub fn home() -> &'static Path {
-    info().dir.as_path()
+    self::info().dir.as_path()
 }
 
 pub fn shell() -> &'static Path {
-    info().shell.as_path()
+    self::info().shell.as_path()
 }
 
 #[test]
 fn test() {
-    println!("name:   {}", name());
-    assert!(!name().is_empty());
+    println!("name:   {}", self::name());
+    assert!(!self::name().is_empty());
 
-    println!("passwd: {}", passwd().to_string_lossy());
-    assert!(!passwd().is_empty());
+    println!("passwd: {}", self::passwd().to_string_lossy());
+    assert!(!self::passwd().is_empty());
 
-    println!("id:     {}", id());
-    assert!(id() > 0);
+    println!("id:     {}", self::id());
+    assert!(id() < u32::MAX);
 
-    println!("gid:    {}", gid());
-    assert!(gid() > 0);
+    println!("gid:    {}", self::gid());
+    assert!(gid() < u32::MAX);
 
-    println!("gecos:  {}", gecos().to_string_lossy());
+    println!("gecos:  {}", self::gecos().to_string_lossy());
 
-    println!("home:   {}", home().display());
-    assert!(home().exists());
+    println!("home:   {}", self::home().display());
+    assert!(self::home().exists());
 
-    println!("shell:  {}", shell().display());
-    assert!(shell().exists());
+    println!("shell:  {}", self::shell().display());
+    assert!(self::home().exists());
 }

@@ -60,14 +60,14 @@ impl FileRelation {
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let mut binaries = binaries.into_iter();
-        let mut debuginfos = debuginfos.into_iter();
+        let mut binary_iter = binaries.into_iter();
+        let mut debuginfo_iter = debuginfos.into_iter();
 
-        while let (Some(binary), Some(debuginfo)) = (binaries.next(), debuginfos.next()) {
-            let binary = Self::find_binary_file(binary)?;
-            let debuginfo = debuginfo.as_ref().to_path_buf();
+        while let (Some(binary), Some(debuginfo)) = (binary_iter.next(), debuginfo_iter.next()) {
+            let binary_file = Self::find_binary_file(binary)?;
+            let debuginfo_file = debuginfo.as_ref().to_path_buf();
 
-            self.debuginfo_map.insert(binary, debuginfo);
+            self.debuginfo_map.insert(binary_file, debuginfo_file);
         }
 
         Ok(())

@@ -26,8 +26,8 @@ pub struct BuildRoot {
 }
 
 impl BuildRoot {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let path = path.as_ref().to_path_buf();
+    pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
+        let path = directory.as_ref().to_path_buf();
         let original_dir = path.join("original");
         let patched_dir = path.join("patched");
         let temp_dir = path.join("temp");

@@ -49,9 +49,9 @@ pub struct CompileUnit {
 pub struct Dwarf;
 
 impl Dwarf {
-    pub fn parse<P: AsRef<Path>>(elf: P) -> Result<Vec<CompileUnit>> {
+    pub fn parse<P: AsRef<Path>>(file_path: P) -> Result<Vec<CompileUnit>> {
         // use mmap here, but depend on some devices
-        let elf = elf.as_ref();
+        let elf = file_path.as_ref();
         let file = std::fs::File::open(elf)?;
         let mmap = unsafe { memmap2::Mmap::map(&file)? };
 
@@ -88,6 +88,8 @@ impl Dwarf {
         file: &File,
         section: &Section,
     ) {
+        const INVALID_SECTION_NAME: &str = ".invalid";
+
         for (offset64, mut relocation) in section.relocations() {
             let offset = offset64 as usize;
             if offset as u64 != offset64 {
@@ -104,8 +106,7 @@ impl Dwarf {
                             }
                             Err(_) => {
                                 trace!("Relocation with invalid symbol for section {} at offset 0x{:08x}",
-                                    section.name().unwrap(),
-                                    offset
+                                    section.name().unwrap_or(INVALID_SECTION_NAME), offset
                                 );
                             }
                         }
@@ -113,7 +114,7 @@ impl Dwarf {
                     if relocations.insert(offset, relocation).is_some() {
                         trace!(
                             "Multiple relocations for section {} at offset 0x{:08x}",
-                            section.name().unwrap(),
+                            section.name().unwrap_or(INVALID_SECTION_NAME),
                             offset
                         );
                     }
@@ -121,7 +122,7 @@ impl Dwarf {
                 _ => {
                     trace!(
                         "Unsupported relocation for section {} at offset 0x{:08x}",
-                        section.name().unwrap(),
+                        section.name().unwrap_or(INVALID_SECTION_NAME),
                         offset
                     );
                 }
@@ -136,12 +137,12 @@ impl Dwarf {
         arena_data: &'arena Arena<Cow<'input, [u8]>>,
         arena_relocations: &'arena Arena<IndexMap<usize, Relocation>>,
     ) -> Result<Relocate<'arena, EndianSlice<'arena, Endian>>> {
-        let mut relocations = IndexMap::new();
+        let mut relocation_map = IndexMap::new();
         let name = Some(id.name());
-        let data = match name.and_then(|name| file.section_by_name(name)) {
+        let data = match name.and_then(|section_name| file.section_by_name(section_name)) {
             Some(ref section) => {
                 // DWO sections never have relocations, so don't bother.
-                Self::add_relocations(&mut relocations, file, section);
+                Self::add_relocations(&mut relocation_map, file, section);
                 section.uncompressed_data()?
             }
             // Use a non-zero capacity so that `ReaderOffsetId`s are unique.
@@ -150,7 +151,7 @@ impl Dwarf {
         let data_ref = (*arena_data.alloc(data)).borrow();
         let reader = EndianSlice::new(data_ref, endian);
         let section = reader;
-        let relocations = (*arena_relocations.alloc(relocations)).borrow();
+        let relocations = (*arena_relocations.alloc(relocation_map)).borrow();
         Ok(Relocate {
             relocations,
             section,

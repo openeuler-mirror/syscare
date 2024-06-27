@@ -62,9 +62,10 @@ impl SyscareCLI {
         let args = Arguments::new()?;
 
         // Initialize logger
-        let log_level_max = match args.verbose {
-            false => LevelFilter::Info,
-            true => LevelFilter::Trace,
+        let log_level_max = if args.verbose {
+            LevelFilter::Trace
+        } else {
+            LevelFilter::Info
         };
         let log_spec = LogSpecification::builder().default(log_level_max).build();
         let logger = Logger::with(log_spec)
@@ -91,10 +92,9 @@ impl SyscareCLI {
 
         debug!("Initializing command executors...");
         let patch_lock_file = self.args.work_dir.join(PATCH_OP_LOCK_NAME);
-        let executors = vec![
-            Box::new(BuildCommandExecutor) as Box<dyn CommandExecutor>,
-            Box::new(PatchCommandExecutor::new(patch_proxy, patch_lock_file))
-                as Box<dyn CommandExecutor>,
+        let executors: Vec<Box<dyn CommandExecutor>> = vec![
+            Box::new(BuildCommandExecutor),
+            Box::new(PatchCommandExecutor::new(patch_proxy, patch_lock_file)),
         ];
 
         let command = &self.args.command;

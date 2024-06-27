@@ -44,7 +44,7 @@ impl Iterator for CharIndices<'_> {
             }
             None => {
                 // Unable to parse utf-8 char, fallback to byte
-                let result = (self.front_idx, char_bytes[0] as char);
+                let result = (self.front_idx, char::from(char_bytes[0]));
                 self.front_idx += 1;
 
                 Some(result)
@@ -68,7 +68,13 @@ impl DoubleEndedIterator for CharIndices<'_> {
             None => {
                 // Unable to parse utf-8 char, fallback to byte
                 self.back_idx -= 1;
-                Some((self.back_idx, *char_bytes.last().unwrap() as char))
+                Some((
+                    self.back_idx,
+                    char_bytes
+                        .last()
+                        .map(|b| char::from(*b))
+                        .unwrap_or_default(),
+                ))
             }
         }
     }

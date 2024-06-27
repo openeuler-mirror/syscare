@@ -38,8 +38,8 @@ pub trait PatchResolverImpl {
 pub struct PatchResolver;
 
 impl PatchResolver {
-    pub fn resolve_patch<P: AsRef<Path>>(patch_root: P) -> Result<Vec<Patch>> {
-        let patch_root = patch_root.as_ref();
+    pub fn resolve_patch<P: AsRef<Path>>(directory: P) -> Result<Vec<Patch>> {
+        let patch_root = directory.as_ref();
         let patch_info = Arc::new(
             serde::deserialize_with_magic::<PatchInfo, _, _>(
                 patch_root.join(PATCH_INFO_FILE_NAME),
@@ -47,9 +47,9 @@ impl PatchResolver {
             )
             .context("Failed to resolve patch metadata")?,
         );
-        let resolver = match patch_info.kind {
-            PatchType::UserPatch => &UpatchResolverImpl as &dyn PatchResolverImpl,
-            PatchType::KernelPatch => &KpatchResolverImpl as &dyn PatchResolverImpl,
+        let resolver: &dyn PatchResolverImpl = match patch_info.kind {
+            PatchType::UserPatch => &UpatchResolverImpl,
+            PatchType::KernelPatch => &KpatchResolverImpl,
         };
 
         let mut patch_list = Vec::with_capacity(patch_info.entities.len());

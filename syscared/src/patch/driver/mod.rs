@@ -39,15 +39,15 @@ pub struct PatchDriver {
 impl PatchDriver {
     fn check_conflict_functions(&self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check_conflict_functions(patch),
-            Patch::UserPatch(patch) => self.upatch.check_conflict_functions(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.check_conflict_functions(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.check_conflict_functions(upatch),
         }
     }
 
     fn check_override_functions(&self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check_override_functions(patch),
-            Patch::UserPatch(patch) => self.upatch.check_override_functions(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.check_override_functions(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.check_override_functions(upatch),
         }
     }
 }
@@ -71,8 +71,8 @@ impl PatchDriver {
     /// Fetch and return the patch status.
     pub fn patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.status(patch),
-            Patch::UserPatch(patch) => self.upatch.status(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.status(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.status(upatch),
         }
         .with_context(|| format!("Failed to get patch '{}' status", patch))
     }
@@ -84,8 +84,8 @@ impl PatchDriver {
             return Ok(());
         }
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.check(patch),
-            Patch::UserPatch(patch) => self.upatch.check(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.check(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.check(upatch),
         }
         .with_context(|| format!("Patch '{}' is not patchable", patch))
     }
@@ -104,8 +104,8 @@ impl PatchDriver {
     /// After this action, the patch status would be changed to 'DEACTIVED'.
     pub fn apply_patch(&mut self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.apply(patch),
-            Patch::UserPatch(patch) => self.upatch.apply(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.apply(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.apply(upatch),
         }
         .with_context(|| format!("Failed to apply patch '{}'", patch))
     }
@@ -114,8 +114,8 @@ impl PatchDriver {
     /// After this action, the patch status would be changed to 'NOT-APPLIED'.
     pub fn remove_patch(&mut self, patch: &Patch) -> Result<()> {
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.remove(patch),
-            Patch::UserPatch(patch) => self.upatch.remove(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.remove(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.remove(upatch),
         }
         .with_context(|| format!("Failed to remove patch '{}'", patch))
     }
@@ -127,8 +127,8 @@ impl PatchDriver {
             self.check_conflict_functions(patch)?;
         }
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.active(patch),
-            Patch::UserPatch(patch) => self.upatch.active(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.active(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.active(upatch),
         }
         .with_context(|| format!("Failed to active patch '{}'", patch))
     }
@@ -140,8 +140,8 @@ impl PatchDriver {
             self.check_override_functions(patch)?;
         }
         match patch {
-            Patch::KernelPatch(patch) => self.kpatch.deactive(patch),
-            Patch::UserPatch(patch) => self.upatch.deactive(patch),
+            Patch::KernelPatch(kpatch) => self.kpatch.deactive(kpatch),
+            Patch::UserPatch(upatch) => self.upatch.deactive(upatch),
         }
         .with_context(|| format!("Failed to deactive patch '{}'", patch))
     }

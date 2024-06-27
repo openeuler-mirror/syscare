@@ -246,12 +246,11 @@ impl PatchManager {
 
         debug!("Reading patch status...");
         let status_file = &self.patch_status_file;
-        let status_map: HashMap<Uuid, PatchStatus> = match status_file.exists() {
-            true => serde::deserialize(status_file).context("Failed to read patch status")?,
-            false => {
-                warn!("Cannot find patch status file");
-                return Ok(());
-            }
+        let status_map: HashMap<Uuid, PatchStatus> = if status_file.exists() {
+            serde::deserialize(status_file).context("Failed to read patch status")?
+        } else {
+            warn!("Cannot find patch status file");
+            return Ok(());
         };
 
         /*
@@ -301,7 +300,7 @@ impl PatchManager {
     pub fn rescan_patches(&mut self) -> Result<()> {
         self.patch_map = Self::scan_patches(&self.patch_install_dir)?;
 
-        let status_keys = self.status_map.keys().cloned().collect::<Vec<_>>();
+        let status_keys = self.status_map.keys().copied().collect::<Vec<_>>();
         for patch_uuid in status_keys {
             if !self.patch_map.contains_key(&patch_uuid) {
                 trace!("Patch '{}' was removed, remove its status", patch_uuid);
@@ -362,9 +361,9 @@ impl PatchManager {
         let mut patch_map = IndexMap::new();
 
         info!("Scanning patches from {}...", directory.as_ref().display());
-        for patch_root in fs::list_dirs(directory, TRAVERSE_OPTION)? {
-            let resolve_result = PatchResolver::resolve_patch(&patch_root)
-                .with_context(|| format!("Failed to resolve patch from {}", patch_root.display()));
+        for patch_dir in fs::list_dirs(directory, TRAVERSE_OPTION)? {
+            let resolve_result = PatchResolver::resolve_patch(&patch_dir)
+                .with_context(|| format!("Failed to resolve patch from {}", patch_dir.display()));
             match resolve_result {
                 Ok(patches) => {
                     for patch in patches {
