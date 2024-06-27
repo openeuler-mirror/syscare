@@ -36,9 +36,8 @@ static void correlate_symbol(struct symbol *sym_orig, struct symbol *sym_patched
     sym_orig->status = sym_patched->status = SAME;
     if (strcmp(sym_orig->name, sym_patched->name)) {
         log_debug("renaming symbol %s to %s \n", sym_patched->name, sym_orig->name);
-        sym_patched->name = strdup(sym_orig->name);
-        if (!sym_patched->name)
-            ERROR("strdup");
+        sym_patched->name = sym_orig->name;
+        sym_patched->name_source = DATA_SOURCE_REF;
     }
 	if (sym_orig->relf_sym && !sym_patched->relf_sym)
 		sym_patched->relf_sym = sym_orig->relf_sym;
@@ -98,9 +97,8 @@ static void __correlate_section(struct section *sec_orig, struct section *sec_pa
     /* Make sure these two sections have the same name */
     if (strcmp(sec_orig->name, sec_patched->name)) {
         log_debug("renaming section %s to %s \n", sec_patched->name, sec_orig->name);
-        sec_patched->name = strdup(sec_orig->name);
-        if (!sec_patched->name)
-            ERROR("strdup");
+        sec_patched->name = sec_orig->name;
+        sec_patched->name_source = DATA_SOURCE_REF;
     }
 }
 

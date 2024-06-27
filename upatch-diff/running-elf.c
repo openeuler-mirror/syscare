@@ -101,7 +101,7 @@ void relf_init(char *elf_name, struct running_elf *relf)
     }
 }
 
-int relf_destroy(struct running_elf *relf)
+int relf_close(struct running_elf *relf)
 {
     free(relf->obj_syms);
     elf_end(relf->elf);
