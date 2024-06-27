@@ -14,6 +14,7 @@
 
 use std::borrow::Cow;
 
+use gimli::ReaderOffset;
 use indexmap::IndexMap;
 use object::Relocation;
 
@@ -28,10 +29,11 @@ impl<'a, R: gimli::Reader<Offset = usize>> Relocate<'a, R> {
     pub fn relocate(&self, offset: usize, value: u64) -> u64 {
         if let Some(relocation) = self.relocations.get(&offset) {
             if relocation.kind() == object::RelocationKind::Absolute {
-                return match relocation.has_implicit_addend() {
+                return if relocation.has_implicit_addend() {
                     // Use the explicit addend too, because it may have the symbol value.
-                    true => value.wrapping_add(relocation.addend() as u64),
-                    false => relocation.addend() as u64,
+                    value.wrapping_add(relocation.addend() as u64)
+                } else {
+                    relocation.addend() as u64
                 };
             }
         };
@@ -52,19 +54,19 @@ impl<'a, R: gimli::Reader<Offset = usize>> gimli::Reader for Relocate<'a, R> {
     fn read_length(&mut self, format: gimli::Format) -> gimli::Result<usize> {
         let offset = self.reader.offset_from(&self.section);
         let value = self.reader.read_length(format)?;
-        <usize as gimli::ReaderOffset>::from_u64(self.relocate(offset, value as u64))
+        gimli::ReaderOffset::from_u64(self.relocate(offset, value.into_u64()))
     }
 
     fn read_offset(&mut self, format: gimli::Format) -> gimli::Result<usize> {
         let offset = self.reader.offset_from(&self.section);
         let value = self.reader.read_offset(format)?;
-        <usize as gimli::ReaderOffset>::from_u64(self.relocate(offset, value as u64))
+        gimli::ReaderOffset::from_u64(self.relocate(offset, value.into_u64()))
     }
 
     fn read_sized_offset(&mut self, size: u8) -> gimli::Result<usize> {
         let offset = self.reader.offset_from(&self.section);
         let value = self.reader.read_sized_offset(size)?;
-        <usize as gimli::ReaderOffset>::from_u64(self.relocate(offset, value as u64))
+        gimli::ReaderOffset::from_u64(self.relocate(offset, value.into_u64()))
     }
 
     #[inline]

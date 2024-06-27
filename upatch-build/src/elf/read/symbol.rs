@@ -99,9 +99,10 @@ impl<'a> SymbolHeaderTable<'a> {
     }
 
     pub fn reset(&mut self, n: usize) {
-        match n < self.num {
-            true => self.count = n,
-            false => self.count = 0,
+        if n < self.num {
+            self.count = n;
+        } else {
+            self.count = 0;
         }
     }
 }
@@ -110,21 +111,18 @@ impl<'a> Iterator for SymbolHeaderTable<'a> {
     type Item = SymbolHeader<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.count < self.num {
-            true => {
-                let offset = self.count * self.size + self.offset;
-                self.count += 1;
-                Some(SymbolHeader::from(
-                    self.mmap,
-                    self.endian,
-                    self.strtab,
-                    offset,
-                ))
-            }
-            false => {
-                self.count = 0;
-                None
-            }
+        if self.count < self.num {
+            let offset = self.count * self.size + self.offset;
+            self.count += 1;
+            Some(SymbolHeader::from(
+                self.mmap,
+                self.endian,
+                self.strtab,
+                offset,
+            ))
+        } else {
+            self.count = 0;
+            None
         }
     }
 }

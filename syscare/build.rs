@@ -12,26 +12,25 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, process::Command};
+use std::{env, ffi::OsStr, os::unix::ffi::OsStrExt, process::Command};
 
 fn rewrite_version() {
-    const ENV_VERSION_NAME: &str = "BUILD_VERSION";
-    const PKG_VERSION_NAME: &str = "CARGO_PKG_VERSION";
+    const PKG_VERSION: &str = env!("CARGO_PKG_VERSION");
+    const ENV_VERSION: Option<&str> = option_env!("BUILD_VERSION");
 
-    let version = env::var(ENV_VERSION_NAME).unwrap_or_else(|_| {
-        let pkg_version = env::var(PKG_VERSION_NAME).expect("Failed to fetch package version");
-        let git_output = Command::new("git")
-            .args(["rev-parse", "--short", "HEAD"])
-            .output()
-            .map(|output| String::from_utf8(output.stdout).expect("Failed to fetch git version"));
-
-        match git_output {
-            Ok(git_version) => format!("{}-g{}", pkg_version, git_version),
-            Err(_) => pkg_version,
-        }
-    });
-
-    println!("cargo:rustc-env={}={}", PKG_VERSION_NAME, version);
+    println!(
+        "cargo:rustc-env=CARGO_PKG_VERSION={}",
+        ENV_VERSION.map(String::from).unwrap_or_else(|| {
+            Command::new("git")
+                .args(["rev-parse", "--short", "HEAD"])
+                .output()
+                .map(|output| {
+                    let git_version = OsStr::from_bytes(&output.stdout).to_string_lossy();
+                    format!("{}-g{}", PKG_VERSION, git_version)
+                })
+                .unwrap_or_else(|_| PKG_VERSION.to_string())
+        })
+    );
 }
 
 fn main() {

@@ -37,10 +37,7 @@ pub trait OsStrExt: AsRef<OsStr> {
 
         let haystack = self.as_ref().as_bytes();
         match haystack.get(index) {
-            Some(&b) => {
-                // This is bit magic equivalent to: b < 128 || b >= 192
-                b as i8 >= -0x40
-            }
+            Some(&b) => !(128..192).contains(&b),
             None => index == haystack.len(),
         }
     }
@@ -135,14 +132,12 @@ pub trait OsStrExt: AsRef<OsStr> {
     }
 
     fn split_whitespace(&self) -> Filter<Split<SplitFn>, FilterFn> {
-        self.split(char::is_whitespace as SplitFn)
+        self.split(SplitFn::from(char::is_whitespace))
             .filter(|s| !s.is_empty())
     }
 
     fn split_at(&self, mid: usize) -> (&OsStr, &OsStr) {
-        if !self.is_char_boundary(mid) {
-            panic!("Failed to slice osstring");
-        }
+        debug_assert!(self.is_char_boundary(mid), "Split out of char boundary");
 
         let (lhs, rhs) = self.as_ref().as_bytes().split_at(mid);
         (OsStr::from_bytes(lhs), OsStr::from_bytes(rhs))

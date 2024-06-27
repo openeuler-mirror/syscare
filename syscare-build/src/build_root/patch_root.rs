@@ -28,8 +28,8 @@ pub struct PatchRoot {
 }
 
 impl PatchRoot {
-    pub fn new<P: AsRef<Path>>(base_dir: P) -> Result<Self> {
-        let path = base_dir.as_ref().to_path_buf();
+    pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
+        let path = directory.as_ref().to_path_buf();
         let build = path.join(BUILD_DIR_NAME);
         let output = path.join(OUTPUT_DIR_NAME);
 

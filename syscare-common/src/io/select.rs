@@ -32,7 +32,7 @@ impl Select {
         Self::with_timeout(fds, None)
     }
 
-    pub fn with_timeout<I, F>(fds: I, timeout: Option<Duration>) -> Self
+    pub fn with_timeout<I, F>(fds: I, duration: Option<Duration>) -> Self
     where
         I: IntoIterator<Item = F>,
         F: AsRawFd,
@@ -44,8 +44,7 @@ impl Select {
         let readfds = FdSet::new();
         let writefds = FdSet::new();
         let errorfds = FdSet::new();
-        let timeout = timeout
-            .map(|timeout| TimeVal::new(timeout.as_secs() as i64, timeout.subsec_micros() as i64));
+        let timeout = duration.map(|t| TimeVal::new(t.as_secs() as i64, t.subsec_micros() as i64));
 
         Self {
             fd_set,

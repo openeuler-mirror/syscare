@@ -100,8 +100,6 @@ mod ffi {
     }
 }
 
-use ffi::*;
-
 const KPATCH_FUNCS_SECTION: &str = ".kpatch.funcs";
 const KPATCH_STRINGS_SECTION: &str = ".kpatch.strings";
 
@@ -130,9 +128,9 @@ impl KpatchResolverImpl {
 
         // Resolve patch functions
         let patch_functions = &mut patch.functions;
-        let kpatch_function_slice = object::slice_from_bytes::<KpatchFunction>(
+        let kpatch_function_slice = object::slice_from_bytes::<ffi::KpatchFunction>(
             function_data,
-            function_data.len() / KPATCH_FUNCTION_SIZE,
+            function_data.len() / ffi::KPATCH_FUNCTION_SIZE,
         )
         .map(|(f, _)| f)
         .map_err(|_| anyhow!("Invalid data format"))
@@ -150,13 +148,13 @@ impl KpatchResolverImpl {
         }
 
         // Relocate patch functions
-        for relocation in KpatchRelocationIterator::new(function_section.relocations()) {
+        for relocation in ffi::KpatchRelocationIterator::new(function_section.relocations()) {
             let (name_reloc_offset, name_reloc) = relocation.name;
             let (object_reloc_offset, obj_reloc) = relocation.object;
 
             // Relocate patch function name
-            let name_index =
-                (name_reloc_offset as usize - KPATCH_FUNCTION_OFFSET) / KPATCH_FUNCTION_SIZE;
+            let name_index = (name_reloc_offset as usize - ffi::KPATCH_FUNCTION_OFFSET)
+                / ffi::KPATCH_FUNCTION_SIZE;
             let name_function = patch_functions
                 .get_mut(name_index)
                 .context("Failed to find patch function")?;
@@ -168,8 +166,8 @@ impl KpatchResolverImpl {
             name_function.name = name_string;
 
             // Relocate patch function object
-            let object_index =
-                (object_reloc_offset as usize - KPATCH_OBJECT_OFFSET) / KPATCH_FUNCTION_SIZE;
+            let object_index = (object_reloc_offset as usize - ffi::KPATCH_OBJECT_OFFSET)
+                / ffi::KPATCH_FUNCTION_SIZE;
             let object_function = patch_functions
                 .get_mut(object_index)
                 .context("Failed to find patch function")?;

@@ -90,7 +90,7 @@ impl Iterator for StdioReader {
         match self.select.select().context("Failed to select stdio") {
             Ok(result) => {
                 let stdio_map = &mut self.stdio_map;
-                let outputs = result.into_iter().filter_map(|fd| match fd {
+                let outputs = result.into_iter().filter_map(|income| match income {
                     SelectResult::Readable(fd) => {
                         stdio_map.get_mut(&fd).and_then(|stdio| match stdio {
                             StdioLines::Stdout(lines) => {

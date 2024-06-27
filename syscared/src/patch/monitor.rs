@@ -44,13 +44,13 @@ impl PatchMonitor {
         patch_root: P,
         patch_manager: Arc<RwLock<PatchManager>>,
     ) -> Result<Self> {
-        let patch_root = patch_root.as_ref().join(PATCH_INSTALL_DIR);
+        let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
 
         let inotify = Arc::new(Mutex::new(Some({
             let mut inotify = Inotify::init().context("Failed to initialize inotify")?;
             inotify
                 .add_watch(
-                    &patch_root,
+                    &patch_install_dir,
                     WatchMask::CREATE | WatchMask::DELETE | WatchMask::ONLYDIR,
                 )
                 .context("Failed to monitor patch directory")?;
@@ -59,7 +59,7 @@ impl PatchMonitor {
         })));
 
         let monitor_thread = MonitorThread {
-            patch_root,
+            patch_root: patch_install_dir,
             inotify: inotify.clone(),
             patch_manager,
         }

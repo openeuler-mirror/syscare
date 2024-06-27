@@ -96,21 +96,18 @@ impl std::fmt::Display for PatchInfo {
             writeln!(f, "patches:")?;
             let last_idx = self.patches.len() - 1;
             for (patch_idx, patch_file) in self.patches.iter().enumerate() {
-                match patch_idx == last_idx {
-                    false => {
-                        if patch_idx >= LIST_DISPLAY_LIMIT {
-                            writeln!(f, "* ......")?;
-                            break;
-                        }
-                        writeln!(f, "* {}", patch_file.name.to_string_lossy())?
+                if patch_idx != last_idx {
+                    if patch_idx >= LIST_DISPLAY_LIMIT {
+                        writeln!(f, "* ......")?;
+                        break;
                     }
-                    true => {
-                        if patch_idx >= LIST_DISPLAY_LIMIT {
-                            write!(f, "* ......")?;
-                            break;
-                        }
-                        write!(f, "* {}", patch_file.name.to_string_lossy())?
+                    writeln!(f, "* {}", patch_file.name.to_string_lossy())?
+                } else {
+                    if patch_idx >= LIST_DISPLAY_LIMIT {
+                        write!(f, "* ......")?;
+                        break;
                     }
+                    write!(f, "* {}", patch_file.name.to_string_lossy())?
                 }
             }
         }

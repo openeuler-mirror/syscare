@@ -32,8 +32,8 @@ pub struct PackageRoot {
 }
 
 impl PackageRoot {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let path = path.as_ref().to_path_buf();
+    pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
+        let path = directory.as_ref().to_path_buf();
         let source = path.join(SOURCE_DIR_NAME);
         let debuginfo = path.join(DEBUGINFO_DIR_NAME);
         let build_root = PackageBuildRoot::new(path.join(BUILD_ROOT_DIR_NAME))?;

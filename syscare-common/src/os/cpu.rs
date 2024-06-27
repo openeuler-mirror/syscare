@@ -30,10 +30,10 @@ pub fn arch() -> &'static OsStr {
 pub fn num() -> usize {
     lazy_static! {
         static ref CPU_NUM: usize = {
-            let cpu_set = sched_getaffinity(getpid()).expect("Failed to get thread CPU affinity");
+            let cpu_set = sched_getaffinity(getpid()).unwrap_or_default();
             let mut cpu_count = 0;
             for i in 0..CpuSet::count() {
-                if cpu_set.is_set(i).expect("Failed to check cpu set") {
+                if cpu_set.is_set(i).unwrap_or_default() {
                     cpu_count += 1;
                 }
             }
