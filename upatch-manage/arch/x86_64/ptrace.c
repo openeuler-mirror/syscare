@@ -173,9 +173,8 @@ size_t get_upatch_addr_len()
     return UPATCH_ADDR_LEN;
 }
 
-
 unsigned long get_new_insn(void)
 {
-	char jmp_insn[] = { 0xff, 0x25, 0x00, 0x00, 0x00, 0x00};
-	return *(unsigned long *)jmp_insn;
+	// ASM: jmp word ptr [di] (FF25 0000 0000 0000)
+	return 0x25FF;
 }

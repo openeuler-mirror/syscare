@@ -385,6 +385,40 @@ process_new_object(struct upatch_process *proc, dev_t dev, ino_t inode,
 	return o;
 }
 
+static int add_upatch_object(struct upatch_process *proc,
+	struct object_file *o, unsigned long src, unsigned char *header_buf)
+{
+	struct object_patch *opatch;
+
+	opatch = malloc(sizeof(struct object_patch));
+	if (opatch == NULL) {
+		log_error("malloc opatch failed\n");
+		return -1;
+	}
+
+	opatch->uinfo = malloc(sizeof(struct upatch_info));
+	if (opatch->uinfo == NULL) {
+		log_error("malloc opatch->uinfo failed\n");
+		free(opatch);
+		return -1;
+	}
+
+	memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
+	opatch->funcs = malloc(opatch->uinfo->changed_func_num *
+			       sizeof(struct upatch_info_func));
+	if (upatch_process_mem_read(proc, src, opatch->funcs,
+		opatch->uinfo->changed_func_num * sizeof(struct upatch_info_func))) {
+		log_error("can't read patch funcs at 0x%lx\n", src);
+		free(opatch->uinfo);
+		free(opatch);
+		return -1;
+	}
+	list_add(&opatch->list, &o->applied_patch);
+	o->num_applied_patch++;
+	o->is_patch = 1;
+
+	return 0;
+}
 /**
  * Returns: 0 if everything is ok, -1 on error.
  */
@@ -420,33 +454,10 @@ static int process_add_object_vma(struct upatch_process *proc, dev_t dev,
 	}
 
 	if (object_type == OBJECT_UPATCH) {
-		struct object_patch *opatch;
-
-		opatch = malloc(sizeof(struct object_patch));
-		if (opatch == NULL) {
+		unsigned long src = vma->start + sizeof(struct upatch_info);
+		if (add_upatch_object(proc, o, src, header_buf) != 0) {
 			return -1;
 		}
-
-		opatch->uinfo = malloc(sizeof(struct upatch_info));
-		if (opatch->uinfo == NULL) {
-			return -1;
-		}
-
-		memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
-		opatch->funcs = malloc(opatch->uinfo->changed_func_num *
-				       sizeof(struct upatch_info_func));
-		if (upatch_process_mem_read(
-			    proc, vma->start + sizeof(struct upatch_info),
-			    opatch->funcs,
-			    opatch->uinfo->changed_func_num *
-				    sizeof(struct upatch_info_func))) {
-			log_error("can't read patch funcs at 0x%lx\n",
-				  vma->start + sizeof(struct upatch_info));
-			return -1;
-		}
-		list_add(&opatch->list, &o->applied_patch);
-		o->num_applied_patch++;
-		o->is_patch = 1;
 	}
 	if (object_type == OBJECT_ELF) {
 		o->is_elf = 1;
