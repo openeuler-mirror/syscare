@@ -39,6 +39,12 @@ struct section;
 struct rela;
 struct symbol;
 
+enum data_source {
+	DATA_SOURCE_ELF,
+	DATA_SOURCE_REF,
+	DATA_SOURCE_ALLOC,
+};
+
 enum status {
 	NEW,
 	CHANGED,
@@ -61,6 +67,9 @@ struct section {
 	struct section *twin;
 	char *name;
 	Elf_Data *data;
+	enum data_source name_source;
+	enum data_source data_source;
+	enum data_source dbuf_source;
 	GElf_Shdr sh;
 	int ignore;
 	int include;
@@ -102,6 +111,7 @@ struct symbol {
 	struct section *sec;
 	GElf_Sym sym;
 	char *name;
+	enum data_source name_source;
 	struct debug_symbol *relf_sym;
 	unsigned int index;
 	unsigned char bind;
@@ -132,8 +142,8 @@ struct upatch_elf {
 void upatch_elf_open(struct upatch_elf *, const char *);
 
 // Destory upatch_elf struct
-void upatch_elf_teardown(struct upatch_elf *);
+void upatch_elf_destroy(struct upatch_elf *);
 
-void upatch_elf_free(struct upatch_elf *);
+void upatch_elf_close(struct upatch_elf *);
 
 #endif

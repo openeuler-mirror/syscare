@@ -129,9 +129,10 @@ void upatch_rebuild_eh_frame(struct section *sec)
 
     /* in this time, some relcation entries may have been deleted */
     frame_size = 0;
-    eh_frame = malloc(sec->data->d_size);
-    if (!eh_frame)
+    eh_frame = calloc(1, sec->data->d_size);
+    if (!eh_frame) {
         ERROR("malloc eh_frame failed \n");
+    }
 
     /* 8 is the offset of PC begin */
     current_offset = 8;
@@ -191,5 +192,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
 
     sec->data->d_buf = eh_frame;
     sec->data->d_size = frame_size;
+    sec->dbuf_source = DATA_SOURCE_ALLOC;
+
     sec->sh.sh_size = frame_size;
 }

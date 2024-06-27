@@ -58,7 +58,7 @@ struct running_elf {
 
 void relf_init(char *, struct running_elf *);
 
-int relf_destroy(struct running_elf *);
+int relf_close(struct running_elf *);
 
 bool lookup_relf(struct running_elf *, struct symbol *, struct lookup_result *);
 
