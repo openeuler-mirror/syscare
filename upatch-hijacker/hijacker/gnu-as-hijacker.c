@@ -48,6 +48,7 @@ int main(int argc, char *argv[], char *envp[])
 {
     // Try to get executable path
     const char *filename = get_current_exec();
+
     if (filename == NULL) {
         return -ENOENT;
     }
@@ -111,9 +112,15 @@ int main(int argc, char *argv[], char *envp[])
         (void)unlink(output_file);
     }
 
+    int ret = 0;
     if (symlink(new_output_file, output_file) != 0) {
-        return execve(filename, argv, envp);
+        ret = execve(filename, argv, envp);
+        goto out;
     }
 
-    return execve(filename, (char* const*)new_argv, envp);
+    ret = execve(filename, (char* const*)new_argv, envp);
+out:
+    free(new_argv);
+
+    return ret;
 }
