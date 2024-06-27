@@ -67,10 +67,13 @@ static void create_section_list(struct upatch_elf *uelf)
         sec->name = elf_strptr(uelf->elf, shstrndx, sec->sh.sh_name);
         if (!sec->name)
             ERROR("elf_strptr with error %s", elf_errmsg(0));
-
         sec->data = elf_getdata(scn, NULL);
         if (!sec->data)
             ERROR("elf_getdata with error %s", elf_errmsg(0));
+
+        sec->name_source = DATA_SOURCE_ELF;
+        sec->data_source = DATA_SOURCE_ELF;
+        sec->dbuf_source = DATA_SOURCE_ELF;
 
         sec->index = (unsigned int)elf_ndxscn(scn);
         /* found extended section header */
@@ -157,6 +160,8 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     struct rela *rela;
     int index = 0, skip = 0;
 
+    INIT_LIST_HEAD(&relasec->relas);
+
     /* for relocation sections, sh_info is the index which these informations apply */
     relasec->base = find_section_by_index(&uelf->sections, relasec->sh.sh_info);
     if (!relasec->base)
@@ -215,10 +220,86 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     }
 }
 
+static void destroy_rela_list(struct section *relasec)
+{
+    struct rela *rela = NULL, *saferela = NULL;
+
+    list_for_each_entry_safe(rela, saferela, &relasec->relas, list) {
+        list_del(&rela->list);
+        free(rela);
+    }
+
+    INIT_LIST_HEAD(&relasec->relas);
+}
+
+static void destroy_section_list(struct upatch_elf *uelf)
+{
+    struct section *sec = NULL, *safesec = NULL;
+
+    list_for_each_entry_safe(sec, safesec, &uelf->sections, list) {
+        if (sec->twin) {
+            sec->twin->twin = NULL;
+        }
+
+        if ((sec->name != NULL) && (sec->name_source == DATA_SOURCE_ALLOC)) {
+            free(sec->name);
+            sec->name = NULL;
+        }
+
+        if (sec->data != NULL) {
+            if (sec->dbuf_source == DATA_SOURCE_ALLOC) {
+                free(sec->data->d_buf);
+                sec->data->d_buf = NULL;
+            }
+            if (sec->data_source == DATA_SOURCE_ALLOC) {
+                free(sec->data);
+                sec->data = NULL;
+            }
+        }
+
+        if (is_rela_section(sec)) {
+            destroy_rela_list(sec);
+        }
+
+        list_del(&sec->list);
+        free(sec);
+    }
+
+    INIT_LIST_HEAD(&uelf->sections);
+}
+
+static void destroy_symbol_list(struct upatch_elf *uelf)
+{
+    struct symbol *sym = NULL, *safesym = NULL;
+
+    list_for_each_entry_safe(sym, safesym, &uelf->symbols, list) {
+        if (sym->twin) {
+            sym->twin->twin = NULL;
+        }
+
+        list_del(&sym->list);
+        free(sym);
+    }
+
+    INIT_LIST_HEAD(&uelf->symbols);
+}
+
+static void destroy_string_list(struct upatch_elf *uelf)
+{
+    struct string *str = NULL, *safestr = NULL;
+
+    list_for_each_entry_safe(str, safestr, &uelf->strings, list) {
+        list_del(&str->list);
+        free(str);
+    }
+
+    INIT_LIST_HEAD(&uelf->strings);
+}
+
 void upatch_elf_open(struct upatch_elf *uelf, const char *name)
 {
     GElf_Ehdr ehdr;
-    struct section *relasec;
+    struct section *sec;
     Elf *elf = NULL;
     int fd = 1;
 
@@ -264,46 +345,21 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
     create_section_list(uelf);
     create_symbol_list(uelf);
 
-    list_for_each_entry(relasec, &uelf->sections, list) {
-        if (!is_rela_section(relasec))
-            continue;
-        INIT_LIST_HEAD(&relasec->relas);
-
-        create_rela_list(uelf, relasec);
-    }
-}
-
-void upatch_elf_teardown(struct upatch_elf *uelf)
-{
-    struct section *sec, *safesec;
-    struct symbol *sym, *safesym;
-    struct rela *rela, *saferela;
-
-    list_for_each_entry_safe(sec, safesec, &uelf->sections, list) {
-        if (sec->twin)
-            sec->twin->twin = NULL;
+    list_for_each_entry(sec, &uelf->sections, list) {
         if (is_rela_section(sec)) {
-            list_for_each_entry_safe(rela, saferela, &sec->relas, list) {
-                memset(rela, 0, sizeof(*rela));
-                free(rela);
-            }
+            create_rela_list(uelf, sec);
         }
-        memset(sec, 0, sizeof(*sec));
-        free(sec);
     }
-
-    list_for_each_entry_safe(sym, safesym, &uelf->symbols, list) {
-        if (sym->twin)
-            sym->twin->twin = NULL;
-        memset(sym, 0, sizeof(*sym));
-        free(sym);
-    }
-
-    INIT_LIST_HEAD(&uelf->sections);
-    INIT_LIST_HEAD(&uelf->symbols);
 }
 
-void upatch_elf_free(struct upatch_elf *uelf)
+void upatch_elf_destroy(struct upatch_elf *uelf)
+{
+    destroy_section_list(uelf);
+    destroy_symbol_list(uelf);
+    destroy_string_list(uelf);
+}
+
+void upatch_elf_close(struct upatch_elf *uelf)
 {
     elf_end(uelf->elf);
     close(uelf->fd);

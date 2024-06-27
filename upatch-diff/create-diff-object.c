@@ -836,8 +836,10 @@ static void include_debug_sections(struct upatch_elf *uelf)
 
         list_for_each_entry_safe(rela, saferela, &sec->relas, list)
             // The shndex of symbol is SHN_COMMON, there is no related section
-            if (rela->sym && !rela->sym->include)
+            if (rela->sym && !rela->sym->include) {
                 list_del(&rela->list);
+                free(rela);
+            }
     }
 
     if (eh_sec)
@@ -993,15 +995,20 @@ int main(int argc, char*argv[])
     mark_ignored_functions_same();
     mark_ignored_sections_same();
 
-    upatch_elf_teardown(&uelf_source);
-    upatch_elf_free(&uelf_source);
-
     include_standard_elements(&uelf_patched);
 
     num_changed = include_changed_functions(&uelf_patched);
     new_globals_exist = include_new_globals(&uelf_patched);
     if (!num_changed && !new_globals_exist) {
         log_normal("No functional changes\n");
+        upatch_elf_destroy(&uelf_source);
+        upatch_elf_destroy(&uelf_patched);
+
+        upatch_elf_close(&uelf_source);
+        upatch_elf_close(&uelf_patched);
+
+        relf_close(&relf);
+
         return 0;
     }
 
@@ -1018,9 +1025,6 @@ int main(int argc, char*argv[])
     include_special_local_section(&uelf_patched);
 
     migrate_included_elements(&uelf_patched, &uelf_out);
-
-    /* since out elf still point to it, we only destroy it, not free it */
-    upatch_elf_teardown(&uelf_patched);
 
     upatch_create_strings_elements(&uelf_out);
 
@@ -1060,11 +1064,19 @@ int main(int argc, char*argv[])
 
     upatch_write_output_elf(&uelf_out, uelf_patched.elf, arguments.output_obj, 0664);
 
-    relf_destroy(&relf);
-    upatch_elf_free(&uelf_patched);
-    upatch_elf_teardown(&uelf_out);
-    upatch_elf_free(&uelf_out);
+    upatch_elf_destroy(&uelf_source);
+    upatch_elf_destroy(&uelf_patched);
+    upatch_elf_destroy(&uelf_out);
+
+    upatch_elf_close(&uelf_source);
+    upatch_elf_close(&uelf_patched);
+    upatch_elf_close(&uelf_out);
+
+    relf_close(&relf);
 
     log_normal("Done\n");
+    fflush(stdout);
+    fflush(stderr);
+
     return 0;
 }
