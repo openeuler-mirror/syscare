@@ -44,7 +44,7 @@ impl OperateRead for SectionHeader<'_> {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct SectionHeaderTable<'a> {
     mmap: &'a Mmap,
     endian: Endian,
@@ -86,16 +86,13 @@ impl<'a> Iterator for SectionHeaderTable<'a> {
     type Item = SectionHeader<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        match self.count < self.num {
-            true => {
-                let offset = self.count * self.size + self.offset;
-                self.count += 1;
-                Some(SectionHeader::from(self.mmap, self.endian, offset))
-            }
-            false => {
-                self.count = 0;
-                None
-            }
+        if self.count < self.num {
+            let offset = self.count * self.size + self.offset;
+            self.count += 1;
+            Some(SectionHeader::from(self.mmap, self.endian, offset))
+        } else {
+            self.count = 0;
+            None
         }
     }
 }

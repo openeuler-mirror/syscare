@@ -36,8 +36,8 @@ pub struct PackageBuildRoot {
 }
 
 impl PackageBuildRoot {
-    pub fn new<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let path = path.as_ref().to_path_buf();
+    pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
+        let path = directory.as_ref().to_path_buf();
         let build = path.join(BUILD_DIR_NAME);
         let buildroot = path.join(BUILDROOT_DIR_NAME);
         let rpms = path.join(RPMS_DIR_NAME);

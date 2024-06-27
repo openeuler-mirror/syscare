@@ -333,9 +333,10 @@ impl UpatchBuild {
             let binary_name = binary
                 .file_name()
                 .with_context(|| format!("Failed to parse binary name of {}", binary.display()))?;
-            let patch_name = match name.is_empty() {
-                true => binary_name.to_os_string(),
-                false => concat_os!(name, "-", binary_name),
+            let patch_name = if name.is_empty() {
+                binary_name.to_os_string()
+            } else {
+                concat_os!(name, "-", binary_name)
             };
             let output_file = build_info.output_dir.join(&patch_name);
 
@@ -393,11 +394,10 @@ impl UpatchBuild {
             .context("Patch test failed")?;
 
         info!("Checking debuginfo version(s)");
-        match self.args.skip_compiler_check {
-            false => {
-                Self::check_debuginfo(&compilers, debuginfos).context("Debuginfo check failed")?;
-            }
-            true => warn!("Warning: Skipped compiler version check!"),
+        if self.args.skip_compiler_check {
+            warn!("Warning: Skipped compiler version check!")
+        } else {
+            Self::check_debuginfo(&compilers, debuginfos).context("Debuginfo check failed")?;
         }
 
         let mut files = FileRelation::new();

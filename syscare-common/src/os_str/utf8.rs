@@ -46,7 +46,7 @@ pub fn next_valid_char(bytes: &[u8]) -> Option<(usize, char)> {
     }
 
     let mut code = match char_width {
-        1 => return Some((1, first_byte as char)),
+        1 => return Some((1, char::from(first_byte))),
         2 => u32::from(first_byte & 0x1F) << 0x6,
         3 => u32::from(first_byte & 0x0F) << 0xC,
         4 => u32::from(first_byte & 0x07) << 0x12,

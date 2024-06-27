@@ -46,6 +46,7 @@ pub struct UpatchEnableRequest {
     offset: u64,
 }
 
+#[repr(C)]
 pub struct UpatchRegisterRequest {
     exec_path: [u8; PATH_MAX as usize],
     jump_path: [u8; PATH_MAX as usize],

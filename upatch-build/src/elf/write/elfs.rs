@@ -15,11 +15,13 @@
 use std::fs::{File, OpenOptions};
 use std::path::Path;
 
-use anyhow::{bail, Result};
+use anyhow::{bail, Context, Result};
 use memmap2::{Mmap, MmapOptions};
 
-use super::super::*;
-use super::{Header, SectionHeader, SymbolHeaderTable};
+use super::{
+    super::{check_elf, check_header, Endian, HeaderRead, SectionRead, SymbolHeader64, SHT_SYMTAB},
+    Header, SectionHeader, SymbolHeaderTable,
+};
 
 #[derive(Debug)]
 pub struct Elf {
@@ -88,7 +90,7 @@ impl Elf {
                 return Ok(SymbolHeaderTable::from(
                     &self.file,
                     self.endian,
-                    self.strtab.as_ref().unwrap(),
+                    self.strtab.as_ref().context("Invalid strtab")?,
                     offset,
                     size,
                     offset + size_sum,

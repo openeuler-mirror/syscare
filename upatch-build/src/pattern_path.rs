@@ -40,22 +40,18 @@ pub fn glob<P: AsRef<Path>>(path: P) -> std::io::Result<Vec<PathBuf>> {
                 let mut path_clone = vec![];
                 for p in &mut pathes {
                     let tmp = p.join(components[i]);
-                    match tmp.exists() {
-                        true => path_clone.push(tmp),
-                        false => {
-                            let all_pathes = match i == (components.len() - 1) {
-                                true => {
-                                    fs::list_files(&p, fs::TraverseOptions { recursive: false })
-                                }
-                                false => {
-                                    fs::list_dirs(&p, fs::TraverseOptions { recursive: false })
-                                }
-                            }?;
-                            for name in find_name(components[i].as_os_str(), all_pathes)? {
-                                path_clone.push(p.join(name));
-                            }
+                    if tmp.exists() {
+                        path_clone.push(tmp);
+                    } else {
+                        let all_pathes = if i == (components.len() - 1) {
+                            fs::list_files(&p, fs::TraverseOptions { recursive: false })
+                        } else {
+                            fs::list_dirs(&p, fs::TraverseOptions { recursive: false })
+                        }?;
+                        for name in find_name(components[i].as_os_str(), all_pathes)? {
+                            path_clone.push(p.join(name));
                         }
-                    };
+                    }
                 }
                 pathes = path_clone;
             }

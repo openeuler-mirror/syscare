@@ -30,7 +30,7 @@ pub fn id() -> i32 {
 pub fn path() -> &'static Path {
     lazy_static! {
         static ref PROCESS_PATH: PathBuf =
-            std::env::current_exe().expect("Read process path failed");
+            std::env::current_exe().unwrap_or_else(|_| PathBuf::from("/"));
     }
     PROCESS_PATH.as_path()
 }

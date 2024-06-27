@@ -92,7 +92,7 @@ pub fn apply_patch(patch: &KernelPatch) -> Result<()> {
         CString::new("")?.as_c_str(),
         kmod::ModuleInitFlags::MODULE_INIT_IGNORE_VERMAGIC,
     )
-    .map_err(|e| anyhow!("Kpatch: {}", std::io::Error::from_raw_os_error(e as i32)))
+    .map_err(|e| anyhow!("Kpatch: {}", std::io::Error::from(e)))
 }
 
 pub fn remove_patch(patch: &KernelPatch) -> Result<()> {
@@ -105,7 +105,7 @@ pub fn remove_patch(patch: &KernelPatch) -> Result<()> {
         patch.module_name.to_cstring()?.as_c_str(),
         kmod::DeleteModuleFlags::O_NONBLOCK,
     )
-    .map_err(|e| anyhow!("Kpatch: {}", std::io::Error::from_raw_os_error(e as i32)))
+    .map_err(|e| anyhow!("Kpatch: {}", std::io::Error::from(e)))
 }
 
 pub fn active_patch(patch: &KernelPatch) -> Result<()> {

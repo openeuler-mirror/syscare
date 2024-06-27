@@ -113,13 +113,15 @@ impl Arguments {
             args.name.push("-");
         }
 
-        args.elf_dir = match args.elf_dir.as_os_str().is_empty() {
-            false => fs::normalize(&args.elf_dir)?,
-            true => args.source_dir.clone(),
+        args.elf_dir = if args.elf_dir.as_os_str().is_empty() {
+            args.source_dir.clone()
+        } else {
+            fs::normalize(&args.elf_dir)?
         };
-        args.object_dir = match args.object_dir.as_os_str().is_empty() {
-            false => fs::normalize(&args.object_dir)?,
-            true => args.source_dir.clone(),
+        args.object_dir = if args.object_dir.as_os_str().is_empty() {
+            args.source_dir.clone()
+        } else {
+            fs::normalize(&args.object_dir)?
         };
 
         for elf_path in &mut args.elf {

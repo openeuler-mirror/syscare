@@ -44,8 +44,8 @@ impl ElfResolver<'_> {
         let lines = output.stdout.lines();
         for line in lines {
             let words = line.split_whitespace().collect::<Vec<_>>();
-            if let Some(path) = words.get(2) {
-                if let Ok(path) = fs::canonicalize(path) {
+            if let Some(lib_path) = words.get(2) {
+                if let Ok(path) = fs::canonicalize(lib_path) {
                     paths.push(path);
                 }
             }

@@ -217,10 +217,10 @@ impl SyscareBuild {
             .find(|entry| entry.target_pkg.name == KERNEL_PKG_NAME);
 
         match (pkg_entry, kernel_entry) {
-            (Some(entry), Some(kernel_entry)) => Ok((
+            (Some(p_entry), Some(k_entry)) => Ok((
                 PatchType::KernelPatch,
-                entry.clone(),
-                Some(kernel_entry.clone()),
+                p_entry.clone(),
+                Some(k_entry.clone()),
             )),
             (None, Some(entry)) => Ok((PatchType::KernelPatch, entry.clone(), None)),
             (Some(entry), None) => Ok((PatchType::UserPatch, entry.clone(), None)),

@@ -38,13 +38,12 @@ impl<'a> SymbolHeader<'a> {
     }
 
     pub fn get_st_name(&mut self) -> &OsStr {
-        match self.name.is_empty() {
-            false => <&std::ffi::OsStr>::clone(&self.name),
-            true => {
-                let name_offset = self.get_st_name_offset() as usize;
-                self.name = self.read_to_os_string(name_offset);
-                self.name
-            }
+        if !self.name.is_empty() {
+            self.name
+        } else {
+            let name_offset = self.get_st_name_offset() as usize;
+            self.name = self.read_to_os_string(name_offset);
+            self.name
         }
     }
 }
@@ -120,22 +119,19 @@ impl<'a> Iterator for SymbolHeaderTable<'a> {
 
     fn next(&mut self) -> Option<Self::Item> {
         let offset = self.count * self.size + self.start;
-        match offset < self.end {
-            true => {
-                self.count += 1;
-                let mmap = unsafe {
-                    MmapOptions::new()
-                        .offset(offset as u64)
-                        .len(self.size)
-                        .map_mut(self.file)
-                        .unwrap()
-                };
-                Some(SymbolHeader::from(mmap, self.endian, self.strtab))
+        if offset < self.end {
+            self.count += 1;
+            unsafe {
+                MmapOptions::new()
+                    .offset(offset as u64)
+                    .len(self.size)
+                    .map_mut(self.file)
+                    .ok()
+                    .map(|mmap_mut| SymbolHeader::from(mmap_mut, self.endian, self.strtab))
             }
-            false => {
-                self.count = 0;
-                None
-            }
+        } else {
+            self.count = 0;
+            None
         }
     }
 }

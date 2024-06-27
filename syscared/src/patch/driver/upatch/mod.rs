@@ -227,8 +227,8 @@ impl UserPatchDriver {
             Err(_) => return,
         };
 
-        let mut target_map = target_map.write();
-        let patch_target = match target_map.get_mut(target_elf) {
+        let mut patch_target_map = target_map.write();
+        let patch_target = match patch_target_map.get_mut(target_elf) {
             Some(target) => target,
             None => return,
         };

@@ -96,9 +96,10 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Apply patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::apply_patch,
-                match force {
-                    false => PatchOpFlag::Normal,
-                    true => PatchOpFlag::Force,
+                if force {
+                    PatchOpFlag::Force
+                } else {
+                    PatchOpFlag::Normal
                 },
                 identifier,
             )
@@ -131,9 +132,10 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 format!("Active patch '{}'", identifier),
                 self.patch_manager.clone(),
                 PatchManager::active_patch,
-                match force {
-                    false => PatchOpFlag::Normal,
-                    true => PatchOpFlag::Force,
+                if force {
+                    PatchOpFlag::Force
+                } else {
+                    PatchOpFlag::Normal
                 },
                 identifier,
             )

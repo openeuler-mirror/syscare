@@ -108,9 +108,10 @@ impl<'a> Searcher<'a> for CharLiteralSearcher<'a> {
         match self.indices.next() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match self.literals.contains(&c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
+                if self.literals.contains(&c) {
+                    SearchStep::Match(char_idx, new_idx)
+                } else {
+                    SearchStep::Reject(char_idx, new_idx)
                 }
             }
             None => SearchStep::Done,
@@ -123,9 +124,10 @@ impl<'a> ReverseSearcher<'a> for CharLiteralSearcher<'a> {
         match self.indices.next_back() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match self.literals.contains(&c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
+                if self.literals.contains(&c) {
+                    SearchStep::Match(char_idx, new_idx)
+                } else {
+                    SearchStep::Reject(char_idx, new_idx)
                 }
             }
             None => SearchStep::Done,
@@ -161,9 +163,10 @@ impl<'a, P: FnMut(char) -> bool> Searcher<'a> for CharPredicateSearcher<'a, P> {
         match self.indices.next() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match (self.predicate)(c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
+                if (self.predicate)(c) {
+                    SearchStep::Match(char_idx, new_idx)
+                } else {
+                    SearchStep::Reject(char_idx, new_idx)
                 }
             }
             None => SearchStep::Done,
@@ -176,9 +179,10 @@ impl<'a, P: FnMut(char) -> bool> ReverseSearcher<'a> for CharPredicateSearcher<'
         match self.indices.next_back() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                match (self.predicate)(c) {
-                    true => SearchStep::Match(char_idx, new_idx),
-                    false => SearchStep::Reject(char_idx, new_idx),
+                if (self.predicate)(c) {
+                    SearchStep::Match(char_idx, new_idx)
+                } else {
+                    SearchStep::Reject(char_idx, new_idx)
                 }
             }
             None => SearchStep::Done,

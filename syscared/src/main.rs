@@ -129,9 +129,10 @@ impl Daemon {
 
         // Initialize logger
         let max_level = args.log_level;
-        let stdout_level = match args.daemon {
-            true => LevelFilter::Off,
-            false => max_level,
+        let stdout_level = if args.daemon {
+            LevelFilter::Off
+        } else {
+            max_level
         };
         let log_spec = LogSpecification::builder().default(max_level).build();
         let file_spec = FileSpec::default()
@@ -210,9 +211,10 @@ impl Daemon {
 
         fs::set_permissions(
             &socket_file,
-            match socket_owner.as_raw() == socket_group.as_raw() {
-                true => Permissions::from_mode(SOCKET_FILE_PERM_STRICT),
-                false => Permissions::from_mode(SOCKET_FILE_PERM),
+            if socket_owner.as_raw() == socket_group.as_raw() {
+                Permissions::from_mode(SOCKET_FILE_PERM_STRICT)
+            } else {
+                Permissions::from_mode(SOCKET_FILE_PERM)
             },
         )?;
 
