@@ -79,21 +79,17 @@ impl std::fmt::Display for PatchInfo {
         writeln!(f, "target:      {}", self.target.short_name())?;
         writeln!(f, "license:     {}", self.target.license)?;
         writeln!(f, "description: {}", self.description)?;
-        if !self.entities.is_empty() {
-            writeln!(f, "entities:")?;
-            for (entity_idx, entity) in self.entities.iter().enumerate() {
-                writeln!(f, "* {}", entity.patch_name.to_string_lossy())?;
-            }
+        writeln!(f, "entities:")?;
+        for entity in &self.entities {
+            writeln!(f, "* {}", entity.patch_name.to_string_lossy())?;
         }
-
-        if !self.patches.is_empty() {
-            writeln!(f, "patches:")?;
-            let last_idx = self.patches.len() - 1;
-            for (patch_idx, patch_file) in self.patches.iter().enumerate() {
-                match patch_idx == last_idx {
-                    false => writeln!(f, "* {}", patch_file.name.to_string_lossy())?,
-                    true => write!(f, "* {}", patch_file.name.to_string_lossy())?,
-                }
+        writeln!(f, "patches:")?;
+        let last_idx = self.patches.len() - 1;
+        for (idx, patch) in self.patches.iter().enumerate() {
+            if idx == last_idx {
+                write!(f, "* {}", patch.name.to_string_lossy())?
+            } else {
+                writeln!(f, "* {}", patch.name.to_string_lossy())?
             }
         }
 
