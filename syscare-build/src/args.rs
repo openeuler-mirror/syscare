@@ -25,7 +25,6 @@ use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
-const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
@@ -81,11 +80,7 @@ pub struct Arguments {
     #[clap(short, long, multiple = true, required = true)]
     pub patch: Vec<PathBuf>,
 
-    /// Working directory
-    #[clap(long, default_value = DEFAULT_WORK_DIR)]
-    pub work_dir: PathBuf,
-
-    /// Build temporary directory
+    /// Build directory
     #[clap(long, default_value = DEFAULT_BUILD_ROOT)]
     pub build_root: PathBuf,
 
@@ -112,16 +107,21 @@ pub struct Arguments {
 
 impl Arguments {
     pub fn new() -> Result<Self> {
-        let mut args = Self::parse().normalize_path().and_then(Self::check)?;
-
-        args.build_root = args
-            .build_root
-            .join(format!("syscare-build.{}", os::process::id()));
+        let mut args = Self::parse();
+        args.setup_build_root().normalize()?.check()?;
 
         Ok(args)
     }
 
-    fn normalize_path(mut self) -> Result<Self> {
+    fn setup_build_root(&mut self) -> &mut Self {
+        self.build_root = self
+            .build_root
+            .join(format!("syscare-build.{}", os::process::id()));
+
+        self
+    }
+
+    fn normalize(&mut self) -> Result<&mut Self> {
         for source in &mut self.source {
             *source = fs::normalize(&source)?;
         }
@@ -131,14 +131,13 @@ impl Arguments {
         for patch in &mut self.patch {
             *patch = fs::normalize(&patch)?;
         }
-        self.work_dir = fs::normalize(&self.work_dir)?;
         self.build_root = fs::normalize(&self.build_root)?;
         self.output = fs::normalize(&self.output)?;
 
         Ok(self)
     }
 
-    fn check(self) -> Result<Self> {
+    fn check(&self) -> Result<()> {
         for source in &self.source {
             ensure!(
                 source.is_file(),
@@ -172,14 +171,9 @@ impl Arguments {
             )
         }
 
-        ensure!(
-            self.work_dir.is_dir(),
-            format!("Cannot find directory {}", self.work_dir.display())
-        );
-
         ensure!(self.jobs != 0, "Parallel build job number cannot be zero");
 
-        Ok(self)
+        Ok(())
     }
 }
 

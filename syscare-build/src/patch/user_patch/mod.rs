@@ -15,7 +15,7 @@
 const DEBUGINFO_FILE_EXT: &str = "debug";
 const DEBUGINFO_INSTALL_DIR: &str = "usr/lib/debug";
 
-mod elf_relation;
+mod file_relation;
 mod upatch_builder;
 
 pub use upatch_builder::*;
