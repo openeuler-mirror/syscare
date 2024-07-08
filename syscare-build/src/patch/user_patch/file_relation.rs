@@ -22,13 +22,13 @@ use syscare_common::ffi::OsStrExt;
 use super::{DEBUGINFO_FILE_EXT, DEBUGINFO_INSTALL_DIR};
 
 #[derive(Debug, Clone)]
-pub struct ElfRelation {
-    pub elf: PathBuf,
+pub struct FileRelation {
+    pub binary: PathBuf,
     pub debuginfo: PathBuf,
 }
 
-impl ElfRelation {
-    pub fn parse<P, Q>(root: P, package: &PackageInfo, debuginfo: Q) -> Result<ElfRelation>
+impl FileRelation {
+    pub fn parse<P, Q>(root: P, package: &PackageInfo, debuginfo: Q) -> Result<FileRelation>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
@@ -36,7 +36,7 @@ impl ElfRelation {
         let prefix = root.as_ref().join(DEBUGINFO_INSTALL_DIR);
 
         let debuginfo_path = debuginfo.as_ref().to_path_buf();
-        let elf_path = debuginfo_path
+        let binary_path = debuginfo_path
             .as_os_str()
             .strip_prefix(prefix.as_os_str())
             .and_then(|name| {
@@ -56,24 +56,24 @@ impl ElfRelation {
             .map(PathBuf::from)
             .with_context(|| {
                 format!(
-                    "Cannot parse elf path from {}, suffix mismatched",
+                    "Cannot parse binary path from {}, suffix mismatched",
                     debuginfo_path.display()
                 )
             })?;
 
-        Ok(ElfRelation {
-            elf: elf_path,
+        Ok(FileRelation {
+            binary: binary_path,
             debuginfo: debuginfo_path,
         })
     }
 }
 
-impl std::fmt::Display for ElfRelation {
+impl std::fmt::Display for FileRelation {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
-            "Elf: {}, debuginfo: {}",
-            self.elf.display(),
+            "Binary: {}, debuginfo: {}",
+            self.binary.display(),
             self.debuginfo.display()
         )
     }

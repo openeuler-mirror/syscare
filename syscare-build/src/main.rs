@@ -44,11 +44,11 @@ const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
-const PATH_ENV_NAME: &str = "PATH";
-const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
-
 const LOG_FILE_NAME: &str = "build";
 const KERNEL_PKG_NAME: &str = "kernel";
+
+const PATH_ENV: &str = "PATH";
+const BINARY_INSTALL_PATH: &str = "/usr/libexec/syscare";
 
 lazy_static! {
     static ref PKG_IMPL: Arc<PackageImpl> = Arc::new(PackageImpl::new(PackageFormat::RpmPackage));
@@ -71,12 +71,13 @@ impl SyscareBuild {
     }
 
     fn new() -> Result<Self> {
-        // Initialize arguments & prepare environments
+        // Setup environment varialbe & umask
+        let path_env = env::var_os(PATH_ENV)
+            .with_context(|| format!("Cannot read environment variable {}", PATH_ENV))?;
+        env::set_var(PATH_ENV, concat_os!(BINARY_INSTALL_PATH, ":", path_env));
         os::umask::set_umask(CLI_UMASK);
-        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
-            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
-        }
 
+        // Parse arguments
         let args = Arguments::new()?;
         let build_root = BuildRoot::new(&args.build_root)?;
         fs::create_dir_all(&args.output)?;
@@ -123,7 +124,6 @@ impl SyscareBuild {
             self.args.patch_arch.as_str() == os::cpu::arch(),
             "Cross compilation is unsupported"
         );
-
         Ok(())
     }
 
@@ -298,7 +298,6 @@ impl SyscareBuild {
 
         info!("- Generating build parameters");
         let build_params = BuildParameters {
-            work_dir: self.args.work_dir.to_owned(),
             build_root: self.build_root.to_owned(),
             pkg_build_root,
             build_entry,

@@ -26,7 +26,6 @@ pub struct BuildEntry {
 }
 
 pub struct BuildParameters {
-    pub work_dir: PathBuf,
     pub build_root: BuildRoot,
     pub pkg_build_root: PackageBuildRoot,
     pub build_entry: BuildEntry,
