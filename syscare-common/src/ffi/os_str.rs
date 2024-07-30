@@ -21,7 +21,7 @@ use std::{
 
 use crate::os_str::{
     pattern::{Pattern, ReverseSearcher, SearchStep, Searcher},
-    CharIndices, Lines, Split, SplitImpl, SplitInclusive,
+    CharIndices, Chars, Lines, Split, SplitImpl, SplitInclusive,
 };
 
 pub type SplitFn = fn(char) -> bool;
@@ -46,6 +46,16 @@ pub trait OsStrExt: AsRef<OsStr> {
         let haystack = self.as_ref().as_bytes();
 
         CharIndices {
+            char_bytes: haystack,
+            front_idx: 0,
+            back_idx: haystack.len(),
+        }
+    }
+
+    fn chars(&self) -> Chars<'_> {
+        let haystack = self.as_ref().as_bytes();
+
+        Chars {
             char_bytes: haystack,
             front_idx: 0,
             back_idx: haystack.len(),
@@ -269,14 +279,31 @@ fn test() {
         );
     }
 
+    println!("Testing OsStrExt::chars()...");
+    assert_eq!(
+        orig_str.chars().collect::<Vec<_>>(),
+        test_str.chars().collect::<Vec<_>>()
+    );
+    assert_eq!(
+        orig_str.chars().rev().collect::<Vec<_>>(),
+        test_str.chars().rev().collect::<Vec<_>>()
+    );
+
     println!("Testing OsStrExt::char_indices()...");
     assert_eq!(
         orig_str.char_indices().collect::<Vec<_>>(),
-        test_str.char_indices().collect::<Vec<_>>()
+        test_str
+            .char_indices()
+            .map(|(i, c)| (i, *c.as_char()))
+            .collect::<Vec<_>>()
     );
     assert_eq!(
         orig_str.char_indices().rev().collect::<Vec<_>>(),
-        test_str.char_indices().rev().collect::<Vec<_>>()
+        test_str
+            .char_indices()
+            .map(|(i, c)| (i, *c.as_char()))
+            .rev()
+            .collect::<Vec<_>>()
     );
 
     println!("Testing OsStrExt::find()...");
