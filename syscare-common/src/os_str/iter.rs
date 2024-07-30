@@ -12,12 +12,58 @@
 * See the Mulan PSL v2 for more details.
 */
 
-use std::{ffi::OsStr, os::unix::ffi::OsStrExt as StdOsStrExt};
+use std::{ffi::OsStr, os::unix::ffi::OsStrExt};
 
 use super::{
+    char_byte::CharByte,
     pattern::{Pattern, Searcher},
     utf8,
 };
+
+/* Chars */
+pub struct Chars<'a> {
+    pub(crate) char_bytes: &'a [u8],
+    pub(crate) front_idx: usize,
+    pub(crate) back_idx: usize,
+}
+
+impl Iterator for Chars<'_> {
+    type Item = CharByte;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.front_idx >= self.char_bytes.len() {
+            return None;
+        }
+
+        let char_bytes = &self.char_bytes[self.front_idx..];
+        if let Some((len, c)) = utf8::next_valid_char(char_bytes) {
+            self.front_idx += len;
+            return Some(CharByte::from(c));
+        }
+
+        // Unable to parse utf-8 char, fallback to byte
+        self.front_idx += 1;
+        Some(CharByte::from(char_bytes[0]))
+    }
+}
+
+impl DoubleEndedIterator for Chars<'_> {
+    fn next_back(&mut self) -> Option<Self::Item> {
+        if self.back_idx == 0 {
+            return None;
+        }
+
+        let char_bytes = &self.char_bytes[..self.back_idx];
+        if let Some((len, c)) = utf8::next_back_valid_char(char_bytes) {
+            self.back_idx -= len;
+            return Some(CharByte::from(c));
+        }
+
+        // Unable to parse utf-8 char, fallback to byte
+        self.back_idx -= 1;
+        char_bytes.last().map(|&b| CharByte::from(b))
+    }
+}
 
 /* CharByteIndices */
 pub struct CharIndices<'a> {
@@ -27,56 +73,44 @@ pub struct CharIndices<'a> {
 }
 
 impl Iterator for CharIndices<'_> {
-    type Item = (usize, char);
+    type Item = (usize, CharByte);
 
     fn next(&mut self) -> Option<Self::Item> {
-        let char_bytes = &self.char_bytes[self.front_idx..];
-        if char_bytes.is_empty() {
+        if self.front_idx >= self.char_bytes.len() {
             return None;
         }
 
-        match utf8::next_valid_char(char_bytes) {
-            Some((len, c)) => {
-                let result = (self.front_idx, c);
-                self.front_idx += len;
-
-                Some(result)
-            }
-            None => {
-                // Unable to parse utf-8 char, fallback to byte
-                let result = (self.front_idx, char::from(char_bytes[0]));
-                self.front_idx += 1;
-
-                Some(result)
-            }
+        let char_bytes = &self.char_bytes[self.front_idx..];
+        if let Some((len, c)) = utf8::next_valid_char(char_bytes) {
+            let result = (self.front_idx, CharByte::from(c));
+            self.front_idx += len;
+            return Some(result);
         }
+
+        // Unable to parse utf-8 char, fallback to byte
+        let result = (self.front_idx, CharByte::from(char_bytes[0]));
+        self.front_idx += 1;
+        Some(result)
     }
 }
 
 impl DoubleEndedIterator for CharIndices<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
-        let char_bytes = &self.char_bytes[..self.back_idx];
-        if char_bytes.is_empty() {
+        if self.back_idx == 0 {
             return None;
         }
 
-        match utf8::next_back_valid_char(char_bytes) {
-            Some((len, c)) => {
-                self.back_idx -= len;
-                Some((self.back_idx, c))
-            }
-            None => {
-                // Unable to parse utf-8 char, fallback to byte
-                self.back_idx -= 1;
-                Some((
-                    self.back_idx,
-                    char_bytes
-                        .last()
-                        .map(|b| char::from(*b))
-                        .unwrap_or_default(),
-                ))
-            }
+        let char_bytes = &self.char_bytes[..self.back_idx];
+        if let Some((len, c)) = utf8::next_back_valid_char(char_bytes) {
+            self.back_idx -= len;
+            return Some((self.back_idx, CharByte::from(c)));
         }
+
+        // Unable to parse utf-8 char, fallback to byte
+        self.back_idx -= 1;
+        char_bytes
+            .last()
+            .map(|&b| (self.back_idx, CharByte::from(b)))
     }
 }
 

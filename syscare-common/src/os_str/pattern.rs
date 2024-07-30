@@ -163,7 +163,7 @@ impl<'a, P: FnMut(char) -> bool> Searcher<'a> for CharPredicateSearcher<'a, P> {
         match self.indices.next() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                if (self.predicate)(c) {
+                if (self.predicate)(c.into_char()) {
                     SearchStep::Match(char_idx, new_idx)
                 } else {
                     SearchStep::Reject(char_idx, new_idx)
@@ -179,7 +179,7 @@ impl<'a, P: FnMut(char) -> bool> ReverseSearcher<'a> for CharPredicateSearcher<'
         match self.indices.next_back() {
             Some((char_idx, c)) => {
                 let new_idx = char_idx + c.len_utf8();
-                if (self.predicate)(c) {
+                if (self.predicate)(c.into_char()) {
                     SearchStep::Match(char_idx, new_idx)
                 } else {
                     SearchStep::Reject(char_idx, new_idx)

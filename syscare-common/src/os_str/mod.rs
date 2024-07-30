@@ -12,8 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
+mod char_byte;
 mod iter;
 pub mod pattern;
 mod utf8;
 
+pub use char_byte::*;
 pub use iter::*;

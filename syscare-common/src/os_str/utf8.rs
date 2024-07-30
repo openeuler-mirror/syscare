@@ -39,29 +39,25 @@ pub const fn char_width(b: u8) -> usize {
 }
 
 pub fn next_valid_char(bytes: &[u8]) -> Option<(usize, char)> {
-    let first_byte = bytes[0];
+    let first_byte = *bytes.first()?;
     let char_width = self::char_width(first_byte);
     if (char_width == 0) || (char_width > bytes.len()) {
         return None;
     }
 
     let mut code = match char_width {
-        1 => return Some((1, char::from(first_byte))),
-        2 => u32::from(first_byte & 0x1F) << 0x6,
-        3 => u32::from(first_byte & 0x0F) << 0xC,
-        4 => u32::from(first_byte & 0x07) << 0x12,
+        1 => return Some((1, first_byte as char)),
+        2 => (first_byte & 0x1F) as u32,
+        3 => (first_byte & 0x0F) as u32,
+        4 => (first_byte & 0x07) as u32,
         _ => unreachable!(),
     };
 
-    let mut index = 1; // start from second byte
-    while index < char_width {
-        let byte = bytes[index];
+    for &byte in &bytes[1..char_width] {
         if byte & 0xC0 != 0x80 {
-            // check if it starts with 0b10
             return None;
         }
-        code |= u32::from(byte & 0x3F) << ((char_width - index - 1) * 6);
-        index += 1;
+        code = (code << 6) | (byte & 0x3F) as u32;
     }
 
     char::from_u32(code).map(|c| (char_width, c))
