@@ -88,7 +88,6 @@ struct obj_vm_area {
 struct object_patch {
 	struct list_head list;
 	struct upatch_info *uinfo;
-	struct upatch_info_func *funcs;
 };
 
 struct upatch_process {
