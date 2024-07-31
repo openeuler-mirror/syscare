@@ -33,6 +33,7 @@
 #include "upatch-ptrace.h"
 #include "upatch-relocation.h"
 #include "upatch-resolve.h"
+#include "upatch-stack-check.h"
 
 #define GET_MICROSECONDS(a, b) \
 	((a.tv_sec - b.tv_sec) * 1000000 + (a.tv_usec - b.tv_usec))
@@ -391,7 +392,6 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 	struct upatch_patch_func *upatch_funcs_addr =
 		(void *)uelf->info.shdrs[uelf->index.upatch_funcs].sh_addr;
 
-	// TODO: uinfo->id
 	memcpy(uinfo, UPATCH_HEADER, strlen(UPATCH_HEADER));
 	uinfo->size = uelf->core_layout.size - uelf->core_layout.info_size;
 	uinfo->start = (unsigned long)uelf->core_layout.base;
@@ -403,16 +403,20 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 	memcpy(uinfo->id, uuid, strlen(uuid));
 
 	log_normal("Changed insn:\n");
+	uinfo->funcs = (void *)uinfo + sizeof(*uinfo);
 	for (unsigned int i = 0; i < uinfo->changed_func_num; ++i) {
-		struct upatch_info_func *upatch_func =
-			(void *)uelf->core_layout.kbase +
-			uelf->core_layout.info_size +
-			sizeof(struct upatch_info) +
-			i * sizeof(struct upatch_info_func);
+		struct upatch_info_func *upatch_func = &uinfo->funcs[i];
 
 		upatch_func->old_addr =
 			upatch_funcs_addr[i].old_addr + uelf->relf->load_bias;
+		upatch_func->old_size = upatch_funcs_addr[i].old_size;
 		upatch_func->new_addr = upatch_funcs_addr[i].new_addr;
+		upatch_func->new_size = upatch_funcs_addr[i].new_size;
+		log_debug("\tstart\tend\n");
+		log_debug("old:\t0x%lx\t0x%lx\n", upatch_func->old_addr,
+			upatch_func->old_addr + upatch_func->old_size);
+		log_debug("new:\t0x%lx\t0x%lx\n", upatch_func->new_addr,
+			upatch_func->new_addr + upatch_func->new_size);
 		ret = upatch_process_mem_read(obj->proc, upatch_func->old_addr,
 					      &upatch_func->old_insn,
 					      get_origin_insn_len());
@@ -424,8 +428,9 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 
 		upatch_func->new_insn = get_new_insn();
 
-		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", upatch_func->old_addr,
-			  upatch_func->old_insn[0], upatch_func->new_insn);
+		log_normal("\t0x%lx(0x%lx 0x%lx -> 0x%lx 0x%lx)\n", upatch_func->old_addr,
+			  upatch_func->old_insn[0], upatch_func->old_insn[1],
+			  upatch_func->new_insn, upatch_func->new_addr);
 	}
 
 out:
@@ -461,11 +466,7 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
 
 	for (i = 0; i < uinfo->changed_func_num; ++i) {
-		struct upatch_info_func *upatch_func =
-			(void *)uelf->core_layout.kbase +
-			uelf->core_layout.info_size +
-			sizeof(struct upatch_info) +
-			i * sizeof(struct upatch_info_func);
+		struct upatch_info_func *upatch_func = &uinfo->funcs[i];
 
 		// write jumper insn to first 8 bytes
 		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_insn,
@@ -493,11 +494,7 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 
 out:
 	if (ret) {
-		unapply_patch(obj,
-			(void *)uelf->core_layout.kbase +
-			uelf->core_layout.info_size +
-			sizeof(struct upatch_info),
-			i);
+		unapply_patch(obj, uinfo->funcs, uinfo->changed_func_num);
 	}
 	return ret;
 }
@@ -648,6 +645,12 @@ static int upatch_apply_patches(struct upatch_process *proc,
 		goto free;
 	}
 
+	struct upatch_info *uinfo =
+		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
+	ret = upatch_stack_check(uinfo, proc, ACTIVE);
+	if (ret) {
+		goto free;
+	}
 	ret = post_memory(uelf, obj);
 	if (ret) {
 		goto free;
@@ -804,7 +807,12 @@ static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
 			}
 			found = true;
 
-			ret = unapply_patch(obj, patch->funcs, patch->uinfo->changed_func_num);
+			ret = upatch_stack_check(patch->uinfo, proc, DEACTIVE);
+			if (ret) {
+				goto out;
+			}
+
+			ret = unapply_patch(obj, patch->uinfo->funcs, patch->uinfo->changed_func_num);
 			if (ret) {
 				goto out;
 			}

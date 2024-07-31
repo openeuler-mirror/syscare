@@ -28,6 +28,23 @@
 
 #define ORIGIN_INSN_LEN 16
 
+int upatch_arch_unwind_init(int pid, long *sp, long *pc)
+{
+	struct iovec regs_iov;
+	struct user_regs_struct regs;
+
+	regs_iov.iov_base = &regs;
+	regs_iov.iov_len = sizeof(regs);
+
+	if (ptrace(PTRACE_GETREGSET, pid,
+		(void *)NT_PRSTATUS, (void *)&regs_iov) < 0) {
+			log_error("Cannot get regs\n");
+			return -1;
+	}
+	*sp = (long)regs.regs[29];
+	*pc = (long)regs.pc;
+	return 0;
+}
 long upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 			       unsigned long arg1, unsigned long arg2,
 			       unsigned long arg3, unsigned long arg4,

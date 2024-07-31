@@ -156,10 +156,10 @@ static void upatch_object_memfree(struct object_file *obj)
 
 	list_for_each_entry_safe(opatch, opatch_safe, &obj->applied_patch, list) {
 		if (opatch->uinfo) {
+			if (opatch->uinfo->funcs) {
+				free(opatch->uinfo->funcs);
+			}
 			free(opatch->uinfo);
-		}
-		if (opatch->funcs) {
-			free(opatch->funcs);
 		}
 		free(opatch);
 	}
@@ -403,11 +403,12 @@ static int add_upatch_object(struct upatch_process *proc,
 	}
 
 	memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
-	opatch->funcs = malloc(opatch->uinfo->changed_func_num *
+	opatch->uinfo->funcs = malloc(opatch->uinfo->changed_func_num *
 			       sizeof(struct upatch_info_func));
-	if (upatch_process_mem_read(proc, src, opatch->funcs,
+	if (upatch_process_mem_read(proc, src, opatch->uinfo->funcs,
 		opatch->uinfo->changed_func_num * sizeof(struct upatch_info_func))) {
 		log_error("can't read patch funcs at 0x%lx\n", src);
+		free(opatch->uinfo->funcs);
 		free(opatch->uinfo);
 		free(opatch);
 		return -1;

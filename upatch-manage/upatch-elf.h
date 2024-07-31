@@ -45,8 +45,10 @@
 
 struct upatch_info_func {
 	unsigned long old_addr;
+	unsigned long old_size;
 	unsigned long new_addr;
-	unsigned long old_insn[3];
+	unsigned long new_size;
+	unsigned long old_insn[2];
 	unsigned long new_insn;
 };
 
@@ -57,7 +59,7 @@ struct upatch_info {
 	unsigned long start; // upatch vma start
 	unsigned long end; // upatch vma end
 	unsigned long changed_func_num;
-	// upatch_header_func
+	struct upatch_info_func *funcs;
 };
 
 struct upatch_layout {

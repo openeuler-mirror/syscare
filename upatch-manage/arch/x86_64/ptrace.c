@@ -27,6 +27,19 @@
 
 #include "upatch-ptrace.h"
 
+int upatch_arch_unwind_init(int pid, long *sp, long *pc)
+{
+	struct user_regs_struct regs;
+
+	if (ptrace(PTRACE_GETREGS, pid, NULL, &regs) < 0) {
+			log_error("Cannot get regs\n");
+			return -1;
+	}
+	*sp = (long)regs.rsp;
+	*pc = (long)regs.rip;
+	return 0;
+}
+
 long upatch_arch_syscall_remote(struct upatch_ptrace_ctx *pctx, int nr,
 			       unsigned long arg1, unsigned long arg2,
 			       unsigned long arg3, unsigned long arg4,
