@@ -113,7 +113,7 @@ $ sudo syscare active redis-6.2.5-1/HP001
 
 3. 补丁去激活
 ```bash
-$ sudo syscarae deactive redis-6.2.5-1/HP001
+$ sudo syscare deactive redis-6.2.5-1/HP001
 ```
 
 4. 补丁卸载/移除
