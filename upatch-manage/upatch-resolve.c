@@ -254,12 +254,12 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
      * Approach 3 is more general, but difficulty to implement.
      */
 
-	/* resolve from got */
-    elf_addr = resolve_rela_dyn(uelf, obj, name, &patch_sym);
+    /* resolve from plt */
+    elf_addr = resolve_rela_plt(uelf, obj, name, &patch_sym);
 
-	/* resolve from plt */
+	/* resolve from got */
     if (!elf_addr) {
-        elf_addr = resolve_rela_plt(uelf, obj, name, &patch_sym);
+        elf_addr = resolve_rela_dyn(uelf, obj, name, &patch_sym);
     }
 
 	/* resolve from dynsym */
