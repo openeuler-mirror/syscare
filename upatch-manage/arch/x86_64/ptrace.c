@@ -27,7 +27,7 @@
 
 #include "upatch-ptrace.h"
 
-int upatch_arch_unwind_init(int pid, long *sp, long *pc)
+int upatch_arch_reg_init(int pid, unsigned long *sp, unsigned long *pc)
 {
 	struct user_regs_struct regs;
 
@@ -35,8 +35,8 @@ int upatch_arch_unwind_init(int pid, long *sp, long *pc)
 			log_error("Cannot get regs from %d\n", pid);
 			return -1;
 	}
-	*sp = (long)regs.rsp;
-	*pc = (long)regs.rip;
+	*sp = (unsigned long)regs.rsp;
+	*pc = (unsigned long)regs.rip;
 	return 0;
 }
 

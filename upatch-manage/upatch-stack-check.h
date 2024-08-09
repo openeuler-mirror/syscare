@@ -11,7 +11,7 @@ typedef enum {
     DEACTIVE,
 } upatch_action_t;
 
-int upatch_arch_unwind_init(int pid, long *sp, long *pc);
+int upatch_arch_reg_init(int pid, unsigned long *sp, unsigned long *pc);
 int upatch_stack_check(struct upatch_info *uinfo,
     struct upatch_process *proc, upatch_action_t action);
 #endif

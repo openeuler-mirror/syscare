@@ -35,9 +35,6 @@
 #include "upatch-resolve.h"
 #include "upatch-stack-check.h"
 
-#define GET_MICROSECONDS(a, b) \
-	((a.tv_sec - b.tv_sec) * 1000000 + (a.tv_usec - b.tv_usec))
-
 #ifndef ARCH_SHF_SMALL
 #define ARCH_SHF_SMALL 0
 #endif
@@ -417,13 +414,13 @@ static void upatch_info_init(struct upatch_elf *uelf, struct upatch_info *uinfo)
 	}
 }
 
-static int upatch_active_stack_check(struct upatch_elf *uelf, struct uaptch_process *proc)
+static int upatch_active_stack_check(struct upatch_elf *uelf, struct upatch_process *proc)
 {
 	struct upatch_info uinfo;
 	int ret = 0;
 
 	ret = upatch_info_alloc(uelf, &uinfo);
-	if(ret < 0) {
+	if (ret < 0) {
 		return ret;
 	}
 	upatch_info_init(uelf, &uinfo);
@@ -458,7 +455,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
 	struct upatch_patch_func *upatch_funcs_addr =
 		(void *)uelf->info.shdrs[uelf->index.upatch_funcs].sh_addr;
-	GElf_Shdr *upatch_string = uelf->info.shdrs[uelf->index.upatch_string];
+	GElf_Shdr *upatch_string = &uelf->info.shdrs[uelf->index.upatch_string];
 
 	memcpy(uinfo->magic, UPATCH_HEADER, strlen(UPATCH_HEADER));
 	memcpy(uinfo->id, uuid, strlen(uuid));
@@ -473,7 +470,7 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 
 	uinfo->func_names = (void *)uinfo + sizeof(*uinfo);
 	uinfo->func_names_size = upatch_string->sh_size;
-	memcpy(uinfo->funcs_names, (void *)upatch_string->sh_addr, upatch_string->sh_size);
+	memcpy(uinfo->func_names, (void *)upatch_string->sh_addr, upatch_string->sh_size);
 
 	log_debug("Changed insn:\n");
 	uinfo->funcs = (void *)uinfo->func_names + uinfo->func_names_size;
@@ -502,7 +499,7 @@ out:
 	return ret;
 }
 
-static int unapply_patch(struct upatch_process *proc,
+static int unapply_patch(struct object_file *obj,
 			 struct upatch_info_func *funcs,
 			 unsigned long changed_func_num)
 {
@@ -728,7 +725,7 @@ static void upatch_time_tick(int pid) {
 		return;
 	}
 
-	long frozen_time = GET_MICROSECONDS(end_tv, start_tv);
+	long frozen_time = get_microseconds(&start_tv, &end_tv);
 	log_debug("Process %d frozen time is %ld microsecond(s)\n",
 		pid, frozen_time);
 }

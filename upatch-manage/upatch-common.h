@@ -22,6 +22,7 @@
 #define __UPATCH_COMMON__
 
 #include <stdbool.h>
+#include <sys/time.h>
 
 #define ALLOC_LINK(_new, _list)                           \
 	{                                                 \
@@ -58,6 +59,16 @@ static inline int page_shift(long n)
 #define ROUND_UP(x, m) (((x) + (m)-1) & ~((m)-1))
 
 #define BIT(x) (1UL << (x))
+
+#define SEC2MICRO 1000000
+
+static inline long get_microseconds(struct timeval *start, struct timeval *end)
+{
+	long sec = end->tv_sec - start->tv_sec;
+	long usec = end->tv_usec - start->tv_usec;
+
+	return sec * SEC2MICRO + usec;
+}
 
 bool streql(const char *, const char *);
 
