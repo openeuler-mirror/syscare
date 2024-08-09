@@ -345,12 +345,10 @@ static inline void update_section_status(struct section *sec, enum status status
 		sec->twin->status = status;
 	}
 	if (is_rela_section(sec)) {
-		if ((sec->base != NULL) &&
-			(sec->base->sym != NULL)) {
+		if ((sec->base != NULL) && (sec->base->sym != NULL) && status != SAME) {
 			sec->base->sym->status = status;
 		}
-	}
-	else {
+	} else {
 		if (sec->sym != NULL) {
 			sec->sym->status = status;
 		}
