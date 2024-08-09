@@ -868,7 +868,7 @@ static void verify_patchability(struct upatch_elf *uelf)
     int errs = 0;
 
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->status == CHANGED && !sec->include) {
+        if (sec->status == CHANGED && !sec->include && !is_rela_section(sec)) {
             log_normal("Section '%s' is changed, but it is not selected for inclusion\n", sec->name);
             errs++;
         }
