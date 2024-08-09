@@ -389,7 +389,9 @@ static void link_funcs_name(struct upatch_info *uinfo)
 	unsigned long idx = 0;
 
 	for (unsigned long i = 0; i < uinfo->changed_func_num; i++) {
-		uinfo->funcs[i].name = (void *)uinfo->func_names + idx;
+		char *name = (char *)uinfo->func_names + idx;
+
+		uinfo->funcs[i].name = name;
 		idx += strlen(name) + 1;
 	}
 }

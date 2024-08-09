@@ -127,7 +127,7 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
         } else if (streql(sec_name, UPATCH_FUNC_NAME)) {
             uelf->index.upatch_funcs = i;
         } else if (streql(sec_name, UPATCH_FUNC_STRING)) {
-            uelf->infex.upatch_string = i;
+            uelf->index.upatch_string = i;
         }
     }
 
