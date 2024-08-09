@@ -272,7 +272,7 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 	unsigned long addr;
 	struct vm_hole *hole = NULL;
 
-	addr = object_find_patch_region_nolimit(obj, sz, &hole);
+	addr = object_find_patch_region(obj, sz, &hole);
 	if (!addr)
 		return NULL;
 
