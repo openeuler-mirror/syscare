@@ -38,10 +38,10 @@ int upatch_arch_unwind_init(int pid, long *sp, long *pc)
 
 	if (ptrace(PTRACE_GETREGSET, pid,
 		(void *)NT_PRSTATUS, (void *)&regs_iov) < 0) {
-			log_error("Cannot get regs\n");
+			log_error("Cannot get regs from %d\n", pid);
 			return -1;
 	}
-	*sp = (long)regs.regs[29];
+	*sp = (long)regs.sp;
 	*pc = (long)regs.pc;
 	return 0;
 }

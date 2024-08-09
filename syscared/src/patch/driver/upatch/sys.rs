@@ -19,7 +19,7 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
         .arg(target_elf)
         .arg("--upatch")
         .arg(patch_file)
-        .stdout(Level::Debug)
+        .stdout(Level::Error)
         .run_with_output()?
         .exit_code();
 
@@ -40,7 +40,7 @@ pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Pat
         .arg(target_elf)
         .arg("--upatch")
         .arg(patch_file)
-        .stdout(Level::Debug)
+        .stdout(Level::Error)
         .run_with_output()?
         .exit_code();
 

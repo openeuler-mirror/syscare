@@ -35,6 +35,7 @@
 #define PLT_RELA_NAME ".rela.plt"
 #define BUILD_ID_NAME ".note.gnu.build-id"
 #define UPATCH_FUNC_NAME ".upatch.funcs"
+#define UPATCH_FUNC_STRING ".upatch.strings"
 #define TDATA_NAME ".tdata"
 #define TBSS_NAME ".tbss"
 
@@ -43,13 +44,18 @@
 #define UPATCH_HEADER_LEN 6
 #define UPATCH_ID_LEN 40
 
-struct upatch_info_func {
-	unsigned long old_addr;
-	unsigned long old_size;
+struct upatch_func_addr {
 	unsigned long new_addr;
 	unsigned long new_size;
+	unsigned long old_addr;
+	unsigned long old_size;
+};
+
+struct upatch_info_func {
+	struct upatch_func_addr addr;
 	unsigned long old_insn[2];
 	unsigned long new_insn;
+	char *name;
 };
 
 struct upatch_info {
@@ -60,6 +66,8 @@ struct upatch_info {
 	unsigned long end; // upatch vma end
 	unsigned long changed_func_num;
 	struct upatch_info_func *funcs;
+	char *func_names;
+	unsigned long func_names_size;
 };
 
 struct upatch_layout {
@@ -79,10 +87,7 @@ struct upatch_layout {
 };
 
 struct upatch_patch_func {
-	unsigned long new_addr;
-	unsigned long new_size;
-	unsigned long old_addr;
-	unsigned long old_size;
+	struct upatch_func_addr addr;
 	unsigned long sympos; /* handle local symbols */
 	char *name;
 };
@@ -133,6 +138,7 @@ struct upatch_elf {
 	struct {
 		unsigned int sym, str;
 		unsigned int upatch_funcs;
+		unsigned int upatch_string;
 	} index;
 
 	unsigned long symoffs, stroffs, core_typeoffs;

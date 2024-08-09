@@ -126,6 +126,8 @@ int upatch_init(struct upatch_elf *uelf, const char *name)
                            uelf->info.shdrs[uelf->info.shdrs[i].sh_link].sh_offset;
         } else if (streql(sec_name, UPATCH_FUNC_NAME)) {
             uelf->index.upatch_funcs = i;
+        } else if (streql(sec_name, UPATCH_FUNC_STRING)) {
+            uelf->infex.upatch_string = i;
         }
     }
 
@@ -203,7 +205,7 @@ int binary_init(struct running_elf *relf, const char *name)
             break;
         }
     }
- 
+
     relf->info.is_pie = is_pie_elf(relf);
     relf->info.is_dyn = is_dyn_elf(relf);
     return 0;

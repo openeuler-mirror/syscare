@@ -4,7 +4,8 @@
 #include "upatch-elf.h"
 #include "upatch-process.h"
 
-#define ERR_STACK_CHECK_FAILED 0xff
+#define STACK_CHECK_RETRY_TIMES 3
+
 typedef enum {
     ACTIVE,
     DEACTIVE,
