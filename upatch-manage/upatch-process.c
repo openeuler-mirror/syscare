@@ -33,7 +33,6 @@
 
 #include "list.h"
 #include "log.h"
-#include "process.h"
 #include "upatch-common.h"
 #include "upatch-elf.h"
 #include "upatch-process.h"
@@ -804,8 +803,9 @@ int vm_hole_split(struct vm_hole *hole, unsigned long alloc_start,
  * and the next hole as a right candidate. Pace through them until there is
  * enough space in the hole for the patch.
  *
- * Since holes can be much larger than 2GiB take extra caution to allocate
- * patch region inside the (-2GiB, +2GiB) range from the original object.
+ * Due to relocation constraints, the hole position should be whin 4GB range
+ * from the obj.
+ * eg: R_AARCH64_ADR_GOT_PAGE
  */
 unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
 				       struct vm_hole **hole)
@@ -813,96 +813,41 @@ unsigned long object_find_patch_region(struct object_file *obj, size_t memsize,
 	struct list_head *head = &obj->proc->vmaholes;
 	struct vm_hole *left_hole = obj->previous_hole;
 	struct vm_hole *right_hole = next_hole(left_hole, head);
-	unsigned long max_distance = MAX_DISTANCE;
+	unsigned long region_start = 0;
 	struct obj_vm_area *sovma;
-
 	unsigned long obj_start, obj_end;
-	unsigned long region_start = 0, region_end = 0;
-
-	log_debug("Looking for patch region for '%s'...\n", obj->name);
 
 	sovma = list_first_entry(&obj->vma, struct obj_vm_area, list);
 	obj_start = sovma->inmem.start;
 	sovma = list_entry(obj->vma.prev, struct obj_vm_area, list);
 	obj_end = sovma->inmem.end;
 
-	max_distance -= memsize;
-
-	/* TODO carefully check for the holes laying between obj_start and
-	 * obj_end, i.e. just after the executable segment of an executable
-	 */
-	while (left_hole != NULL && right_hole != NULL) {
-		if (right_hole != NULL &&
-		    right_hole->start - obj_start > max_distance)
-			right_hole = NULL;
-		else if (hole_size(right_hole) > memsize) {
-			region_start = right_hole->start;
-			region_end = (right_hole->end - obj_start) <=
-						     max_distance ?
-					     right_hole->end - memsize :
-					     obj_start + max_distance;
-			*hole = right_hole;
-			break;
-		} else
-			right_hole = next_hole(right_hole, head);
-
-		if (left_hole != NULL &&
-		    obj_end - left_hole->end > max_distance)
-			left_hole = NULL;
-		else if (hole_size(left_hole) > memsize) {
-			region_start = (obj_end - left_hole->start) <=
-						       max_distance ?
-					       left_hole->start :
-				       obj_end > max_distance ?
-					       obj_end - max_distance :
-					       0;
-			region_end = left_hole->end - memsize;
-			*hole = left_hole;
-			break;
-		} else
-			left_hole = prev_hole(left_hole, head);
-	}
-
-	if (region_start == region_end) {
-		log_error("Cannot find suitable region for patch '%s'\n", obj->name);
-		return -1UL;
-	}
-
-	region_start = (region_start >> (unsigned long)PAGE_SHIFT) << (unsigned long)PAGE_SHIFT;
-	log_debug("Found patch region for '%s' at 0x%lx\n", obj->name,
-		  region_start);
-
-	return region_start;
-}
-unsigned long object_find_patch_region_nolimit(struct object_file *obj, size_t memsize,
-				       struct vm_hole **hole)
-{
-	struct list_head *head = &obj->proc->vmaholes;
-	struct vm_hole *left_hole = obj->previous_hole;
-	struct vm_hole *right_hole = next_hole(left_hole, head);
-	unsigned long region_start = 0;
-
 	log_debug("Looking for patch region for '%s'...\n", obj->name);
 
-	while (right_hole != NULL) {
+	while (right_hole != NULL || left_hole != NULL) {
 		if (hole_size(right_hole) > memsize) {
 			*hole = right_hole;
+			region_start = right_hole->start;
+			if (region_start + memsize - obj_start > MAX_DISTANCE) {
+				continue;
+			}
 			goto found;
-		} else
-			right_hole = next_hole(right_hole, head);
-
-	while (left_hole != NULL)
+		}
 		if (hole_size(left_hole) > memsize) {
 			*hole = left_hole;
+			region_start = left_hole->end - memsize;
+			if (obj_end - region_start > MAX_DISTANCE) {
+				continue;
+			}
 			goto found;
-		} else
-			left_hole = prev_hole(left_hole, head);
+		}
+		right_hole = next_hole(right_hole, head);
+		left_hole = prev_hole(left_hole, head);
 	}
-
 	log_error("Cannot find suitable region for patch '%s'\n", obj->name);
 	return -1UL;
 found:
-	region_start = ((*hole)->start >> PAGE_SHIFT) << PAGE_SHIFT;
+	region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
 	log_debug("Found patch region for '%s' 0xat %lx\n", obj->name,
 		  region_start);
 

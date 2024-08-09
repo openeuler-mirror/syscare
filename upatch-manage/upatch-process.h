@@ -33,6 +33,10 @@
 #define ELFMAG "\177ELF"
 #define SELFMAG 4
 
+#ifndef MAX_DISTANCE
+#define MAX_DISTANCE (1UL << 32)
+#endif
+
 enum {
 	MEM_READ,
 	MEM_WRITE,
@@ -142,8 +146,6 @@ void upatch_process_detach(struct upatch_process *proc);
 int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
 
 unsigned long object_find_patch_region(struct object_file *, size_t,
-				       struct vm_hole **);
-unsigned long object_find_patch_region_nolimit(struct object_file *, size_t,
 				       struct vm_hole **);
 
 #endif
