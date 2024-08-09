@@ -29,6 +29,7 @@
 #include "log.h"
 #include "upatch-elf.h"
 #include "upatch-patch.h"
+#include "upatch-stack-check.h"
 
 #define PROG_VERSION "upatch-manage "BUILD_VERSION
 #define COMMAND_SIZE 4
@@ -221,6 +222,5 @@ int main(int argc, char *argv[])
 		break;
 	}
 
-	(ret == 0) ? log_normal("SUCCESS\n\n") : log_error("FAILED\n\n");
 	return abs(ret);
 }

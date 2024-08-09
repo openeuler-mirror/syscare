@@ -135,10 +135,11 @@ static void layout_upatch_info(struct upatch_elf *uelf)
 {
 	GElf_Shdr *upatch_func = uelf->info.shdrs + uelf->index.upatch_funcs;
 	unsigned long num = upatch_func->sh_size / sizeof(struct upatch_patch_func);
+	GElf_Shdr *upatch_string = uelf->info.shdrs + uelf->index.upatch_string;
 
 	uelf->core_layout.info_size = uelf->core_layout.size;
 	uelf->core_layout.size += sizeof(struct upatch_info) +
-				  num * sizeof(struct upatch_info_func);
+				  num * sizeof(struct upatch_info_func) + upatch_string->sh_size;
 	uelf->core_layout.size = PAGE_ALIGN(uelf->core_layout.size);
 }
 
@@ -384,6 +385,72 @@ out:
 	return ret;
 }
 
+static int upatch_info_alloc(struct upatch_elf *uelf, struct upatch_info *uinfo)
+{
+	GElf_Shdr *upatch_funcs = &uelf->info.shdrs[uelf->index.upatch_funcs];
+	size_t num = upatch_funcs->sh_size / sizeof(struct upatch_patch_func);
+
+	uinfo->funcs = (void *)malloc(num * sizeof(*uinfo->funcs));
+	if (uinfo->funcs == NULL) {
+		log_error("Failed to malloc uinfo->funcs\n");
+		return -ENOMEM;
+	}
+	return 0;
+}
+
+static void upatch_info_init(struct upatch_elf *uelf, struct upatch_info *uinfo)
+{
+	GElf_Shdr *ufuncs = &uelf->info.shdrs[uelf->index.upatch_funcs];
+	GElf_Shdr *ustring = &uelf->info.shdrs[uelf->index.upatch_string];
+	struct upatch_patch_func *funcs = (void *)uelf->info.hdr + ufuncs->sh_offset;
+	char *names = (void *)uelf->info.hdr + ustring->sh_offset;
+
+	uinfo->changed_func_num = ufuncs->sh_size / sizeof(struct upatch_patch_func);
+	uinfo->func_names_size = ustring->sh_size;
+	uinfo->func_names = names;
+
+	for (unsigned long i = 0; i < uinfo->changed_func_num; i++) {
+		uinfo->funcs[i].addr = funcs[i].addr;
+		uinfo->funcs[i].addr.old_addr += uelf->relf->load_bias;
+		uinfo->funcs[i].name = names;
+		names += strlen(names) + 1;
+	}
+}
+
+static int upatch_active_stack_check(struct upatch_elf *uelf, struct uaptch_process *proc)
+{
+	struct upatch_info uinfo;
+	int ret = 0;
+
+	ret = upatch_info_alloc(uelf, &uinfo);
+	if(ret < 0) {
+		return ret;
+	}
+	upatch_info_init(uelf, &uinfo);
+	ret = upatch_stack_check(&uinfo, proc, ACTIVE);
+	free(uinfo.funcs);
+	return ret;
+}
+
+static struct object_file *upatch_find_obj(struct upatch_elf *uelf,
+	struct upatch_process *proc)
+{
+	struct object_file *obj = NULL;
+	GElf_Off min_addr;
+
+	list_for_each_entry(obj, &proc->objs, list) {
+		if (obj->inode == uelf->relf->info.inode) {
+			min_addr = calculate_load_address(uelf->relf, true);
+			uelf->relf->load_start = calculate_mem_load(obj);
+			uelf->relf->load_bias = uelf->relf->load_start - min_addr;
+			log_debug("load_bias = %lx\n", uelf->relf->load_bias);
+			return obj;
+		}
+	}
+	log_error("Cannot find inode %lu in pid %d, file is not loaded\n",
+		uelf->relf->info.inode, proc->pid);
+	return NULL;
+}
 static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const char *uuid)
 {
 	int ret = 0;
@@ -391,8 +458,11 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
 	struct upatch_patch_func *upatch_funcs_addr =
 		(void *)uelf->info.shdrs[uelf->index.upatch_funcs].sh_addr;
+	GElf_Shdr *upatch_string = uelf->info.shdrs[uelf->index.upatch_string];
 
-	memcpy(uinfo, UPATCH_HEADER, strlen(UPATCH_HEADER));
+	memcpy(uinfo->magic, UPATCH_HEADER, strlen(UPATCH_HEADER));
+	memcpy(uinfo->id, uuid, strlen(uuid));
+
 	uinfo->size = uelf->core_layout.size - uelf->core_layout.info_size;
 	uinfo->start = (unsigned long)uelf->core_layout.base;
 	uinfo->end =
@@ -400,58 +470,53 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj, const
 	uinfo->changed_func_num =
 		uelf->info.shdrs[uelf->index.upatch_funcs].sh_size /
 		sizeof(struct upatch_patch_func);
-	memcpy(uinfo->id, uuid, strlen(uuid));
 
-	log_normal("Changed insn:\n");
-	uinfo->funcs = (void *)uinfo + sizeof(*uinfo);
+	uinfo->func_names = (void *)uinfo + sizeof(*uinfo);
+	uinfo->func_names_size = upatch_string->sh_size;
+	memcpy(uinfo->funcs_names, (void *)upatch_string->sh_addr, upatch_string->sh_size);
+
+	log_debug("Changed insn:\n");
+	uinfo->funcs = (void *)uinfo->func_names + uinfo->func_names_size;
 	for (unsigned int i = 0; i < uinfo->changed_func_num; ++i) {
 		struct upatch_info_func *upatch_func = &uinfo->funcs[i];
 
-		upatch_func->old_addr =
-			upatch_funcs_addr[i].old_addr + uelf->relf->load_bias;
-		upatch_func->old_size = upatch_funcs_addr[i].old_size;
-		upatch_func->new_addr = upatch_funcs_addr[i].new_addr;
-		upatch_func->new_size = upatch_funcs_addr[i].new_size;
-		log_debug("\tstart\tend\n");
-		log_debug("old:\t0x%lx\t0x%lx\n", upatch_func->old_addr,
-			upatch_func->old_addr + upatch_func->old_size);
-		log_debug("new:\t0x%lx\t0x%lx\n", upatch_func->new_addr,
-			upatch_func->new_addr + upatch_func->new_size);
-		ret = upatch_process_mem_read(obj->proc, upatch_func->old_addr,
+		upatch_func->addr = upatch_funcs_addr[i].addr;
+		upatch_func->addr.old_addr += uelf->relf->load_bias;
+		ret = upatch_process_mem_read(obj->proc, upatch_func->addr.old_addr,
 					      &upatch_func->old_insn,
 					      get_origin_insn_len());
 		if (ret) {
 			log_error("can't read origin insn at 0x%lx - %d\n",
-				  upatch_func->old_addr, ret);
+				  upatch_func->addr.old_addr, ret);
 			goto out;
 		}
 
 		upatch_func->new_insn = get_new_insn();
 
-		log_normal("\t0x%lx(0x%lx 0x%lx -> 0x%lx 0x%lx)\n", upatch_func->old_addr,
+		log_debug("\t0x%lx(0x%lx 0x%lx -> 0x%lx 0x%lx)\n", upatch_func->addr.old_addr,
 			  upatch_func->old_insn[0], upatch_func->old_insn[1],
-			  upatch_func->new_insn, upatch_func->new_addr);
+			  upatch_func->new_insn, upatch_func->addr.new_addr);
 	}
 
 out:
 	return ret;
 }
 
-static int unapply_patch(struct object_file *obj,
+static int unapply_patch(struct upatch_process *proc,
 			 struct upatch_info_func *funcs,
 			 unsigned long changed_func_num)
 {
-	log_normal("Changed insn:\n");
+	log_debug("Changed insn:\n");
 	for (unsigned int i = 0; i < changed_func_num; ++i) {
-		log_normal("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].old_addr,
+		log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].addr.old_addr,
 			  funcs[i].new_insn, funcs[i].old_insn[0]);
 
 		int ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
-			(unsigned long)funcs[i].old_addr, get_origin_insn_len());
+			(unsigned long)funcs[i].addr.old_addr, get_origin_insn_len());
 
 		if (ret) {
 			log_error("Failed to write old insn at 0x%lx, ret=%d\n",
-				funcs[i].old_addr, ret);
+				funcs[i].addr.old_addr, ret);
 			return ret;
 		}
 	}
@@ -470,24 +535,23 @@ static int apply_patch(struct upatch_elf *uelf, struct object_file *obj)
 
 		// write jumper insn to first 8 bytes
 		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_insn,
-			(unsigned long)upatch_func->old_addr, get_upatch_insn_len());
+			(unsigned long)upatch_func->addr.old_addr, get_upatch_insn_len());
 		if (ret) {
 			log_error(
 				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
-				upatch_func->old_addr, upatch_func->new_insn,
+				upatch_func->addr.old_addr, upatch_func->new_insn,
 				ret);
 			goto out;
 		}
 		// write 64bit new addr to second 8 bytes
-		ret = upatch_process_mem_write(obj->proc, &upatch_func->new_addr,
-			(unsigned long)upatch_func->old_addr + get_upatch_insn_len(),
+		ret = upatch_process_mem_write(obj->proc, &upatch_func->addr.new_addr,
+			(unsigned long)upatch_func->addr.old_addr + get_upatch_insn_len(),
 			get_upatch_addr_len());
 		if (ret) {
 			log_error(
 				"Failed to ptrace upatch func at 0x%lx(0x%lx) - %d\n",
-				upatch_func->old_addr + get_upatch_insn_len(),
-				upatch_func->new_addr,
-				ret);
+				upatch_func->addr.old_addr + get_upatch_insn_len(),
+				upatch_func->addr.new_addr, ret);
 			goto out;
 		}
 	}
@@ -566,36 +630,15 @@ static int upatch_mprotect(struct upatch_elf *uelf, struct object_file *obj)
 	return 0;
 }
 
-static int upatch_apply_patches(struct upatch_process *proc,
+static int upatch_apply_patches(struct object_file *obj,
 				struct upatch_elf *uelf, const char *uuid)
 {
 	int ret = 0;
-	struct object_file *obj = NULL;
-	GElf_Off min_addr;
-	bool found = false;
-
-	list_for_each_entry(obj, &proc->objs, list) {
-		if (obj->inode == uelf->relf->info.inode) {
-			found = true;
-			break;
-		}
-	}
-
-	if (!found) {
-		ret = -1;
-		log_debug("Cannot find inode %lu in pid %d, file is not loaded\n",
-			uelf->relf->info.inode, proc->pid);
-		goto out;
-	}
-
-	min_addr = calculate_load_address(uelf->relf, true);
-	uelf->relf->load_start = calculate_mem_load(obj);
-	uelf->relf->load_bias = uelf->relf->load_start - min_addr;
-	log_debug("load_bias = %lx\n", uelf->relf->load_bias);
 
 	ret = rewrite_section_headers(uelf);
-	if (ret)
-		goto free;
+	if (ret) {
+		return ret;
+	}
 
 	// Caculate upatch mem size
 	layout_jmptable(uelf);
@@ -645,12 +688,6 @@ static int upatch_apply_patches(struct upatch_process *proc,
 		goto free;
 	}
 
-	struct upatch_info *uinfo =
-		(void *)uelf->core_layout.kbase + uelf->core_layout.info_size;
-	ret = upatch_stack_check(uinfo, proc, ACTIVE);
-	if (ret) {
-		goto free;
-	}
 	ret = post_memory(uelf, obj);
 	if (ret) {
 		goto free;
@@ -692,30 +729,63 @@ static void upatch_time_tick(int pid) {
 	}
 
 	long frozen_time = GET_MICROSECONDS(end_tv, start_tv);
-	log_normal("Process %d frozen time is %ld microsecond(s)\n",
+	log_debug("Process %d frozen time is %ld microsecond(s)\n",
 		pid, frozen_time);
 }
 
-int upatch_process_uuid_exist(struct upatch_process *proc, const char *uuid)
+static struct object_patch *upatch_find_patch(struct upatch_process *proc, const char *uuid)
 {
-	struct object_file *obj;
-	struct object_patch *patch;
+	struct object_file *obj = NULL;
+	struct object_patch *patch = NULL;
+
+	// Traverse all mapped memory and find all upatch memory
 	list_for_each_entry(obj, &proc->objs, list) {
 		if (!obj->is_patch) {
 			continue;
 		}
 		list_for_each_entry(patch, &obj->applied_patch, list) {
 			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) == 0) {
-				return -EEXIST;
+				return patch;
 			}
 		}
 	}
-	return 0;
+	return NULL;
+}
+
+static int upatch_apply_prepare(struct upatch_elf *uelf,
+	struct upatch_process *proc, struct object_file **obj)
+{
+	int ret = 0;
+
+	for (int i = 0; i < STACK_CHECK_RETRY_TIMES; i++) {
+		ret = upatch_process_attach(proc);
+		if (ret < 0) {
+			log_error("Failed to attach process\n");
+			goto detach;
+		}
+
+		*obj = upatch_find_obj(uelf, proc);
+		if (*obj == NULL) {
+			ret = -ENODATA;
+			goto detach;
+		}
+
+		ret = upatch_active_stack_check(uelf, proc);
+		if (ret != -EBUSY) {
+			return ret;
+		}
+		upatch_process_detach(proc);
+		sleep(1);
+	}
+detach:
+	upatch_process_detach(proc);
+	return ret;
 }
 
 int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, const char *uuid, const char *binary_path)
 {
 	struct upatch_process proc;
+	struct object_file *obj = NULL;
 
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	int ret = upatch_process_init(&proc, pid);
@@ -748,9 +818,8 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 		log_error("Failed to read process memory mapping\n");
 		goto out_free;
 	}
-	ret = upatch_process_uuid_exist(&proc, uuid);
-	if (ret != 0) {
-		ret = 0;
+	struct object_patch *patch = upatch_find_patch(&proc, uuid);
+	if (patch != NULL) {
 		log_error("Patch '%s' already exists\n", uuid);
 		goto out_free;
 	}
@@ -763,16 +832,12 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
     uelf->relf = relf;
 	upatch_time_tick(pid);
 
-	/* Finally, attach to process */
-	ret = upatch_process_attach(&proc);
+	ret = upatch_apply_prepare(uelf, &proc, &obj);
 	if (ret < 0) {
-		log_error("Failed to attach process\n");
 		goto out_free;
 	}
-
-	// TODO: 栈解析
 	// 应用
-	ret = upatch_apply_patches(&proc, uelf, uuid);
+	ret = upatch_apply_patches(obj, uelf, uuid);
 	if (ret < 0) {
 		log_error("Failed to apply patch\n");
 		goto out_free;
@@ -781,67 +846,59 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf, co
 out_free:
 	upatch_process_detach(&proc);
 	upatch_time_tick(pid);
-
 	upatch_process_destroy(&proc);
-
 out:
 	return ret;
 }
 
-static int upatch_unapply_patches(struct upatch_process *proc, const char *uuid)
+static int upatch_unapply_patches(struct object_file *obj, struct upatch_info *uinfo)
 {
 	int ret = 0;
-	struct object_file *obj = NULL;
-	struct object_patch *patch = NULL;
-	bool found = false;
 
-	// Traverse all mapped memory and find all upatch memory
-	list_for_each_entry(obj, &proc->objs, list) {
-		if (!obj->is_patch) {
-			continue;
-		}
-		// For eatch patch, check it's id and do remove
-		list_for_each_entry(patch, &obj->applied_patch, list) {
-			if (strncmp(patch->uinfo->id, uuid, UPATCH_ID_LEN) != 0) {
-				continue;
-			}
-			found = true;
-
-			ret = upatch_stack_check(patch->uinfo, proc, DEACTIVE);
-			if (ret) {
-				goto out;
-			}
-
-			ret = unapply_patch(obj, patch->uinfo->funcs, patch->uinfo->changed_func_num);
-			if (ret) {
-				goto out;
-			}
-
-			log_debug("munmap upatch layout core:\n");
-			upatch_free(obj,
-				(void *)patch->uinfo->start,
-				patch->uinfo->end - patch->uinfo->start
-			);
-
-			break;
-		}
+	ret = unapply_patch(obj, uinfo->funcs, uinfo->changed_func_num);
+	if (ret) {
+		return ret;
 	}
 
-	if (!found) {
-		log_warn("Patch '%s' is not found\n", uuid);
-		goto out;
-	}
+	log_debug("munmap upatch layout core:\n");
+	upatch_free(obj, (void *)uinfo->start, uinfo->end - uinfo->start);
+	return ret;
+}
 
-out:
+static int upatch_unapply_prepare(struct upatch_process *proc,
+	const char *uuid, struct object_patch **patch)
+{
+	int ret = 0;
+
+	for (int i = 0; i < STACK_CHECK_RETRY_TIMES; i++) {
+		ret = upatch_process_attach(proc);
+		if (ret < 0) {
+			log_error("Failed to attach process\n");
+			goto detach;
+		}
+		*patch = upatch_find_patch(proc, uuid);
+		if (*patch == NULL) {
+			log_error("Patch '%s' is not found\n", uuid);
+			ret = -ENODATA;
+			goto detach;
+		}
+		ret = upatch_stack_check((*patch)->uinfo, proc, DEACTIVE);
+		if (ret != -EBUSY) {
+			return ret;
+		}
+		upatch_process_detach(proc);
+		sleep(1);
+	}
+detach:
+	upatch_process_detach(proc);
 	return ret;
 }
 
 int process_unpatch(int pid, const char *uuid)
 {
 	struct upatch_process proc;
+	struct object_patch *patch = NULL;
 
-	// TODO: check build id
-	// TODO: 栈解析
 	// 查看process的信息，pid: maps, mem, cmdline, exe
 	int ret = upatch_process_init(&proc, pid);
 	if (ret < 0) {
@@ -875,16 +932,12 @@ int process_unpatch(int pid, const char *uuid)
 	}
 
 	upatch_time_tick(pid);
-
-	/* Finally, attach to process */
-	ret = upatch_process_attach(&proc);
+	ret = upatch_unapply_prepare(&proc, uuid, &patch);
 	if (ret < 0) {
-		log_error("Failed to attach process\n");
 		goto out_free;
 	}
-
 	// 应用
-	ret = upatch_unapply_patches(&proc, uuid);
+	ret = upatch_unapply_patches(patch->obj, patch->uinfo);
 	if (ret < 0) {
 		log_error("Failed to remove patch\n");
 		goto out_free;
@@ -893,7 +946,6 @@ int process_unpatch(int pid, const char *uuid)
 out_free:
 	upatch_process_detach(&proc);
 	upatch_time_tick(pid);
-
 	upatch_process_destroy(&proc);
 
 out:
@@ -967,6 +1019,6 @@ out_free:
 	upatch_process_destroy(&proc);
 
 out:
-	log_normal("%s\n", status);
+	log_debug("%s\n", status);
 	return ret;
 }

@@ -224,10 +224,10 @@ static void process_print_cmdline(struct upatch_process *proc)
 
 		for (i = 0; i < rv; i++) {
 			if (isprint(buf[i])) {
-				printf("%c", buf[i]);
+				log_debug("%c", buf[i]);
 			}
 			else {
-				printf(" ");
+				log_debug(" ");
 			}
 		}
 	}
@@ -238,9 +238,9 @@ err_close:
 
 void upatch_process_print_short(struct upatch_process *proc)
 {
-	printf("process %d, cmdline: ", proc->pid);
+	log_debug("process %d, cmdline: ", proc->pid);
 	process_print_cmdline(proc);
-	printf("\n");
+	log_debug("\n");
 }
 
 int upatch_process_mem_open(struct upatch_process *proc, int mode)
@@ -384,6 +384,33 @@ process_new_object(struct upatch_process *proc, dev_t dev, ino_t inode,
 	return o;
 }
 
+static void link_funcs_name(struct upatch_info *uinfo)
+{
+	unsigned long idx = 0;
+
+	for (unsigned long i = 0; i < uinfo->changed_func_num; i++) {
+		uinfo->funcs[i].name = (void *)uinfo->func_names + idx;
+		idx += strlen(name) + 1;
+	}
+}
+
+static void free_object_patch(struct object_patch *opatch)
+{
+	if (opatch == NULL) {
+		return;
+	}
+	if (opatch->uinfo != NULL) {
+		if (opatch->uinfo->funcs != NULL) {
+			free(opatch->uinfo->funcs);
+		}
+		if (opatch->uinfo->func_names != NULL) {
+			free(opatch->uinfo->func_names);
+		}
+		free(opatch->uinfo);
+	}
+	free(opatch);
+}
+
 static int add_upatch_object(struct upatch_process *proc,
 	struct object_file *o, unsigned long src, unsigned char *header_buf)
 {
@@ -395,6 +422,7 @@ static int add_upatch_object(struct upatch_process *proc,
 		return -1;
 	}
 
+	opatch->obj = o;
 	opatch->uinfo = malloc(sizeof(struct upatch_info));
 	if (opatch->uinfo == NULL) {
 		log_error("malloc opatch->uinfo failed\n");
@@ -402,21 +430,34 @@ static int add_upatch_object(struct upatch_process *proc,
 		return -1;
 	}
 
-	memcpy(opatch->uinfo, header_buf, sizeof(struct upatch_info));
+	memcpy(opatch->uinfo->magic, header_buf, sizeof(struct upatch_info));
+
+	opatch->uinfo->func_names = malloc(opatch->uinfo->func_names_size);
+	if (opatch->uinfo->func_names == NULL) {
+		log_error("Failed to malloc funcs_names\n");
+		free_object_patch(opatch);
+		return -ENOMEM;
+	}
+	if (upatch_process_mem_read(proc, src,
+		opatch->uinfo->func_names, opatch->uinfo->func_names_size)) {
+			log_error("Cannot read patch func names at 0x%lx\n", src);
+			free_object_patch(opatch);
+			return -1;
+		}
+
+	src += opatch->uinfo->func_names_size;
 	opatch->uinfo->funcs = malloc(opatch->uinfo->changed_func_num *
 			       sizeof(struct upatch_info_func));
 	if (upatch_process_mem_read(proc, src, opatch->uinfo->funcs,
 		opatch->uinfo->changed_func_num * sizeof(struct upatch_info_func))) {
 		log_error("can't read patch funcs at 0x%lx\n", src);
-		free(opatch->uinfo->funcs);
-		free(opatch->uinfo);
-		free(opatch);
+		free_object_patch(opatch);
 		return -1;
 	}
+	link_funcs_name(opatch->uinfo);
 	list_add(&opatch->list, &o->applied_patch);
 	o->num_applied_patch++;
 	o->is_patch = 1;
-
 	return 0;
 }
 /**
@@ -575,17 +616,6 @@ int upatch_process_map_object_files(struct upatch_process *proc)
 	return upatch_process_parse_proc_maps(proc);
 }
 
-// static int process_has_thread_pid(struct upatch_proces *proc, int pid)
-// {
-// 	struct upatch_ptrace_ctx *pctx;
-
-// 	list_for_each_entry(pctx, &proc->ptrace.pctxs, list)
-// 		if (pctx->pid == pid)
-// 			return 1;
-
-// 	return 0;
-// }
-
 static int process_list_threads(struct upatch_process *proc, int **ppids,
 				size_t *npids, size_t *alloc)
 {
@@ -738,7 +768,8 @@ void upatch_process_detach(struct upatch_process *proc)
 				pid = waitpid(p->pid, &status, __WALL);
 			} while (pid > 0 && !WIFEXITED(status));
 		}
-		// upatch_ptrace_ctx_destroy(p);
+		list_del(&p->list);
+		free(p);
 	}
 	log_debug("Process detached\n");
 }

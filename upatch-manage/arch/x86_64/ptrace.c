@@ -32,7 +32,7 @@ int upatch_arch_unwind_init(int pid, long *sp, long *pc)
 	struct user_regs_struct regs;
 
 	if (ptrace(PTRACE_GETREGS, pid, NULL, &regs) < 0) {
-			log_error("Cannot get regs\n");
+			log_error("Cannot get regs from %d\n", pid);
 			return -1;
 	}
 	*sp = (long)regs.rsp;

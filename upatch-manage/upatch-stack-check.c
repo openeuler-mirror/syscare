@@ -15,20 +15,21 @@ static int stack_check(struct upatch_info *uinfo, unsigned long pc, upatch_actio
     unsigned long start, end;
 
     for (size_t i = 0; i < uinfo->changed_func_num; i++) {
-        struct upatch_info_func *upatch_func = &uinfo->funcs[i];
+        struct upatch_func_addr addr = upatch_func->addr;
+
         if (action == ACTIVE) {
-            start = upatch_func->old_addr;
-            end = upatch_func->old_addr + upatch_func->old_size;
+            start = addr.old_addr;
+            end = addr.old_addr + addr.old_size;
         } else if (action == DEACTIVE) {
-            start = upatch_func->new_addr;
-            end = upatch_func->new_addr + upatch_func->new_size;
+            start = addr.new_addr;
+            end = addr.new_addr + addr.new_size;
         } else {
             log_error("Unknown upatch action\n");
             return -1;
         }
         if (pc >= start && pc <= end) {
-            log_error("Stack check failed 0x%lx is running [0x%lx: 0x%lx]\n",
-                pc, start, end);
+            log_error("Failed to check stack, running function: %s\n",
+                upatch_func->name);
                 return -1;
         }
     }
@@ -42,7 +43,6 @@ static int stack_check_each_pid(struct upatch_info *uinfo, int pid, upatch_actio
     if (upatch_arch_unwind_init(pid, &sp, &pc) < 0) {
         return -1;
     }
-    log_debug("Stack line:\n");
     while (1) {
         if (stack_check(uinfo, (unsigned long)pc, action) < 0) {
             return -1;
@@ -51,7 +51,6 @@ static int stack_check_each_pid(struct upatch_info *uinfo, int pid, upatch_actio
         if (pc == -1 && errno != 0) {
             break;
         }
-        log_debug("\t0x%lx: 0x%lx\n", sp, pc);
         sp += 8;
     }
     return 0;
@@ -64,7 +63,7 @@ int upatch_stack_check(struct upatch_info *uinfo,
 
     list_for_each_entry(pctx, &proc->ptrace.pctxs, list) {
         if (stack_check_each_pid(uinfo, pctx->pid, action) < 0) {
-            return -ERR_STACK_CHECK_FAILED;
+            return -EBUSY;
         }
     }
     return 0;
