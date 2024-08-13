@@ -1,7 +1,6 @@
 # Install service
 install(
     FILES
-        ${CMAKE_CURRENT_LIST_DIR}/upatch.service
         ${CMAKE_CURRENT_LIST_DIR}/syscare.service
     PERMISSIONS
         OWNER_EXECUTE OWNER_WRITE OWNER_READ
