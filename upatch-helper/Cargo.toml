@@ -1,0 +1,13 @@
+[package]
+name         = "upatch-helper"
+version      = "1.2.1"
+authors      = ["renoseven <dev@renoseven.net>"]
+description  = "Upatch compiler helper"
+license      = "MulanPSL-2.0"
+edition      = "2018"
+rust-version = "1.60"
+build        = "build.rs"
+
+[dependencies]
+syscare-common = { package = "syscare-common", path = "../syscare-common" }
+anyhow         = { version = "1.0" }

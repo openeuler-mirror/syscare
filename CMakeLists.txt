@@ -110,33 +110,35 @@ add_link_options(${PROJECT_C_LINK_FLAGS})
 link_libraries(${PROJECT_C_LIBRARIES})
 
 # Build rust executables
+set(RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust")
+set(RUST_OUTPUT_DIR "${RUST_TARGET_DIR}/release")
 foreach(FLAG IN LISTS PROJECT_RUST_FLAGS)
-     set(RUSTFLAGS "${RUSTFLAGS} ${FLAG}")
+     set(RUST_FLAGS "${RUST_FLAGS} ${FLAG}")
 endforeach()
 
 add_custom_target(rust-build ALL
     COMMENT "Building rust executables..."
     COMMAND ${CMAKE_COMMAND} -E env
         "BUILD_VERSION=${PROJECT_BUILD_VERSION}"
-        "RUSTFLAGS=${RUSTFLAGS}"
-        cargo build --release --target-dir "${CMAKE_CURRENT_BINARY_DIR}/rust"
+        "RUSTFLAGS=${RUST_FLAGS}"
+        cargo build --release --target-dir "${RUST_TARGET_DIR}"
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Generate upatch helpers
+add_custom_target(generate-upatch-helpers ALL
+    COMMENT "Generating upatch helpers..."
+    COMMAND ln -sf upatch-helper upatch-cc
+    COMMAND ln -sf upatch-helper upatch-c++
+    DEPENDS
+        rust-build
+    WORKING_DIRECTORY ${RUST_OUTPUT_DIR}
 )
 
 # Install rust binaries
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscared
-    PERMISSIONS
-        OWNER_READ OWNER_WRITE OWNER_EXECUTE
-        GROUP_READ GROUP_EXECUTE
-    DESTINATION
-        ${SYSCARE_BINARY_DIR}
-)
-
-install(
-    PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscare
+        ${RUST_OUTPUT_DIR}/syscare
     PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_EXECUTE
@@ -147,8 +149,21 @@ install(
 
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/upatch-build
-        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscare-build
+        ${RUST_OUTPUT_DIR}/syscared
+    PERMISSIONS
+        OWNER_READ OWNER_WRITE OWNER_EXECUTE
+        GROUP_READ GROUP_EXECUTE
+    DESTINATION
+        ${SYSCARE_BINARY_DIR}
+)
+
+install(
+    PROGRAMS
+        ${RUST_OUTPUT_DIR}/syscare-build
+        ${RUST_OUTPUT_DIR}/upatch-build
+        ${RUST_OUTPUT_DIR}/upatch-helper
+        ${RUST_OUTPUT_DIR}/upatch-cc
+        ${RUST_OUTPUT_DIR}/upatch-c++
     PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_EXECUTE
