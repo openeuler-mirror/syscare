@@ -126,7 +126,6 @@ add_custom_target(rust-build ALL
 # Install rust binaries
 install(
     PROGRAMS
-        ${CMAKE_CURRENT_BINARY_DIR}/rust/release/upatchd
         ${CMAKE_CURRENT_BINARY_DIR}/rust/release/syscared
     PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE
