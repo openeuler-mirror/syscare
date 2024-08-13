@@ -21,6 +21,7 @@ use uuid::Uuid;
 use super::package_info::PackageInfo;
 
 pub const PATCH_INFO_MAGIC: &str = "112574B6EDEE4BA4A05F";
+const MAX_CHECKSUM_LEN: usize = 32;
 
 #[derive(Serialize, Deserialize, Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum PatchType {
@@ -42,11 +43,27 @@ pub struct PatchEntity {
     pub checksum: String,
 }
 
+impl std::fmt::Display for PatchEntity {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "uuid:     {}", self.uuid)?;
+        writeln!(f, "target:   {}", self.patch_target.display())?;
+        writeln!(f, "patch:    {}", self.patch_name.to_string_lossy())?;
+        write!(f, "checksum: {}", &self.checksum[0..MAX_CHECKSUM_LEN])
+    }
+}
+
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, Ord, PartialEq, PartialOrd)]
 pub struct PatchFile {
     pub name: OsString,
     pub path: PathBuf,
     pub digest: String,
+}
+
+impl std::fmt::Display for PatchFile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "name:     {}", self.name.to_string_lossy())?;
+        write!(f, "checksum: {}", &self.digest[0..MAX_CHECKSUM_LEN])
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -84,9 +101,9 @@ impl std::fmt::Display for PatchInfo {
             writeln!(f, "* {}", entity.patch_name.to_string_lossy())?;
         }
         writeln!(f, "patches:")?;
-        let last_idx = self.patches.len() - 1;
-        for (idx, patch) in self.patches.iter().enumerate() {
-            if idx == last_idx {
+        let mut patches_iter = self.patches.iter().peekable();
+        while let Some(patch) = patches_iter.next() {
+            if patches_iter.peek().is_none() {
                 write!(f, "* {}", patch.name.to_string_lossy())?
             } else {
                 writeln!(f, "* {}", patch.name.to_string_lossy())?
