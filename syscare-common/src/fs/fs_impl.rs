@@ -565,6 +565,107 @@ pub fn copy_dir_contents<P: AsRef<Path>, Q: AsRef<Path>>(src_dir: P, dst_dir: Q)
     Ok(())
 }
 
+pub fn glob<P: AsRef<Path>>(path: P) -> io::Result<Vec<PathBuf>> {
+    const CURRENT_DIR: Component = Component::CurDir;
+    const WILDCARD_ONE: char = '?';
+    const WILDCARD_ALL: char = '*';
+    const WILDCARD_RECURSIVE: &str = "**";
+
+    fn match_name(name: &OsStr, pattern: &OsStr) -> bool {
+        let name: Vec<_> = name.chars().collect();
+        let pattern: Vec<_> = pattern.chars().collect();
+
+        let (mut name_idx, mut patt_idx, mut star_idx, mut match_idx) = (0, 0, None, 0);
+
+        while name_idx < name.len() {
+            if patt_idx < pattern.len()
+                && (pattern[patt_idx] == WILDCARD_ONE || pattern[patt_idx] == name[name_idx])
+            {
+                name_idx += 1;
+                patt_idx += 1;
+            } else if patt_idx < pattern.len() && pattern[patt_idx] == WILDCARD_ALL {
+                star_idx = Some(patt_idx);
+                match_idx = name_idx;
+                patt_idx += 1;
+            } else if let Some(star) = star_idx {
+                patt_idx = star + 1;
+                match_idx += 1;
+                name_idx = match_idx;
+            } else {
+                return false;
+            }
+        }
+
+        while patt_idx < pattern.len() && pattern[patt_idx] == WILDCARD_ALL {
+            patt_idx += 1;
+        }
+
+        patt_idx == pattern.len()
+    }
+
+    let pattern = path.as_ref();
+    let base_dir = if pattern.is_relative() && !pattern.starts_with(CURRENT_DIR.as_os_str()) {
+        PathBuf::from(CURRENT_DIR.as_os_str())
+    } else {
+        PathBuf::new()
+    };
+    let components = pattern.components().collect::<Vec<_>>();
+
+    let mut result = Vec::new();
+    let mut stack = vec![(base_dir, 0)];
+
+    while let Some((mut curr_dir, mut comp_idx)) = stack.pop() {
+        let comp_len = components.len();
+        while comp_idx < comp_len {
+            if let Component::Normal(pattern) = components[comp_idx] {
+                if pattern == WILDCARD_RECURSIVE {
+                    if let Ok(read_dir) = self::read_dir(&curr_dir) {
+                        for dir_entry in read_dir.flatten() {
+                            let next_path = dir_entry.path();
+                            if next_path.is_dir() {
+                                stack.push((next_path.clone(), comp_idx));
+                            }
+                            if comp_idx + 1 == comp_len {
+                                result.push(next_path);
+                                continue;
+                            }
+                            stack.push((next_path, comp_idx + 1));
+                        }
+                    }
+                    break;
+                } else if pattern.contains(WILDCARD_ONE) || pattern.contains(WILDCARD_ALL) {
+                    if let Ok(read_dir) = self::read_dir(&curr_dir) {
+                        for dir_entry in read_dir.flatten() {
+                            let next_path = dir_entry.path();
+                            let file_name = next_path.file_name().unwrap_or_default();
+                            if !match_name(file_name, pattern) {
+                                continue;
+                            }
+                            if comp_idx + 1 == comp_len {
+                                result.push(next_path);
+                                continue;
+                            }
+                            if next_path.is_dir() {
+                                stack.push((next_path, comp_idx + 1));
+                            }
+                        }
+                    }
+                    break;
+                }
+            }
+
+            curr_dir.push(components[comp_idx]);
+            if curr_dir.exists() && (comp_idx + 1 == comp_len) {
+                result.push(curr_dir.clone());
+                break;
+            }
+            comp_idx += 1;
+        }
+    }
+
+    Ok(result)
+}
+
 pub fn sync() {
     nix::unistd::sync()
 }
