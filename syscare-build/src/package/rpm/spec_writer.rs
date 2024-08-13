@@ -13,7 +13,9 @@
  */
 
 use std::{
-    collections::BTreeSet, ffi::{OsStr, OsString}, io::Write, path::{Path, PathBuf}
+    collections::BTreeSet,
+    ffi::{OsStr, OsString},
+    path::{Path, PathBuf},
 };
 
 use anyhow::{Context, Result};
@@ -154,9 +156,9 @@ impl PackageSpecWriter for RpmSpecWriter {
 #[test]
 fn tests_spec_writer() {
     use std::fs::File;
-    use std::io::Read;
+    use std::io::{Read, Write};
+
     let mut specfile = File::create("/tmp/test.spec").unwrap();
-  
     specfile.write_all(b"Source: kerneltest-1.tar.gz").unwrap();
     specfile.write_all(b"%description").unwrap();
 
@@ -164,7 +166,11 @@ fn tests_spec_writer() {
     let filepath = PathBuf::from("/tmp/test.spec");
 
     let test = RpmSpecWriter;
-    test.add_source_files(&filepath, vec![PathBuf::from("test1"),PathBuf::from("test2")]).unwrap();
+    test.add_source_files(
+        &filepath,
+        vec![PathBuf::from("test1"), PathBuf::from("test2")],
+    )
+    .unwrap();
 
     let mut fileread = File::open(&filepath).unwrap();
     let mut content = String::new();
