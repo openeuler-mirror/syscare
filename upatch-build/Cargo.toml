@@ -17,7 +17,6 @@ flexi_logger   = { version = "0.24" }
 function_name  = { version = "0.3" }
 gimli          = { version = "0.26" }
 indexmap       = { version = "1.9" }
-jsonrpc        = { version = "0.16", features = ["simple_uds"] }
 lazy_static    = { version = "1.0" }
 log            = { version = "0.4" }
 memmap2        = { version = "0.9" }

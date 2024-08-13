@@ -36,17 +36,14 @@ mod compiler;
 mod dwarf;
 mod elf;
 mod file_relation;
-mod helper;
 mod project;
 mod resolve;
-mod rpc;
 
 use args::Arguments;
 use build_root::BuildRoot;
 use compiler::Compiler;
 use dwarf::Dwarf;
 use file_relation::FileRelation;
-use helper::UpatchHelper;
 use project::Project;
 
 const CLI_NAME: &str = "upatch build";
@@ -350,7 +347,6 @@ impl UpatchBuild {
     }
 
     fn run(&mut self) -> Result<()> {
-        let work_dir = self.args.work_dir.as_path();
         let name = self.args.name.as_os_str();
         let output_dir = self.args.output_dir.as_path();
         let object_dir = self.args.object_dir.as_path();
@@ -400,8 +396,6 @@ impl UpatchBuild {
         }
 
         let mut files = FileRelation::new();
-        let upatch_helper =
-            UpatchHelper::new(&compilers, work_dir).context("Failed to hook compilers")?;
 
         info!("Preparing {}", project);
         project
@@ -434,9 +428,6 @@ impl UpatchBuild {
 
         info!("Collecting file relations");
         files.collect_patched_build(object_dir, patched_dir)?;
-
-        // Restore compilers
-        drop(upatch_helper);
 
         let build_info = BuildInfo {
             linker,
