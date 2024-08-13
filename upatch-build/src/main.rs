@@ -37,7 +37,6 @@ mod dwarf;
 mod elf;
 mod file_relation;
 mod helper;
-mod pattern_path;
 mod project;
 mod resolve;
 mod rpc;

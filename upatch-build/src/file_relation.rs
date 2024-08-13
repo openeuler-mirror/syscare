@@ -20,10 +20,7 @@ use anyhow::{bail, ensure, Context, Result};
 use indexmap::{IndexMap, IndexSet};
 use syscare_common::{ffi::OsStrExt, fs};
 
-use super::{
-    elf::{check_elf, read},
-    pattern_path::glob,
-};
+use super::elf::{check_elf, read};
 
 const UPATCH_SYM_PREFIX: &str = ".upatch_";
 const OBJECT_EXTENSION: &str = "o";
@@ -168,7 +165,7 @@ impl FileRelation {
 impl FileRelation {
     fn find_binary_file<P: AsRef<Path>>(binary: P) -> Result<PathBuf> {
         let binary_file = binary.as_ref();
-        let matched_file = glob(binary_file)?
+        let matched_file = fs::glob(binary_file)?
             .into_iter()
             .filter(|path| {
                 path.is_file()
