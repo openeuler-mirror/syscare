@@ -290,6 +290,10 @@ pub fn normalize<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
     let mut new_path = PathBuf::new();
 
     let orig_path = path.as_ref();
+    if orig_path.as_os_str().is_empty() {
+        return Ok(new_path);
+    }
+
     if orig_path.is_relative() {
         new_path.push(env::current_dir()?);
     }
