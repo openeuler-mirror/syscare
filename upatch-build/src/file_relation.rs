@@ -12,18 +12,30 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
-use anyhow::{bail, ensure, Context, Result};
+use anyhow::{ensure, Context, Result};
 
 use indexmap::{IndexMap, IndexSet};
-use syscare_common::{ffi::OsStrExt, fs};
+use log::warn;
+use object::ObjectKind;
+use syscare_common::{concat_os, ffi::OsStrExt, fs};
 
-use super::elf::{check_elf, read};
+use crate::elf;
 
-const UPATCH_SYM_PREFIX: &str = ".upatch_";
-const OBJECT_EXTENSION: &str = "o";
+const BUILD_ROOT_PREFIX: &str = "upatch-build.";
+const UPATCH_ID_PREFIX: &str = ".upatch_";
+
+const NON_EXIST_PATH: &str = "/dev/null";
+
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct ObjectRelation {
+    pub original_object: PathBuf,
+    pub patched_object: PathBuf,
+}
 
 /*
  * The task of this class is to find out:
@@ -31,189 +43,224 @@ const OBJECT_EXTENSION: &str = "o";
  * 2. relationship between output binaries and objects
  * 3. relationship between original objects and patched objects
  */
-
 #[derive(Debug)]
 pub struct FileRelation {
-    debuginfo_map: IndexMap<PathBuf, PathBuf>, // Binary -> Debuginfo
-    symlink_map: IndexMap<PathBuf, PathBuf>,   // Symlink object -> Orignal object
-    patch_objects_map: IndexMap<PathBuf, IndexSet<PathBuf>>, // Binary -> Patched objects
-    original_object_map: IndexMap<PathBuf, PathBuf>, // Patched object -> Original object
+    binary_debuginfo_map: IndexMap<PathBuf, PathBuf>, // Binary -> Debuginfo
+    binary_relation_map: IndexMap<PathBuf, IndexMap<PathBuf, PathBuf>>, // Binary -> [ObjectRelation]
+    original_object_map: IndexMap<PathBuf, PathBuf>, // Output object -> Original object
 }
 
 impl FileRelation {
     pub fn new() -> Self {
         Self {
-            debuginfo_map: IndexMap::new(),
-            symlink_map: IndexMap::new(),
-            patch_objects_map: IndexMap::new(),
+            binary_debuginfo_map: IndexMap::new(),
+            binary_relation_map: IndexMap::new(),
             original_object_map: IndexMap::new(),
         }
     }
 
-    pub fn collect_debuginfo<I, J, P, Q>(&mut self, binaries: I, debuginfos: J) -> Result<()>
+    pub fn collect_debuginfo<P, I, J, Q, R>(
+        &mut self,
+        binary_dir: P,
+        binaries: I,
+        debuginfos: J,
+    ) -> Result<()>
     where
-        I: IntoIterator<Item = P>,
-        J: IntoIterator<Item = Q>,
         P: AsRef<Path>,
+        I: IntoIterator<Item = Q>,
+        J: IntoIterator<Item = R>,
         Q: AsRef<Path>,
+        R: AsRef<Path>,
     {
         let mut binary_iter = binaries.into_iter();
         let mut debuginfo_iter = debuginfos.into_iter();
 
         while let (Some(binary), Some(debuginfo)) = (binary_iter.next(), debuginfo_iter.next()) {
-            let binary_file = Self::find_binary_file(binary)?;
-            let debuginfo_file = debuginfo.as_ref().to_path_buf();
-
-            self.debuginfo_map.insert(binary_file, debuginfo_file);
-        }
-
-        Ok(())
-    }
-
-    pub fn collect_original_build<P, Q>(&mut self, object_dir: P, expected_dir: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let symlinks = fs::list_symlinks(&object_dir, fs::TraverseOptions { recursive: true })?;
-        for symlink in symlinks {
-            let object = fs::read_link(&symlink)?;
-            if !object.starts_with(expected_dir.as_ref().as_os_str()) {
-                continue;
-            }
-            self.symlink_map.insert(symlink, object);
-        }
-        ensure!(
-            !self.symlink_map.is_empty(),
-            "Cannot find any valid objects in {}",
-            object_dir.as_ref().display()
-        );
-
-        Ok(())
-    }
-
-    pub fn collect_patched_build<P, Q>(&mut self, object_dir: P, expected_dir: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let mut symlink_map = IndexMap::new();
-        let symlinks = fs::list_symlinks(&object_dir, fs::TraverseOptions { recursive: true })?;
-        for symlink in symlinks {
-            let object = fs::read_link(&symlink)?;
-            if !object.starts_with(expected_dir.as_ref().as_os_str()) {
-                continue;
-            }
-            symlink_map.insert(object, symlink);
-        }
-        ensure!(
-            !self.symlink_map.is_empty(),
-            "Cannot find any valid objects in {}",
-            object_dir.as_ref().display()
-        );
-
-        for (binary, _) in &self.debuginfo_map {
-            let mut objects = IndexSet::new();
-
-            let upatch_ids = Self::parse_upatch_ids(binary)
-                .with_context(|| format!("Failed to parse upatch id of {}", binary.display()))?;
-            for upatch_id in upatch_ids {
-                let patched_object = Self::get_object_file(&expected_dir, &upatch_id)
-                    .with_context(|| {
-                        format!("Failed to get object of {}", upatch_id.to_string_lossy())
-                    })?;
-                let original_object = symlink_map
-                    .get(&patched_object)
-                    .and_then(|path| self.symlink_map.get(path))
-                    .with_context(|| {
-                        format!(
-                            "failed to find original object of {}",
-                            patched_object.display()
-                        )
+            let binary_path = binary_dir.as_ref().join(&binary);
+            let binary_files =
+                fs::list_files(&binary_dir, fs::TraverseOptions { recursive: true })?
+                    .into_iter()
+                    .filter(|file_path| {
+                        file_path.ends_with(binary.as_ref().as_os_str())
+                            && matches!(
+                                elf::parse_file_kind(file_path).unwrap_or(ObjectKind::Unknown),
+                                ObjectKind::Executable | ObjectKind::Dynamic
+                            )
                     })
-                    .cloned()?;
+                    .collect::<IndexSet<_>>();
 
-                // Update object relations
-                self.original_object_map
-                    .insert(patched_object.to_owned(), original_object);
-                objects.insert(patched_object);
-            }
-            self.patch_objects_map.insert(binary.to_owned(), objects);
+            ensure!(
+                !binary_files.is_empty(),
+                "Path {} does not match to any file",
+                binary_path.display()
+            );
+            ensure!(
+                binary_files.len() == 1,
+                "Path {} matches to too many file",
+                binary_path.display()
+            );
+            self.binary_debuginfo_map
+                .insert(binary_files[0].clone(), debuginfo.as_ref().to_path_buf());
         }
-        self.symlink_map.clear(); // clear useless records
+
+        Ok(())
+    }
+
+    pub fn collect_original_build<P, Q>(&mut self, object_dir: P, collect_dir: Q) -> Result<()>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let id_object_map = Self::collect_objects(&object_dir, &collect_dir)?;
+        for (_, (object_file, object_archive)) in id_object_map {
+            self.original_object_map.insert(object_file, object_archive);
+        }
+
+        Ok(())
+    }
+
+    pub fn collect_patched_build<P, Q>(&mut self, object_dir: P, collect_dir: Q) -> Result<()>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let id_object_map = Self::collect_objects(&object_dir, &collect_dir)?;
+        let binary_id_map = Self::collect_binaries(self.binary_debuginfo_map.keys())?;
+
+        for (binary_file, upatch_ids) in binary_id_map {
+            let mut object_relation = IndexMap::new();
+
+            for upatch_id in upatch_ids {
+                let (object_file, patched_object) =
+                    id_object_map.get(&upatch_id).with_context(|| {
+                        format!(
+                            "Cannot find patched object of {}",
+                            upatch_id.to_string_lossy()
+                        )
+                    })?;
+                let original_object = self
+                    .original_object_map
+                    .get(object_file)
+                    .map(|p| p.as_path())
+                    .unwrap_or_else(|| Path::new(NON_EXIST_PATH));
+
+                object_relation.insert(patched_object.to_path_buf(), original_object.to_path_buf());
+            }
+            object_relation.sort_keys();
+
+            self.binary_relation_map
+                .insert(binary_file, object_relation);
+        }
 
         Ok(())
     }
 
     pub fn get_files(&self) -> impl IntoIterator<Item = (&Path, &Path)> {
-        self.debuginfo_map
+        self.binary_debuginfo_map
             .iter()
             .map(|(binary, debuginfo)| (binary.as_path(), debuginfo.as_path()))
     }
 
-    pub fn get_patched_objects<P: AsRef<Path>>(&self, binary: P) -> Option<&IndexSet<PathBuf>> {
-        self.patch_objects_map.get(binary.as_ref())
-    }
-
-    pub fn get_original_object<P: AsRef<Path>>(&self, object: P) -> Option<&Path> {
-        self.original_object_map
-            .get(object.as_ref())
-            .map(|p| p.as_path())
+    pub fn binary_objects<P: AsRef<Path>>(&self, binary: P) -> Option<&IndexMap<PathBuf, PathBuf>> {
+        self.binary_relation_map.get(binary.as_ref())
     }
 }
 
 impl FileRelation {
-    fn find_binary_file<P: AsRef<Path>>(binary: P) -> Result<PathBuf> {
-        let binary_file = binary.as_ref();
-        let matched_file = fs::glob(binary_file)?
-            .into_iter()
-            .filter(|path| {
-                path.is_file()
-                    && fs::open_file(path)
-                        .map(|file| check_elf(&file).is_ok())
-                        .unwrap_or(false)
-            })
-            .collect::<Vec<_>>(); // for rpm's "BUILDROOT/*/path"
+    fn parse_upatch_ids<P: AsRef<Path>>(file_path: P) -> Result<IndexSet<OsString>> {
+        let file_path = file_path.as_ref();
+        let elf_file = elf::read::Elf::parse(file_path).context("Failed to parse elf")?;
+        let symbols = elf_file.symbols().context("Failed to read elf symbols")?;
 
-        match matched_file.len() {
-            1 => Ok(matched_file[0].clone()),
-            0 => bail!("Path does not match to any binary"),
-            _ => bail!("Path matches to too many binaries"),
+        let mut upatch_ids = IndexSet::new();
+        for symbol in symbols {
+            let symbol_name = symbol.get_st_name();
+            if symbol_name.starts_with(UPATCH_ID_PREFIX) {
+                upatch_ids.insert(symbol_name.to_os_string());
+            }
         }
+
+        Ok(upatch_ids)
     }
 
-    fn get_object_file<P, S>(object_dir: P, upatch_id: S) -> Result<PathBuf>
+    fn collect_binaries<I, P>(binaries: I) -> Result<IndexMap<PathBuf, IndexSet<OsString>>>
+    where
+        I: IntoIterator<Item = P>,
+        P: AsRef<Path>,
+    {
+        let mut binary_id_map = IndexMap::new();
+
+        for binary in binaries {
+            let binary_file = binary.as_ref();
+            binary_id_map.insert(
+                binary_file.to_path_buf(),
+                Self::parse_upatch_ids(binary_file).with_context(|| {
+                    format!("Failed to parse upatch id of {}", binary_file.display())
+                })?,
+            );
+        }
+        binary_id_map.sort_keys();
+
+        Ok(binary_id_map)
+    }
+
+    fn collect_objects<P, Q>(
+        search_dir: P,
+        target_dir: Q,
+    ) -> Result<IndexMap<OsString, (PathBuf, PathBuf)>>
     where
         P: AsRef<Path>,
-        S: AsRef<OsStr>,
+        Q: AsRef<Path>,
     {
-        let mut file_path = object_dir.as_ref().join(upatch_id.as_ref());
-        file_path.set_extension(OBJECT_EXTENSION);
+        let mut object_files = IndexSet::new();
 
+        let matched_dirs = fs::glob(&search_dir)
+            .with_context(|| format!("Cannot match path {}", search_dir.as_ref().display()))?;
+        for matched_dir in matched_dirs {
+            object_files.extend(elf::find_elf_files(&matched_dir, |obj_path, obj_kind| {
+                !obj_path.contains(BUILD_ROOT_PREFIX) && (obj_kind == ObjectKind::Relocatable)
+            })?);
+        }
         ensure!(
-            file_path.is_file(),
-            "Cannot access object {}",
-            file_path.display()
+            !object_files.is_empty(),
+            "Cannot find any valid objects in {}, please add compile flag '-save-temps' manually",
+            search_dir.as_ref().display()
         );
-        Ok(file_path)
-    }
 
-    /*
-     * To find out the relationship between the object and the binary file,
-     * we add a marker symbol to the object that matches its file name, named ."upatch_xxx."
-     * Once the binary is linked, all of the object's marker symbols will be linked into the binary.
-     * Thus, we can find out which object is associated w/ the binary by looking up the marker symbols.
-     */
-    fn parse_upatch_ids<P: AsRef<Path>>(binary: P) -> Result<IndexSet<OsString>> {
-        let object_path = binary.as_ref();
-        let object_elf = read::Elf::parse(object_path).context("Failed to parse elf")?;
-        let object_ids = object_elf
-            .symbols()
-            .context("Failed to read symbols")?
-            .filter_map(|symbol| symbol.get_st_name().strip_prefix(UPATCH_SYM_PREFIX))
-            .map(|upatch_id| upatch_id.to_os_string())
-            .collect::<IndexSet<_>>();
+        let mut object_relations = Vec::with_capacity(object_files.len());
+        for (file_id, object_file) in object_files.into_iter().enumerate() {
+            let object_archive = target_dir.as_ref().join(concat_os!(
+                format!("{:04}-", file_id),
+                object_file.file_name().with_context(|| {
+                    format!("Failed to parse file name of {}", object_file.display())
+                })?
+            ));
+            fs::copy(&object_file, &object_archive)?;
 
-        Ok(object_ids)
+            let upatch_ids = Self::parse_upatch_ids(&object_file).with_context(|| {
+                format!("Failed to parse upatch id of {}", object_file.display())
+            })?;
+            object_relations.push((object_file, object_archive, upatch_ids));
+        }
+
+        let mut id_object_map = IndexMap::with_capacity(object_relations.len());
+        for (object_file, object_archive, object_ids) in &object_relations {
+            if object_relations.iter().all(|(obj, _, ids)| {
+                if (obj != object_file) && !ids.is_empty() && ids.is_subset(object_ids) {
+                    warn!("Skipped object {}", object_archive.display());
+                    return false;
+                }
+                true
+            }) {
+                id_object_map.extend(object_ids.iter().map(|id| {
+                    (
+                        id.to_os_string(),
+                        (object_file.clone(), object_archive.clone()),
+                    )
+                }));
+            }
+        }
+
+        Ok(id_object_map)
     }
 }

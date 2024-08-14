@@ -12,23 +12,21 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    env,
-    ffi::OsStr,
-    fs::Permissions,
-    os::unix::fs::PermissionsExt,
-    path::{Path, PathBuf},
-    process,
-};
+use std::{env, ffi::OsStr, fs::Permissions, os::unix::fs::PermissionsExt, path::Path, process};
 
 use anyhow::{ensure, Context, Result};
 use flexi_logger::{
     DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
 };
-use indexmap::IndexSet;
-use log::{debug, error, info, warn, Level, LevelFilter, Record};
-use object::{write, Object, ObjectSection, SectionKind};
-use syscare_common::{concat_os, fs, os, process::Command};
+use indexmap::{IndexMap, IndexSet};
+use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
+use object::{write, Object, ObjectKind, ObjectSection, SectionKind};
+use syscare_common::{
+    concat_os,
+    fs::{self, MappedFile},
+    os,
+    process::Command,
+};
 
 mod args;
 mod build_root;
@@ -41,8 +39,8 @@ mod resolve;
 
 use args::Arguments;
 use build_root::BuildRoot;
-use compiler::Compiler;
-use dwarf::Dwarf;
+use compiler::CompilerInfo;
+use dwarf::{Dwarf, ProducerType};
 use file_relation::FileRelation;
 use project::Project;
 
@@ -51,42 +49,30 @@ const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
 const CLI_UMASK: u32 = 0o022;
 
-const PATH_ENV_NAME: &str = "PATH";
-const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
-
 const LOG_FILE_NAME: &str = "build";
 
-struct BuildInfo {
-    files: FileRelation,
-    linker: PathBuf,
-    temp_dir: PathBuf,
-    output_dir: PathBuf,
-    verbose: bool,
-}
+const PATH_ENV: &str = "PATH";
+const BINARY_INSTALL_PATH: &str = "/usr/libexec/syscare";
+const UPATCH_DIFF_BIN: &str = "upatch-diff";
 
 struct UpatchBuild {
     args: Arguments,
     logger: LoggerHandle,
     build_root: BuildRoot,
+    compiler_map: IndexMap<ProducerType, CompilerInfo>,
+    file_relation: FileRelation,
 }
 
-/* Initialization */
+/* Main process */
 impl UpatchBuild {
-    fn format_log(
-        w: &mut dyn std::io::Write,
-        _now: &mut DeferredNow,
-        record: &Record,
-    ) -> std::io::Result<()> {
-        write!(w, "{}", &record.args())
-    }
-
     fn new() -> Result<Self> {
-        // Initialize arguments & prepare environments
+        // Setup environment variable & umask
+        let path_env = env::var_os(PATH_ENV)
+            .with_context(|| format!("Cannot read environment variable {}", PATH_ENV))?;
+        env::set_var(PATH_ENV, concat_os!(BINARY_INSTALL_PATH, ":", path_env));
         os::umask::set_umask(CLI_UMASK);
-        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
-            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
-        }
 
+        // Parse arguments
         let args = Arguments::new()?;
         let build_root = BuildRoot::new(&args.build_root)?;
         fs::create_dir_all(&args.output_dir)?;
@@ -122,72 +108,267 @@ impl UpatchBuild {
             args,
             logger,
             build_root,
+            compiler_map: IndexMap::new(),
+            file_relation: FileRelation::new(),
         })
+    }
+
+    fn check_debuginfo(&self) -> Result<()> {
+        let supported_compilers = self
+            .compiler_map
+            .values()
+            .flat_map(|info| &info.producers)
+            .collect::<IndexSet<_>>();
+        for debuginfo in &self.args.debuginfo {
+            for producer in Dwarf::parse(debuginfo)?.producers() {
+                ensure!(
+                    supported_compilers.contains(&producer),
+                    "{} is not supported",
+                    producer.to_string_lossy()
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn build_patch(&self, patch_name: &OsStr, binary: &Path, debuginfo: &Path) -> Result<()> {
+        const NOTES_OBJECT_NAME: &str = "notes.o";
+
+        let temp_dir = self.build_root.build_dir.join(patch_name);
+        let output_dir = self.args.output_dir.as_path();
+
+        let debuginfo_file = temp_dir.join(
+            debuginfo
+                .file_name()
+                .context("Failed to parse debuginfo name")?,
+        );
+        let output_file = output_dir.join(patch_name);
+
+        fs::create_dir_all(&temp_dir)?;
+        fs::copy(debuginfo, &debuginfo_file)?;
+        fs::set_permissions(&debuginfo_file, Permissions::from_mode(0o644))?;
+
+        debug!("- Resolving debuginfo");
+        resolve::resolve_dynamic(&debuginfo_file).context("Failed to resolve debuginfo")?;
+
+        debug!("- Creating diff objects");
+        let binary_objects = self
+            .file_relation
+            .binary_objects(binary)
+            .with_context(|| format!("Failed to find objects of {}", binary.display()))?;
+
+        for (patched_object, original_object) in binary_objects {
+            debug!(
+                "* {}",
+                patched_object
+                    .file_name()
+                    .unwrap_or(patched_object.as_os_str())
+                    .to_string_lossy()
+            );
+            Self::create_diff_objs(original_object, patched_object, &debuginfo_file, &temp_dir)
+                .with_context(|| {
+                    format!(
+                        "Failed to create diff objects for {}",
+                        patch_name.to_string_lossy()
+                    )
+                })?;
+        }
+
+        debug!("- Collecting changes");
+        let mut changed_objects =
+            elf::find_elf_files(&temp_dir, |_, obj_kind| obj_kind == ObjectKind::Relocatable)?;
+        if changed_objects.is_empty() {
+            debug!("- No functional changes");
+            return Ok(());
+        }
+
+        debug!("- Creating patch notes");
+        let notes_object = temp_dir.join(NOTES_OBJECT_NAME);
+        Self::create_note(&debuginfo_file, &notes_object)
+            .context("Failed to create patch notes")?;
+        changed_objects.push(notes_object);
+
+        debug!("- Linking patch objects");
+        let mut link_compiler = ProducerType::C;
+        for object in &changed_objects {
+            if Dwarf::parse(object)?
+                .producer_types()
+                .contains(&ProducerType::Cxx)
+            {
+                link_compiler = ProducerType::Cxx;
+                break;
+            }
+        }
+
+        let compiler_info = self
+            .compiler_map
+            .get(&link_compiler)
+            .with_context(|| format!("Failed to get link compiler {}", link_compiler))?;
+        Self::link_objects(&compiler_info.linker, &changed_objects, &output_file)
+            .context("Failed to link patch objects")?;
+
+        debug!("- Resolving patch");
+        resolve::resolve_upatch(&output_file, &debuginfo_file)
+            .context("Failed to resolve patch")?;
+
+        debug!("- Done");
+        Ok(())
+    }
+
+    fn build_patches(&self) -> Result<()> {
+        for (binary, debuginfo) in self.file_relation.get_files() {
+            let binary_name = binary
+                .file_name()
+                .with_context(|| format!("Failed to parse binary name of {}", binary.display()))?;
+            let patch_name = if self.args.prefix.is_empty() {
+                binary_name.to_os_string()
+            } else {
+                concat_os!(&self.args.prefix, "-", binary_name)
+            };
+            debug!("Generating patch '{}'", patch_name.to_string_lossy());
+            self.build_patch(&patch_name, binary, debuginfo)
+                .with_context(|| {
+                    format!("Failed to build patch '{}'", patch_name.to_string_lossy())
+                })?;
+        }
+
+        Ok(())
+    }
+
+    fn run(&mut self) -> Result<()> {
+        let compilers = self.args.compiler.as_slice();
+        let binary_dir = self.args.binary_dir.as_path();
+        let object_dir = self.args.object_dir.as_path();
+        let binaries = self.args.binary.as_slice();
+        let debuginfos = self.args.debuginfo.as_slice();
+
+        let temp_dir = self.build_root.build_dir.as_path();
+        let original_dir = self.build_root.original_dir.as_path();
+        let patched_dir = self.build_root.patched_dir.as_path();
+
+        info!("==============================");
+        info!("{}", CLI_ABOUT);
+        info!("==============================");
+        trace!("{:#?}", self.args);
+
+        info!("Checking compiler(s)");
+        self.compiler_map = CompilerInfo::parse(compilers, temp_dir)?;
+
+        info!("------------------------------");
+        info!("Compiler");
+        info!("------------------------------");
+        for (producer_type, compiler_info) in &self.compiler_map {
+            info!(
+                "[{}] compiler: {}, assembler: {}, linker: {}",
+                producer_type,
+                compiler_info.binary.display(),
+                compiler_info.assembler.display(),
+                compiler_info.linker.display(),
+            );
+        }
+
+        let project = Project::new(&self.args, &self.build_root, &self.compiler_map)?;
+        info!("------------------------------");
+        info!("Project");
+        info!("------------------------------");
+        info!("Testing patch file(s)");
+        project.test_patches().context("Patch test failed")?;
+
+        info!("Checking debuginfo version(s)");
+        if self.args.skip_compiler_check {
+            warn!("Warning: Skipped compiler version check!")
+        } else {
+            self.check_debuginfo().context("Debuginfo check failed")?;
+        }
+
+        info!("Preparing '{}'", project);
+        project
+            .prepare()
+            .with_context(|| format!("Failed to prepare {}", project))?;
+
+        info!("Building '{}'", project);
+        project
+            .build()
+            .with_context(|| format!("Failed to build {}", project))?;
+        self.file_relation
+            .collect_debuginfo(binary_dir, binaries, debuginfos)?;
+        self.file_relation
+            .collect_original_build(object_dir, original_dir)?;
+
+        info!("Cleaning '{}'", project);
+        project
+            .clean()
+            .with_context(|| format!("Failed to clean {}", project))?;
+
+        info!("Patching '{}'", project);
+        project
+            .apply_patches()
+            .with_context(|| format!("Failed to patch {}", project))?;
+
+        info!("Building '{}'", project);
+        project
+            .build()
+            .with_context(|| format!("Failed to build {}", project))?;
+        self.file_relation
+            .collect_patched_build(object_dir, patched_dir)?;
+        trace!("{:#?}", self.file_relation);
+
+        info!("------------------------------");
+        info!("Patches");
+        info!("------------------------------");
+        self.build_patches()?;
+
+        if !self.args.skip_cleanup {
+            info!("Cleaning up");
+            self.build_root.remove().ok();
+        }
+
+        info!("Done");
+        Ok(())
     }
 }
 
 /* Tool functions */
 impl UpatchBuild {
-    fn check_debuginfo(compilers: &[Compiler], debuginfos: &[PathBuf]) -> Result<()> {
-        let supported_versions = compilers
-            .iter()
-            .flat_map(|c| c.versions.iter().map(|s| s.as_os_str()))
-            .collect::<IndexSet<_>>();
-
-        debug!("Supported versions:");
-        for version in &supported_versions {
-            debug!("- {}", version.to_string_lossy());
-        }
-
-        for debuginfo in debuginfos {
-            let versions = Dwarf::parse_compiler_versions(debuginfo).with_context(|| {
-                format!("Failed to parse compiler name of {}", debuginfo.display())
-            })?;
-            for version in versions {
-                ensure!(
-                    supported_versions.contains(version.as_os_str()),
-                    "{} version mismatched, version={}",
-                    debuginfo.display(),
-                    version.to_string_lossy()
-                );
-            }
-        }
-        Ok(())
+    fn format_log(
+        w: &mut dyn std::io::Write,
+        _now: &mut DeferredNow,
+        record: &Record,
+    ) -> std::io::Result<()> {
+        write!(w, "{}", record.args())
     }
 
-    fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(debuginfo: P, path: Q) -> Result<()> {
-        let debuginfo_elf = unsafe { memmap2::Mmap::map(&std::fs::File::open(debuginfo)?)? };
+    fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(debuginfo: P, output_file: Q) -> Result<()> {
+        let debuginfo_file = MappedFile::open(&debuginfo)?;
+        let object_file = object::File::parse(debuginfo_file.as_bytes())
+            .with_context(|| format!("Failed to parse {}", debuginfo.as_ref().display()))?;
 
-        let input_obj =
-            object::File::parse(&*debuginfo_elf).context("Failed to parse debuginfo")?;
-        let mut output_obj = write::Object::new(
-            input_obj.format(),
-            input_obj.architecture(),
-            input_obj.endianness(),
+        let mut new_object = write::Object::new(
+            object_file.format(),
+            object_file.architecture(),
+            object_file.endianness(),
         );
 
-        for input_section in input_obj.sections() {
-            if input_section.kind() != SectionKind::Note {
+        for section in object_file.sections() {
+            if section.kind() != SectionKind::Note {
                 continue;
             }
 
-            let section_name = input_section.name().context("Failed to get section name")?;
-            let section_data = input_section.data().context("Failed to get section data")?;
-            let section_id = output_obj.add_section(
-                vec![],
-                section_name.as_bytes().to_vec(),
-                input_section.kind(),
-            );
+            let section_name = section.name().context("Failed to get section name")?;
+            let section_data = section.data().context("Failed to get section data")?;
+            let section_id =
+                new_object.add_section(vec![], section_name.as_bytes().to_vec(), section.kind());
 
-            let output_section = output_obj.section_mut(section_id);
-            output_section.set_data(section_data, input_section.align());
-            output_section.flags = input_section.flags();
+            let new_section = new_object.section_mut(section_id);
+            new_section.set_data(section_data, section.align());
+            new_section.flags = section.flags();
         }
 
-        let contents = output_obj
+        let contents = new_object
             .write()
             .context("Failed to serialize note object")?;
-        fs::write(path, contents)?;
+        fs::write(output_file, contents)?;
 
         Ok(())
     }
@@ -197,10 +378,7 @@ impl UpatchBuild {
         patched_object: &Path,
         debuginfo: &Path,
         output_dir: &Path,
-        verbose: bool,
     ) -> Result<()> {
-        const UPATCH_DIFF_BIN: &str = "upatch-diff";
-
         let ouput_name = original_object.file_name().with_context(|| {
             format!(
                 "Failed to parse patch file name of {}",
@@ -215,14 +393,10 @@ impl UpatchBuild {
             .arg(original_object)
             .arg("-p")
             .arg(patched_object)
-            .arg("-o")
-            .arg(output_file)
             .arg("-r")
-            .arg(debuginfo);
-
-        if verbose {
-            command.arg("-d");
-        }
+            .arg(debuginfo)
+            .arg("-o")
+            .arg(output_file);
 
         command.stdout(Level::Trace).run_with_output()?.exit_ok()
     }
@@ -238,213 +412,9 @@ impl UpatchBuild {
             .args(["-r", "-o"])
             .arg(output.as_ref())
             .args(objects)
-            .run()?
+            .stdout(Level::Trace)
+            .run_with_output()?
             .exit_ok()
-    }
-}
-
-/* Main process */
-impl UpatchBuild {
-    fn build_patch(
-        &self,
-        build_info: &BuildInfo,
-        binary: &Path,
-        debuginfo: &Path,
-        output_file: &Path,
-    ) -> Result<()> {
-        const OBJECT_EXTENSION: &str = "o";
-        const NOTES_OBJECT_NAME: &str = "notes.o";
-
-        let binary_name = binary.file_name().context("Failed to parse binary name")?;
-        let debuginfo_name = debuginfo
-            .file_name()
-            .context("Failed to parse debuginfo name")?;
-        let temp_dir = build_info.temp_dir.join(binary_name);
-        let new_debuginfo = temp_dir.join(debuginfo_name);
-
-        debug!("- Preparing to build patch");
-        fs::create_dir_all(&temp_dir)?;
-        fs::copy(debuginfo, &new_debuginfo)?;
-        fs::set_permissions(&new_debuginfo, Permissions::from_mode(0o644))?;
-
-        debug!("- Resolving debuginfo");
-        resolve::resolve_dynamic(&new_debuginfo).context("Failed to resolve debuginfo")?;
-
-        debug!("- Creating diff objects");
-        let patched_objects = build_info
-            .files
-            .get_patched_objects(binary)
-            .with_context(|| format!("Failed to find objects of {}", binary.display()))?;
-
-        for patched_object in patched_objects {
-            let original_object = build_info
-                .files
-                .get_original_object(patched_object)
-                .with_context(|| {
-                    format!(
-                        "Failed to find patched object of {}",
-                        patched_object.display()
-                    )
-                })?;
-
-            UpatchBuild::create_diff_objs(
-                original_object,
-                patched_object,
-                &new_debuginfo,
-                &temp_dir,
-                build_info.verbose,
-            )
-            .with_context(|| format!("Failed to create diff objects for {}", binary.display()))?;
-        }
-
-        debug!("- Collecting changes");
-        let mut changed_objects = fs::list_files_by_ext(
-            &temp_dir,
-            OBJECT_EXTENSION,
-            fs::TraverseOptions { recursive: false },
-        )?;
-        if changed_objects.is_empty() {
-            debug!("- No functional changes");
-            return Ok(());
-        }
-
-        debug!("- Creating patch notes");
-        let notes_object = temp_dir.join(NOTES_OBJECT_NAME);
-        Self::create_note(&new_debuginfo, &notes_object).context("Failed to create patch notes")?;
-        changed_objects.push(notes_object);
-
-        debug!("- Linking patch objects");
-        Self::link_objects(&build_info.linker, &changed_objects, output_file)
-            .context("Failed to link patch objects")?;
-
-        debug!("- Resolving patch");
-        resolve::resolve_upatch(output_file, &new_debuginfo).context("Failed to resolve patch")?;
-
-        debug!("- Patch: {}", output_file.display());
-        Ok(())
-    }
-
-    fn build_patches(&self, build_info: BuildInfo, name: &OsStr) -> Result<()> {
-        for (binary, debuginfo) in build_info.files.get_files() {
-            let binary_name = binary
-                .file_name()
-                .with_context(|| format!("Failed to parse binary name of {}", binary.display()))?;
-            let patch_name = if name.is_empty() {
-                binary_name.to_os_string()
-            } else {
-                concat_os!(name, "-", binary_name)
-            };
-            let output_file = build_info.output_dir.join(&patch_name);
-
-            info!("Generating patch for '{}'", patch_name.to_string_lossy());
-            self.build_patch(&build_info, binary, debuginfo, &output_file)
-                .with_context(|| {
-                    format!("Failed to build patch '{}'", patch_name.to_string_lossy())
-                })?;
-        }
-
-        Ok(())
-    }
-
-    fn run(&mut self) -> Result<()> {
-        let name = self.args.name.as_os_str();
-        let output_dir = self.args.output_dir.as_path();
-        let object_dir = self.args.object_dir.as_path();
-        let binaries = self.args.elf.as_slice();
-        let debuginfos = self.args.debuginfo.as_slice();
-        let verbose = self.args.verbose;
-
-        let temp_dir = self.build_root.temp_dir.as_path();
-        let original_dir = self.build_root.original_dir.as_path();
-        let patched_dir = self.build_root.patched_dir.as_path();
-
-        info!("==============================");
-        info!("{}", CLI_ABOUT);
-        info!("==============================");
-        info!("Checking compiler(s)");
-
-        let compilers = Compiler::parse(&self.args.compiler, temp_dir)?;
-        let linker = compilers
-            .iter()
-            .map(|c| c.linker.clone())
-            .collect::<IndexSet<_>>()
-            .pop()
-            .context("Failed to find any linker")?;
-
-        debug!("------------------------------");
-        debug!("Compiler");
-        debug!("------------------------------");
-        for compiler in &compilers {
-            debug!("{}", compiler);
-        }
-        debug!("------------------------------");
-
-        let project = Project::new(&self.args, &self.build_root);
-        info!("------------------------------");
-        info!("Project {}", project);
-        info!("------------------------------");
-        info!("Testing patch file(s)");
-        project
-            .test_patches(&self.args.patch)
-            .context("Patch test failed")?;
-
-        info!("Checking debuginfo version(s)");
-        if self.args.skip_compiler_check {
-            warn!("Warning: Skipped compiler version check!")
-        } else {
-            Self::check_debuginfo(&compilers, debuginfos).context("Debuginfo check failed")?;
-        }
-
-        let mut files = FileRelation::new();
-
-        info!("Preparing {}", project);
-        project
-            .prepare()
-            .with_context(|| format!("Failed to prepare {}", project))?;
-
-        info!("Building {}", project);
-        project
-            .build()
-            .with_context(|| format!("Failed to build {}", project))?;
-
-        info!("Collecting file relations");
-        files.collect_debuginfo(binaries, debuginfos)?;
-        files.collect_original_build(object_dir, original_dir)?;
-
-        info!("Preparing {}", project);
-        project
-            .prepare()
-            .with_context(|| format!("Failed to prepare {}", project))?;
-
-        info!("Patching {}", project);
-        project
-            .apply_patches(&self.args.patch)
-            .with_context(|| format!("Failed to patch {}", project))?;
-
-        info!("Rebuilding {}", project);
-        project
-            .rebuild()
-            .with_context(|| format!("Failed to rebuild {}", project))?;
-
-        info!("Collecting file relations");
-        files.collect_patched_build(object_dir, patched_dir)?;
-
-        let build_info = BuildInfo {
-            linker,
-            files,
-            temp_dir: temp_dir.to_path_buf(),
-            output_dir: output_dir.to_path_buf(),
-            verbose,
-        };
-        self.build_patches(build_info, name)?;
-
-        if !self.args.skip_cleanup {
-            info!("Cleaning up");
-            self.build_root.remove().ok();
-        }
-
-        info!("Done");
-        Ok(())
     }
 }
 

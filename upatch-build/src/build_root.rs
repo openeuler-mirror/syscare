@@ -19,30 +19,38 @@ use syscare_common::fs;
 
 pub struct BuildRoot {
     pub path: PathBuf,
+    pub bin_dir: PathBuf,
+    pub script_dir: PathBuf,
+    pub build_dir: PathBuf,
     pub original_dir: PathBuf,
     pub patched_dir: PathBuf,
-    pub temp_dir: PathBuf,
     pub log_file: PathBuf,
 }
 
 impl BuildRoot {
     pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
         let path = directory.as_ref().to_path_buf();
+        let bin_dir = path.join("bin");
+        let script_dir = path.join("script");
+        let build_dir = path.join("build");
         let original_dir = path.join("original");
         let patched_dir = path.join("patched");
-        let temp_dir = path.join("temp");
         let log_file = path.join("build.log");
 
         fs::create_dir_all(&path)?;
+        fs::create_dir_all(&bin_dir)?;
+        fs::create_dir_all(&script_dir)?;
+        fs::create_dir_all(&build_dir)?;
         fs::create_dir_all(&original_dir)?;
         fs::create_dir_all(&patched_dir)?;
-        fs::create_dir_all(&temp_dir)?;
 
         Ok(Self {
             path,
+            bin_dir,
+            script_dir,
+            build_dir,
             original_dir,
             patched_dir,
-            temp_dir,
             log_file,
         })
     }

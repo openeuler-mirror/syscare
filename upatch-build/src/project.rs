@@ -13,6 +13,7 @@
  */
 
 use std::{
+    env,
     ffi::{OsStr, OsString},
     fs::File,
     io::Write,
@@ -21,48 +22,81 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-
+use indexmap::IndexMap;
 use log::{debug, Level};
-use syscare_common::{fs, process::Command};
+use which::which;
 
-use crate::{args::Arguments, build_root::BuildRoot};
+use crate::{args::Arguments, build_root::BuildRoot, compiler::CompilerInfo, dwarf::ProducerType};
+use syscare_common::{concat_os, fs, process::Command};
 
 const PATCH_BIN: &str = "patch";
-const COMPILER_CMD_ENV: &str = "UPATCH_HELPER";
+const UPATCH_HELPER_BIN: &str = "upatch-helper";
+const UPATCH_HELPER_CC_BIN: &str = "upatch-cc";
+const UPATCH_HELPER_CXX_BIN: &str = "upatch-c++";
 
 const PREPARE_SCRIPT_NAME: &str = "prepare.sh";
 const BUILD_SCRIPT_NAME: &str = "build.sh";
+const CLEAN_SCRIPT_NAME: &str = "clean.sh";
+
+const PATH_ENV: &str = "PATH";
+const CC_ENV: &str = "CC";
+const CXX_ENV: &str = "CXX";
+
+const UPATCH_CC_ENV: &str = "UPATCH_HELPER_CC";
+const UPATCH_CXX_ENV: &str = "UPATCH_HELPER_CXX";
 
 pub struct Project<'a> {
     name: OsString,
-    root_dir: &'a Path,
-    build_dir: &'a Path,
-    original_dir: &'a Path,
-    patched_dir: &'a Path,
-    prepare_cmd: &'a str,
-    build_cmd: &'a str,
+    build_root: &'a BuildRoot,
+    source_dir: &'a Path,
+    prepare_cmd: &'a OsStr,
+    build_cmd: &'a OsStr,
+    clean_cmd: &'a OsStr,
+    patches: &'a [PathBuf],
 }
 
 impl<'a> Project<'a> {
-    pub fn new(args: &'a Arguments, build_root: &'a BuildRoot) -> Self {
-        let root_dir = args.source_dir.as_path();
-        let build_dir = build_root.temp_dir.as_path();
-        let original_dir = build_root.original_dir.as_path();
-        let patched_dir = build_root.patched_dir.as_path();
+    pub fn new(
+        args: &'a Arguments,
+        build_root: &'a BuildRoot,
+        compiler_map: &'a IndexMap<ProducerType, CompilerInfo>,
+    ) -> Result<Self> {
+        let path_env = env::var_os(PATH_ENV)
+            .with_context(|| format!("Cannot read environment variable '{}'", PATH_ENV))?;
+        let upatch_helper = which(UPATCH_HELPER_BIN)
+            .with_context(|| format!("Cannot find component '{}'", UPATCH_HELPER_BIN))?;
 
-        let name = fs::file_name(root_dir);
-        let prepare_cmd = args.prepare_cmd.as_str();
-        let build_cmd = args.build_cmd.as_str();
+        for (producer_type, compiler_info) in compiler_map {
+            let compiler_bin = compiler_info.binary.as_path();
+            let compiler_name = compiler_bin
+                .file_name()
+                .context("Failed to parse compiler name")?;
 
-        Self {
-            name,
-            root_dir,
-            build_dir,
-            original_dir,
-            patched_dir,
-            prepare_cmd,
-            build_cmd,
+            match producer_type {
+                ProducerType::C => env::set_var(UPATCH_CC_ENV, compiler_bin),
+                ProducerType::Cxx => env::set_var(UPATCH_CXX_ENV, compiler_bin),
+                _ => {}
+            }
+            fs::soft_link(&upatch_helper, build_root.bin_dir.join(compiler_name))?;
         }
+
+        env::set_var(PATH_ENV, concat_os!(&build_root.bin_dir, ":", path_env));
+        env::set_var(CC_ENV, UPATCH_HELPER_CC_BIN);
+        env::set_var(CXX_ENV, UPATCH_HELPER_CXX_BIN);
+
+        Ok(Self {
+            name: args
+                .source_dir
+                .file_name()
+                .context("Failed to parse project name")?
+                .to_os_string(),
+            build_root,
+            source_dir: args.source_dir.as_path(),
+            prepare_cmd: args.prepare_cmd.as_os_str(),
+            build_cmd: args.build_cmd.as_os_str(),
+            clean_cmd: args.clean_cmd.as_os_str(),
+            patches: args.patch.as_slice(),
+        })
     }
 }
 
@@ -77,7 +111,7 @@ impl Project<'_> {
             .args(args)
             .arg("-i")
             .arg(patch_file.as_ref())
-            .current_dir(self.root_dir)
+            .current_dir(self.source_dir)
             .run_with_output()?
             .exit_ok()
     }
@@ -87,12 +121,11 @@ impl Project<'_> {
         S: AsRef<OsStr>,
         T: AsRef<OsStr>,
     {
-        let script = self.build_dir.join(script_name.as_ref());
+        let script = self.build_root.script_dir.join(script_name.as_ref());
 
         let mut script_file = File::create(&script)?;
         script_file.write_all(b"#!/bin/bash\n")?;
         script_file.write_all(command.as_ref().as_bytes())?;
-        drop(script_file);
 
         Ok(script)
     }
@@ -102,31 +135,13 @@ impl Project<'_> {
         S: AsRef<OsStr>,
         T: AsRef<OsStr>,
     {
-        let script = self.create_script(script_name, command)?;
-
-        Command::new("sh")
-            .arg(script)
-            .current_dir(self.root_dir)
-            .stdout(Level::Debug)
-            .run_with_output()?
-            .exit_ok()
-    }
-
-    fn exec_build_command<S, T, P>(&self, script_name: S, command: T, object_dir: P) -> Result<()>
-    where
-        S: AsRef<OsStr>,
-        T: AsRef<OsStr>,
-        P: AsRef<Path>,
-    {
         if command.as_ref().is_empty() {
             return Ok(());
         }
         let script = self.create_script(script_name, command)?;
-
         Command::new("sh")
             .arg(script)
-            .env(COMPILER_CMD_ENV, object_dir.as_ref())
-            .current_dir(self.root_dir)
+            .current_dir(self.source_dir)
             .stdout(Level::Debug)
             .run_with_output()?
             .exit_ok()
@@ -134,29 +149,28 @@ impl Project<'_> {
 }
 
 impl Project<'_> {
-    pub fn apply_patches<P: AsRef<Path>>(&self, patches: &[P]) -> Result<()> {
-        for patch in patches {
-            debug!("- Applying patch");
+    pub fn apply_patches(&self) -> Result<()> {
+        for patch in self.patches.iter() {
+            debug!("* {}", patch.display());
             self.patch(patch, ["-N", "-p1"])
-                .with_context(|| format!("Failed to patch {}", patch.as_ref().display()))?;
+                .with_context(|| format!("Failed to patch {}", patch.display()))?;
         }
 
         Ok(())
     }
 
-    pub fn remove_patches<P: AsRef<Path>>(&self, patches: &[P]) -> Result<()> {
-        debug!("- Removing patch");
-        for patch in patches.iter().rev() {
+    pub fn remove_patches(&self) -> Result<()> {
+        for patch in self.patches.iter().rev() {
             self.patch(patch, ["-R", "-p1"])
-                .with_context(|| format!("Failed to unpatch {}", patch.as_ref().display()))?;
+                .with_context(|| format!("Failed to unpatch {}", patch.display()))?;
         }
 
         Ok(())
     }
 
-    pub fn test_patches<P: AsRef<Path>>(&self, patches: &[P]) -> Result<()> {
-        self.apply_patches(patches)?;
-        self.remove_patches(patches)?;
+    pub fn test_patches(&self) -> Result<()> {
+        self.apply_patches()?;
+        self.remove_patches()?;
 
         Ok(())
     }
@@ -166,16 +180,22 @@ impl Project<'_> {
     }
 
     pub fn build(&self) -> Result<()> {
-        self.exec_build_command(BUILD_SCRIPT_NAME, self.build_cmd, self.original_dir)
+        self.exec_command(BUILD_SCRIPT_NAME, self.build_cmd)
     }
 
-    pub fn rebuild(&self) -> Result<()> {
-        self.exec_build_command(BUILD_SCRIPT_NAME, self.build_cmd, self.patched_dir)
+    pub fn clean(&self) -> Result<()> {
+        self.exec_command(CLEAN_SCRIPT_NAME, self.clean_cmd)
     }
 }
 
 impl std::fmt::Display for Project<'_> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{}", self.name.to_string_lossy())
+    }
+}
+
+impl Drop for Project<'_> {
+    fn drop(&mut self) {
+        self.remove_patches().ok();
     }
 }

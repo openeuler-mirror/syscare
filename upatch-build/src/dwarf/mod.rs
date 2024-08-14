@@ -22,7 +22,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{Context, Result};
+use anyhow::Result;
 use gimli::{
     constants, Attribute, AttributeValue, EndianSlice, Endianity, Reader, RunTimeEndian, SectionId,
 };
@@ -34,51 +34,90 @@ use object::{
 };
 use typed_arena::Arena;
 
-use syscare_common::ffi::OsStrExt;
+use syscare_common::{ffi::OsStrExt, fs::MappedFile};
 
 use relocate::Relocate;
 
 #[allow(non_snake_case)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct CompileUnit {
-    pub producer: OsString,   // DW_AT_producer
-    pub compile_dir: PathBuf, // DW_AT_comp_dir
-    pub file_name: PathBuf,   // DW_AT_name
+    producer: OsString,   // DW_AT_producer
+    compile_dir: PathBuf, // DW_AT_comp_dir
+    file_name: PathBuf,   // DW_AT_name
 }
 
-pub struct Dwarf;
+impl CompileUnit {
+    pub fn producer(&self) -> OsString {
+        self.producer
+            .split('-')
+            .next()
+            .map(|s| s.trim().to_os_string())
+            .unwrap_or_else(|| self.producer.clone())
+    }
+
+    pub fn producer_type(&self) -> ProducerType {
+        ProducerType::from(&self.producer)
+    }
+}
+
+#[derive(Debug, Clone, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum ProducerType {
+    C,
+    Cxx,
+    As,
+    Unknown,
+}
+
+impl<S: AsRef<OsStr>> From<S> for ProducerType {
+    fn from(s: S) -> Self {
+        if s.as_ref().contains("C++") {
+            ProducerType::Cxx
+        } else if s.as_ref().contains("C") {
+            ProducerType::C
+        } else if s.as_ref().contains("AS") {
+            ProducerType::As
+        } else {
+            ProducerType::Unknown
+        }
+    }
+}
+
+impl std::fmt::Display for ProducerType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            ProducerType::C => "C",
+            ProducerType::Cxx => "CXX",
+            ProducerType::As => "AS",
+            ProducerType::Unknown => "Unknown",
+        })
+    }
+}
+
+pub struct Dwarf {
+    pub units: IndexSet<CompileUnit>,
+}
 
 impl Dwarf {
-    pub fn parse<P: AsRef<Path>>(file_path: P) -> Result<Vec<CompileUnit>> {
-        // use mmap here, but depend on some devices
-        let elf = file_path.as_ref();
-        let file = std::fs::File::open(elf)?;
-        let mmap = unsafe { memmap2::Mmap::map(&file)? };
-
-        let object = File::parse(&*mmap)?;
+    pub fn parse<P: AsRef<Path>>(file_path: P) -> Result<Self> {
+        let mmap = MappedFile::open(file_path)?;
+        let object = File::parse(mmap.as_bytes())?;
         let endian = if object.is_little_endian() {
             gimli::RunTimeEndian::Little
         } else {
             gimli::RunTimeEndian::Big
         };
 
-        Self::get_files(&object, endian)
+        Ok(Self {
+            units: Self::parse_compile_units(&object, endian)?,
+        })
     }
 
-    pub fn parse_compiler_versions<P: AsRef<Path>>(object: P) -> Result<IndexSet<OsString>> {
-        let compiler_versions = Dwarf::parse(&object)
-            .with_context(|| format!("Failed to read dwarf of {}", object.as_ref().display()))?
-            .into_iter()
-            .filter_map(|dwarf| {
-                dwarf
-                    .producer
-                    .split('-')
-                    .next()
-                    .map(|s| s.trim().to_os_string())
-            })
-            .collect::<IndexSet<_>>();
+    pub fn producers(&self) -> IndexSet<OsString> {
+        self.units.iter().map(|unit| unit.producer()).collect()
+    }
 
-        Ok(compiler_versions)
+    pub fn producer_types(&self) -> IndexSet<ProducerType> {
+        self.units.iter().map(|unit| unit.producer_type()).collect()
     }
 }
 
@@ -159,7 +198,7 @@ impl Dwarf {
         })
     }
 
-    fn get_files(file: &File, endian: RunTimeEndian) -> Result<Vec<CompileUnit>> {
+    fn parse_compile_units(file: &File, endian: RunTimeEndian) -> Result<IndexSet<CompileUnit>> {
         let arena_data = Arena::new();
         let arena_relocations = Arena::new();
 
@@ -170,11 +209,11 @@ impl Dwarf {
 
         let dwarf = gimli::Dwarf::load(&mut load_section)?;
 
-        Self::__get_files(&dwarf)
+        Self::build_compile_units(&dwarf)
     }
 
-    fn __get_files<R: Reader>(dwarf: &gimli::Dwarf<R>) -> Result<Vec<CompileUnit>> {
-        let mut result = Vec::new();
+    fn build_compile_units<R: Reader>(dwarf: &gimli::Dwarf<R>) -> Result<IndexSet<CompileUnit>> {
+        let mut result = IndexSet::new();
         let mut iter = dwarf.units();
         while let Some(header) = iter.next()? {
             let unit = dwarf.unit(header)?;
@@ -206,7 +245,7 @@ impl Dwarf {
                     }
                 }
 
-                result.push(element);
+                result.insert(element);
             }
         }
         Ok(result)
