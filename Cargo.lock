@@ -511,7 +511,6 @@ checksum = "bd070e393353796e801d209ad339e89596eb4c8d430d18ede6a1cced8fafbd99"
 dependencies = [
  "autocfg",
  "hashbrown",
- "serde",
 ]
 
 [[package]]
@@ -1322,7 +1321,6 @@ dependencies = [
  "function_name",
  "gimli",
  "indexmap",
- "jsonrpc",
  "lazy_static",
  "log",
  "memmap2",
@@ -1335,23 +1333,10 @@ dependencies = [
 ]
 
 [[package]]
-name = "upatchd"
+name = "upatch-helper"
 version = "1.2.1"
 dependencies = [
  "anyhow",
- "clap",
- "daemonize",
- "flexi_logger",
- "indexmap",
- "jsonrpc-core",
- "jsonrpc-derive",
- "jsonrpc-ipc-server",
- "log",
- "nix",
- "object",
- "serde",
- "serde_yaml",
- "signal-hook",
  "syscare-common",
 ]
 
