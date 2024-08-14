@@ -12,12 +12,40 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::fs::File;
+use std::{
+    fs::File,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{bail, ensure, Context, Result};
 use memmap2::MmapOptions;
+use object::{Object, ObjectKind};
+
+use syscare_common::fs;
 
 use super::{Endian, Endianness};
+
+pub fn parse_file_kind<P: AsRef<Path>>(file_path: P) -> Result<ObjectKind> {
+    Ok(object::File::parse(fs::MappedFile::open(&file_path)?.as_bytes())?.kind())
+}
+
+pub fn find_elf_files<P, F>(directory: P, predicate: F) -> Result<Vec<PathBuf>>
+where
+    P: AsRef<Path>,
+    F: Fn(&Path, ObjectKind) -> bool,
+{
+    let mut elf_files = Vec::new();
+    for file_path in fs::list_files(&directory, fs::TraverseOptions { recursive: true })? {
+        if let Ok(obj_kind) = self::parse_file_kind(&file_path) {
+            if predicate(&file_path, obj_kind) {
+                elf_files.push(file_path);
+            }
+        }
+    }
+    elf_files.sort();
+
+    Ok(elf_files)
+}
 
 pub fn check_elf(file: &File) -> Result<bool> {
     if file.metadata()?.len() < 64 {

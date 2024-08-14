@@ -18,70 +18,33 @@ use std::{
 };
 
 use anyhow::{Context, Result};
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use log::debug;
 use which::which;
 
 use syscare_common::{ffi::OsStrExt, fs, process::Command};
 
-use super::dwarf::Dwarf;
+use crate::dwarf::{Dwarf, ProducerType};
 
-const COMPILER_STANDARDS: [&str; 42] = [
-    "c89",
-    "c90",
-    "iso9899:1990",
-    "iso9899:199409",
-    "c99",
-    "c9x",
-    "iso9899:1999",
-    "iso9899:199x",
-    "c11",
-    "c1x",
-    "iso9899:2011",
-    "c17",
-    "c18",
-    "iso9899:2017",
-    "iso9899:2018",
-    "gnu89",
-    "gnu90",
-    "gnu99",
-    "gnu9x",
-    "gnu11",
-    "gnu1x",
-    "gnu17",
-    "gnu18",
-    "gnu2x",
-    "c++98",
-    "c++03",
-    "c++11",
-    "c++0x",
-    "gnu++11",
-    "gnu++0x",
-    "c++14",
-    "c++1y",
-    "gnu++14",
-    "gnu++1y",
-    "c++17",
-    "c++1z",
-    "gnu++17",
-    "gnu++1z",
-    "c++20",
-    "c++2a",
-    "gnu++20",
-    "gnu++2a",
+const STD_NAMES: [&str; 45] = [
+    "c89", "c90", "c99", "c9x", "c11", "c17", "c18", "c1x", "c2x", "gnu", "gnu89", "gnu90",
+    "gnu99", "gnu9x", "gnu11", "gnu17", "gnu18", "gnu1x", "gnu2x", "c++98", "c++03", "c++0x",
+    "c++11", "c++14", "c++17", "c++1y", "c++1z", "c++20", "c++2a", "gnu++98", "gnu++03", "gnu++0x",
+    "gnu++11", "gnu++14", "gnu++17", "gnu++1y", "gnu++1z", "gnu++20", "gnu++2a", "f95", "f2003",
+    "f2008", "f2008ts", "f2018", "legacy",
 ];
 const ASSEMBLER_NAME: &str = "as";
 const LINKER_NAME: &str = "ld";
 
 #[derive(Debug, Clone)]
-pub struct Compiler {
-    pub path: PathBuf,
+pub struct CompilerInfo {
+    pub binary: PathBuf,
     pub assembler: PathBuf,
     pub linker: PathBuf,
-    pub versions: IndexSet<OsString>,
+    pub producers: IndexSet<OsString>,
 }
 
-impl Compiler {
+impl CompilerInfo {
     fn get_component_name<P: AsRef<Path>>(compiler: P, name: &str) -> Result<OsString> {
         let output = Command::new(compiler.as_ref())
             .arg(format!("-print-prog-name={}", name))
@@ -91,147 +54,142 @@ impl Compiler {
         Ok(output.stdout)
     }
 
-    fn run_assembler_test<P, Q>(&self, source_file: P, output_dir: Q) -> Result<PathBuf>
+    fn build_test_objects<P, Q, R>(
+        binary: P,
+        assembler: Q,
+        output_dir: R,
+    ) -> Result<IndexSet<PathBuf>>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
+        R: AsRef<Path>,
     {
-        let assembler_file = output_dir.as_ref().join("test.s");
-        let object_file = output_dir.as_ref().join("test.o");
+        let source_file = output_dir.as_ref().join("test.c");
+        let assembly_file = output_dir.as_ref().join("test.S");
+        let assembly_object = output_dir.as_ref().join("test.o");
 
-        Command::new(&self.path)
+        fs::write(&source_file, "int main() { return 0; }")?;
+
+        let mut object_files = IndexSet::new();
+
+        Command::new(binary.as_ref())
             .arg("-S")
-            .arg(source_file.as_ref())
+            .arg(&source_file)
             .arg("-o")
-            .arg(assembler_file.as_path())
+            .arg(&assembly_file)
             .run()?
             .exit_ok()?;
 
-        Command::new(&self.assembler)
+        Command::new(assembler.as_ref())
             .arg("-g")
-            .arg(assembler_file)
+            .arg(assembly_file)
             .arg("-o")
-            .arg(object_file.as_path())
+            .arg(&assembly_object)
             .run()?
             .exit_ok()?;
 
-        Ok(object_file)
-    }
+        object_files.insert(assembly_object);
 
-    fn run_compiler_test<P, Q>(&self, source_file: P, output_dir: Q) -> Result<Vec<PathBuf>>
-    where
-        P: AsRef<Path>,
-        Q: AsRef<Path>,
-    {
-        let mut object_files = Vec::new();
-
-        for std_name in COMPILER_STANDARDS {
-            let object_file = output_dir.as_ref().join(format!("test_{}.o", std_name));
-            let build_success = Command::new(&self.path)
+        for std_name in STD_NAMES {
+            let compiler_object = output_dir.as_ref().join(format!("test_{}.o", std_name));
+            let build_success = Command::new(binary.as_ref())
                 .arg(format!("-std={}", std_name))
                 .args(["-g", "-c"])
-                .arg(source_file.as_ref())
+                .arg(&source_file)
                 .arg("-o")
-                .arg(object_file.as_path())
-                .run()?
+                .arg(&compiler_object)
+                .stderr(log::Level::Trace)
+                .run_with_output()?
                 .success();
 
             if build_success {
-                object_files.push(object_file);
+                object_files.insert(compiler_object);
             }
         }
+        object_files.sort();
 
         Ok(object_files)
     }
 
-    fn fetch_versions<P: AsRef<Path>>(&mut self, output_dir: P) -> Result<()> {
-        let source_file = output_dir.as_ref().join("test.c");
-        fs::write(&source_file, "int main() { return 0; }")
-            .context("Failed to write source file")?;
+    fn run_compiler_detection<P, Q, R>(
+        binary: P,
+        assembler: Q,
+        output_dir: R,
+    ) -> Result<IndexSet<OsString>>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+        R: AsRef<Path>,
+    {
+        let mut producers = IndexSet::new();
 
-        let mut objects = self
-            .run_compiler_test(&source_file, &output_dir)
-            .context("Compiler test failed")?;
-        let asm_object = self
-            .run_assembler_test(&source_file, &output_dir)
-            .context("Assembler test failed")?;
-        objects.push(asm_object);
-
-        for object in objects {
-            let versions = Dwarf::parse_compiler_versions(&object).with_context(|| {
-                format!("Failed to parse compiler name of {}", object.display())
-            })?;
-            self.versions.extend(versions);
+        let test_objects = Self::build_test_objects(binary, assembler, &output_dir)
+            .context("Failed to build test objects")?;
+        for test_object in test_objects {
+            producers.extend(Dwarf::parse(test_object)?.producers());
         }
+        producers.sort();
 
-        Ok(())
+        fs::remove_dir_all(&output_dir)?;
+        Ok(producers)
     }
 }
 
-impl Compiler {
-    pub fn parse<I, P, Q>(compilers: I, temp_dir: Q) -> Result<Vec<Compiler>>
+impl CompilerInfo {
+    pub fn parse<I, P, Q>(compilers: I, temp_dir: Q) -> Result<IndexMap<ProducerType, CompilerInfo>>
     where
         I: IntoIterator<Item = P>,
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let mut result = Vec::new();
+        let mut compiler_map = IndexMap::new();
 
         for compiler in compilers {
-            let compiler_path = compiler.as_ref();
-            let compiler_name = compiler_path
+            let binary_file = compiler.as_ref();
+            let binary_name = binary_file
                 .file_name()
-                .context("Failed to parse compiler name")?;
+                .context("Failed to parse binary name")?;
 
-            let output_dir = temp_dir.as_ref().join(compiler_name);
+            let output_dir = temp_dir.as_ref().join(binary_name);
             fs::create_dir_all(&output_dir)?;
 
-            debug!("- Checking {}", compiler_path.display());
-            let assembler_name = Self::get_component_name(compiler_path, ASSEMBLER_NAME)
+            debug!("- Checking {}", binary_file.display());
+            let assembler_name = Self::get_component_name(binary_file, ASSEMBLER_NAME)
                 .with_context(|| {
-                    format!(
-                        "Failed to get assembler name of {}",
-                        compiler_path.display()
-                    )
+                    format!("Failed to get assembler name of {}", binary_file.display())
                 })?;
-            let linker_name =
-                Self::get_component_name(compiler_path, LINKER_NAME).with_context(|| {
-                    format!("Failed to get linker name of {}", compiler_path.display())
-                })?;
-
-            let path = compiler_path.to_path_buf();
-            let assembler = which(assembler_name.trim()).with_context(|| {
+            let assembler = fs::normalize(which(assembler_name.trim()).with_context(|| {
                 format!("Cannot find assembler {}", assembler_name.to_string_lossy())
-            })?;
-            let linker = which(linker_name.trim())
-                .with_context(|| format!("Cannot find linker {}", linker_name.to_string_lossy()))?;
-            let versions = IndexSet::new();
+            })?)?;
 
-            let mut instance = Self {
-                path,
-                assembler,
-                linker,
-                versions,
-            };
-            instance
-                .fetch_versions(output_dir)
-                .context("Failed to fetch supported versions")?;
+            let linker_name =
+                Self::get_component_name(binary_file, LINKER_NAME).with_context(|| {
+                    format!("Failed to get linker name of {}", binary_file.display())
+                })?;
+            let linker = fs::normalize(which(linker_name.trim()).with_context(|| {
+                format!("Cannot find linker {}", linker_name.to_string_lossy())
+            })?)?;
+            let producers = Self::run_compiler_detection(&compiler, &assembler, &output_dir)
+                .context("Failed to detect compiler")?;
 
-            result.push(instance);
+            for producer in &producers {
+                let producer_type = ProducerType::from(producer);
+                if (producer_type == ProducerType::As) || (producer_type == ProducerType::Unknown) {
+                    continue;
+                }
+                compiler_map.insert(
+                    producer_type,
+                    Self {
+                        binary: binary_file.to_path_buf(),
+                        assembler: assembler.clone(),
+                        linker: linker.clone(),
+                        producers: producers.clone(),
+                    },
+                );
+            }
         }
+        compiler_map.sort_keys();
 
-        Ok(result)
-    }
-}
-
-impl std::fmt::Display for Compiler {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Path: {}, assembler: {}, linker: {}",
-            self.path.display(),
-            self.assembler.display(),
-            self.linker.display()
-        )
+        Ok(compiler_map)
     }
 }
