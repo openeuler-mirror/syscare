@@ -54,7 +54,7 @@ lazy_static! {
         (PatchStatus::NotApplied, PatchStatus::Actived) => vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE],
         (PatchStatus::NotApplied, PatchStatus::Accepted) => vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT],
         (PatchStatus::Deactived, PatchStatus::NotApplied) => vec![PATCH_REMOVE],
-        (PatchStatus::Deactived, PatchStatus::Actived) => vec![PATCH_ACTIVE],
+        (PatchStatus::Deactived, PatchStatus::Actived) => vec![PATCH_CHECK, PATCH_ACTIVE],
         (PatchStatus::Deactived, PatchStatus::Accepted) => vec![PATCH_ACTIVE, PATCH_ACCEPT],
         (PatchStatus::Actived, PatchStatus::NotApplied) => vec![PATCH_DEACTIVE, PATCH_REMOVE],
         (PatchStatus::Actived, PatchStatus::Deactived) => vec![PATCH_DEACTIVE],
