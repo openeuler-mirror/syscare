@@ -14,7 +14,7 @@
 
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
-use syscare_abi::{PatchInfo, PatchType};
+use syscare_abi::PatchInfo;
 use uuid::Uuid;
 
 /// Kernel patch function definition
@@ -61,7 +61,6 @@ impl std::fmt::Display for KernelPatchFunction {
 pub struct KernelPatch {
     pub uuid: Uuid,
     pub name: OsString,
-    pub kind: PatchType,
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
     pub module_name: OsString,

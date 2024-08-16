@@ -14,7 +14,7 @@
 
 use std::{ffi::OsString, path::PathBuf, sync::Arc};
 
-use syscare_abi::{PatchInfo, PatchType};
+use syscare_abi::PatchInfo;
 use uuid::Uuid;
 
 /// User patch function definition
@@ -58,7 +58,6 @@ impl std::fmt::Display for UserPatchFunction {
 pub struct UserPatch {
     pub uuid: Uuid,
     pub name: OsString,
-    pub kind: PatchType,
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
     pub functions: Vec<UserPatchFunction>,
