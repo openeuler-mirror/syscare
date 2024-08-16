@@ -25,7 +25,6 @@ const BUILD_ROOT_DIR_NAME: &str = "patch";
 
 #[derive(Debug, Clone)]
 pub struct PackageRoot {
-    pub path: PathBuf,
     pub source: PathBuf,
     pub debuginfo: PathBuf,
     pub build_root: PackageBuildRoot,
@@ -33,17 +32,16 @@ pub struct PackageRoot {
 
 impl PackageRoot {
     pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
-        let path = directory.as_ref().to_path_buf();
+        let path = directory.as_ref();
         let source = path.join(SOURCE_DIR_NAME);
         let debuginfo = path.join(DEBUGINFO_DIR_NAME);
         let build_root = PackageBuildRoot::new(path.join(BUILD_ROOT_DIR_NAME))?;
 
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
         fs::create_dir_all(&source)?;
         fs::create_dir_all(&debuginfo)?;
 
         Ok(Self {
-            path,
             source,
             debuginfo,
             build_root,

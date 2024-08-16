@@ -21,7 +21,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use object::{NativeFile, Object, ObjectSection};
 
-use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+use syscare_abi::{PatchEntity, PatchInfo};
 use syscare_common::{concat_os, ffi::CStrExt, fs};
 
 use super::PatchResolverImpl;
@@ -59,7 +59,7 @@ mod ffi {
     pub const UPATCH_FUNCTION_OFFSET: usize = 40;
 
     pub struct UpatchRelocation {
-        pub addr: (u64, Relocation),
+        pub _addr: (u64, Relocation),
         pub name: (u64, Relocation),
     }
 
@@ -78,7 +78,7 @@ mod ffi {
 
         fn next(&mut self) -> Option<Self::Item> {
             if let (Some(addr), Some(name)) = (self.0.next(), self.0.next()) {
-                return Some(UpatchRelocation { addr, name });
+                return Some(UpatchRelocation { _addr: addr, name });
             }
             None
         }
@@ -168,7 +168,6 @@ impl PatchResolverImpl for UpatchResolverImpl {
                 "/",
                 fs::file_name(&patch_entity.patch_target)
             ),
-            kind: PatchType::UserPatch,
             info: patch_info.clone(),
             pkg_name: patch_info.target.full_name(),
             patch_file: patch_root.join(&patch_entity.patch_name),
