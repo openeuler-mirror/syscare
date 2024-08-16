@@ -1111,7 +1111,7 @@ dependencies = [
 
 [[package]]
 name = "syscare"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1126,7 +1126,7 @@ dependencies = [
 
 [[package]]
 name = "syscare-abi"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "serde",
  "uuid",
@@ -1134,7 +1134,7 @@ dependencies = [
 
 [[package]]
 name = "syscare-build"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -1153,7 +1153,7 @@ dependencies = [
 
 [[package]]
 name = "syscare-common"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "lazy_static",
@@ -1168,7 +1168,7 @@ dependencies = [
 
 [[package]]
 name = "syscared"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1312,7 +1312,7 @@ checksum = "3354b9ac3fae1ff6755cb6db53683adb661634f67557942dea4facebec0fee4b"
 
 [[package]]
 name = "upatch-build"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "clap",
@@ -1334,7 +1334,7 @@ dependencies = [
 
 [[package]]
 name = "upatch-helper"
-version = "1.2.1"
+version = "1.2.2"
 dependencies = [
  "anyhow",
  "syscare-common",
