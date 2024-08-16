@@ -1,6 +1,6 @@
 [package]
 name         = "upatch-helper"
-version      = "1.2.1"
+version      = "1.2.2"
 authors      = ["renoseven <dev@renoseven.net>"]
 description  = "Upatch compiler helper"
 license      = "MulanPSL-2.0"
