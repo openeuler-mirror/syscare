@@ -22,25 +22,20 @@ const OUTPUT_DIR_NAME: &str = "output";
 
 #[derive(Debug, Clone)]
 pub struct PatchRoot {
-    pub path: PathBuf,
     pub build: PathBuf,
     pub output: PathBuf,
 }
 
 impl PatchRoot {
     pub fn new<P: AsRef<Path>>(directory: P) -> Result<Self> {
-        let path = directory.as_ref().to_path_buf();
+        let path = directory.as_ref();
         let build = path.join(BUILD_DIR_NAME);
         let output = path.join(OUTPUT_DIR_NAME);
 
-        fs::create_dir_all(&path)?;
+        fs::create_dir_all(path)?;
         fs::create_dir_all(&build)?;
         fs::create_dir_all(&output)?;
 
-        Ok(Self {
-            path,
-            build,
-            output,
-        })
+        Ok(Self { build, output })
     }
 }

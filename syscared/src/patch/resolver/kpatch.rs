@@ -21,7 +21,7 @@ use std::{
 use anyhow::{anyhow, Context, Result};
 use object::{NativeFile, Object, ObjectSection};
 
-use syscare_abi::{PatchEntity, PatchInfo, PatchType};
+use syscare_abi::{PatchEntity, PatchInfo};
 use syscare_common::{
     concat_os,
     ffi::{CStrExt, OsStrExt},
@@ -71,7 +71,7 @@ mod ffi {
     unsafe impl Pod for KpatchFunction {}
 
     pub struct KpatchRelocation {
-        pub addr: (u64, Relocation),
+        pub _addr: (u64, Relocation),
         pub name: (u64, Relocation),
         pub object: (u64, Relocation),
     }
@@ -93,7 +93,11 @@ mod ffi {
             if let (Some(addr), Some(name), Some(object)) =
                 (self.0.next(), self.0.next(), self.0.next())
             {
-                return Some(KpatchRelocation { addr, name, object });
+                return Some(KpatchRelocation {
+                    _addr: addr,
+                    name,
+                    object,
+                });
             }
             None
         }
@@ -205,7 +209,6 @@ impl PatchResolverImpl for KpatchResolverImpl {
                 "/",
                 &patch_entity.patch_target
             ),
-            kind: PatchType::KernelPatch,
             info: patch_info.clone(),
             pkg_name: patch_info.target.full_name(),
             module_name,
