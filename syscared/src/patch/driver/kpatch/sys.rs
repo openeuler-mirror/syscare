@@ -90,7 +90,7 @@ pub fn apply_patch(patch: &KernelPatch) -> Result<()> {
     kmod::finit_module(
         &patch_module,
         CString::new("")?.as_c_str(),
-        kmod::ModuleInitFlags::MODULE_INIT_IGNORE_VERMAGIC,
+        kmod::ModuleInitFlags::empty(),
     )
     .map_err(|e| anyhow!("Kpatch: {}", std::io::Error::from(e)))
 }
