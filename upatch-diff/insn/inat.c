@@ -43,7 +43,7 @@ insn_attr_t inat_get_escape_attribute(insn_byte_t opcode, int lpfx_id,
 				      insn_attr_t esc_attr)
 {
 	const insn_attr_t *table;
-	int n;
+	unsigned int n;
 
 	n = inat_escape_id(esc_attr);
 
@@ -62,7 +62,7 @@ insn_attr_t inat_get_group_attribute(insn_byte_t modrm, int lpfx_id,
 				     insn_attr_t grp_attr)
 {
 	const insn_attr_t *table;
-	int n;
+	unsigned int n;
 
 	n = inat_group_id(grp_attr);
 

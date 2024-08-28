@@ -156,7 +156,7 @@ static inline int inat_is_escape(insn_attr_t attr)
 	return attr & INAT_ESC_MASK;
 }
 
-static inline int inat_escape_id(insn_attr_t attr)
+static inline unsigned int inat_escape_id(insn_attr_t attr)
 {
 	return (attr & INAT_ESC_MASK) >> INAT_ESC_OFFS;
 }
@@ -166,7 +166,7 @@ static inline int inat_is_group(insn_attr_t attr)
 	return attr & INAT_GRP_MASK;
 }
 
-static inline int inat_group_id(insn_attr_t attr)
+static inline unsigned int inat_group_id(insn_attr_t attr)
 {
 	return (attr & INAT_GRP_MASK) >> INAT_GRP_OFFS;
 }
@@ -181,7 +181,7 @@ static inline int inat_has_immediate(insn_attr_t attr)
 	return attr & INAT_IMM_MASK;
 }
 
-static inline int inat_immediate_size(insn_attr_t attr)
+static inline unsigned int inat_immediate_size(insn_attr_t attr)
 {
 	return (attr & INAT_IMM_MASK) >> INAT_IMM_OFFS;
 }
