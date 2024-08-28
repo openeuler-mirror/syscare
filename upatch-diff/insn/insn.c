@@ -574,6 +574,6 @@ void insn_get_length(struct insn *insn)
 		return;
 	if (!insn->immediate.got)
 		insn_get_immediate(insn);
-	insn->length = (unsigned char)((unsigned long)insn->next_byte
-				     - (unsigned long)insn->kaddr);
+	insn->length = (unsigned char)((unsigned long)insn->next_byte -
+				       (unsigned long)insn->kaddr);
 }
