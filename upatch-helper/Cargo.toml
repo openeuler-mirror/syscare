@@ -9,5 +9,5 @@ rust-version = "1.60"
 build        = "build.rs"
 
 [dependencies]
-syscare-common = { package = "syscare-common", path = "../syscare-common" }
 anyhow         = { version = "1.0" }
+uuid           = { version = "0.8", features = ["v4"] }
