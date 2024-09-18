@@ -15,7 +15,7 @@
 use std::{os::unix::process::CommandExt, path::Path, process::Command};
 
 use anyhow::{bail, Context};
-use syscare_common::os;
+use uuid::Uuid;
 
 const UPATCH_CC_ENV: &str = "UPATCH_HELPER_CC";
 const UPATCH_CXX_ENV: &str = "UPATCH_HELPER_CXX";
@@ -50,9 +50,9 @@ fn main() -> anyhow::Result<()> {
     if exec_args.iter().any(|arg| arg == OUTPUT_FLAG) {
         command.args(APPEND_ARGS);
         command.arg(format!(
-            "-Wa,--defsym,{}0x{:04x}=0",
+            "-Wa,--defsym,{}{}=0",
             UPATCH_ID_PREFIX,
-            os::process::id()
+            Uuid::new_v4(),
         ));
     }
 
