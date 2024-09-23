@@ -9,33 +9,28 @@ syscare build为纯CLI工具，提供从RPM包生成热补丁包的功能，补�
 ## 命令行参数
 
 ```bash
-Usage: syscare build [OPTIONS] --patch-name <PATCH_NAME> --source <SOURCE> --debuginfo <DEBUGINFO> <PATCHES>...
+USAGE:
+    syscare build [OPTIONS] --patch-name <PATCH_NAME> --source <SOURCE>... --debuginfo <DEBUGINFO>... --patch <PATCH>...
 
-Arguments:
-  <PATCHES>...  Patch file(s)
-
-Options:
-  -n, --patch-name <PATCH_NAME>                Patch name
-      --patch-arch <PATCH_ARCH>                Patch architecture [default: x86_64]
-      --patch-version <PATCH_VERSION>          Patch version [default: 1]
-      --patch-release <PATCH_RELEASE>          Patch release [default: 1]
-      --patch-description <PATCH_DESCRIPTION>  Patch description [default: (none)]
-  -s, --source <SOURCE>                        Source package
-  -d, --debuginfo <DEBUGINFO>                  Debuginfo package
-      --workdir <WORKDIR>                      Working directory [default: .]
-  -o, --output <OUTPUT>                        Generated patch output directory [default: .]
-      --jobs <N>                               Parallel build jobs [default: 96]
-      --skip-compiler-check                    Skip compiler version check (not recommended)
-      --skip-cleanup                           Skip post-build cleanup
-  -v, --verbose                                Provide more detailed info
-  -h, --help                                   Print help information
-  -V, --version                                Print version information
+OPTIONS:
+    -n, --patch-name <PATCH_NAME>                  Patch name
+        --patch-arch <PATCH_ARCH>                  Patch architecture [default: x86_64]
+        --patch-version <PATCH_VERSION>            Patch version [default: 1]
+        --patch-release <PATCH_RELEASE>            Patch release [default: 1]
+        --patch-description <PATCH_DESCRIPTION>    Patch description [default: (none)]
+        --patch-requires <PATCH_REQUIRES>...       Patch requirements
+    -s, --source <SOURCE>...                       Source package(s)
+    -d, --debuginfo <DEBUGINFO>...                 Debuginfo package(s)
+    -p, --patch <PATCH>...                         Patch file(s)
+        --build-root <BUILD_ROOT>                  Build directory [default: .]
+    -o, --output <OUTPUT>                          Output directory [default: .]
+    -j, --jobs <JOBS>                              Parallel build jobs [default: 20]
+        --skip-compiler-check                      Skip compiler version check (not recommended)
+        --skip-cleanup                             Skip post-build cleanup
+    -v, --verbose                                  Provide more detailed info
+    -h, --help                                     Print help information
+    -V, --version                                  Print version information
 ```
-
-### 参数
-|名称|描述|类型|备注|
-| ---- | ---- | ---- | ---- |
-| ```<PATCHES>```... |补丁文件路径|字符串|必选参数，可指定多个，需为合法路径|
 
 ### 选项
 |名称|描述|类型|备注|
@@ -45,9 +40,11 @@ Options:
 |--patch-version ```<PATCH_VERSION>```|补丁版本号|字符串|默认值为1，需符合RPM命名规范|
 |--patch-release ```<PATCH_RELEASE>```|补丁release|数字|默认值为1，需符合RPM命名规范|
 |--patch-description ```<PATCH_DESCRIPTION>```|补丁描述|字符串|默认为(none)|
+|--patch-requires ```<PATCH_REQUIRES>```|补丁依赖|字符串|默认为(none)|
 |-s, --source ```<SOURCE>```|目标软件src.rpm源码包路径|字符串|必选参数，需为合法路径|
 |-d, --debuginfo ```<DEBUGINFO>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
-|--workdir ```<WORKDIR>```|临时文件夹路径|字符串|默认为当前执行目录，需为合法路径|
+|-p, --patch ```<PATCH>```|目标软件debuginfo包路径|字符串|必选参数，需为合法路径|
+|--build-root ```<BUILD_ROOT>```|编译临时目录|字符串|默认为当前执行目录|
 |-o, --output ```<OUTPUT>```|补丁输出文件夹|字符串|默认为当前执行目录，需为合法路径|
 |-j, --jobs ```<N>```|并行编译线程数|数字|默认为cpu线程数|
 |--skip-compiler-check|跳过编译器检查|标识|-|
@@ -103,17 +100,19 @@ syscare build \
 | arch | 补丁架构 |
 | type | 补丁类型 |
 | target | 目标软件名 |
-| target_elf | 目标软件可执行文件名称 |
-| digest | 补丁指纹 |
 | license | 目标软件许可证 |
 | description | 补丁描述 |
-| patch| 补丁文件列表 |
+| entities | 补丁实体列表 |
+| patch | 补丁文件列表 |
 
 
 示例：
 
 ```bash
-dev@openeuler-dev:[output]$ syscare info redis-6.2.5-1/HP001
+dev@dev-x86:[output]$ syscare info redis-6.2.5-1/HP001-1-1
+---------------------------------------------------
+Patch: redis-6.2.5-1/HP001-1-1
+---------------------------------------------------
 uuid:        ec503257-aa75-4abc-9045-c4afdd7ae0f2
 name:        HP001
 version:     1
@@ -121,12 +120,15 @@ release:     1
 arch:        x86_64
 type:        UserPatch
 target:      redis-6.2.5-1
-target_elf:  redis-cli, redis-server, redis-benchmark
-digest:      31fc7544
 license:     BSD and MIT
 description: CVE-2021-32675 - When parsing an incoming Redis Standard Protocol (RESP) request, Redis allocates memory according to user-specified values which determine the number of elements (in the multi-bulk header) and size of each element (in the bulk header). An attacker delivering specially crafted requests over multiple connections can cause the server to allocate significant amount of memory. Because the same parsing mechanism is used to handle authentication requests, this vulnerability can also be exploited by unauthenticated users.
+entities:
+* redis-server
+* redis-cli
+* redis-benchmark
 patch:
-31fc7544 0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+* 0001-Prevent-unauthenticated-client-from-easily-consuming.patch
+---------------------------------------------------
 ```
 
 
@@ -156,7 +158,7 @@ patch:
    示例：
 
    ```bash
-   syscare-build \
+   syscare build \
            --patch-name HP001 \
            --source kernel-5.10.0-60.66.0.91.oe2203.src.rpm \
            --debuginfo kernel-debuginfo-5.10.0-60.66.0.91.oe2203.x86_64.rpm \
@@ -164,12 +166,10 @@ patch:
            001-kernel-patch-test.patch
    ```
 
-   补丁制作过程将会在由`--workdir`参数所指定的目录中（默认为当前目录）创建以```syscare-build```开头的临时文件夹，用于存放临时文件及编译日志。
-
    示例：
 
    ```bash
-   dev@openeuler-dev:[kernel_patch]$ ls -l syscare-build.111602/
+   dev@dev-x86:[kernel_patch]$ ls -l syscare-build.111602/
    total 100
    -rw-r--r--. 1 dev dev 92303 Nov 12 00:00 build.log
    drwxr-xr-x. 6 dev dev  4096 Nov 12 00:00 package
@@ -177,7 +177,7 @@ patch:
    ```
    编译日志将会生成在临时文件夹中，名称为```build.log```
    ```bash
-   dev@openeuler-dev:[kernel_patch]$ cat syscare-build.111602/build.log | less
+   dev@dev-x86:[kernel_patch]$ cat syscare-build.111602/build.log | less
    ...
    ```
    若补丁制作成功，将不会保留该临时文件夹。
@@ -187,7 +187,7 @@ patch:
    示例：
 
    ```bash
-   dev@openeuler-dev:[output]$ ll
+   dev@dev-x86:[output]$ ll
    total 372M
    -rw-r--r--. 1 dev dev 186M Nov 12 00:00 kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.src.rpm
    -rw-r--r--. 1 dev dev  11K Nov 12 00:00 patch-kernel-5.10.0-60.80.0.104.oe2203-HP001-1-1.x86_64.rpm
