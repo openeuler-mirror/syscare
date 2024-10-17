@@ -13,8 +13,6 @@
  */
 
 use std::{
-    cmp::Ordering,
-    collections::HashMap,
     path::{Path, PathBuf},
     str::FromStr,
     sync::Arc,
@@ -221,19 +219,16 @@ impl PatchManager {
     pub fn save_patch_status(&mut self) -> Result<()> {
         info!("Saving all patch status...");
 
-        debug!("Updating all patch status...");
+        debug!("Updating patch status...");
         for patch in self.get_patch_list() {
-            debug!("Update patch '{}' status", patch);
             self.get_patch_status(&patch)?;
         }
 
-        let mut status_map = HashMap::new();
+        debug!("Writing patch status...");
         for (uuid, status) in &self.status_map {
-            status_map.insert(uuid, status);
+            debug!("Patch '{}' status: {}", uuid, status);
         }
-
-        debug!("Writing patch status file");
-        serde::serialize(&status_map, &self.patch_status_file)
+        serde::serialize(&self.status_map, &self.patch_status_file)
             .context("Failed to write patch status file")?;
 
         fs::sync();
@@ -244,57 +239,35 @@ impl PatchManager {
 
     pub fn restore_patch_status(&mut self, accepted_only: bool) -> Result<()> {
         info!("Restoring all patch status...");
+        if !self.patch_status_file.exists() {
+            return Ok(());
+        }
 
         debug!("Reading patch status...");
-        let status_file = &self.patch_status_file;
-        let status_map: HashMap<Uuid, PatchStatus> = if status_file.exists() {
-            serde::deserialize(status_file).context("Failed to read patch status")?
-        } else {
-            warn!("Cannot find patch status file");
-            return Ok(());
-        };
+        let status_map: IndexMap<Uuid, PatchStatus> =
+            serde::deserialize(&self.patch_status_file).context("Failed to read patch status")?;
+        for (uuid, status) in &status_map {
+            debug!("Patch '{}' status: {}", uuid, status);
+        }
 
-        /*
-         * To ensure that we won't load multiple patches for same target at the same time,
-         * we take a sort operation of the status to make sure do REMOVE operation at first
-         */
-        let mut restore_list = status_map
+        let restore_list = status_map
             .into_iter()
-            .filter_map(|(uuid, status)| match self.find_patch_by_uuid(&uuid) {
+            .filter(|(_, status)| !accepted_only || (*status == PatchStatus::Accepted));
+        for (uuid, status) in restore_list {
+            match self.find_patch_by_uuid(&uuid) {
                 Ok(patch) => {
-                    if accepted_only && (status != PatchStatus::Accepted) {
-                        debug!(
-                            "Skipped patch '{}', status is not '{}'",
-                            patch,
-                            PatchStatus::Accepted
-                        );
-                        return None;
+                    debug!("Restore patch '{}' status to '{}'", patch, status);
+                    if let Err(e) = self.do_status_transition(&patch, status, PatchOpFlag::Force) {
+                        error!("{}", e);
                     }
-                    Some((patch, status))
                 }
                 Err(e) => {
-                    error!("{:?}", e);
-                    None
+                    error!("{}", e);
                 }
-            })
-            .collect::<Vec<_>>();
-
-        restore_list.sort_by(|(lhs_patch, lhs_status), (rhs_patch, rhs_status)| {
-            match lhs_status.cmp(rhs_status) {
-                Ordering::Less => Ordering::Less,
-                Ordering::Equal => lhs_patch.cmp(rhs_patch),
-                Ordering::Greater => Ordering::Greater,
-            }
-        });
-
-        for (patch, target_status) in restore_list {
-            debug!("Restore patch '{}' status to '{}'", patch, target_status);
-            if let Err(e) = self.do_status_transition(&patch, target_status, PatchOpFlag::Force) {
-                error!("{}", e);
             }
         }
-        info!("All patch status were restored");
 
+        info!("All patch status were restored");
         Ok(())
     }
 
@@ -426,13 +399,14 @@ impl PatchManager {
             bail!("Cannot set patch '{}' status to '{}'", patch, value);
         }
 
-        let status_map = &mut self.status_map;
-        match status_map.get_mut(patch.uuid()) {
-            Some(status) => {
-                *status = value;
-            }
-            None => {
-                status_map.insert(*patch.uuid(), value);
+        let (index, _) = self.status_map.insert_full(*patch.uuid(), value);
+        if let Some(last_index) = self
+            .status_map
+            .last()
+            .and_then(|(key, _)| self.status_map.get_index_of(key))
+        {
+            if index != last_index {
+                self.status_map.move_index(index, last_index);
             }
         }
 
