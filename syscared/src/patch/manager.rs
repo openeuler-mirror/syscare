@@ -47,6 +47,7 @@ const PATCH_REMOVE: TransitionAction = &PatchManager::driver_remove_patch;
 const PATCH_ACTIVE: TransitionAction = &PatchManager::driver_active_patch;
 const PATCH_DEACTIVE: TransitionAction = &PatchManager::driver_deactive_patch;
 const PATCH_ACCEPT: TransitionAction = &PatchManager::driver_accept_patch;
+const PATCH_DECLINE: TransitionAction = &PatchManager::driver_decline_patch;
 
 lazy_static! {
     static ref STATUS_TRANSITION_MAP: IndexMap<Transition, Vec<TransitionAction>> = indexmap! {
@@ -59,9 +60,9 @@ lazy_static! {
         (PatchStatus::Actived, PatchStatus::NotApplied) => vec![PATCH_DEACTIVE, PATCH_REMOVE],
         (PatchStatus::Actived, PatchStatus::Deactived) => vec![PATCH_DEACTIVE],
         (PatchStatus::Actived, PatchStatus::Accepted) => vec![PATCH_ACCEPT],
-        (PatchStatus::Accepted, PatchStatus::NotApplied) => vec![PATCH_ACCEPT, PATCH_DEACTIVE, PATCH_REMOVE],
-        (PatchStatus::Accepted, PatchStatus::Deactived) => vec![PATCH_ACCEPT, PATCH_DEACTIVE],
-        (PatchStatus::Accepted, PatchStatus::Actived) => vec![PATCH_ACCEPT],
+        (PatchStatus::Accepted, PatchStatus::NotApplied) => vec![PATCH_DECLINE, PATCH_DEACTIVE, PATCH_REMOVE],
+        (PatchStatus::Accepted, PatchStatus::Deactived) => vec![PATCH_DECLINE, PATCH_DEACTIVE],
+        (PatchStatus::Accepted, PatchStatus::Actived) => vec![PATCH_DECLINE],
     };
 }
 
@@ -470,6 +471,10 @@ impl PatchManager {
 
     fn driver_accept_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
         self.set_patch_status(patch, PatchStatus::Accepted)
+    }
+
+    fn driver_decline_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
+        self.set_patch_status(patch, PatchStatus::Actived)
     }
 }
 
