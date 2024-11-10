@@ -301,33 +301,33 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
             name = uelf->strtab + sym[i].st_name;
 
         switch (sym[i].st_shndx) {
-        case SHN_COMMON:
-            log_debug("Unsupported common symbol '%s'\n", name);
-            ret = -ENOEXEC;
-            break;
-        case SHN_ABS:
-            break;
-        case SHN_UNDEF:
-            elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
-            if (!elf_addr) {
+            case SHN_COMMON:
+                log_debug("Unsupported common symbol '%s'\n", name);
                 ret = -ENOEXEC;
-            }
-            sym[i].st_value = elf_addr;
-            log_debug("Resolved symbol '%s' at 0x%lx\n",
-                name, (unsigned long)sym[i].st_value);
-            break;
-        case SHN_LIVEPATCH:
-            sym[i].st_value += uelf->relf->load_bias;
-            log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
-                  name, (unsigned long)sym[i].st_value);
-            break;
-        default:
-            /* use real address to calculate secbase */
-            secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
-            sym[i].st_value += secbase;
-            log_debug("Symbol '%s' at 0x%lx\n",
-                name, (unsigned long)sym[i].st_value);
-            break;
+                break;
+            case SHN_ABS:
+                break;
+            case SHN_UNDEF:
+                elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
+                if (!elf_addr) {
+                    ret = -ENOEXEC;
+                }
+                sym[i].st_value = elf_addr;
+                log_debug("Resolved symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
+            case SHN_LIVEPATCH:
+                sym[i].st_value += uelf->relf->load_bias;
+                log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
+            default:
+                /* use real address to calculate secbase */
+                secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
+                sym[i].st_value += secbase;
+                log_debug("Symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
         }
     }
 

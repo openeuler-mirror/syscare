@@ -582,7 +582,9 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 /* text section refer other sections */
                 if (is_text_section(relasec->base) &&
                     !is_text_section(sym->sec) &&
-                    (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 || rela->type == R_AARCH64_ABS64) &&
+                    (rela->type == R_X86_64_32S || rela->type == R_X86_64_32 ||
+                    rela->type == R_AARCH64_ABS64 ||
+                    rela->type == R_RISCV_64) &&
                     rela->addend == (long)sym->sec->sh.sh_size &&
                     end == (long)sym->sec->sh.sh_size)
                     ERROR("Relocation refer end of data sections.");
@@ -718,8 +720,17 @@ static void include_symbol(struct symbol *sym)
      * For section symbols, we always include the section because
      * references to them can't otherwise be resolved externally.
      */
-    if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME))
+    if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME)) {
         include_section(sym->sec);
+    }
+#ifdef __riscv
+    /* .L symbols not exist in EXE. If they are included, so are their sections. */
+    else if (sym->sec &&
+            !sym->sec->include &&
+            !strncmp(sym->name, ".L", 2)) {
+        include_section(sym->sec);
+    }
+#endif
 }
 
 static void include_section(struct section *sec)
@@ -899,6 +910,22 @@ static void verify_patchability(struct upatch_elf *uelf)
     }
 }
 
+/*
+ * These types are for linker optimization and memory layout.
+ * They have no associated symbols and their names are empty
+ * string which would mismatch running-elf symbols in later
+ * lookup_relf(). Drop these useless items now.
+ */
+static void rv_drop_useless_rela(struct section *relasec)
+{
+    struct rela *rela, *saferela;
+    list_for_each_entry_safe(rela, saferela, &relasec->relas, list)
+        if (rela->type == R_RISCV_RELAX || rela->type == R_RISCV_ALIGN) {
+            list_del(&rela->list);
+            memset(rela, 0, sizeof(*rela));
+            free(rela);
+        }
+}
 static void migrate_included_elements(struct upatch_elf *uelf_patched, struct upatch_elf *uelf_out)
 {
     struct section *sec, *safesec;
@@ -919,8 +946,14 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched, struct up
         list_del(&sec->list);
         list_add_tail(&sec->list, &uelf_out->sections);
         sec->index = 0;
-        if (!is_rela_section(sec) && sec->secsym && !sec->secsym->include)
-            sec->secsym = NULL; // break link to non-included section symbol
+        if (!is_rela_section(sec)) {
+            if (sec->secsym && !sec->secsym->include) {
+                // break link to non-included section symbol
+                sec->secsym = NULL;
+            }
+        } else if (uelf_patched->arch == RISCV64) {
+            rv_drop_useless_rela(sec);
+        }
     }
 
     /* migrate included symbols from kelf to out */

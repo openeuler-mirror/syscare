@@ -386,22 +386,22 @@ err_out:
 static int __get_moffset(struct insn *insn)
 {
 	switch (insn->addr_bytes) {
-	case 2:
-		insn->moffset1.value = get_next(short, insn);
-		insn->moffset1.nbytes = 2;
-		break;
-	case 4:
-		insn->moffset1.value = get_next(int, insn);
-		insn->moffset1.nbytes = 4;
-		break;
-	case 8:
-		insn->moffset1.value = get_next(int, insn);
-		insn->moffset1.nbytes = 4;
-		insn->moffset2.value = get_next(int, insn);
-		insn->moffset2.nbytes = 4;
-		break;
-	default:	/* opnd_bytes must be modified manually */
-		goto err_out;
+        case 2:
+            insn->moffset1.value = get_next(short, insn);
+            insn->moffset1.nbytes = 2;
+            break;
+        case 4:
+            insn->moffset1.value = get_next(int, insn);
+            insn->moffset1.nbytes = 4;
+            break;
+        case 8:
+            insn->moffset1.value = get_next(int, insn);
+            insn->moffset1.nbytes = 4;
+            insn->moffset2.value = get_next(int, insn);
+            insn->moffset2.nbytes = 4;
+            break;
+        default:	/* opnd_bytes must be modified manually */
+            goto err_out;
 	}
 	insn->moffset1.got = insn->moffset2.got = 1;
 
@@ -415,17 +415,18 @@ err_out:
 static int __get_immv32(struct insn *insn)
 {
 	switch (insn->opnd_bytes) {
-	case 2:
-		insn->immediate.value = get_next(short, insn);
-		insn->immediate.nbytes = 2;
-		break;
-	case 4:
-	case 8:
-		insn->immediate.value = get_next(int, insn);
-		insn->immediate.nbytes = 4;
-		break;
-	default:	/* opnd_bytes must be modified manually */
-		goto err_out;
+        case 2:
+            insn->immediate.value = get_next(short, insn);
+            insn->immediate.nbytes = 2;
+            break;
+        case 4:
+        case 8:
+            insn->immediate.value = get_next(int, insn);
+            insn->immediate.nbytes = 4;
+            break;
+        default:
+            /* opnd_bytes must be modified manually */
+            goto err_out;
 	}
 
 	return 1;
@@ -438,22 +439,23 @@ err_out:
 static int __get_immv(struct insn *insn)
 {
 	switch (insn->opnd_bytes) {
-	case 2:
-		insn->immediate1.value = get_next(short, insn);
-		insn->immediate1.nbytes = 2;
-		break;
-	case 4:
-		insn->immediate1.value = get_next(int, insn);
-		insn->immediate1.nbytes = 4;
-		break;
-	case 8:
-		insn->immediate1.value = get_next(int, insn);
-		insn->immediate1.nbytes = 4;
-		insn->immediate2.value = get_next(int, insn);
-		insn->immediate2.nbytes = 4;
-		break;
-	default:	/* opnd_bytes must be modified manually */
-		goto err_out;
+        case 2:
+            insn->immediate1.value = get_next(short, insn);
+            insn->immediate1.nbytes = 2;
+            break;
+        case 4:
+            insn->immediate1.value = get_next(int, insn);
+            insn->immediate1.nbytes = 4;
+            break;
+        case 8:
+            insn->immediate1.value = get_next(int, insn);
+            insn->immediate1.nbytes = 4;
+            insn->immediate2.value = get_next(int, insn);
+            insn->immediate2.nbytes = 4;
+            break;
+        default:
+            /* opnd_bytes must be modified manually */
+            goto err_out;
 	}
 	insn->immediate1.got = insn->immediate2.got = 1;
 
@@ -466,19 +468,20 @@ err_out:
 static int __get_immptr(struct insn *insn)
 {
 	switch (insn->opnd_bytes) {
-	case 2:
-		insn->immediate1.value = get_next(short, insn);
-		insn->immediate1.nbytes = 2;
-		break;
-	case 4:
-		insn->immediate1.value = get_next(int, insn);
-		insn->immediate1.nbytes = 4;
-		break;
-	case 8:
-		/* ptr16:64 is not exist (no segment) */
-		return 0;
-	default:	/* opnd_bytes must be modified manually */
-		goto err_out;
+        case 2:
+            insn->immediate1.value = get_next(short, insn);
+            insn->immediate1.nbytes = 2;
+            break;
+        case 4:
+            insn->immediate1.value = get_next(int, insn);
+            insn->immediate1.nbytes = 4;
+            break;
+        case 8:
+            /* ptr16:64 is not exist (no segment) */
+            return 0;
+        default:
+            /* opnd_bytes must be modified manually */
+            goto err_out;
 	}
 	insn->immediate2.value = get_next(unsigned short, insn);
 	insn->immediate2.nbytes = 2;
@@ -516,39 +519,42 @@ void insn_get_immediate(struct insn *insn)
 		goto done;
 
 	switch (inat_immediate_size(insn->attr)) {
-	case INAT_IMM_BYTE:
-		insn->immediate.value = get_next(char, insn);
-		insn->immediate.nbytes = 1;
-		break;
-	case INAT_IMM_WORD:
-		insn->immediate.value = get_next(short, insn);
-		insn->immediate.nbytes = 2;
-		break;
-	case INAT_IMM_DWORD:
-		insn->immediate.value = get_next(int, insn);
-		insn->immediate.nbytes = 4;
-		break;
-	case INAT_IMM_QWORD:
-		insn->immediate1.value = get_next(int, insn);
-		insn->immediate1.nbytes = 4;
-		insn->immediate2.value = get_next(int, insn);
-		insn->immediate2.nbytes = 4;
-		break;
-	case INAT_IMM_PTR:
-		if (!__get_immptr(insn))
-			goto err_out;
-		break;
-	case INAT_IMM_VWORD32:
-		if (!__get_immv32(insn))
-			goto err_out;
-		break;
-	case INAT_IMM_VWORD:
-		if (!__get_immv(insn))
-			goto err_out;
-		break;
-	default:
-		/* Here, insn must have an immediate, but failed */
-		goto err_out;
+        case INAT_IMM_BYTE:
+            insn->immediate.value = get_next(char, insn);
+            insn->immediate.nbytes = 1;
+            break;
+        case INAT_IMM_WORD:
+            insn->immediate.value = get_next(short, insn);
+            insn->immediate.nbytes = 2;
+            break;
+        case INAT_IMM_DWORD:
+            insn->immediate.value = get_next(int, insn);
+            insn->immediate.nbytes = 4;
+            break;
+        case INAT_IMM_QWORD:
+            insn->immediate1.value = get_next(int, insn);
+            insn->immediate1.nbytes = 4;
+            insn->immediate2.value = get_next(int, insn);
+            insn->immediate2.nbytes = 4;
+            break;
+        case INAT_IMM_PTR:
+            if (!__get_immptr(insn)) {
+                goto err_out;
+            }
+            break;
+        case INAT_IMM_VWORD32:
+            if (!__get_immv32(insn)) {
+                goto err_out;
+            }
+            break;
+        case INAT_IMM_VWORD:
+            if (!__get_immv(insn)) {
+                goto err_out;
+            }
+            break;
+        default:
+            /* Here, insn must have an immediate, but failed */
+            goto err_out;
 	}
 	if (inat_has_second_immediate(insn->attr)) {
 		insn->immediate2.value = get_next(char, insn);

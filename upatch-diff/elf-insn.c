@@ -60,29 +60,30 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
     struct section *sec = relasec->base;
 
     switch(uelf->arch) {
-    case AARCH64:
-        add_off = 0;
-        break;
-    case X86_64:
-        if (!is_text_section(sec) ||
-            rela->type == R_X86_64_64 ||
-            rela->type == R_X86_64_32 ||
-            rela->type == R_X86_64_32S)
+        case RISCV64:
+        case AARCH64:
             add_off = 0;
-        else if (rela->type == R_X86_64_PC32 ||
-                rela->type == R_X86_64_PLT32) {
-            struct insn insn;
-            rela_insn(sec, rela, &insn);
-            add_off = (long)insn.next_byte -
-                        (long)sec->data->d_buf -
-                        (long)rela->offset;
-        } else {
-            ERROR("unable to handle rela type %d \n", rela->type);
-        }
-        break;
-    default:
-        ERROR("unsupported arch \n");
-        break;
+            break;
+        case X86_64:
+            if (!is_text_section(sec) ||
+                rela->type == R_X86_64_64 ||
+                rela->type == R_X86_64_32 ||
+                rela->type == R_X86_64_32S) {
+                add_off = 0;
+            } else if (rela->type == R_X86_64_PC32 ||
+                    rela->type == R_X86_64_PLT32) {
+                struct insn insn;
+                rela_insn(sec, rela, &insn);
+                add_off = (long)insn.next_byte -
+                            (long)sec->data->d_buf -
+                            (long)rela->offset;
+            } else {
+                ERROR("unable to handle rela type %d \n", rela->type);
+            }
+            break;
+        default:
+            ERROR("unsupported arch \n");
+            break;
     }
 
     return rela->addend + add_off;
@@ -93,14 +94,20 @@ unsigned int insn_length(struct upatch_elf *uelf, void *addr)
     struct insn decoded_insn;
 
     switch(uelf->arch) {
-    case AARCH64:
-        return ARM64_INSTR_LEN;
-    case X86_64:
-        insn_init(&decoded_insn, addr, 1);
-        insn_get_length(&decoded_insn);
-        return decoded_insn.length;
-    default:
-        ERROR("unsupported arch");
+        case AARCH64:
+            return ARM64_INSTR_LEN;
+        case X86_64:
+            insn_init(&decoded_insn, addr, 1);
+            insn_get_length(&decoded_insn);
+            return decoded_insn.length;
+        case RISCV64:
+            /* LSB 2 bits distinguish insn size. Now only RV32, RVC supported. */
+            if ((*(char *)addr & 0x3) == 0x3) {
+                return RISCV64_INSN_LEN_4;
+            }
+            return RISCV64_INSN_LEN_2;
+        default:
+            ERROR("unsupported arch");
     }
 
     return 0;
@@ -112,22 +119,25 @@ bool insn_is_load_immediate(struct upatch_elf *uelf, void *addr)
     unsigned char *insn = addr;
 
     switch(uelf->arch) {
-    case X86_64:
-        /* arg2: mov $imm, %esi */
-        if (insn[0] == 0xbe)
-            return true;
+        case X86_64:
+            /* arg2: mov $imm, %esi */
+            if (insn[0] == 0xbe) {
+                return true;
+            }
 
-        /* arg3: mov $imm, %edx */
-        if (insn[0] == 0xba)
-            return true;
+            /* arg3: mov $imm, %edx */
+            if (insn[0] == 0xba) {
+                return true;
+            }
 
-        /* 0x41 is the prefix extend - REX.B */
-        if (insn[0] == 0x41 && insn[1] == 0xb8)
-            return true;
+            /* 0x41 is the prefix extend - REX.B */
+            if (insn[0] == 0x41 && insn[1] == 0xb8) {
+                return true;
+            }
 
-        break;
-    default:
-        ERROR("unsupported arch");
+            break;
+        default:
+            ERROR("unsupported arch");
     }
     return false;
 }

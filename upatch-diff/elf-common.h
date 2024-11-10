@@ -186,14 +186,14 @@ static inline char *section_function_name(struct section *sec)
 static inline char *status_str(enum status status)
 {
 	switch(status) {
-	case NEW:
-		return "NEW";
-	case CHANGED:
-		return "CHANGED";
-	case SAME:
-		return "SAME";
-	default:
-		ERROR("status_str");
+        case NEW:
+            return "NEW";
+        case CHANGED:
+            return "CHANGED";
+        case SAME:
+            return "SAME";
+        default:
+            ERROR("status_str");
 	}
 	return NULL;
 }
@@ -203,12 +203,14 @@ int offset_of_string(struct list_head *, char *);
 static inline unsigned int absolute_rela_type(struct upatch_elf *uelf)
 {
 	switch(uelf->arch) {
-	case AARCH64:
-		return R_AARCH64_ABS64;
-	case X86_64:
-		return R_X86_64_64;
-	default:
-		ERROR("unsupported arch");
+        case AARCH64:
+            return R_AARCH64_ABS64;
+        case X86_64:
+            return R_X86_64_64;
+        case RISCV64:
+            return R_RISCV_64;
+        default:
+            ERROR("unsupported arch");
 	}
 	return 0;
 }

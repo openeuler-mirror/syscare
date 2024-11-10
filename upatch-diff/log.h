@@ -41,10 +41,10 @@ enum exit_status{
 
 /* Since upatch-build is an one-shot program, we do not care about failure handler */
 #define ERROR(format, ...) \
-	error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+    error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 #define DIFF_FATAL(format, ...) \
-	error(EXIT_STATUS_DIFF_FATAL, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+    error(EXIT_STATUS_DIFF_FATAL, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 /* it is time cost */
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
@@ -53,12 +53,12 @@ enum exit_status{
 
 #define log(level, format, ...) \
 ({ \
-	if (g_loglevel <= (level)) \
-		printf(format, ##__VA_ARGS__); \
+    if (g_loglevel <= (level)) \
+        printf(format, ##__VA_ARGS__); \
 })
 
 #define REQUIRE(COND, message) \
-	do	\
+    do	\
 		if (!(COND)) \
 			ERROR(message); \
 	while (0)

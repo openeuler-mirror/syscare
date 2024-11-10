@@ -24,26 +24,26 @@
 #include <stdbool.h>
 #include <sys/time.h>
 
-#define ALLOC_LINK(_new, _list)                           \
-	{                                                 \
-		(_new) = calloc(1, sizeof(*(_new)));      \
-		if (!(_new))                              \
-			ERROR("calloc");                  \
-		INIT_LIST_HEAD(&(_new)->list);            \
-		if (_list)                                \
-			list_add(&(_new)->list, (_list)); \
-	}
+#define ALLOC_LINK(_new, _list)               \
+    do {                                      \
+        (_new) = calloc(1, sizeof(*(_new)));  \
+        if (!(_new))                          \
+            ERROR("calloc");                  \
+        INIT_LIST_HEAD(&(_new)->list);        \
+        if (_list)                            \
+            list_add(&(_new)->list, (_list)); \
+    } while (0)
 
 static inline int page_shift(long n)
 {
-	int res = -1;
+    int res = -1;
 
-	while (n) {
-		res++;
-		n >>= 1;
-	}
+    while (n) {
+        res++;
+        n >>= 1;
+    }
 
-	return res;
+    return res;
 }
 
 #ifndef PAGE_SIZE
@@ -52,11 +52,11 @@ static inline int page_shift(long n)
 #define PAGE_SHIFT page_shift(PAGE_SIZE)
 #endif
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
-#define ALIGN(x, a) (((x) + (a)-1) & (~((a)-1)))
+#define ALIGN(x, a) (((x) + (a) - 1) & (~((a) - 1)))
 #define PAGE_ALIGN(x) ALIGN((x), (unsigned long)PAGE_SIZE)
 
-#define ROUND_DOWN(x, m) ((x) & ~((m)-1))
-#define ROUND_UP(x, m) (((x) + (m)-1) & ~((m)-1))
+#define ROUND_DOWN(x, m) ((x) & ~((m) - 1))
+#define ROUND_UP(x, m) (((x) + (m) - 1) & ~((m) - 1))
 
 #define BIT(x) (1UL << (x))
 
@@ -64,10 +64,10 @@ static inline int page_shift(long n)
 
 static inline long get_microseconds(struct timeval *start, struct timeval *end)
 {
-	long sec = end->tv_sec - start->tv_sec;
-	long usec = end->tv_usec - start->tv_usec;
+    long sec = end->tv_sec - start->tv_sec;
+    long usec = end->tv_usec - start->tv_usec;
 
-	return sec * SEC2MICRO + usec;
+    return sec * SEC2MICRO + usec;
 }
 
 bool streql(const char *, const char *);

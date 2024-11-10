@@ -61,10 +61,10 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
             log_debug("rela section expansion\n");
             list_for_each_entry(rela, &sec->relas, list) {
                 log_debug("sym %d, offset %ld, type %d, %s %s %ld \n",
-                    rela->sym->index, rela->offset,
-                    rela->type, rela->sym->name,
-                    (rela->addend < 0) ? "-" : "+",
-                    labs(rela->addend));
+                          rela->sym->index, rela->offset,
+                          rela->type, rela->sym->name,
+                          (rela->addend < 0) ? "-" : "+",
+                          labs(rela->addend));
             }
         } else {
             if (sec->sym)
@@ -81,8 +81,8 @@ next:
     log_debug("\n=== Symbols ===\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
         log_debug("sym %02d, type %d, bind %d, ndx %02d, name %s (%s)",
-            sym->index, sym->type, sym->bind, sym->sym.st_shndx,
-            sym->name, status_str(sym->status));
+                  sym->index, sym->type, sym->bind, sym->sym.st_shndx,
+                  sym->name, status_str(sym->status));
         if (sym->sec && (sym->type == STT_FUNC || sym->type == STT_OBJECT))
             log_debug(" -> %s", sym->sec->name);
         log_debug("\n");
@@ -115,7 +115,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
         return;
 
     list_for_each_entry(rela, &sec->rela->relas, list)
-        count ++;
+        count++;
 
     /* currently, only delete is possible */
     if (sec->rela->sh.sh_entsize != 0 &&

@@ -126,6 +126,7 @@ struct symbol {
 enum architecture {
 	X86_64 = 0x1 << 0,
 	AARCH64 = 0x1 << 1,
+	RISCV64 = 0x1 << 2
 };
 
 struct upatch_elf {

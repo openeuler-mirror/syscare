@@ -29,7 +29,12 @@
 #include "asm/insn.h"
 #include "upatch-elf.h"
 
+// arm
 #define ARM64_INSTR_LEN 4
+
+// riscv
+#define RISCV64_INSN_LEN_4 4
+#define RISCV64_INSN_LEN_2 2
 
 void rela_insn(const struct section *sec, const struct rela *rela, struct insn *insn);
 

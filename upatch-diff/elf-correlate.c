@@ -39,50 +39,67 @@ static void correlate_symbol(struct symbol *sym_orig, struct symbol *sym_patched
         sym_patched->name = sym_orig->name;
         sym_patched->name_source = DATA_SOURCE_REF;
     }
-	if (sym_orig->relf_sym && !sym_patched->relf_sym)
-		sym_patched->relf_sym = sym_orig->relf_sym;
+    if (sym_orig->relf_sym && !sym_patched->relf_sym) {
+        sym_patched->relf_sym = sym_orig->relf_sym;
+    }
 }
 
 void upatch_correlate_symbols(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
-	struct symbol *sym_orig, *sym_patched;
+    struct symbol *sym_orig, *sym_patched;
 
-	list_for_each_entry(sym_orig, &uelf_source->symbols, list) {
-		if (sym_orig->twin)
-			continue;
+    list_for_each_entry(sym_orig, &uelf_source->symbols, list)
+    {
+        if (sym_orig->twin) {
+            continue;
+        }
 
         /* find matched symbol */
-		list_for_each_entry(sym_patched, &uelf_patched->symbols, list) {
-			if (mangled_strcmp(sym_orig->name, sym_patched->name) ||
-			    sym_orig->type != sym_patched->type || sym_patched->twin)
-				continue;
+        list_for_each_entry(sym_patched, &uelf_patched->symbols, list)
+        {
+            if (mangled_strcmp(sym_orig->name, sym_patched->name) ||
+                sym_orig->type != sym_patched->type || sym_patched->twin) {
+                continue;
+            }
 
-		   	/*
-			 * TODO: Special static local variables should never be correlated and should always
-			 * be included if they are referenced by an included function.
-			 */
-			/*
-			 * The .LCx symbols point to string literals in
-			 * '.rodata.<func>.str1.*' sections.  They get included
-			 * in include_standard_elements().
-			 * Clang creates similar .Ltmp%d symbols in .rodata.str
-			 */
-			if (sym_orig->type == STT_NOTYPE &&
-				(!strncmp(sym_orig->name, ".LC", 3) || !strncmp(sym_orig->name, ".Ltmp", 5)))
-				continue;
+            /*
+             * TODO: Special static local variables should never be correlated and should always
+             * be included if they are referenced by an included function.
+             */
+            /*
+             * The .LCx symbols point to string literals in
+             * '.rodata.<func>.str1.*' sections.  They get included
+             * in include_standard_elements().
+             * Clang creates similar .Ltmp%d symbols in .rodata.str
+             */
+            if (sym_orig->type == STT_NOTYPE &&
+                (!strncmp(sym_orig->name, ".LC", 3) ||
+                !strncmp(sym_orig->name, ".Ltmp", 5))) {
+                continue;
+            }
 
-			if (is_mapping_symbol(uelf_source, sym_orig))
-				continue;
+            if (is_mapping_symbol(uelf_source, sym_orig)) {
+                continue;
+            }
 
-			/* group section symbols must have correlated sections */
-			if (sym_orig->sec && sym_orig->sec->sh.sh_type == SHT_GROUP &&
-			    sym_orig->sec->twin != sym_patched->sec)
-				continue;
+            /* group section symbols must have correlated sections */
+            if (sym_orig->sec && sym_orig->sec->sh.sh_type == SHT_GROUP &&
+                sym_orig->sec->twin != sym_patched->sec) {
+                continue;
+            }
 
-			correlate_symbol(sym_orig, sym_patched);
-			break;
-		}
-	}
+            /* .L symbols should not change section */
+            if (uelf_source->arch == RISCV64 &&
+                !strncmp(sym_orig->name, ".L", 2) &&
+                sym_orig->sec &&
+                sym_orig->sec->twin != sym_patched->sec) {
+                continue;
+            }
+
+            correlate_symbol(sym_orig, sym_patched);
+            break;
+        }
+    }
 }
 
 static void __correlate_section(struct section *sec_orig, struct section *sec_patched)
@@ -104,88 +121,95 @@ static void __correlate_section(struct section *sec_orig, struct section *sec_pa
 
 static void correlate_section(struct section *sec_orig, struct section *sec_patched)
 {
-	__correlate_section(sec_orig, sec_patched);
+    __correlate_section(sec_orig, sec_patched);
 
-	if (is_rela_section(sec_orig)) {
-		__correlate_section(sec_orig->base, sec_patched->base);
+    if (is_rela_section(sec_orig)) {
+        __correlate_section(sec_orig->base, sec_patched->base);
 
         /* handle symbol for base section now */
-		sec_orig = sec_orig->base;
-		sec_patched = sec_patched->base;
-	} else if (sec_orig->rela && sec_patched->rela) {
-		__correlate_section(sec_orig->rela, sec_patched->rela);
-	}
+        sec_orig = sec_orig->base;
+        sec_patched = sec_patched->base;
+    } else if (sec_orig->rela && sec_patched->rela) {
+        __correlate_section(sec_orig->rela, sec_patched->rela);
+    }
 
-	if (sec_orig->secsym && sec_patched->secsym) {
-		correlate_symbol(sec_orig->secsym, sec_patched->secsym);
-	}
+    if (sec_orig->secsym && sec_patched->secsym) {
+        correlate_symbol(sec_orig->secsym, sec_patched->secsym);
+    }
 
-	if (sec_orig->sym) {
-		correlate_symbol(sec_orig->sym, sec_patched->sym);
-	}
+    if (sec_orig->sym) {
+        correlate_symbol(sec_orig->sym, sec_patched->sym);
+    }
 }
 
 void upatch_correlate_sections(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
-	struct section *sec_orig, *sec_patched;
+    struct section *sec_orig, *sec_patched;
 
-	list_for_each_entry(sec_orig, &uelf_source->sections, list) {
+    list_for_each_entry(sec_orig, &uelf_source->sections, list) {
         /* already found */
-		if (sec_orig->twin)
-			continue;
+        if (sec_orig->twin) {
+            continue;
+        }
 
-		list_for_each_entry(sec_patched, &uelf_patched->sections, list) {
-			if (mangled_strcmp(sec_orig->name, sec_patched->name) ||
-			    sec_patched->twin)
-				continue;
+        list_for_each_entry(sec_patched, &uelf_patched->sections, list) {
+            if (mangled_strcmp(sec_orig->name, sec_patched->name) ||
+                sec_patched->twin) {
+                continue;
+            }
 
-			/*
-			 * TODO: Special static local variables should never be correlated and should always
-			 * be included if they are referenced by an included function.
-			 */
-			/*
-			 * Group sections must match exactly to be correlated.
-			 */
-			if (sec_orig->sh.sh_type == SHT_GROUP) {
-				if (sec_orig->data->d_size != sec_patched->data->d_size)
-					continue;
-				if (memcmp(sec_orig->data->d_buf, sec_patched->data->d_buf,
-				           sec_orig->data->d_size))
-					continue;
-			}
+            /*
+             * TODO: Special static local variables should never be correlated and should always
+             * be included if they are referenced by an included function.
+             */
+            /*
+             * Group sections must match exactly to be correlated.
+             */
+            if (sec_orig->sh.sh_type == SHT_GROUP) {
+                if (sec_orig->data->d_size != sec_patched->data->d_size) {
+                    continue;
+                }
+                if (memcmp(sec_orig->data->d_buf, sec_patched->data->d_buf,
+                           sec_orig->data->d_size)) {
+                    continue;
+                }
+            }
 
-			correlate_section(sec_orig, sec_patched);
-			break;
-		}
-	}
+            correlate_section(sec_orig, sec_patched);
+            break;
+        }
+    }
 }
 
 /* TODO: need handle .toc section */
 static struct symbol *find_uncorrelated_rela(struct section *relasec, struct symbol *sym)
 {
-	struct rela *rela;
+    struct rela *rela;
 
-	/* find the patched object's corresponding variable */
-	list_for_each_entry(rela, &relasec->relas, list) {
-		struct symbol *patched_sym = rela->sym;
-		if (patched_sym->twin)
-			continue;
+    /* find the patched object's corresponding variable */
+    list_for_each_entry(rela, &relasec->relas, list) {
+        struct symbol *patched_sym = rela->sym;
+        if (patched_sym->twin) {
+            continue;
+        }
 
-		if (sym->type != patched_sym->type ||
-		    (sym->type == STT_OBJECT &&
-		     sym->sym.st_size != patched_sym->sym.st_size))
-			continue;
+        if (sym->type != patched_sym->type ||
+            (sym->type == STT_OBJECT &&
+             sym->sym.st_size != patched_sym->sym.st_size)) {
+            continue;
+        }
 
-		if (mangled_strcmp(patched_sym->name, sym->name))
-			continue;
+        if (mangled_strcmp(patched_sym->name, sym->name)) {
+            continue;
+        }
 
         log_debug("find uncorrelated rela symbol successful %s [%s] \n",
-            patched_sym->name, section_function_name(relasec));
+                  patched_sym->name, section_function_name(relasec));
 
-		return patched_sym;
-	}
+        return patched_sym;
+    }
 
-	return NULL;
+    return NULL;
 }
 
 /*
@@ -197,23 +221,25 @@ static struct symbol *find_static_twin(struct section *relasec, struct symbol *s
 {
     /* TODO: handle .part symbol is neccessry */
 
-	if (!relasec->twin)
-		return NULL;
+    if (!relasec->twin) {
+        return NULL;
+    }
 
-	return find_uncorrelated_rela(relasec->twin, sym);
+    return find_uncorrelated_rela(relasec->twin, sym);
 }
 
 static struct rela *find_static_twin_ref(struct section *relasec, struct symbol *sym)
 {
-	struct rela *rela;
+    struct rela *rela;
 
-	list_for_each_entry(rela, &relasec->relas, list) {
-		if (rela->sym == sym->twin)
-			return rela;
-	}
+    list_for_each_entry(rela, &relasec->relas, list) {
+        if (rela->sym == sym->twin) {
+            return rela;
+        }
+    }
 
-	/* TODO: handle child func here */
-	return NULL;
+    /* TODO: handle child func here */
+    return NULL;
 }
 
 /* Check two things:
@@ -224,56 +250,65 @@ static struct rela *find_static_twin_ref(struct section *relasec, struct symbol 
  */
 static void check_static_variable_correlate(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
-	struct section *relasec;
-	struct rela *rela;
+    struct section *relasec;
+    struct rela *rela;
     struct symbol *sym;
 
-	list_for_each_entry(relasec, &uelf_source->sections, list) {
-		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec) ||
-			is_note_section(relasec))
-			continue;
+    list_for_each_entry(relasec, &uelf_source->sections, list) {
+        if (!is_rela_section(relasec) ||
+            is_debug_section(relasec) ||
+            is_note_section(relasec)) {
+            continue;
+        }
 
-		list_for_each_entry(rela, &relasec->relas, list) {
+        list_for_each_entry(rela, &relasec->relas, list) {
             sym = rela->sym;
-			if (!is_normal_static_local(sym))
-				continue;
+            if (!is_normal_static_local(sym)) {
+                continue;
+            }
 
-			if (!sym->twin || !relasec->twin)
-				DIFF_FATAL("reference to static local variable %s in %s was removed",
-                    sym->name, section_function_name(relasec));
+            if (!sym->twin || !relasec->twin) {
+                DIFF_FATAL("reference to static local variable %s in %s was removed",
+                           sym->name, section_function_name(relasec));
+            }
 
-            if(!find_static_twin_ref(relasec->twin, sym))
-				DIFF_FATAL("static local %s has been correlated with %s, but patched %s is missing a reference to it",
-                    sym->name, sym->twin->name, section_function_name(relasec->twin));
+            if (!find_static_twin_ref(relasec->twin, sym)) {
+                DIFF_FATAL("static local %s has been correlated with %s, but patched %s is missing a reference to it",
+                           sym->name, sym->twin->name, section_function_name(relasec->twin));
+            }
         }
     }
 
-	/*
-	 * Now go through the patched object and look for any uncorrelated
-	 * static locals to see if we need to print any warnings about new
-	 * variables.
-	 */
+    /*
+     * Now go through the patched object and look for any uncorrelated
+     * static locals to see if we need to print any warnings about new
+     * variables.
+     */
 
-	list_for_each_entry(relasec, &uelf_patched->sections, list) {
+    list_for_each_entry(relasec, &uelf_patched->sections, list)
+    {
 
-		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec) ||
-			is_note_section(relasec))
-			continue;
+        if (!is_rela_section(relasec) ||
+            is_debug_section(relasec) ||
+            is_note_section(relasec)) {
+            continue;
+        }
 
-		list_for_each_entry(rela, &relasec->relas, list) {
-			sym = rela->sym;
-			if (!is_normal_static_local(sym))
-				continue;
+        list_for_each_entry(rela, &relasec->relas, list)
+        {
+            sym = rela->sym;
+            if (!is_normal_static_local(sym)) {
+                continue;
+            }
 
-			if (sym->twin)
-				continue;
+            if (sym->twin) {
+                continue;
+            }
 
-			log_normal("unable to correlate static local variable %s used by %s, assuming variable is new \n",
-				   sym->name, section_function_name(relasec));
-		}
-	}
+            log_normal("unable to correlate static local variable %s used by %s, assuming variable is new \n",
+                       sym->name, section_function_name(relasec));
+        }
+    }
 }
 
 static void uncorrelate_symbol(struct symbol *sym)
@@ -314,86 +349,97 @@ static void uncorrelate_section(struct section *sec)
  */
 void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source, struct upatch_elf *uelf_patched)
 {
-	struct symbol *sym, *patched_sym;
-	struct section *relasec;
-	struct rela *rela;
-	int bundled, patched_bundled;
-
-	/*
-	 * undo the correlations for all static locals.  Two static locals can have the same numbered suffix in the orig
-     * and patchedobjects by coincidence.
-	 */
-    list_for_each_entry(sym, &uelf_source->symbols, list) {
-		if (!is_normal_static_local(sym))
-			continue;
-
-        log_debug("find normal symbol %s \n", sym->name);
-		if (sym->twin)
-			uncorrelate_symbol(sym);
-
-		bundled = (sym == sym->sec->sym) ? 1 : 0;
-		if (bundled && sym->sec->twin) {
-            log_debug("find bundled static symbol %s \n", sym->name);
-
-			uncorrelate_section(sym->sec);
-
-			if (sym->sec->secsym)
-				uncorrelate_symbol(sym->sec->secsym);
-
-			if (sym->sec->rela)
-				uncorrelate_section(sym->sec->rela); // uncorrelate relocation section which is not equal to reference
-		}
-	}
+    struct symbol *sym, *patched_sym;
+    struct section *relasec;
+    struct rela *rela;
+    int bundled, patched_bundled;
 
     /*
-	 * Do the correlations: for each section reference to a static local,
-	 * look for a corresponding reference in the section's twin.
-	 */
-	list_for_each_entry(relasec, &uelf_source->sections, list) {
+     * undo the correlations for all static locals.  Two static locals can have the same numbered suffix in the orig
+     * and patchedobjects by coincidence.
+     */
+    list_for_each_entry(sym, &uelf_source->symbols, list) {
+        if (!is_normal_static_local(sym)) {
+            continue;
+        }
+
+        log_debug("find normal symbol %s \n", sym->name);
+        if (sym->twin) {
+            uncorrelate_symbol(sym);
+        }
+
+        bundled = (sym == sym->sec->sym) ? 1 : 0;
+        if (bundled && sym->sec->twin) {
+            log_debug("find bundled static symbol %s \n", sym->name);
+
+            uncorrelate_section(sym->sec);
+
+            if (sym->sec->secsym) {
+                uncorrelate_symbol(sym->sec->secsym);
+            }
+
+            if (sym->sec->rela) {
+                uncorrelate_section(sym->sec->rela); // uncorrelate relocation section which is not equal to reference
+            }
+        }
+    }
+
+    /*
+     * Do the correlations: for each section reference to a static local,
+     * look for a corresponding reference in the section's twin.
+     */
+    list_for_each_entry(relasec, &uelf_source->sections, list) {
 
         /* handle .rela.toc sectoins */
-		if (!is_rela_section(relasec) ||
-		    is_debug_section(relasec) ||
-			is_note_section(relasec))
-			continue;
+        if (!is_rela_section(relasec) ||
+            is_debug_section(relasec) ||
+            is_note_section(relasec)) {
+            continue;
+        }
 
         /* check all relocation symbols */
-		list_for_each_entry(rela, &relasec->relas, list) {
+        list_for_each_entry(rela, &relasec->relas, list) {
             sym = rela->sym;
 
-			if (!is_normal_static_local(sym))
-				continue;
+            if (!is_normal_static_local(sym)) {
+                continue;
+            }
 
-			if (sym->twin)
-				continue;
+            if (sym->twin) {
+                continue;
+            }
 
-			bundled = (sym == sym->sec->sym) ? 1 : 0;
-			if (bundled && sym->sec == relasec->base) {
-				/*
-				 * TODO: A rare case where a static local data structure references itself.
+            bundled = (sym == sym->sec->sym) ? 1 : 0;
+            if (bundled && sym->sec == relasec->base) {
+                /*
+                 * TODO: A rare case where a static local data structure references itself.
                  * There's no reliable way to correlate this.  Hopefully
                  * to the symbol somewhere that can be used.
-				 */
-				log_debug("can't correlate static local %s's reference to itself\n", sym->name);
-				continue;
-			}
+                 */
+                log_debug("can't correlate static local %s's reference to itself\n", sym->name);
+                continue;
+            }
 
-			patched_sym = find_static_twin(relasec, sym);
-			if (!patched_sym)
-				DIFF_FATAL("reference to static local variable %s in %s was removed",
-                    sym->name, section_function_name(relasec));
+            patched_sym = find_static_twin(relasec, sym);
+            if (!patched_sym) {
+                DIFF_FATAL("reference to static local variable %s in %s was removed",
+                           sym->name, section_function_name(relasec));
+            }
 
-			patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
-			if (bundled != patched_bundled)
-				ERROR("bundle mismatch for symbol %s", sym->name);
-			if (!bundled && sym->sec->twin != patched_sym->sec)
-				ERROR("sections %s and %s aren't correlated for symbol %s",
-				      sym->sec->name, patched_sym->sec->name, sym->name);
+            patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
+            if (bundled != patched_bundled) {
+                ERROR("bundle mismatch for symbol %s", sym->name);
+            }
+            if (!bundled && sym->sec->twin != patched_sym->sec) {
+                ERROR("sections %s and %s aren't correlated for symbol %s",
+                      sym->sec->name, patched_sym->sec->name, sym->name);
+            }
 
-			correlate_symbol(sym, patched_sym);
+            correlate_symbol(sym, patched_sym);
 
-			if (bundled)
-				correlate_section(sym->sec, patched_sym->sec);
+            if (bundled) {
+                correlate_section(sym->sec, patched_sym->sec);
+            }
         }
     }
 
