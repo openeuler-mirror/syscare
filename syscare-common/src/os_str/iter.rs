@@ -131,7 +131,7 @@ impl<'a, P: Pattern<'a>> SplitImpl<'a, P> {
         }
 
         self.finished = true;
-        return Some(OsStr::from_bytes(&haystack[self.position..]));
+        Some(OsStr::from_bytes(&haystack[self.position..]))
     }
 }
 

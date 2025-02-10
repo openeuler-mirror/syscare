@@ -379,10 +379,10 @@ where
         if !file_type.is_file() {
             return false;
         }
-        return file_path
+        file_path
             .extension()
             .map(|s| s == ext.as_ref())
-            .unwrap_or(false);
+            .unwrap_or(false)
     })
 }
 

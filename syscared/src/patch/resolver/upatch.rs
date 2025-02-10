@@ -75,7 +75,7 @@ mod ffi {
         }
     }
 
-    impl<'data, 'file, Elf: FileHeader> Iterator for UpatchRelocationIterator<'data, 'file, Elf> {
+    impl<Elf: FileHeader> Iterator for UpatchRelocationIterator<'_, '_, Elf> {
         type Item = UpatchRelocation;
 
         fn next(&mut self) -> Option<Self::Item> {
