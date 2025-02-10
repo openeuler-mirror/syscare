@@ -119,7 +119,7 @@ pub trait OsStrExt: AsRef<OsStr> {
         }
     }
 
-    fn split<'a, P: Pattern<'a>>(&'a self, pat: P) -> Split<P> {
+    fn split<'a, P: Pattern<'a>>(&'a self, pat: P) -> Split<'a, P> {
         let haystack = self.as_ref().as_bytes();
 
         Split(SplitImpl {
