@@ -12,7 +12,6 @@ build        = "build.rs"
 syscare-common = { package = "syscare-common", path = "../syscare-common" }
 anyhow         = { version = "1.0" }
 clap           = { version = "3.2", features = ["cargo", "derive"] }
-ctrlc          = { version = "3.3" }
 flexi_logger   = { version = "0.24" }
 function_name  = { version = "0.3" }
 gimli          = { version = "0.26" }
