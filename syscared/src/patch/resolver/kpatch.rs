@@ -86,7 +86,7 @@ mod ffi {
         }
     }
 
-    impl<'data, 'file, Elf: FileHeader> Iterator for KpatchRelocationIterator<'data, 'file, Elf> {
+    impl<Elf: FileHeader> Iterator for KpatchRelocationIterator<'_, '_, Elf> {
         type Item = KpatchRelocation;
 
         fn next(&mut self) -> Option<Self::Item> {

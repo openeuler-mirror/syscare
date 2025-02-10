@@ -37,7 +37,6 @@ const DEFAULT_LOG_LEVEL: &str = "info";
     global_setting(AppSettings::DeriveDisplayOrder),
     term_width(120),
 )]
-
 pub struct Arguments {
     /// Run as a daemon
     #[clap(short, long)]

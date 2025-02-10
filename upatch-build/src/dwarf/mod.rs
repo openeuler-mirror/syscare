@@ -233,13 +233,13 @@ impl Dwarf {
                 while let Some(attr) = attrs.next()? {
                     match attr.name() {
                         constants::DW_AT_comp_dir => {
-                            element.compile_dir.push(&Self::attr_value(&attr, dwarf));
+                            element.compile_dir.push(Self::attr_value(&attr, dwarf));
                         }
                         constants::DW_AT_name => {
-                            element.file_name.push(&Self::attr_value(&attr, dwarf));
+                            element.file_name.push(Self::attr_value(&attr, dwarf));
                         }
                         constants::DW_AT_producer => {
-                            element.producer.push(&Self::attr_value(&attr, dwarf));
+                            element.producer.push(Self::attr_value(&attr, dwarf));
                         }
                         _ => continue,
                     }
