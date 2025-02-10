@@ -102,12 +102,6 @@ impl SyscareBuild {
             .start()
             .context("Failed to initialize logger")?;
 
-        // Initialize signal handler
-        ctrlc::set_handler(|| {
-            eprintln!("Interrupt");
-        })
-        .context("Failed to initialize signal handler")?;
-
         Ok(Self {
             args,
             logger,
