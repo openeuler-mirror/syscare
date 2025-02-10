@@ -160,10 +160,10 @@ impl Stdio {
                         }
                     }
                 }
-                if stdout_buf.ends_with(&[b'\n']) {
+                if stdout_buf.ends_with(b"\n") {
                     stdout_buf.pop();
                 }
-                if stderr_buf.ends_with(&[b'\n']) {
+                if stderr_buf.ends_with(b"\n") {
                     stderr_buf.pop();
                 }
 
