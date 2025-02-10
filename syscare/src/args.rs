@@ -14,7 +14,7 @@
 
 use std::path::PathBuf;
 
-use anyhow::{ensure, Result};
+use anyhow::Result;
 use clap::{AppSettings, ColorChoice, Parser, Subcommand};
 
 use syscare_common::fs;
@@ -131,21 +131,11 @@ pub enum SubCommand {
 
 impl Arguments {
     pub fn new() -> Result<Self> {
-        Self::parse().normalize_path().and_then(Self::check)
+        Self::parse().normalize_path()
     }
 
     fn normalize_path(mut self) -> Result<Self> {
         self.work_dir = fs::normalize(&self.work_dir)?;
-
-        Ok(self)
-    }
-
-    fn check(self) -> Result<Self> {
-        let work_dir = &self.work_dir;
-        ensure!(
-            work_dir.is_dir(),
-            format!("Cannot find directory {}", work_dir.display())
-        );
 
         Ok(self)
     }
