@@ -25,7 +25,7 @@ pub struct Relocate<'a, R: gimli::Reader<Offset = usize>> {
     pub reader: R,
 }
 
-impl<'a, R: gimli::Reader<Offset = usize>> Relocate<'a, R> {
+impl<R: gimli::Reader<Offset = usize>> Relocate<'_, R> {
     pub fn relocate(&self, offset: usize, value: u64) -> u64 {
         if let Some(relocation) = self.relocations.get(&offset) {
             if relocation.kind() == object::RelocationKind::Absolute {
@@ -41,7 +41,7 @@ impl<'a, R: gimli::Reader<Offset = usize>> Relocate<'a, R> {
     }
 }
 
-impl<'a, R: gimli::Reader<Offset = usize>> gimli::Reader for Relocate<'a, R> {
+impl<R: gimli::Reader<Offset = usize>> gimli::Reader for Relocate<'_, R> {
     type Endian = R::Endian;
     type Offset = R::Offset;
 
