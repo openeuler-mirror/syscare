@@ -248,6 +248,12 @@ impl CommandExecutor for PatchCommandExecutor {
                 self.proxy.restore_patch_status(*accepted)?;
                 return Ok(Some(0));
             }
+            SubCommand::Rescan => {
+                let _file_lock = FileLock::new(&self.lock_file, FileLockType::Exclusive)?;
+
+                self.proxy.rescan_patches()?;
+                return Ok(Some(0));
+            }
             _ => {}
         }
 
