@@ -53,4 +53,7 @@ pub trait PatchSkeleton {
 
     #[rpc(name = "restore_patch_status")]
     fn restore_patch_status(&self, accepted_only: bool) -> RpcResult<()>;
+
+    #[rpc(name = "rescan_patches")]
+    fn rescan_patches(&self) -> RpcResult<()>;
 }
