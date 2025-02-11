@@ -234,4 +234,13 @@ impl PatchSkeleton for PatchSkeletonImpl {
                 .context("Failed to restore patch status")
         })
     }
+
+    fn rescan_patches(&self) -> RpcResult<()> {
+        RpcFunction::call(move || -> Result<()> {
+            self.patch_manager
+                .write()
+                .rescan_patches()
+                .context("Failed to rescan patches")
+        })
+    }
 }
