@@ -127,6 +127,8 @@ pub enum SubCommand {
         #[clap(long)]
         accepted: bool,
     },
+    /// Rescan all patches
+    Rescan,
 }
 
 impl Arguments {

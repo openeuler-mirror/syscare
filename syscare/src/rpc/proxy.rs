@@ -103,4 +103,9 @@ impl RpcProxy {
         self.remote
             .call_with_args(function_name!(), RpcArguments::new().arg(accepted_only))
     }
+
+    #[named]
+    pub fn rescan_patches(&self) -> Result<()> {
+        self.remote.call(function_name!())
+    }
 }
