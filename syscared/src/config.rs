@@ -18,8 +18,26 @@ use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
 use syscare_common::fs;
 
+const DEFAULT_MAX_LOG_SIZE: u64 = 2 * 1024 * 1024;
+const DEFAULT_MAX_LOG_NUM: usize = 7;
+
 const DEFAULT_SOCKET_UID: u32 = 0;
 const DEFAULT_SOCKET_GID: u32 = 0;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LogConfig {
+    pub max_file_size: u64,
+    pub max_file_num: usize,
+}
+
+impl Default for LogConfig {
+    fn default() -> Self {
+        Self {
+            max_file_size: DEFAULT_MAX_LOG_SIZE,
+            max_file_num: DEFAULT_MAX_LOG_NUM,
+        }
+    }
+}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SocketConfig {
@@ -37,13 +55,9 @@ impl Default for SocketConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct DaemonConfig {
-    pub socket: SocketConfig,
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
-    pub daemon: DaemonConfig,
+    pub log: LogConfig,
+    pub socket: SocketConfig,
 }
 
 impl Config {
