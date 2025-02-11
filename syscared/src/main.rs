@@ -22,7 +22,7 @@ use flexi_logger::{
 };
 use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
-use log::{debug, error, info, warn, LevelFilter, Record};
+use log::{error, info, LevelFilter, Record};
 use nix::unistd::{chown, Gid, Uid};
 use parking_lot::RwLock;
 use patch::manager::PatchManager;
@@ -127,6 +127,21 @@ impl Daemon {
             )
         })?;
 
+        // Initialize config
+        println!("Initializing configuation...");
+        let config_file = args.config_dir.join(CONFIG_FILE_NAME);
+        let config = match Config::parse(&config_file) {
+            Ok(config) => config,
+            Err(e) => {
+                eprintln!("{:?}", e);
+                println!("Using default configuration...");
+                let config = Config::default();
+                config.write(&config_file)?;
+
+                config
+            }
+        };
+
         // Initialize logger
         let max_level = args.log_level;
         let stdout_level = if args.daemon {
@@ -143,28 +158,13 @@ impl Daemon {
             .format(Self::format_log)
             .duplicate_to_stdout(Duplicate::from(stdout_level))
             .rotate(
-                Criterion::Age(Age::Day),
+                Criterion::AgeOrSize(Age::Day, config.log.max_file_size),
                 Naming::Timestamps,
-                Cleanup::KeepCompressedFiles(30),
+                Cleanup::KeepCompressedFiles(config.log.max_file_num),
             )
             .write_mode(WriteMode::Direct)
             .start()
             .context("Failed to initialize logger")?;
-
-        // Initialize config
-        debug!("Initializing configuation...");
-        let config_file = args.config_dir.join(CONFIG_FILE_NAME);
-        let config = match Config::parse(&config_file) {
-            Ok(config) => config,
-            Err(e) => {
-                warn!("{:?}", e);
-                info!("Using default configuration...");
-                let config = Config::default();
-                config.write(&config_file)?;
-
-                config
-            }
-        };
 
         // Print panic to log incase it really happens
         panic::set_hook(Box::new(|info| error!("{}", info)));
@@ -205,8 +205,8 @@ impl Daemon {
                 .context("Failed to convert socket path to string")?,
         )?;
 
-        let socket_owner = Uid::from_raw(self.config.daemon.socket.uid);
-        let socket_group = Gid::from_raw(self.config.daemon.socket.gid);
+        let socket_owner = Uid::from_raw(self.config.socket.uid);
+        let socket_group = Gid::from_raw(self.config.socket.gid);
         chown(&socket_file, Some(socket_owner), Some(socket_group))?;
 
         fs::set_permissions(
