@@ -12,8 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use anyhow::{ensure, Result};
-use syscare_common::os;
+use anyhow::Result;
 
 use super::args::SubCommand;
 
@@ -22,15 +21,4 @@ pub mod patch;
 
 pub trait CommandExecutor {
     fn invoke(&self, command: &SubCommand) -> Result<Option<i32>>;
-
-    fn check_root_permission(&self) -> Result<()> {
-        const ROOT_UID: u32 = 0;
-
-        ensure!(
-            os::user::id() == ROOT_UID,
-            "This command has to be run with superuser privileges (under the root user on most systems)."
-        );
-
-        Ok(())
-    }
 }
