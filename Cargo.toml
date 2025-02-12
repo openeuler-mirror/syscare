@@ -6,7 +6,8 @@ members = [
     "syscare-build",
     "syscared",
     "upatch-build",
-    "upatch-helper"
+    "upatch-helper",
+    "metadata-viewer",
 ]
 
 [profile.release]
