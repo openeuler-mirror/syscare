@@ -91,8 +91,6 @@ impl PatchCommandExecutor {
 
 impl CommandExecutor for PatchCommandExecutor {
     fn invoke(&self, command: &SubCommand) -> Result<Option<i32>> {
-        self.check_root_permission()?;
-
         match command {
             SubCommand::Info { identifiers } => {
                 let mut patch_list = vec![];
