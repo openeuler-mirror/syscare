@@ -237,10 +237,7 @@ impl UserPatchDriver {
             patch_entity.clean_dead_process(&process_list);
 
             // Active patch
-            let need_ignored = patch_entity.need_ignored(&process_list);
-
-            let mut need_actived = patch_entity.need_actived(&process_list);
-            need_actived.retain(|pid| !need_ignored.contains(pid));
+            let need_actived = patch_entity.need_actived(&process_list);
             if !need_actived.is_empty() {
                 debug!(
                     "Activating patch '{}' ({}) for process {:?}",
@@ -260,7 +257,6 @@ impl UserPatchDriver {
                             pid,
                             e.to_string().to_lowercase(),
                         );
-                        patch_entity.ignore_process(pid)
                     }
                 }
             }
@@ -333,9 +329,8 @@ impl UserPatchDriver {
         let mut results = Vec::new();
         for pid in patch_entity.need_actived(&process_list) {
             let result = sys::active_patch(patch_uuid, pid, target_elf, patch_file);
-            match result {
-                Ok(_) => patch_entity.add_process(pid),
-                Err(_) => patch_entity.ignore_process(pid),
+            if result.is_ok() {
+                patch_entity.add_process(pid);
             }
             results.push((pid, result));
         }
@@ -411,13 +406,10 @@ impl UserPatchDriver {
             target_elf.display(),
         );
 
-        let need_ignored = patch_entity.need_ignored(&process_list);
-
-        let mut need_deactived = patch_entity.need_deactived(&process_list);
-        need_deactived.retain(|pid| need_ignored.contains(pid));
+        let need_deactived = patch_entity.need_deactived(&process_list);
 
         let mut results = Vec::new();
-        for pid in patch_entity.need_deactived(&process_list) {
+        for pid in need_deactived {
             let result = sys::deactive_patch(patch_uuid, pid, target_elf, patch_file);
             if result.is_ok() {
                 patch_entity.remove_process(pid)

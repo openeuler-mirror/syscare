@@ -20,7 +20,6 @@ use indexmap::{indexset, IndexSet};
 pub struct PatchEntity {
     pub patch_file: PathBuf,
     process_list: IndexSet<i32>,
-    ignored_list: IndexSet<i32>,
 }
 
 impl PatchEntity {
@@ -28,7 +27,6 @@ impl PatchEntity {
         Self {
             patch_file,
             process_list: indexset! {},
-            ignored_list: indexset! {},
         }
     }
 }
@@ -42,20 +40,8 @@ impl PatchEntity {
         self.process_list.remove(&pid);
     }
 
-    pub fn ignore_process(&mut self, pid: i32) {
-        self.ignored_list.insert(pid);
-    }
-
     pub fn clean_dead_process(&mut self, process_list: &IndexSet<i32>) {
         self.process_list.retain(|pid| process_list.contains(pid));
-        self.ignored_list.retain(|pid| process_list.contains(pid));
-    }
-
-    pub fn need_ignored(&self, process_list: &IndexSet<i32>) -> IndexSet<i32> {
-        process_list
-            .intersection(&self.ignored_list)
-            .copied()
-            .collect()
     }
 
     pub fn need_actived(&self, process_list: &IndexSet<i32>) -> IndexSet<i32> {
