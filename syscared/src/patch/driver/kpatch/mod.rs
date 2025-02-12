@@ -15,6 +15,7 @@
 use std::{
     ffi::{OsStr, OsString},
     fmt::Write,
+    iter::FromIterator,
 };
 
 use anyhow::{ensure, Result};
@@ -24,7 +25,10 @@ use log::{debug, info};
 use syscare_abi::PatchStatus;
 use syscare_common::{concat_os, os, util::digest};
 
-use crate::patch::entity::{KernelPatch, KernelPatchFunction};
+use crate::{
+    config::KernelPatchConfig,
+    patch::entity::{KernelPatch, KernelPatchFunction},
+};
 
 mod sys;
 mod target;
@@ -33,12 +37,14 @@ use target::PatchTarget;
 
 pub struct KernelPatchDriver {
     target_map: IndexMap<OsString, PatchTarget>,
+    blocked_targets: IndexSet<OsString>,
 }
 
 impl KernelPatchDriver {
-    pub fn new() -> Result<Self> {
+    pub fn new(config: &KernelPatchConfig) -> Result<Self> {
         Ok(Self {
             target_map: IndexMap::new(),
+            blocked_targets: IndexSet::from_iter(config.blocked.iter().cloned()),
         })
     }
 }
@@ -247,6 +253,11 @@ impl KernelPatchDriver {
             patch.patch_file.display()
         );
 
+        ensure!(
+            self.blocked_targets.contains(&patch.target_name),
+            "Patch target '{}' is blocked",
+            patch.target_name.to_string_lossy(),
+        );
         sys::selinux_relable_patch(patch)?;
         sys::apply_patch(patch)?;
         self.add_patch_target(patch);

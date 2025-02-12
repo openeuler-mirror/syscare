@@ -194,6 +194,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
         patch_info: Arc<PatchInfo>,
         patch_entity: &PatchEntity,
     ) -> Result<Patch> {
+        let target_name = patch_entity.patch_name.as_os_str().to_os_string();
         let module_name = patch_entity.patch_name.replace(['-', '.'], "_");
         let patch_file = patch_root.join(concat_os!(&patch_entity.patch_name, KPATCH_SUFFIX));
         let sys_file = PathBuf::from(KPATCH_SYS_DIR)
@@ -211,6 +212,7 @@ impl PatchResolverImpl for KpatchResolverImpl {
             ),
             info: patch_info.clone(),
             pkg_name: patch_info.target.full_name(),
+            target_name,
             module_name,
             patch_file,
             sys_file,

@@ -21,13 +21,11 @@ use std::{
 };
 
 use anyhow::{bail, Context, Result};
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 use inotify::{Inotify, WatchDescriptor, WatchMask};
 use log::info;
 use parking_lot::{Mutex, RwLock};
 use syscare_common::ffi::OsStrExt;
-
-use super::target::PatchTarget;
 
 const MONITOR_THREAD_NAME: &str = "upatch_monitor";
 const MONITOR_CHECK_PERIOD: u64 = 100;
@@ -41,12 +39,9 @@ pub(super) struct UserPatchMonitor {
 }
 
 impl UserPatchMonitor {
-    pub fn new<F>(
-        patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
-        callback: F,
-    ) -> Result<Self>
+    pub fn new<F>(callback: F) -> Result<Self>
     where
-        F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
+        F: Fn(Vec<&Path>) + Send + Sync + 'static,
     {
         let inotify = Arc::new(Mutex::new(Some(
             Inotify::init().context("Failed to initialize inotify")?,
@@ -56,7 +51,6 @@ impl UserPatchMonitor {
         let monitor_thread = MonitorThread {
             inotify: inotify.clone(),
             watch_file_map: watch_file_map.clone(),
-            patch_target_map,
             callback,
         }
         .run()?;
@@ -119,13 +113,12 @@ impl UserPatchMonitor {
 struct MonitorThread<F> {
     inotify: Arc<Mutex<Option<Inotify>>>,
     watch_file_map: Arc<RwLock<IndexMap<WatchDescriptor, PathBuf>>>,
-    patch_target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
     callback: F,
 }
 
 impl<F> MonitorThread<F>
 where
-    F: Fn(Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>, &Path) + Send + Sync + 'static,
+    F: Fn(Vec<&Path>) + Send + Sync + 'static,
 {
     fn run(self) -> Result<thread::JoinHandle<()>> {
         thread::Builder::new()
@@ -152,13 +145,12 @@ where
 
             if let Ok(events) = inotify.read_events(&mut buffer) {
                 let watch_file_map = self.watch_file_map.read();
-                let target_elfs = events
+                let path_list = events
                     .filter_map(|event| watch_file_map.get(&event.wd))
                     .filter(|path| Self::filter_blacklist_path(path))
-                    .collect::<IndexSet<_>>();
-                for target_elf in target_elfs {
-                    (self.callback)(self.patch_target_map.clone(), target_elf);
-                }
+                    .map(|path| path.as_ref())
+                    .collect::<Vec<_>>();
+                (self.callback)(path_list)
             }
 
             thread::park_timeout(Duration::from_millis(MONITOR_CHECK_PERIOD))

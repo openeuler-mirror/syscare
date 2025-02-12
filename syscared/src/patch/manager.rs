@@ -27,7 +27,7 @@ use uuid::Uuid;
 use syscare_abi::PatchStatus;
 use syscare_common::{concat_os, ffi::OsStrExt, fs, util::serde};
 
-use crate::patch::resolver::PatchResolver;
+use crate::{config::PatchConfig, patch::resolver::PatchResolver};
 
 use super::{
     driver::{PatchDriver, PatchOpFlag},
@@ -75,8 +75,8 @@ pub struct PatchManager {
 }
 
 impl PatchManager {
-    pub fn new<P: AsRef<Path>>(patch_root: P) -> Result<Self> {
-        let driver = PatchDriver::new()?;
+    pub fn new<P: AsRef<Path>>(patch_config: &PatchConfig, patch_root: P) -> Result<Self> {
+        let driver = PatchDriver::new(patch_config)?;
         let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
         let patch_status_file = patch_root.as_ref().join(PATCH_STATUS_FILE_NAME);
         let patch_map = Self::scan_patches(&patch_install_dir)?;
