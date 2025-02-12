@@ -164,6 +164,7 @@ install(
         ${RUST_OUTPUT_DIR}/upatch-helper
         ${RUST_OUTPUT_DIR}/upatch-cc
         ${RUST_OUTPUT_DIR}/upatch-c++
+        ${RUST_OUTPUT_DIR}/metadata-viewer
     PERMISSIONS
         OWNER_READ OWNER_WRITE OWNER_EXECUTE
         GROUP_READ GROUP_EXECUTE
