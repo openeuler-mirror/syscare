@@ -43,7 +43,6 @@ impl Default for LogConfig {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-
 pub struct SocketConfig {
     pub uid: u32,
     pub gid: u32,
