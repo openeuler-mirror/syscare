@@ -12,7 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::Path;
+use std::{
+    ffi::OsString,
+    path::{Path, PathBuf},
+};
 
 use anyhow::{anyhow, Result};
 use serde::{Deserialize, Serialize};
@@ -56,9 +59,26 @@ impl Default for SocketConfig {
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KernelPatchConfig {
+    pub blocked: Vec<OsString>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UserPatchConfig {
+    pub skipped: Vec<PathBuf>,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PatchConfig {
+    pub kpatch: KernelPatchConfig,
+    pub upatch: UserPatchConfig,
+}
+
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Config {
     pub log: LogConfig,
     pub socket: SocketConfig,
+    pub patch: PatchConfig,
 }
 
 impl Config {

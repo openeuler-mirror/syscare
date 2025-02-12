@@ -15,6 +15,7 @@
 use std::{
     ffi::OsStr,
     fmt::Write,
+    iter::FromIterator,
     os::linux::fs::MetadataExt,
     path::{Path, PathBuf},
     sync::Arc,
@@ -29,7 +30,10 @@ use uuid::Uuid;
 use syscare_abi::PatchStatus;
 use syscare_common::{fs, util::digest};
 
-use crate::patch::{driver::upatch::entity::PatchEntity, entity::UserPatch};
+use crate::{
+    config::UserPatchConfig,
+    patch::{driver::upatch::entity::PatchEntity, entity::UserPatch},
+};
 
 mod entity;
 mod monitor;
@@ -42,21 +46,25 @@ use target::PatchTarget;
 pub struct UserPatchDriver {
     status_map: IndexMap<Uuid, PatchStatus>,
     target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+    skipped_files: Arc<IndexSet<PathBuf>>,
     monitor: UserPatchMonitor,
 }
 
 impl UserPatchDriver {
-    pub fn new() -> Result<Self> {
-        let status_map = IndexMap::new();
+    pub fn new(config: &UserPatchConfig) -> Result<Self> {
         let target_map = Arc::new(RwLock::new(IndexMap::new()));
-        let monitor = UserPatchMonitor::new(target_map.clone(), Self::patch_new_process)?;
-        let instance = Self {
-            status_map,
-            target_map,
-            monitor,
-        };
+        let skipped_files = Arc::new(IndexSet::from_iter(config.skipped.iter().cloned()));
 
-        Ok(instance)
+        Ok(Self {
+            status_map: IndexMap::new(),
+            target_map: target_map.clone(),
+            skipped_files: skipped_files.clone(),
+            monitor: UserPatchMonitor::new(move |target_elfs| {
+                for target_elf in target_elfs {
+                    Self::patch_new_process(&target_map, &skipped_files, target_elf);
+                }
+            })?,
+        })
     }
 }
 
@@ -178,7 +186,10 @@ impl UserPatchDriver {
             .and_then(Result::ok)
     }
 
-    fn find_target_process<P: AsRef<Path>>(target_elf: P) -> Result<IndexSet<i32>> {
+    fn find_target_process<P: AsRef<Path>>(
+        skipped_files: &IndexSet<PathBuf>,
+        target_elf: P,
+    ) -> Result<IndexSet<i32>> {
         let mut target_pids = IndexSet::new();
         let target_path = target_elf.as_ref();
         let target_inode = target_path.metadata()?.st_ino();
@@ -192,6 +203,9 @@ impl UserPatchDriver {
                 Ok(file_path) => file_path,
                 Err(_) => continue,
             };
+            if skipped_files.contains(&exec_path) {
+                continue;
+            }
             // Try to match binary path
             if exec_path == target_path {
                 target_pids.insert(pid);
@@ -219,10 +233,11 @@ impl UserPatchDriver {
     }
 
     fn patch_new_process(
-        target_map: Arc<RwLock<IndexMap<PathBuf, PatchTarget>>>,
+        target_map: &RwLock<IndexMap<PathBuf, PatchTarget>>,
+        skipped_files: &IndexSet<PathBuf>,
         target_elf: &Path,
     ) {
-        let process_list = match Self::find_target_process(target_elf) {
+        let process_list = match Self::find_target_process(skipped_files, target_elf) {
             Ok(pids) => pids,
             Err(_) => return,
         };
@@ -312,7 +327,7 @@ impl UserPatchDriver {
         let patch_functions = patch.functions.as_slice();
         let target_elf = patch.target_elf.as_path();
 
-        let process_list = Self::find_target_process(target_elf)?;
+        let process_list = Self::find_target_process(&self.skipped_files, target_elf)?;
 
         let mut target_map = self.target_map.write();
         let patch_target = target_map
@@ -390,7 +405,7 @@ impl UserPatchDriver {
         let patch_functions = patch.functions.as_slice();
         let target_elf = patch.target_elf.as_path();
 
-        let process_list = Self::find_target_process(target_elf)?;
+        let process_list = Self::find_target_process(&self.skipped_files, target_elf)?;
 
         let mut target_map = self.target_map.write();
         let patch_target = target_map
