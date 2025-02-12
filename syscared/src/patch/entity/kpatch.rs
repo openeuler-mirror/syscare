@@ -64,6 +64,7 @@ pub struct KernelPatch {
     pub info: Arc<PatchInfo>,
     pub pkg_name: String,
     pub module_name: OsString,
+    pub target_name: OsString,
     pub functions: Vec<KernelPatchFunction>,
     pub patch_file: PathBuf,
     pub sys_file: PathBuf,

@@ -231,7 +231,8 @@ impl Daemon {
         info!("Initializing patch manager...");
         let patch_root = &self.args.data_dir;
         let patch_manager = Arc::new(RwLock::new(
-            PatchManager::new(patch_root).context("Failed to initialize patch manager")?,
+            PatchManager::new(&self.config.patch, patch_root)
+                .context("Failed to initialize patch manager")?,
         ));
 
         info!("Initializing patch monitor...");

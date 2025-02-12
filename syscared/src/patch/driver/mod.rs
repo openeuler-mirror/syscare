@@ -29,6 +29,8 @@ pub enum PatchOpFlag {
     Force,
 }
 
+use crate::config::PatchConfig;
+
 use super::entity::Patch;
 
 pub struct PatchDriver {
@@ -53,14 +55,14 @@ impl PatchDriver {
 }
 
 impl PatchDriver {
-    pub fn new() -> Result<Self> {
+    pub fn new(config: &PatchConfig) -> Result<Self> {
         info!("Initializing kernel patch driver...");
-        let kpatch_driver =
-            KernelPatchDriver::new().context("Failed to initialize kernel patch driver")?;
+        let kpatch_driver = KernelPatchDriver::new(&config.kpatch)
+            .context("Failed to initialize kernel patch driver")?;
 
         info!("Initializing user patch driver...");
-        let upatch_driver =
-            UserPatchDriver::new().context("Failed to initialize user patch driver")?;
+        let upatch_driver = UserPatchDriver::new(&config.upatch)
+            .context("Failed to initialize user patch driver")?;
 
         Ok(Self {
             kpatch: kpatch_driver,
