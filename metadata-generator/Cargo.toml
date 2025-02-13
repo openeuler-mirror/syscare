@@ -1,0 +1,18 @@
+[package]
+name         = "metadata-generator"
+version      = "1.2.2"
+authors      = ["renoseven <dev@renoseven.net>"]
+description  = "Syscare patch metadata generator"
+license      = "MulanPSL-2.0"
+edition      = "2018"
+rust-version = "1.60"
+build        = "build.rs"
+
+[dependencies]
+syscare-abi    = { package = "syscare-abi", path = "../syscare-abi" }
+syscare-common = { package = "syscare-common", path = "../syscare-common" }
+anyhow         = { version = "1.0" }
+clap           = { version = "3.2", features = ["cargo", "derive"] }
+flexi_logger   = { version = "0.24" }
+lazy_static    = { version = "1.0" }
+log            = { version = "0.4" }
