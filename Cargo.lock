@@ -680,6 +680,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "metadata-generator"
+version = "1.2.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flexi_logger",
+ "lazy_static",
+ "log",
+ "syscare-abi",
+ "syscare-common",
+]
+
+[[package]]
+name = "metadata-viewer"
+version = "1.2.2"
+dependencies = [
+ "anyhow",
+ "clap",
+ "flexi_logger",
+ "log",
+ "syscare-abi",
+ "syscare-common",
+]
+
+[[package]]
 name = "miniz_oxide"
 version = "0.5.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
