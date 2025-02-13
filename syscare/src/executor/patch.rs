@@ -53,23 +53,31 @@ impl PatchCommandExecutor {
     }
 
     fn show_patch_info(patch_list: impl IntoIterator<Item = (String, PatchInfo)>) {
-        for (identifier, patch) in patch_list {
+        let mut patch_iter = patch_list.into_iter().peekable();
+        while let Some((identifier, patch)) = patch_iter.next() {
             info!("-------------------------------------------");
             info!("Patch: {}", identifier);
             info!("-------------------------------------------");
             info!("{}", patch);
+            if patch_iter.peek().is_some() {
+                continue;
+            }
+            info!("-------------------------------------------");
         }
-        info!("-------------------------------------------");
     }
 
     fn show_patch_target(pkg_list: impl IntoIterator<Item = (String, PackageInfo)>) {
-        for (identifier, package) in pkg_list {
+        let mut pkg_iter = pkg_list.into_iter().peekable();
+        while let Some((identifier, package)) = pkg_iter.next() {
             info!("-------------------------------------------");
             info!("Patch: {}", identifier);
             info!("-------------------------------------------");
             info!("{}", package);
+            if pkg_iter.peek().is_some() {
+                continue;
+            }
+            info!("-------------------------------------------");
         }
-        info!("-------------------------------------------");
     }
 
     fn show_patch_status(status_list: impl IntoIterator<Item = PatchStateRecord>) {
