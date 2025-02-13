@@ -8,6 +8,7 @@ members = [
     "upatch-build",
     "upatch-helper",
     "metadata-viewer",
+    "metadata-generator",
 ]
 
 [profile.release]
