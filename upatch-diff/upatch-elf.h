@@ -40,102 +40,102 @@ struct rela;
 struct symbol;
 
 enum data_source {
-	DATA_SOURCE_ELF,
-	DATA_SOURCE_REF,
-	DATA_SOURCE_ALLOC,
+    DATA_SOURCE_ELF,
+    DATA_SOURCE_REF,
+    DATA_SOURCE_ALLOC,
 };
 
 enum status {
-	NEW,
-	CHANGED,
-	SAME
+    NEW,
+    CHANGED,
+    SAME
 };
 
 enum symbol_strip {
-	SYMBOL_DEFAULT,
-	SYMBOL_USED,
-	SYMBOL_STRIP,
+    SYMBOL_DEFAULT,
+    SYMBOL_USED,
+    SYMBOL_STRIP,
 };
 
 struct string {
-	struct list_head list;
-	char *name;
+    struct list_head list;
+    char *name;
 };
 
 struct section {
-	struct list_head list;
-	struct section *twin;
-	char *name;
-	Elf_Data *data;
-	enum data_source name_source;
-	enum data_source data_source;
-	enum data_source dbuf_source;
-	GElf_Shdr sh;
-	int ignore;
-	int include;
-	int grouped;
-	unsigned int index;
-	enum status status;
-	union {
+    struct list_head list;
+    struct section *twin;
+    char *name;
+    Elf_Data *data;
+    enum data_source name_source;
+    enum data_source data_source;
+    enum data_source dbuf_source;
+    GElf_Shdr sh;
+    int ignore;
+    int include;
+    int grouped;
+    unsigned int index;
+    enum status status;
+    union {
         // section with relocation information
-		struct {
-			struct section *base;
-			struct list_head relas;
-		};
+        struct {
+            struct section *base;
+            struct list_head relas;
+        };
         // other function or data section
-		struct {
-			struct section *rela;
-			struct symbol *sym;
-			struct symbol *secsym;
-		};
-	};
+        struct {
+            struct section *rela;
+            struct symbol *sym;
+            struct symbol *secsym;
+        };
+    };
 };
 
 struct rela {
-	struct list_head list;
-	GElf_Rela rela;
-	struct symbol *sym;
-	unsigned int type;
-	unsigned long offset;
-	long addend;
-	char *string;
-	bool need_dynrela;
+    struct list_head list;
+    GElf_Rela rela;
+    struct symbol *sym;
+    unsigned int type;
+    unsigned long offset;
+    long addend;
+    char *string;
+    bool need_dynrela;
 };
 
 struct symbol {
-	struct list_head list;
-	struct symbol *twin;
-	struct symbol *parent;
-	struct list_head children;
-	struct list_head subfunction_node;
-	struct section *sec;
-	GElf_Sym sym;
-	char *name;
-	enum data_source name_source;
-	struct debug_symbol *relf_sym;
-	unsigned int index;
-	unsigned char bind;
-	unsigned char type;
-	enum status status;
-	union {
-		int include; /* used in the patched elf */
-		enum symbol_strip strip; /* used in the output elf */
-	};
+    struct list_head list;
+    struct symbol *twin;
+    struct symbol *parent;
+    struct list_head children;
+    struct list_head subfunction_node;
+    struct section *sec;
+    GElf_Sym sym;
+    char *name;
+    enum data_source name_source;
+    struct debug_symbol *relf_sym;
+    unsigned int index;
+    unsigned char bind;
+    unsigned char type;
+    enum status status;
+    union {
+        int include; /* used in the patched elf */
+        enum symbol_strip strip; /* used in the output elf */
+    };
 };
 
 enum architecture {
-	X86_64 = 0x1 << 0,
-	AARCH64 = 0x1 << 1,
+    X86_64 = 0x1 << 0,
+    AARCH64 = 0x1 << 1,
 };
 
 struct upatch_elf {
-	Elf *elf;
-	enum architecture arch;
-	struct list_head sections;
-	struct list_head symbols;
-	struct list_head strings;
-	Elf_Data *symtab_shndx;
-	int fd;
+    Elf *elf;
+    enum architecture arch;
+    struct list_head sections;
+    struct list_head symbols;
+    struct list_head strings;
+    Elf_Data *symtab_shndx;
+    int fd;
 };
 
 // init a upatch_elf from a path
