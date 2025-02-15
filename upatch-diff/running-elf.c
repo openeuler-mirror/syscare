@@ -35,7 +35,8 @@
 #include "running-elf.h"
 #include "log.h"
 
-/* TODO: need to judge whether running_elf is a Position-Independent Executable file
+/* TODO:
+ * need to judge whether running_elf is a Position-Independent Executable file
  * https://github.com/bminor/binutils-gdb/blob/master/binutils/readelf.c
  */
 static bool is_pie(void)
@@ -47,9 +48,9 @@ static bool is_exec(struct Elf *elf)
 {
     GElf_Ehdr ehdr;
 
-    if (!gelf_getehdr(elf, &ehdr))
+    if (!gelf_getehdr(elf, &ehdr)) {
         ERROR("gelf_getehdr running_file failed for %s.", elf_errmsg(0));
-
+    }
     return ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && is_pie());
 }
 
@@ -61,38 +62,46 @@ void relf_init(char *elf_name, struct running_elf *relf)
     GElf_Sym sym;
 
     relf->fd = open(elf_name, O_RDONLY);
-    if (relf->fd == -1)
+    if (relf->fd == -1) {
         ERROR("open with errno = %d", errno);
+    }
 
     relf->elf = elf_begin(relf->fd, ELF_C_READ, NULL);
-    if (!relf->elf)
+    if (!relf->elf) {
         ERROR("elf_begin with error %s", elf_errmsg(0));
+    }
 
     relf->is_exec = is_exec(relf->elf);
 
     while ((scn = elf_nextscn(relf->elf, scn)) != NULL) {
-        if (!gelf_getshdr(scn, &shdr))
+        if (!gelf_getshdr(scn, &shdr)) {
             ERROR("gelf_getshdr with error %s", elf_errmsg(0));
-
-        if (shdr.sh_type == SHT_SYMTAB)
+        }
+        if (shdr.sh_type == SHT_SYMTAB) {
             break;
+        }
     }
 
     data = elf_getdata(scn, NULL);
-    if (!data)
+    if (!data) {
         ERROR("elf_getdata with error %s", elf_errmsg(0));
+    }
 
     relf->obj_nr = (int)(shdr.sh_size / shdr.sh_entsize);
     relf->obj_syms = calloc((size_t)relf->obj_nr, sizeof(struct debug_symbol));
-    if (!relf->obj_syms)
+    if (!relf->obj_syms) {
         ERROR("calloc with errno = %d", errno);
+    }
 
-    for (int i = 0; i < relf->obj_nr; i ++) {
-        if (!gelf_getsym(data, i, &sym))
+    for (int i = 0; i < relf->obj_nr; i++) {
+        if (!gelf_getsym(data, i, &sym)) {
             ERROR("gelf_getsym with error %s", elf_errmsg(0));
-        relf->obj_syms[i].name = elf_strptr(relf->elf, shdr.sh_link, sym.st_name);
-        if (!relf->obj_syms[i].name)
+        }
+        relf->obj_syms[i].name = elf_strptr(relf->elf,
+            shdr.sh_link, sym.st_name);
+        if (!relf->obj_syms[i].name) {
             ERROR("elf_strptr with error %s", elf_errmsg(0));
+        }
         relf->obj_syms[i].type = GELF_ST_TYPE(sym.st_info);
         relf->obj_syms[i].bind = GELF_ST_BIND(sym.st_info);
         relf->obj_syms[i].shndx = sym.st_shndx;
@@ -112,8 +121,8 @@ int relf_close(struct running_elf *relf)
     return 0;
 }
 
-bool lookup_relf(struct running_elf *relf,
-    struct symbol *lookup_sym, struct lookup_result *result)
+bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
+    struct lookup_result *result)
 {
     struct debug_symbol *symbol = NULL;
     unsigned long sympos = 0;
@@ -128,7 +137,6 @@ bool lookup_relf(struct running_elf *relf,
         if (result->symbol != NULL && symbol->type == STT_FILE) {
             break;
         }
-
         if (strcmp(symbol->name, lookup_sym->name) != 0 ||
             symbol->bind != lookup_sym->bind) {
             continue;
