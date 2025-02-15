@@ -23,7 +23,7 @@
 #ifndef __UPATCH_PATCH_H_
 #define __UPATCH_PATCH_H_
 
-#define SYM_OTHER	0x40
+#define SYM_OTHER 0x40
 
 struct upatch_patch_func {
     unsigned long new_addr;

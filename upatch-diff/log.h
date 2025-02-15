@@ -29,43 +29,45 @@
 #include <error.h>
 
 /* Files that include log.h must define g_loglevel and g_logprefix */
-extern enum LogLevel g_loglevel;
+extern enum log_level g_loglevel;
 extern char *g_logprefix;
 
-enum exit_status{
-    EXIT_STATUS_SUCCESS     = 0,
-    EXIT_STATUS_ERROR       = 1,
-    EXIT_STATUS_DIFF_FATAL  = 2,
-    EXIT_STATUS_NO_CHANGE   = 3,
+enum exit_status {
+    EXIT_STATUS_SUCCESS = 0,
+    EXIT_STATUS_ERROR   = 1,
 };
 
 /* Since upatch-build is an one-shot program, we do not care about failure handler */
 #define ERROR(format, ...) \
-	error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
-
-#define DIFF_FATAL(format, ...) \
-	error(EXIT_STATUS_DIFF_FATAL, 0, "ERROR: %s: %s: %d: " format, g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+    error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, \
+        g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 /* it is time cost */
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
-#define log_normal(format, ...) log(NORMAL, "%s: " format, g_logprefix, ##__VA_ARGS__)
-#define log_warn(format, ...) log(WARN, "%s: " format, g_logprefix, ##__VA_ARGS__)
+#define log_normal(format, ...) log(NORMAL, format, ##__VA_ARGS__)
+#define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
+#define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
 
 #define log(level, format, ...) \
-({ \
-	if (g_loglevel <= (level)) \
-		printf(format, ##__VA_ARGS__); \
-})
+    do { \
+        if (g_loglevel <= (level)) { \
+            printf(format, ##__VA_ARGS__); \
+        } \
+    } while (0)
 
 #define REQUIRE(COND, message) \
-	do	\
-		if (!(COND)) \
-			ERROR(message); \
-	while (0)
+    do { \
+        if (!(COND)) { \
+            ERROR(message); \
+        } \
+    } \
+    while (0)
 
-enum LogLevel {
-	DEBUG,
-	NORMAL,
+enum log_level {
+    DEBUG,
+    NORMAL,
     WARN,
+    ERR,
 };
+
 #endif

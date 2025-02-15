@@ -34,8 +34,9 @@ void upatch_partly_resolve(struct upatch_elf *uelf, struct running_elf *relf)
 
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (sym->sym.st_other & SYM_OTHER) {
-            if (!lookup_relf(relf, sym, &symbol))
+            if (!lookup_relf(relf, sym, &symbol)) {
                 continue;
+            }
             /* keep it undefined for link purpose */
             sym->sym.st_value = symbol.symbol->addr;
             sym->sym.st_size = symbol.symbol->size;
