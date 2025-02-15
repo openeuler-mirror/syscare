@@ -40,7 +40,8 @@ static struct section *create_section_pair(struct upatch_elf *uelf, char *name,
     unsigned int entsize, unsigned int nr)
 {
     char *relaname;
-    struct section *sec, *relasec;
+    struct section *sec;
+    struct section *relasec;
     size_t size = strlen(name) + strlen(".rela") + 1;
 
     relaname = calloc(1, size);
@@ -136,14 +137,21 @@ void upatch_create_strings_elements(struct upatch_elf *uelf)
 }
 
 /* create upatch func info section */
-void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf *relf)
+void upatch_create_patches_sections(struct upatch_elf *uelf,
+    struct running_elf *relf)
 {
-    struct symbol *sym, *strsym;
-    struct section *sec, *relasec;
+    struct symbol *sym;
+    struct symbol *strsym;
+
+    struct section *sec;
+    struct section *relasec;
+
     struct upatch_patch_func *funcs;
     struct rela *rela;
     struct lookup_result symbol;
-    unsigned int nr = 0, index = 0;
+
+    unsigned int nr = 0;
+    unsigned int index = 0;
 
     /* find changed func */
     list_for_each_entry(sym, &uelf->symbols, list) {
@@ -167,15 +175,12 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
         if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent) {
             continue;
         }
-
         if (!lookup_relf(relf, sym, &symbol)) {
             ERROR("Cannot find symbol '%s' in %s", sym->name, g_relf_name);
         }
-
         if (sym->bind == STB_LOCAL && symbol.global) {
             ERROR("Cannot find local symbol '%s' in symbol table.", sym->name);
         }
-
         log_debug("lookup for %s: symbol name %s sympos=%lu size=%lu.\n",
             sym->name, symbol.symbol->name, symbol.sympos, symbol.symbol->size);
 
@@ -185,7 +190,8 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
         funcs[index].new_size = sym->sym.st_size;
         funcs[index].sympos = symbol.sympos;
 
-        log_debug("change func %s from 0x%lx.\n", sym->name, funcs[index].old_addr);
+        log_debug("change func %s from 0x%lx.\n",
+            sym->name, funcs[index].old_addr);
 
         /* Add a rela than will handle funcs[index].new_addr */
         ALLOC_LINK(rela, &relasec->relas);
@@ -205,18 +211,20 @@ void upatch_create_patches_sections(struct upatch_elf *uelf, struct running_elf 
         index++;
     }
 
-    if (index != nr)
-        ERROR("sanity check failed in funcs sections. \n");
+    if (index != nr) {
+        ERROR("sanity check failed in funcs sections.\n");
+    }
 }
 
-static bool need_dynrela(struct running_elf *relf,
-    struct section *relasec, struct rela *rela)
+static bool need_dynrela(struct running_elf *relf, struct section *relasec,
+    struct rela *rela)
 {
     struct lookup_result symbol;
 
     if (is_debug_section(relasec) ||
-		is_note_section(relasec))
+        is_note_section(relasec)) {
         return false;
+    }
 
     if (!lookup_relf(relf, rela->sym, &symbol)) {
         /* relocation is based on new symbol. */
@@ -224,8 +232,9 @@ static bool need_dynrela(struct running_elf *relf,
     }
 
     if (rela->sym->bind == STB_LOCAL) {
-        if (symbol.global)
-            ERROR("No releated local symbol found. \n");
+        if (symbol.global) {
+            ERROR("No releated local symbol found.\n");
+        }
         return true;
     }
 
@@ -239,7 +248,8 @@ static bool need_dynrela(struct running_elf *relf,
  * 1. refer to old symbols
  *
  */
-void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running_elf *relf)
+void upatch_create_intermediate_sections(struct upatch_elf *uelf,
+    struct running_elf *relf)
 {
     struct rela *rela, *rela_safe;
     struct section *relasec, *usym_sec, *urela_sec;
@@ -249,24 +259,27 @@ void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running
     unsigned int nr = 0, index = 0;
 
     list_for_each_entry(relasec, &uelf->sections, list) {
-        if (!is_rela_section(relasec))
+        if (!is_rela_section(relasec)) {
             continue;
+        }
         /* no need to handle upatch meta section. */
-        if (!strcmp(relasec->name, ".rela.upatch.funcs"))
+        if (!strcmp(relasec->name, ".rela.upatch.funcs")) {
             continue;
-
+        }
         list_for_each_entry(rela, &relasec->relas, list) {
             nr++;
-            if (need_dynrela(relf, relasec, rela)){
+            if (need_dynrela(relf, relasec, rela)) {
                 rela->need_dynrela = 1;
             }
         }
     }
 
-    urela_sec = create_section_pair(uelf, ".upatch.relocations", sizeof(*urelas), nr);
+    urela_sec = create_section_pair(uelf, ".upatch.relocations",
+        sizeof(*urelas), nr);
     urelas = urela_sec->data->d_buf;
 
-    usym_sec = create_section_pair(uelf, ".upatch.symbols", sizeof(*usyms), nr);
+    usym_sec = create_section_pair(uelf, ".upatch.symbols",
+        sizeof(*usyms), nr);
     usyms = usym_sec->data->d_buf;
 
     ALLOC_LINK(usym_sec_sym, &uelf->symbols);
@@ -277,17 +290,19 @@ void upatch_create_intermediate_sections(struct upatch_elf *uelf, struct running
     usym_sec_sym->name = ".upatch.symbols";
 
     strsym = find_symbol_by_name(&uelf->symbols, ".upatch.strings");
-    if (!strsym)
-        ERROR("can't find .upatch.strings symbol. \n");
+    if (!strsym) {
+        ERROR("can't find .upatch.strings symbol.\n");
+    }
 
     list_for_each_entry(relasec, &uelf->sections, list) {
-        if (!is_rela_section(relasec))
+        if (!is_rela_section(relasec)) {
             continue;
+        }
         if (!strcmp(relasec->name, ".rela.upatch.funcs") ||
             !strcmp(relasec->name, ".rela.upatch.relocations") ||
-            !strcmp(relasec->name, ".rela.upatch.symbols"))
+            !strcmp(relasec->name, ".rela.upatch.symbols")) {
             continue;
-
+        }
         list_for_each_entry_safe(rela, rela_safe, &relasec->relas, list) {
             if (!rela->need_dynrela) {
                 rela->sym->strip = SYMBOL_USED;
@@ -314,12 +329,14 @@ void upatch_build_strings_section_data(struct upatch_elf *uelf)
     char *strtab;
 
     sec = find_section_by_name(&uelf->sections, ".upatch.strings");
-    if (!sec)
+    if (!sec) {
         ERROR("can't find strings section.");
+    }
 
     size = 0;
-    list_for_each_entry(string, &uelf->strings, list)
+    list_for_each_entry(string, &uelf->strings, list) {
         size += strlen(string->name) + 1;
+    }
 
     /* allocate section resources */
     strtab = calloc(1, size);
@@ -345,9 +362,9 @@ static void migrate_symbols(struct list_head *src,
     struct symbol *sym, *sym_safe;
 
     list_for_each_entry_safe(sym, sym_safe, src, list) {
-        if (select && !select(sym))
+        if (select && !select(sym)) {
             continue;
-
+        }
         list_del(&sym->list);
         list_add_tail(&sym->list, dst);
     }
@@ -402,9 +419,9 @@ void upatch_reindex_elements(struct upatch_elf *uelf)
     list_for_each_entry(sym, &uelf->symbols, list) {
         sym->index = index;
         index++;
-        if (sym->sec)
+        if (sym->sec) {
             sym->sym.st_shndx = (unsigned short)sym->sec->index;
-        else if (sym->sym.st_shndx != SHN_ABS) {
+        } else if (sym->sym.st_shndx != SHN_ABS) {
             sym->sym.st_shndx = SHN_UNDEF;
         }
     }
@@ -415,10 +432,13 @@ static void rebuild_rela_section_data(struct section *sec)
     struct rela *rela;
     GElf_Rela *relas;
     size_t size;
-    unsigned int nr = 0, index = 0;
 
-    list_for_each_entry(rela, &sec->relas, list)
+    unsigned int nr = 0;
+    unsigned int index = 0;
+
+    list_for_each_entry(rela, &sec->relas, list) {
         nr++;
+    }
 
     size = nr * sizeof(*relas);
     relas = calloc(1, size);
@@ -438,22 +458,26 @@ static void rebuild_rela_section_data(struct section *sec)
         index++;
     }
 
-    if (index != nr)
+    if (index != nr) {
         ERROR("size mismatch in rebuild rela section.");
+    }
 }
 
 /* update index for relocations */
 void upatch_rebuild_relocations(struct upatch_elf *uelf)
 {
-    struct section *relasec, *symtab;
+    struct section *relasec;
+    struct section *symtab;
 
     symtab = find_section_by_name(&uelf->sections, ".symtab");
-    if (!symtab)
-        ERROR("missing .symtab section in rebuild relocations. \n");
+    if (!symtab) {
+        ERROR("missing .symtab section in rebuild relocations.\n");
+    }
 
     list_for_each_entry(relasec, &uelf->sections, list) {
-        if (!is_rela_section(relasec))
+        if (!is_rela_section(relasec)) {
             continue;
+        }
         relasec->sh.sh_link = (Elf64_Word)symtab->index;
         relasec->sh.sh_info = (Elf64_Word)relasec->base->index;
         rebuild_rela_section_data(relasec);
@@ -471,18 +495,23 @@ static void print_strtab(char *buf, size_t size)
     size_t i;
 
     for (i = 0; i < size; i++) {
-        if (buf[i] == 0)
+        if (buf[i] == 0) {
             log_debug("\\0");
-        else
+        } else {
             log_debug("%c", buf[i]);
+        }
     }
 }
 
 void upatch_create_shstrtab(struct upatch_elf *uelf)
 {
-    size_t size, offset, len;
-    struct section *shstrtab, *sec;
+    struct section *shstrtab;
+    struct section *sec;
+
     char *buf;
+    size_t size;
+    size_t offset;
+    size_t len;
 
     shstrtab = find_section_by_name(&uelf->sections, ".shstrtab");
     if (!shstrtab) {
@@ -491,8 +520,9 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
 
     /* determine size of string table */
     size = 1;
-    list_for_each_entry(sec, &uelf->sections, list)
+    list_for_each_entry(sec, &uelf->sections, list) {
         size += strlen(sec->name) + 1;
+    }
 
     buf = calloc(1, size);
     if (!buf) {
@@ -520,13 +550,16 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
     print_strtab(buf, size);
     log_debug("\n");
 
-    list_for_each_entry(sec, &uelf->sections, list)
+    list_for_each_entry(sec, &uelf->sections, list) {
         log_debug("%s @ shstrtab offset %d\n", sec->name, sec->sh.sh_name);
+    }
 }
 
 void upatch_create_strtab(struct upatch_elf *uelf)
 {
-    size_t size = 0, offset = 0, len = 0;
+    size_t size = 0;
+    size_t offset = 0;
+    size_t len = 0;
 
     struct section *strtab = find_section_by_name(&uelf->sections, ".strtab");
     if (!strtab) {
@@ -535,8 +568,9 @@ void upatch_create_strtab(struct upatch_elf *uelf)
 
     struct symbol *sym = NULL;
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->type == STT_SECTION)
+        if (sym->type == STT_SECTION) {
             continue;
+        }
         size += strlen(sym->name) + 1;
     }
 
@@ -569,8 +603,9 @@ void upatch_create_strtab(struct upatch_elf *uelf)
     print_strtab(buf, size);
     log_debug("\n");
 
-    list_for_each_entry(sym, &uelf->symbols, list)
+    list_for_each_entry(sym, &uelf->symbols, list) {
         log_debug("%s @ strtab offset %d\n", sym->name, sym->sym.st_name);
+    }
 }
 
 void upatch_create_symtab(struct upatch_elf *uelf)
@@ -578,17 +613,22 @@ void upatch_create_symtab(struct upatch_elf *uelf)
     struct section *symtab;
     struct section *strtab;
     struct symbol *sym;
-    size_t size;
+
+    unsigned int nr = 0;
+    unsigned int nr_local = 0;
+
     char *buf;
-    unsigned int nr = 0, nr_local = 0;
+    size_t size;
     unsigned long offset = 0;
 
     symtab = find_section_by_name(&uelf->sections, ".symtab");
-    if (!symtab)
+    if (!symtab) {
         ERROR("find_section_by_name failed.");
+    }
 
-    list_for_each_entry(sym, &uelf->symbols, list)
+    list_for_each_entry(sym, &uelf->symbols, list) {
         nr++;
+    }
 
     size = nr * symtab->sh.sh_entsize;
     buf = calloc(1, size);
@@ -600,9 +640,9 @@ void upatch_create_symtab(struct upatch_elf *uelf)
     list_for_each_entry(sym, &uelf->symbols, list) {
         memcpy(buf + offset, &sym->sym, symtab->sh.sh_entsize);
         offset += symtab->sh.sh_entsize;
-
-        if (is_local_sym(sym))
+        if (is_local_sym(sym)) {
             nr_local++;
+        }
     }
 
     symtab->data->d_buf = buf;
@@ -611,38 +651,52 @@ void upatch_create_symtab(struct upatch_elf *uelf)
 
     /* update symtab section header */
     strtab = find_section_by_name(&uelf->sections, ".strtab");
-    if (!strtab)
+    if (!strtab) {
         ERROR("missing .strtab section in create symtab.");
+    }
 
     symtab->sh.sh_link = (Elf64_Word)strtab->index;
     symtab->sh.sh_info = nr_local;
 }
 
-void upatch_write_output_elf(struct upatch_elf *uelf, Elf *elf, char *outfile, mode_t mode)
+void upatch_write_output_elf(struct upatch_elf *uelf, Elf *elf,
+    char *outfile, mode_t mode)
 {
     int fd;
+
     Elf *elfout;
+
     Elf_Scn *scn;
     Elf_Data *data;
-    GElf_Ehdr eh, ehout;
+
+    GElf_Ehdr eh;
+    GElf_Ehdr ehout;
+
     GElf_Shdr sh;
-    struct section *sec, *shstrtab;
+
+    struct section *sec;
+    struct section *shstrtab;
 
     fd = creat(outfile, mode);
-    if (fd == -1)
+    if (fd == -1) {
         ERROR("creat failed.");
+    }
 
     elfout = elf_begin(fd, ELF_C_WRITE, NULL);
-    if (!elfout)
+    if (!elfout) {
         ERROR("elf_begin failed.");
+    }
 
     /* alloc ELF header */
-    if (!gelf_newehdr(elfout, gelf_getclass(elf)))
+    if (!gelf_newehdr(elfout, gelf_getclass(elf))) {
         ERROR("gelf_newehdr failed.");
-    if (!gelf_getehdr(elfout, &ehout))
+    }
+    if (!gelf_getehdr(elfout, &ehout)) {
         ERROR("gelf_getehdr elfout failed.");
-    if (!gelf_getehdr(elf, &eh))
+    }
+    if (!gelf_getehdr(elf, &eh)) {
         ERROR("gelf_getehdr elf failed.");
+    }
 
     memset(&ehout, 0, sizeof(ehout));
     ehout.e_ident[EI_DATA] = eh.e_ident[EI_DATA];
@@ -651,42 +705,50 @@ void upatch_write_output_elf(struct upatch_elf *uelf, Elf *elf, char *outfile, m
     ehout.e_version = EV_CURRENT;
 
     shstrtab = find_section_by_name(&uelf->sections, ".shstrtab");
-    if (!shstrtab)
+    if (!shstrtab) {
         ERROR("missing .shstrtab sections in write output elf");
+    }
 
     ehout.e_shstrndx = (unsigned short)shstrtab->index;
 
     /* add changed sections */
     list_for_each_entry(sec, &uelf->sections, list) {
         scn = elf_newscn(elfout);
-        if (!scn)
+        if (!scn) {
             ERROR("elf_newscn failed.");
+        }
 
         data = elf_newdata(scn);
-        if (!data)
+        if (!data) {
             ERROR("elf_newdata failed.");
+        }
 
-        if (!elf_flagdata(data, ELF_C_SET, ELF_F_DIRTY))
+        if (!elf_flagdata(data, ELF_C_SET, ELF_F_DIRTY)) {
             ERROR("elf_flagdata failed.");
+        }
 
         data->d_type = sec->data->d_type;
         data->d_buf = sec->data->d_buf;
         data->d_size = sec->data->d_size;
 
-        if (!gelf_getshdr(scn, &sh))
+        if (!gelf_getshdr(scn, &sh)) {
             ERROR("gelf_getshdr in adding changed sections");
+        }
 
         sh = sec->sh;
 
-        if (!gelf_update_shdr(scn, &sh))
+        if (!gelf_update_shdr(scn, &sh)) {
             ERROR("gelf_update_shdr failed.");
+        }
     }
 
-    if (!gelf_update_ehdr(elfout, &ehout))
+    if (!gelf_update_ehdr(elfout, &ehout)) {
         ERROR("gelf_update_ehdr failed.");
+    }
 
-    if (elf_update(elfout, ELF_C_WRITE) < 0)
+    if (elf_update(elfout, ELF_C_WRITE) < 0) {
         ERROR("elf_update failed.");
+    }
 
     elf_end(elfout);
     close(fd);

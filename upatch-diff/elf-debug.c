@@ -36,12 +36,15 @@ void upatch_print_changes(struct upatch_elf *uelf)
     struct symbol *sym;
 
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (!sym->include || !sym->sec || sym->type != STT_FUNC || sym->parent)
+        if (!sym->include || !sym->sec ||
+            sym->type != STT_FUNC || sym->parent) {
             continue;
-        if (sym->status == NEW)
+        }
+        if (sym->status == NEW) {
             log_normal("New function: %s\n", sym->name);
-        else if (sym->status == CHANGED)
+        } else if (sym->status == CHANGED) {
             log_normal("Changed function: %s\n", sym->name);
+        }
     }
 }
 
@@ -53,26 +56,31 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
 
     log_debug("\n=== Sections ===\n");
     list_for_each_entry(sec, &uelf->sections, list) {
-        log_debug("%02d %s (%s)", sec->index, sec->name, status_str(sec->status));
+        log_debug("%02d %s (%s)",
+            sec->index, sec->name, status_str(sec->status));
         if (is_rela_section(sec)) {
             log_debug(", base-> %s\n", sec->base->name);
-            if (is_debug_section(sec) || is_note_section(sec))
+            if (is_debug_section(sec) || is_note_section(sec)) {
                 goto next;
+            }
             log_debug("rela section expansion\n");
             list_for_each_entry(rela, &sec->relas, list) {
-                log_debug("sym %d, offset %ld, type %d, %s %s %ld \n",
+                log_debug("sym %d, offset %ld, type %d, %s %s %ld\n",
                     rela->sym->index, rela->offset,
                     rela->type, rela->sym->name,
                     (rela->addend < 0) ? "-" : "+",
                     labs(rela->addend));
             }
         } else {
-            if (sec->sym)
+            if (sec->sym) {
                 log_debug(", sym-> %s", sec->sym->name);
-            if (sec->secsym)
+            }
+            if (sec->secsym) {
                 log_debug(", secsym-> %s", sec->secsym->name);
-            if (sec->rela)
+            }
+            if (sec->rela) {
                 log_debug(", rela-> %s", sec->rela->name);
+            }
         }
 next:
         log_debug("\n");
@@ -83,14 +91,16 @@ next:
         log_debug("sym %02d, type %d, bind %d, ndx %02d, name %s (%s)",
             sym->index, sym->type, sym->bind, sym->sym.st_shndx,
             sym->name, status_str(sym->status));
-        if (sym->sec && (sym->type == STT_FUNC || sym->type == STT_OBJECT))
+        if (sym->sec && (sym->type == STT_FUNC || sym->type == STT_OBJECT)) {
             log_debug(" -> %s", sym->sec->name);
+        }
         log_debug("\n");
     }
 }
 
 /* debuginfo releated */
-static inline bool skip_bytes(unsigned char **iter, unsigned char *end, unsigned int len)
+static inline bool skip_bytes(unsigned char **iter, unsigned char *end,
+    unsigned int len)
 {
     if ((unsigned int)(end - *iter) < len) {
         *iter = end;
@@ -104,26 +114,33 @@ void upatch_rebuild_eh_frame(struct section *sec)
 {
     void *eh_frame;
     unsigned long long frame_size;
+
     struct rela *rela;
-    unsigned char *data, *data_end;
-    unsigned int hdr_length, hdr_id;
+    unsigned char *data;
+    unsigned char *data_end;
+
+    unsigned int hdr_length;
+    unsigned int hdr_id;
+
     unsigned long current_offset;
     unsigned int count = 0;
 
     /* sanity check */
-    if (!is_eh_frame(sec) || is_rela_section(sec) || !sec->rela)
+    if (!is_eh_frame(sec) || is_rela_section(sec) || !sec->rela) {
         return;
+    }
 
-    list_for_each_entry(rela, &sec->rela->relas, list)
-        count ++;
+    list_for_each_entry(rela, &sec->rela->relas, list) {
+        count++;
+    }
 
     /* currently, only delete is possible */
     if (sec->rela->sh.sh_entsize != 0 &&
-        count == sec->rela->sh.sh_size / sec->rela->sh.sh_entsize)
+        count == sec->rela->sh.sh_size / sec->rela->sh.sh_entsize) {
         return;
+    }
 
-    log_debug("sync modification for eh_frame \n");
-
+    log_debug("sync modification for eh_frame\n");
     data = sec->data->d_buf;
     data_end = sec->data->d_buf + sec->data->d_size;
 
@@ -131,7 +148,7 @@ void upatch_rebuild_eh_frame(struct section *sec)
     frame_size = 0;
     eh_frame = calloc(1, sec->data->d_size);
     if (!eh_frame) {
-        ERROR("malloc eh_frame failed \n");
+        ERROR("malloc eh_frame failed\n");
     }
 
     /* 8 is the offset of PC begin */
@@ -139,27 +156,30 @@ void upatch_rebuild_eh_frame(struct section *sec)
     list_for_each_entry(rela, &sec->rela->relas, list) {
         unsigned long offset = rela->offset;
         bool found_rela = false;
-        log_debug("handle relocaton offset at 0x%lx \n", offset);
+        log_debug("handle relocaton offset at 0x%lx\n", offset);
         while (data != data_end) {
             void *__src = data;
 
-            log_debug("current handle offset is 0x%lx \n", current_offset);
+            log_debug("current handle offset is 0x%lx\n", current_offset);
 
             REQUIRE(skip_bytes(&data, data_end, 4), "no length to be read");
             hdr_length = *(unsigned int *)(data - 4);
 
-            REQUIRE(hdr_length != 0xffffffff, "64 bit .eh_frame is not supported");
+            REQUIRE(hdr_length != 0xffffffff,
+                "64 bit .eh_frame is not supported");
             /* if it is 0, we reach the end. */
-            if (hdr_length == 0)
+            if (hdr_length == 0) {
                 break;
+            }
 
             REQUIRE(skip_bytes(&data, data_end, 4), "no length to be read");
             hdr_id = *(unsigned int *)(data - 4);
 
-            REQUIRE(skip_bytes(&data, data_end, hdr_length - 4), "no length to be read");
-
-            if (current_offset == offset)
+            REQUIRE(skip_bytes(&data, data_end, hdr_length - 4),
+                "no length to be read");
+            if (current_offset == offset) {
                 found_rela = true;
+            }
 
             /* CIE or relocation releated FDE */
             if (hdr_id == 0 || found_rela) {
@@ -173,14 +193,14 @@ void upatch_rebuild_eh_frame(struct section *sec)
 
                 frame_size += (hdr_length + 4);
             } else {
-                log_debug("remove FDE at 0x%lx \n", current_offset);
+                log_debug("remove FDE at 0x%lx\n", current_offset);
             }
-
             /* hdr_length(value) + hdr_length(body) */
             current_offset += (4 + hdr_length);
 
-            if (found_rela)
+            if (found_rela) {
                 break;
+            }
         }
     }
 

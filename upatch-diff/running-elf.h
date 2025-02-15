@@ -36,8 +36,8 @@ struct symbol;
 
 struct lookup_result {
     struct debug_symbol *symbol;
-	unsigned long sympos;
-	bool global;
+    unsigned long sympos;
+    bool global;
 };
 
 struct debug_symbol {
