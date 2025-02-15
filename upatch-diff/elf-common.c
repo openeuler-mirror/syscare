@@ -57,8 +57,8 @@ static int mangled_strcmp_dot_L(char *str1, char *str2)
 int mangled_strcmp(char *str1, char *str2)
 {
     /*
-     * ELF string sections aren't mangled, though they look that way.
-     */
+    * ELF string sections aren't mangled, though they look that way.
+    */
     if (strstr(str1, ".str1.")) {
         return strcmp(str1, str2);
     }
@@ -73,17 +73,16 @@ int mangled_strcmp(char *str1, char *str2)
         if (!*str2) {
             return 0;
         }
-
         // format like ".[0-9]"
         if (*str1 == '.' && isdigit(str1[1])) {
             if (!isdigit(str2[1])) {
                 return 1;
             }
             while (isdigit(*++str1)) {
-                // Empty loop body
+                // empty loop body
             }
             while (isdigit(*++str2)) {
-                // Empty loop body
+                // empty loop body
             }
         } else {
             str1++;
@@ -105,13 +104,11 @@ bool is_normal_static_local(struct symbol *sym)
     if (sym->type != STT_OBJECT || sym->bind != STB_LOCAL) {
         return false;
     }
-
     // TODO: .Local ? need a example here
     if (!strncmp(sym->name, ".L", 2)) {
-        ERROR("find no-local variable \n");
+        ERROR("find no-local variable\n");
         return false;
     }
-
     if (!strchr(sym->name, '.')) {
         return false;
     }
@@ -120,7 +117,6 @@ bool is_normal_static_local(struct symbol *sym)
      * TODO: Special static local variables should never be correlated and should always
      * be included if they are referenced by an included function.
      */
-
     return true;
 }
 
@@ -145,10 +141,11 @@ int offset_of_string(struct list_head *list, char *name)
 bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf)
 {
     switch (uelf->arch) {
-        case RISCV64:
         case AARCH64:
             return false;
         case X86_64:
+            return false;
+        case RISCV64:
             return false;
         default:
             ERROR("unsupported arch");
@@ -161,11 +158,11 @@ bool is_mapping_symbol(struct upatch_elf *uelf, struct symbol *sym)
     if ((uelf->arch != AARCH64) && (uelf->arch != RISCV64)) {
         return false;
     }
-
     if (sym->name && sym->name[0] == '$' &&
         sym->type == STT_NOTYPE &&
         sym->bind == STB_LOCAL) {
         return true;
     }
+
     return false;
 }

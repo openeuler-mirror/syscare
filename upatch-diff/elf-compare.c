@@ -29,27 +29,26 @@
 #include "elf-compare.h"
 #include "elf-insn.h"
 
-static void compare_correlated_symbol(struct symbol *sym, struct symbol *symtwin)
+static void compare_correlated_symbol(struct symbol *sym,
+    struct symbol *symtwin)
 {
     // compare bind and type info
     if (sym->sym.st_info != symtwin->sym.st_info ||
         (sym->sec && !symtwin->sec) ||
         (symtwin->sec && !sym->sec)) {
-        DIFF_FATAL("symbol info mismatch: %s", sym->name);
+        ERROR("symbol info mismatch: %s", sym->name);
     }
-
     // check if correlated symbols have correlated sections
-    if (sym->sec && symtwin->sec && sym->sec->twin != symtwin->sec)
-        DIFF_FATAL("symbol changed sections: %s", sym->name);
-
+    if (sym->sec && symtwin->sec && sym->sec->twin != symtwin->sec) {
+        ERROR("symbol changed sections: %s", sym->name);
+    }
     // data object can't change size
-    if (sym->type == STT_OBJECT && sym->sym.st_size != symtwin->sym.st_size)
-        DIFF_FATAL("object size mismatch: %s", sym->name);
-
-    if (sym->sym.st_shndx == SHN_UNDEF ||
-        sym->sym.st_shndx == SHN_ABS)
+    if (sym->type == STT_OBJECT && sym->sym.st_size != symtwin->sym.st_size) {
+        ERROR("object size mismatch: %s", sym->name);
+    }
+    if (sym->sym.st_shndx == SHN_UNDEF || sym->sym.st_shndx == SHN_ABS) {
         sym->status = SAME;
-
+    }
     /*
      * For local symbols, we handle them based on their matching sections.
      */
@@ -65,36 +64,34 @@ void upatch_compare_symbols(struct upatch_elf *uelf)
         } else {
             sym->status = NEW;
         }
-
         log_debug("symbol %s is %s\n", sym->name, status_str(sym->status));
     }
 }
 
 static bool rela_equal(struct rela *rela1, struct rela *rela2)
 {
-    if (rela1->type != rela2->type ||
-        rela1->offset != rela2->offset)
+    if (rela1->type != rela2->type || rela1->offset != rela2->offset) {
         return false;
-
+    }
     /* TODO: handle altinstr_aux */
-
     /* TODO: handle rela for toc section */
-
     if (rela1->string) {
         return rela2->string && !strcmp(rela1->string, rela2->string);
     }
-
     if (rela1->addend != rela2->addend) {
-        log_debug("relocation addend has changed from %ld to %ld", rela1->addend, rela2->addend);
+        log_debug("relocation addend has changed from %ld to %ld",
+            rela1->addend, rela2->addend);
         return false;
     }
 
     return !mangled_strcmp(rela1->sym->name, rela2->sym->name);
 }
 
-static void compare_correlated_rela_section(struct section *relasec, struct section *relasec_twin)
+static void compare_correlated_rela_section(struct section *relasec,
+    struct section *relasec_twin)
 {
-    struct rela *rela1, *rela2 = NULL;
+    struct rela *rela1 = NULL;
+    struct rela *rela2 = NULL;
 
     /* check relocation item one by one, order matters */
     rela2 = list_entry(relasec_twin->relas.next, struct rela, list);
@@ -106,11 +103,11 @@ static void compare_correlated_rela_section(struct section *relasec, struct sect
         relasec->status = CHANGED;
         return;
     }
-
     relasec->status = SAME;
 }
 
-static void compare_correlated_nonrela_section(struct section *sec, struct section *sectwin)
+static void compare_correlated_nonrela_section(struct section *sec,
+    struct section *sectwin)
 {
     if (sec->sh.sh_type != SHT_NOBITS &&
         (sec->data->d_size != sectwin->data->d_size ||
@@ -122,7 +119,8 @@ static void compare_correlated_nonrela_section(struct section *sec, struct secti
 }
 
 // we may change status of sec, they are not same
-static int compare_correlated_section(struct section *sec, struct section *sectwin)
+static int compare_correlated_section(struct section *sec,
+    struct section *sectwin)
 {
     /* TODO: addr align of rodata has changed. after strlen(str) >= 30, align 8 exists */
     /* compare section headers */
@@ -130,23 +128,22 @@ static int compare_correlated_section(struct section *sec, struct section *sectw
         sec->sh.sh_flags != sectwin->sh.sh_flags ||
         sec->sh.sh_entsize != sectwin->sh.sh_entsize ||
         (sec->sh.sh_addralign != sectwin->sh.sh_addralign &&
-         !is_text_section(sec) && !is_string_section(sec))) {
-        DIFF_FATAL("%s section header details differ from %s", sec->name, sectwin->name);
-        return -1;
-    }
+        !is_text_section(sec) && !is_string_section(sec))) {
+            ERROR("%s section header details differ from %s",
+                sec->name, sectwin->name);
+            return -1;
+        }
 
     if (is_note_section(sec)) {
         sec->status = SAME;
         goto out;
     }
-
     /* As above but for aarch64 */
     if (!strcmp(sec->name, ".rela__patchable_function_entries") ||
         !strcmp(sec->name, "__patchable_function_entries")) {
         sec->status = SAME;
         goto out;
     }
-
     /* compare file size and data size(memory size) */
     if (sec->sh.sh_size != sectwin->sh.sh_size ||
         sec->data->d_size != sectwin->data->d_size ||
@@ -195,12 +192,21 @@ bool check_line_func(const char *symname)
  * For example, a WARN() or might_sleep() macro's embedding of the line number into an
  * instruction operand.
  */
-static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
+static bool line_macro_change_only_x86_64(struct upatch_elf *uelf,
+    struct section *sec)
 {
-    unsigned long offset, insn1_len, insn2_len;
-    void *data1, *data2, *insn1, *insn2;
-    struct rela *rela;
-    bool found, found_any = false;
+    unsigned long offset;
+    unsigned long insn1_len;
+    unsigned long insn2_len;
+
+    void *data1;
+    void *data2;
+    void *insn1;
+    void *insn2;
+
+    struct rela *rela = NULL;
+    bool found_any = false;
+    bool found = false;
 
     if (sec->status != CHANGED ||
         is_rela_section(sec) ||
@@ -219,10 +225,9 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
 
         insn1_len = insn_length(uelf, insn1);
         insn2_len = insn_length(uelf, insn2);
-
         if (!insn1_len || !insn2_len) {
             ERROR("decode instruction in section %s at offset 0x%lx failed",
-                  sec->name, offset);
+                sec->name, offset);
         }
 
         if (insn1_len != insn2_len) {
@@ -233,15 +238,14 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
         if (!memcmp(insn1, insn2, insn1_len)) {
             continue;
         }
-
-        log_debug("check list for %s at 0x%lx \n", sec->name, offset);
+        log_debug("check list for %s at 0x%lx\n", sec->name, offset);
 
         /*
          * Here we found a differece between two instructions of the
          * same length. Only ignore the change if:
          *
          * 1) the instruction match a known pattern of a '__LINE__'
-         * 	  macro immediate value which was embedded in the instruction.
+         *    macro immediate value which was embedded in the instruction.
          *
          * 2) the instructions are followed by certain expected relocations.
          *    (white-list)
@@ -256,17 +260,14 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
             if (rela->offset < offset + insn1_len) {
                 continue;
             }
-
             if (rela->string) {
                 continue;
             }
-
             /* TODO: we may need black list ? */
             if (check_line_func(rela->sym->name)) {
                 found = true;
                 break;
             }
-
             return false;
         }
         if (!found) {
@@ -278,18 +279,25 @@ static bool _line_macro_change_only(struct upatch_elf *uelf, struct section *sec
 
     if (!found_any) {
         ERROR("no instruction changes detected for changed section %s",
-              sec->name);
+            sec->name);
     }
+
     return true;
 }
 
-static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct section *sec)
+static bool line_macro_change_only_aarch64(struct upatch_elf *uelf,
+    struct section *sec)
 {
+    unsigned long start1;
+    unsigned long start2;
+    unsigned long size;
+    unsigned long offset;
 
-    unsigned long start1, start2, size, offset;
-    struct rela *rela;
-    bool found_any = false, found;
-    unsigned int mov_imm_mask = ((1 << 16) - 1) << 5;
+    struct rela *rela = NULL;
+    bool found_any = false;
+    bool found = false;
+
+    unsigned int mov_imm_mask = ((1<<16) - 1)<<5;
     unsigned long insn_len = insn_length(uelf, NULL);
 
     if (sec->status != CHANGED ||
@@ -305,13 +313,14 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
     start2 = (unsigned long)sec->data->d_buf;
     size = sec->sh.sh_size;
     for (offset = 0; offset < size; offset += insn_len) {
-        if (!memcmp((void *)start1 + offset, (void *)start2 + offset, insn_len)) {
+        if (!memcmp((void *)start1 + offset, (void *)start2 + offset,
+            insn_len)) {
             continue;
         }
 
         /* verify it's a mov immediate to w1 */
         if ((*(unsigned int *)(start1 + offset) & ~mov_imm_mask) !=
-            (*(unsigned int *)(start2 + offset) & ~mov_imm_mask)) {
+                (*(unsigned int *)(start2 + offset) & ~mov_imm_mask)) {
             return false;
         }
 
@@ -323,7 +332,6 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
             if (rela->string) {
                 continue;
             }
-
             /* TODO: we may need black list ? */
             if (check_line_func(rela->sym->name)) {
                 found = true;
@@ -340,7 +348,7 @@ static bool _line_macro_change_only_aarch64(struct upatch_elf *uelf, struct sect
 
     if (!found_any) {
         ERROR("no instruction changes detected for changed section %s",
-              sec->name);
+            sec->name);
     }
 
     return true;
@@ -350,9 +358,9 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
 {
     switch (uelf->arch) {
         case AARCH64:
-            return _line_macro_change_only_aarch64(uelf, sec);
+            return line_macro_change_only_aarch64(uelf, sec);
         case X86_64:
-            return _line_macro_change_only(uelf, sec);
+            return line_macro_change_only_x86_64(uelf, sec);
         case RISCV64:
             /* TODO: not support */
             break;
@@ -362,7 +370,7 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
     return false;
 }
 
-static inline void update_section_status(struct section *sec, enum status status)
+static void update_section_status(struct section *sec, enum status status)
 {
     if (sec == NULL) {
         return;
@@ -393,7 +401,8 @@ void upatch_compare_sections(struct upatch_elf *uelf)
         }
         /* exclude WARN-only, might_sleep changes */
         if (line_macro_change_only(uelf, sec)) {
-            log_debug("reverting macro / line number section %s status to SAME\n", sec->name);
+            log_debug("reverting line number section %s status to SAME\n",
+                sec->name);
             sec->status = SAME;
         }
         /* sync status */
