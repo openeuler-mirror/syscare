@@ -24,5 +24,5 @@
 
 bool streql(const char *a, const char *b)
 {
-	return strlen(a) == strlen(b) && !strncmp(a, b, strlen(a));
+    return strlen(a) == strlen(b) && !strncmp(a, b, strlen(a));
 }

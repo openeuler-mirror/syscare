@@ -13,7 +13,8 @@
 
 static int stack_check(struct upatch_info *uinfo, unsigned long pc, upatch_action_t action)
 {
-    unsigned long start, end;
+    unsigned long start;
+    unsigned long end;
 
     for (size_t i = 0; i < uinfo->changed_func_num; i++) {
         struct upatch_func_addr addr = uinfo->funcs[i].addr;
@@ -31,7 +32,7 @@ static int stack_check(struct upatch_info *uinfo, unsigned long pc, upatch_actio
         if (pc >= start && pc <= end) {
             log_error("Failed to check stack, running function: %s\n",
                 uinfo->funcs[i].name);
-                return -1;
+            return -1;
         }
     }
     return 0;
@@ -46,11 +47,13 @@ static unsigned long *stack_alloc(size_t *size)
         log_error("Failed to get system stack size config\n");
         return 0;
     }
+
     *size = rl.rlim_cur;
     stack = (unsigned long *)malloc(*size);
     if (stack == NULL) {
         log_error("Failed to malloc stack\n");
     }
+
     return stack;
 }
 
@@ -80,13 +83,16 @@ static int stack_check_each_pid(struct upatch_process *proc,
     if (stack == NULL) {
         return -1;
     }
+
     stack_size = read_stack(proc, stack, stack_size, sp);
     log_debug("[%d]Stack size %lu, region [0x%lx, 0x%lx]\n",
         pid, stack_size, sp, sp + stack_size);
+
     for (size_t i = 0; i < stack_size / sizeof(*stack); i++) {
         if (stack[i] == 0 || stack[i] == -1UL) {
             continue;
         }
+
         ret = stack_check(uinfo, stack[i], action);
         if (ret < 0) {
             goto free;
@@ -97,8 +103,8 @@ free:
     return ret;
 }
 
-int upatch_stack_check(struct upatch_info *uinfo,
-    struct upatch_process *proc, upatch_action_t action)
+int upatch_stack_check(struct upatch_info *uinfo, struct upatch_process *proc,
+    upatch_action_t action)
 {
     struct upatch_ptrace_ctx *pctx;
     struct timeval start, end;
@@ -106,14 +112,18 @@ int upatch_stack_check(struct upatch_info *uinfo,
     if (gettimeofday(&start, NULL) < 0) {
         log_error("Failed to get stack check start time\n");
     }
+
     list_for_each_entry(pctx, &proc->ptrace.pctxs, list) {
         if (stack_check_each_pid(proc, uinfo, pctx->pid, action) < 0) {
             return -EBUSY;
         }
     }
+
     if (gettimeofday(&end, NULL) < 0) {
         log_error("Failed to get stack check end time\n");
     }
-    log_debug("Stack check time %ld microseconds\n", get_microseconds(&start, &end));
+
+    log_debug("Stack check time %ld microseconds\n",
+        get_microseconds(&start, &end));
     return 0;
 }

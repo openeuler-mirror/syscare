@@ -25,29 +25,22 @@
 #ifndef __UPATCH_LOG_H_
 #define __UPATCH_LOG_H_
 
-#include <error.h>
 #include <stdio.h>
+#include <error.h>
 
-/* Files that include log.h must define loglevel and logprefix */
-extern enum loglevel loglevel;
-extern char *logprefix;
+/* Files that include log.h must define g_loglevel and g_logprefix */
+extern enum log_level g_loglevel;
+extern char *g_logprefix;
 
 enum exit_status {
-	EXIT_STATUS_SUCCESS = 0,
-	EXIT_STATUS_ERROR = 1,
-	EXIT_STATUS_DIFF_FATAL = 2,
-	EXIT_STATUS_NO_CHANGE = 3,
+    EXIT_STATUS_SUCCESS = 0,
+    EXIT_STATUS_ERROR   = 1,
 };
 
-/* Since upatch-build is an one-shot program, we do not care about failure
- * handler */
-#define ERROR(format, ...)                                                   \
-	error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, logprefix, \
-	      __FUNCTION__, __LINE__, ##__VA_ARGS__)
-
-#define DIFF_FATAL(format, ...)                                        \
-	error(EXIT_STATUS_DIFF_FATAL, 0, "ERROR: %s: %s: %d: " format, \
-	      logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+/* Since upatch-build is an one-shot program, we do not care about failure handler */
+#define ERROR(format, ...) \
+    error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, \
+        g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
 
 /* it is time cost */
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
@@ -55,22 +48,26 @@ enum exit_status {
 #define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
 #define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
 
-#define log(level, format, ...)                        \
-	({                                             \
-		if (loglevel <= (level))               \
-			printf(format, ##__VA_ARGS__); \
-	})
+#define log(level, format, ...) \
+    do { \
+        if (g_loglevel <= (level)) { \
+            printf(format, ##__VA_ARGS__); \
+        } \
+    } while (0)
 
-#define REQUIRE(COND, message)          \
-	do                              \
-		if (!(COND))            \
-			ERROR(message); \
-	while (0)
+#define REQUIRE(COND, message) \
+    do { \
+        if (!(COND)) { \
+            ERROR(message); \
+        } \
+    } \
+    while (0)
 
-enum loglevel {
-	DEBUG,
-	NORMAL,
-	WARN,
-	ERR,
+enum log_level {
+    DEBUG,
+    NORMAL,
+    WARN,
+    ERR,
 };
+
 #endif

@@ -53,8 +53,7 @@ static unsigned long resolve_rela_dyn(struct upatch_elf *uelf,
             if (rela_dyn[i].r_addend != (long)patch_sym->st_value) {
                 continue;
             }
-        }
-        else {
+        } else {
             char *sym_name = relf->dynstrtab + dynsym[sym_idx].st_name;
             char *sym_splitter = NULL;
 
@@ -256,30 +255,26 @@ static unsigned long resolve_symbol(struct upatch_elf *uelf,
 
     /* resolve from plt */
     elf_addr = resolve_rela_plt(uelf, obj, name, &patch_sym);
-
-	/* resolve from got */
+    /* resolve from got */
     if (!elf_addr) {
         elf_addr = resolve_rela_dyn(uelf, obj, name, &patch_sym);
     }
-
-	/* resolve from dynsym */
+    /* resolve from dynsym */
     if (!elf_addr) {
         elf_addr = resolve_dynsym(uelf, obj, name);
     }
-
-	/* resolve from sym */
+    /* resolve from sym */
     if (!elf_addr) {
         elf_addr = resolve_sym(uelf, name);
     }
-
-	/* resolve from patch sym */
+    /* resolve from patch sym */
     if (!elf_addr) {
         elf_addr = resolve_patch_sym(uelf, name, &patch_sym);
     }
-
     if (!elf_addr) {
         log_error("Cannot resolve symbol '%s'\n", name);
     }
+
     return elf_addr;
 }
 
@@ -295,40 +290,41 @@ int simplify_symbols(struct upatch_elf *uelf, struct object_file *obj)
         const char *name;
 
         if (GELF_ST_TYPE(sym[i].st_info) == STT_SECTION &&
-            sym[i].st_shndx < uelf->info.hdr->e_shnum)
-            name = uelf->info.shstrtab + uelf->info.shdrs[sym[i].st_shndx].sh_name;
-        else
+            sym[i].st_shndx < uelf->info.hdr->e_shnum) {
+            name = uelf->info.shstrtab +
+                uelf->info.shdrs[sym[i].st_shndx].sh_name;
+        } else {
             name = uelf->strtab + sym[i].st_name;
-
-        switch (sym[i].st_shndx) {
-        case SHN_COMMON:
-            log_debug("Unsupported common symbol '%s'\n", name);
-            ret = -ENOEXEC;
-            break;
-        case SHN_ABS:
-            break;
-        case SHN_UNDEF:
-            elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
-            if (!elf_addr) {
-                ret = -ENOEXEC;
-            }
-            sym[i].st_value = elf_addr;
-            log_debug("Resolved symbol '%s' at 0x%lx\n",
-                name, (unsigned long)sym[i].st_value);
-            break;
-        case SHN_LIVEPATCH:
-            sym[i].st_value += uelf->relf->load_bias;
-            log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
-                  name, (unsigned long)sym[i].st_value);
-            break;
-        default:
-            /* use real address to calculate secbase */
-            secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
-            sym[i].st_value += secbase;
-            log_debug("Symbol '%s' at 0x%lx\n",
-                name, (unsigned long)sym[i].st_value);
-            break;
         }
+        switch (sym[i].st_shndx) {
+            case SHN_COMMON:
+                log_debug("Unsupported common symbol '%s'\n", name);
+                ret = -ENOEXEC;
+                break;
+            case SHN_ABS:
+                break;
+            case SHN_UNDEF:
+                elf_addr = resolve_symbol(uelf, obj, name, sym[i]);
+                if (!elf_addr) {
+                    ret = -ENOEXEC;
+                }
+                sym[i].st_value = elf_addr;
+                log_debug("Resolved symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
+            case SHN_LIVEPATCH:
+                sym[i].st_value += uelf->relf->load_bias;
+                log_debug("Resolved livepatch symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
+            default:
+                /* use real address to calculate secbase */
+                secbase = uelf->info.shdrs[sym[i].st_shndx].sh_addralign;
+                sym[i].st_value += secbase;
+                log_debug("Symbol '%s' at 0x%lx\n",
+                    name, (unsigned long)sym[i].st_value);
+                break;
+            }
     }
 
     return ret;
