@@ -15,19 +15,19 @@
 #include "upatch-relocation.h"
 
 enum aarch64_insn_imm_type {
-	AARCH64_INSN_IMM_ADR,
-	AARCH64_INSN_IMM_26,
-	AARCH64_INSN_IMM_19,
-	AARCH64_INSN_IMM_16,
-	AARCH64_INSN_IMM_14,
-	AARCH64_INSN_IMM_12,
-	AARCH64_INSN_IMM_9,
-	AARCH64_INSN_IMM_7,
-	AARCH64_INSN_IMM_6,
-	AARCH64_INSN_IMM_S,
-	AARCH64_INSN_IMM_R,
-	AARCH64_INSN_IMM_N,
-	AARCH64_INSN_IMM_MAX
+    AARCH64_INSN_IMM_ADR,
+    AARCH64_INSN_IMM_26,
+    AARCH64_INSN_IMM_19,
+    AARCH64_INSN_IMM_16,
+    AARCH64_INSN_IMM_14,
+    AARCH64_INSN_IMM_12,
+    AARCH64_INSN_IMM_9,
+    AARCH64_INSN_IMM_7,
+    AARCH64_INSN_IMM_6,
+    AARCH64_INSN_IMM_S,
+    AARCH64_INSN_IMM_R,
+    AARCH64_INSN_IMM_N,
+    AARCH64_INSN_IMM_MAX
 };
 
 #define SZ_2M 0x00200000
@@ -61,11 +61,11 @@ enum aarch64_insn_imm_type {
 #define cpu_to_le32(val) bswap_32(val)
 #endif
 
-u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type, u32 insn,
-				  u64 imm);
+u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type,
+    u32 insn, u64 imm);
 
-s64 extract_insn_imm(s64, int, int);
+s64 extract_insn_imm(s64 sval, int len, int lsb);
 
-s32 insert_insn_imm(enum aarch64_insn_imm_type, void *, u64);
+s32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm);
 
 #endif /* _ARCH_AARCH64_INSN_H */
