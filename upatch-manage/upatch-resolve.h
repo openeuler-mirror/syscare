@@ -32,12 +32,12 @@ struct upatch_jmp_table_entry;
 unsigned int get_jmp_table_entry(void);
 
 unsigned long insert_plt_table(struct upatch_elf *, struct object_file *,
-			       unsigned long, unsigned long);
+    unsigned long, unsigned long);
 unsigned long insert_got_table(struct upatch_elf *, struct object_file *,
-			       unsigned long, unsigned long);
+    unsigned long, unsigned long);
 
-unsigned long search_insert_plt_table(struct upatch_elf *, unsigned long,
-				      unsigned long);
+unsigned long search_insert_plt_table(struct upatch_elf *,
+    unsigned long, unsigned long);
 
 int simplify_symbols(struct upatch_elf *, struct object_file *);
 

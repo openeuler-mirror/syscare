@@ -54,6 +54,7 @@ static int mangled_strcmp_dot_L(char *str1, char *str2)
     return 0;
 }
 #endif
+
 int mangled_strcmp(char *str1, char *str2)
 {
     /*

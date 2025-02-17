@@ -44,20 +44,20 @@ enum {
 
 struct object_file {
     struct list_head list;
-    struct upatch_process* proc;
+    struct upatch_process *proc;
 
     /* Device the object resides on */
     dev_t dev;
     ino_t inode;
 
     /* Object name (as seen in /proc/<pid>/maps) */
-    char* name;
+    char *name;
 
     /* List of object's VM areas */
     struct list_head vma;
 
     /* Pointer to the previous hole in the patient's mapping */
-    struct vm_hole* previous_hole;
+    struct vm_hole *previous_hole;
 
     /* Pointer to the applied patch list, if any */
     struct list_head applied_patch;
@@ -91,8 +91,8 @@ struct obj_vm_area {
 
 struct object_patch {
     struct list_head list;
-    struct upatch_info* uinfo;
-    struct object_file* obj;
+    struct upatch_info *uinfo;
+    struct object_file *obj;
 };
 
 struct upatch_process {
@@ -129,24 +129,23 @@ struct upatch_process {
     unsigned long libc_base;
 };
 
-int upatch_process_init(struct upatch_process*, int);
+int upatch_process_init(struct upatch_process *, int);
 
-void upatch_process_destroy(struct upatch_process*);
+void upatch_process_destroy(struct upatch_process *);
 
-void upatch_process_print_short(struct upatch_process*);
+void upatch_process_print_short(struct upatch_process *);
 
-int upatch_process_mem_open(struct upatch_process*, int);
+int upatch_process_mem_open(struct upatch_process *, int);
 
-int upatch_process_map_object_files(struct upatch_process*);
+int upatch_process_map_object_files(struct upatch_process *);
 
-int upatch_process_attach(struct upatch_process*);
+int upatch_process_attach(struct upatch_process *);
 
-void upatch_process_detach(struct upatch_process* proc);
+void upatch_process_detach(struct upatch_process *proc);
 
-int vm_hole_split(struct vm_hole*, unsigned long, unsigned long);
+int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
 
-unsigned long object_find_patch_region(struct object_file*,
-                                       size_t,
-                                       struct vm_hole**);
+unsigned long object_find_patch_region(struct object_file *,
+    size_t, struct vm_hole **);
 
 #endif

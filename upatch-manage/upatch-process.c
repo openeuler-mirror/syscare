@@ -48,17 +48,11 @@ static const int MAX_ATTACH_ATTEMPTS = 3;
  */
 static int lock_process(int pid)
 {
-    ssize_t ret;
     int fd;
     char path[128];
 
     log_debug("Locking PID %d...", pid);
-
-    ret = snprintf(path, sizeof(path), "/proc/%d/maps", pid);
-    if (ret < 0 || ret >= (ssize_t)sizeof(path)) {
-        log_error("snprintf failed to format path\n");
-        return -1;
-    }
+    (void) snprintf(path, sizeof(path), "/proc/%d/maps", pid);
 
     fd = open(path, O_RDONLY);
     if (fd < 0) {
@@ -78,25 +72,22 @@ static void unlock_process(int fdmaps)
 }
 
 // TODO: get addr_space
-static int upatch_coroutines_init(struct upatch_process* proc)
+static int upatch_coroutines_init(struct upatch_process *proc)
 {
     INIT_LIST_HEAD(&proc->coro.coros);
 
     return 0;
 }
 
-static int process_get_comm(struct upatch_process* proc)
+static int process_get_comm(struct upatch_process *proc)
 {
     char path[128];
     char realpath[PATH_MAX];
-    char *bn, *c;
+    char *bn;
+    char *c;
     ssize_t ret;
 
-    ret = snprintf(path, sizeof(path), "/proc/%d/exe", proc->pid);
-    if (ret < 0 || ret >= (ssize_t)sizeof(path)) {
-        log_error("snprintf failed to format path\n");
-        return -1;
-    }
+    (void) snprintf(path, sizeof(path), "/proc/%d/exe", proc->pid);
     log_debug("Reading from '%s'...", path);
 
     ret = readlink(path, realpath, sizeof(realpath));
@@ -119,7 +110,7 @@ static int process_get_comm(struct upatch_process* proc)
     return 0;
 }
 
-int upatch_process_init(struct upatch_process* proc, int pid)
+int upatch_process_init(struct upatch_process *proc, int pid)
 {
     int fdmaps;
 
@@ -155,10 +146,12 @@ out_err:
     return -1;
 }
 
-static void upatch_object_memfree(struct object_file* obj)
+static void upatch_object_memfree(struct object_file *obj)
 {
-    struct object_patch *opatch, *opatch_safe;
-    struct obj_vm_area *ovma, *ovma_safe;
+    struct object_patch *opatch;
+    struct object_patch *opatch_safe;
+    struct obj_vm_area *ovma;
+    struct obj_vm_area *ovma_safe;
 
     if (obj->name) {
         free(obj->name);
@@ -179,11 +172,14 @@ static void upatch_object_memfree(struct object_file* obj)
     }
 }
 
-static void upatch_process_memfree(struct upatch_process* proc)
+static void upatch_process_memfree(struct upatch_process *proc)
 {
-    struct upatch_ptrace_ctx *p, *p_safe;
-    struct object_file *obj, *obj_safe;
-    struct vm_hole *hole, *hole_safe;
+    struct upatch_ptrace_ctx *p;
+    struct upatch_ptrace_ctx *p_safe;
+    struct object_file *obj;
+    struct object_file *obj_safe;
+    struct vm_hole *hole;
+    struct vm_hole *hole_safe;
 
     list_for_each_entry_safe(p, p_safe, &proc->ptrace.pctxs, list) {
         free(p);
@@ -199,24 +195,19 @@ static void upatch_process_memfree(struct upatch_process* proc)
     }
 }
 
-void upatch_process_destroy(struct upatch_process* proc)
+void upatch_process_destroy(struct upatch_process *proc)
 {
     unlock_process(proc->fdmaps);
     upatch_process_memfree(proc);
 }
 
-static void process_print_cmdline(struct upatch_process* proc)
+static void process_print_cmdline(struct upatch_process *proc)
 {
     char buf[PATH_MAX];
-    ssize_t i, rv;
-    ssize_t ret;
+    ssize_t i;
+    ssize_t rv;
 
-    ret = snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
-    if (ret < 0 || ret >= (ssize_t)sizeof(buf)) {
-        log_error("snprintf failed to format buf\n");
-        return;
-    }
-
+    (void) snprintf(buf, PATH_MAX, "/proc/%d/cmdline", proc->pid);
 
     int fd = open(buf, O_RDONLY);
     if (fd == -1) {
@@ -226,7 +217,6 @@ static void process_print_cmdline(struct upatch_process* proc)
 
     while (1) {
         rv = read(fd, buf, sizeof(buf));
-
         if (rv == -1) {
             if (errno == EINTR) {
                 continue;
@@ -252,28 +242,22 @@ err_close:
     close(fd);
 }
 
-void upatch_process_print_short(struct upatch_process* proc)
+void upatch_process_print_short(struct upatch_process *proc)
 {
     log_debug("process %d, cmdline: ", proc->pid);
     process_print_cmdline(proc);
     log_debug("\n");
 }
 
-int upatch_process_mem_open(struct upatch_process* proc, int mode)
+int upatch_process_mem_open(struct upatch_process *proc, int mode)
 {
     char path[PATH_MAX];
-    ssize_t ret;
 
     if (proc->memfd >= 0) {
         close(proc->memfd);
     }
 
-    ret = snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
-    if (ret < 0 || ret >= (ssize_t)sizeof(path)) {
-        log_error("snprintf failed to format path\n");
-        return -1;
-    }
-
+    (void) snprintf(path, sizeof(path), "/proc/%d/mem", proc->pid);
     proc->memfd = open(path, mode == MEM_WRITE ? O_RDWR : O_RDONLY);
     if (proc->memfd < 0) {
         log_error("Failed to open file '%s'\n", path);
@@ -283,7 +267,7 @@ int upatch_process_mem_open(struct upatch_process* proc, int mode)
     return 0;
 }
 
-static unsigned int perms2prot(const char* perms)
+static unsigned int perms2prot(const char *perms)
 {
     unsigned int prot = 0;
 
@@ -300,11 +284,10 @@ static unsigned int perms2prot(const char* perms)
     return prot;
 }
 
-static struct vm_hole* process_add_vm_hole(struct upatch_process* proc,
-                                           unsigned long hole_start,
-                                           unsigned long hole_end)
+static struct vm_hole *process_add_vm_hole(struct upatch_process *proc,
+    unsigned long hole_start, unsigned long hole_end)
 {
-    struct vm_hole* hole;
+    struct vm_hole *hole;
 
     hole = malloc(sizeof(*hole));
     if (hole == NULL) {
@@ -320,13 +303,11 @@ static struct vm_hole* process_add_vm_hole(struct upatch_process* proc,
     return hole;
 }
 
-static int process_get_object_type(struct upatch_process* proc,
-                                   struct vm_area* vma,
-                                   char* name,
-                                   unsigned char* buf,
-                                   size_t bufsize)
+static int process_get_object_type(struct upatch_process *proc,
+    struct vm_area *vma, char *name, unsigned char *buf, size_t bufsize)
 {
-    int ret, type = OBJECT_UNKNOWN;
+    int ret;
+    int type = OBJECT_UNKNOWN;
 
     ret = upatch_process_mem_read(proc, vma->start, buf, bufsize);
     if (ret < 0) {
@@ -346,17 +327,17 @@ static int process_get_object_type(struct upatch_process* proc,
     return type;
 }
 
-static int vm_area_same(struct vm_area* a, struct vm_area* b)
+static int vm_area_same(struct vm_area *a, struct vm_area *b)
 {
-    return ((a->start == b->start) && (a->end == b->end) &&
-            (a->prot == b->prot));
+    return ((a->start == b->start) &&
+        (a->end == b->end) &&
+        (a->prot == b->prot));
 }
 
-static int object_add_vm_area(struct object_file* o,
-                              struct vm_area* vma,
-                              struct vm_hole* hole)
+static int object_add_vm_area(struct object_file *o, struct vm_area *vma,
+    struct vm_hole *hole)
 {
-    struct obj_vm_area* ovma;
+    struct obj_vm_area *ovma;
 
     if (o->previous_hole == NULL) {
         o->previous_hole = hole;
@@ -367,24 +348,24 @@ static int object_add_vm_area(struct object_file* o,
             return 0;
         }
     }
+
     ovma = malloc(sizeof(*ovma));
     if (!ovma) {
         return -1;
     }
+
     memset(ovma, 0, sizeof(*ovma));
     ovma->inmem = *vma;
+
     list_add(&ovma->list, &o->vma);
     return 0;
 }
 
-static struct object_file* process_new_object(struct upatch_process* proc,
-                                              dev_t dev,
-                                              ino_t inode,
-                                              const char* name,
-                                              struct vm_area* vma,
-                                              struct vm_hole* hole)
+static struct object_file *process_new_object(struct upatch_process *proc,
+    dev_t dev, ino_t inode, const char *name,
+    struct vm_area *vma, struct vm_hole *hole)
 {
-    struct object_file* o;
+    struct object_file *o;
 
     log_debug("Creating object file '%s' for %lx:%lu...", name, dev, inode);
 
@@ -421,23 +402,24 @@ static struct object_file* process_new_object(struct upatch_process* proc,
     return o;
 }
 
-static void link_funcs_name(struct upatch_info* uinfo)
+static void link_funcs_name(struct upatch_info *uinfo)
 {
     unsigned long idx = 0;
 
     for (unsigned long i = 0; i < uinfo->changed_func_num; i++) {
-        char* name = (char*)uinfo->func_names + idx;
+        char *name = (char *)uinfo->func_names + idx;
 
         uinfo->funcs[i].name = name;
         idx += strlen(name) + 1;
     }
 }
 
-static void free_object_patch(struct object_patch* opatch)
+static void free_object_patch(struct object_patch *opatch)
 {
     if (opatch == NULL) {
         return;
     }
+
     if (opatch->uinfo != NULL) {
         if (opatch->uinfo->funcs != NULL) {
             free(opatch->uinfo->funcs);
@@ -447,15 +429,14 @@ static void free_object_patch(struct object_patch* opatch)
         }
         free(opatch->uinfo);
     }
+
     free(opatch);
 }
 
-static int add_upatch_object(struct upatch_process* proc,
-                             struct object_file* o,
-                             unsigned long src,
-                             unsigned char* header_buf)
+static int add_upatch_object(struct upatch_process *proc, struct object_file *o,
+    unsigned long src, unsigned char *header_buf)
 {
-    struct object_patch* opatch;
+    struct object_patch *opatch;
 
     opatch = malloc(sizeof(struct object_patch));
     if (opatch == NULL) {
@@ -479,8 +460,9 @@ static int add_upatch_object(struct upatch_process* proc,
         free_object_patch(opatch);
         return -ENOMEM;
     }
-    if (upatch_process_mem_read(proc, src, opatch->uinfo->func_names,
-                                opatch->uinfo->func_names_size)) {
+
+    if (upatch_process_mem_read(proc, src,
+        opatch->uinfo->func_names, opatch->uinfo->func_names_size)) {
         log_error("Cannot read patch func names at 0x%lx\n", src);
         free_object_patch(opatch);
         return -1;
@@ -488,45 +470,43 @@ static int add_upatch_object(struct upatch_process* proc,
 
     src += opatch->uinfo->func_names_size;
     opatch->uinfo->funcs = malloc(opatch->uinfo->changed_func_num *
-                                  sizeof(struct upatch_info_func));
+        sizeof(struct upatch_info_func));
     if (upatch_process_mem_read(proc, src, opatch->uinfo->funcs,
-                                opatch->uinfo->changed_func_num *
-                                sizeof(struct upatch_info_func))) {
+        opatch->uinfo->changed_func_num * sizeof(struct upatch_info_func))) {
         log_error("can't read patch funcs at 0x%lx\n", src);
         free_object_patch(opatch);
         return -1;
     }
+
     link_funcs_name(opatch->uinfo);
     list_add(&opatch->list, &o->applied_patch);
     o->num_applied_patch++;
     o->is_patch = 1;
+
     return 0;
 }
 /**
  * Returns: 0 if everything is ok, -1 on error.
  */
-static int process_add_object_vma(struct upatch_process* proc,
-                                  dev_t dev,
-                                  ino_t inode,
-                                  char* name,
-                                  struct vm_area* vma,
-                                  struct vm_hole* hole)
+static int process_add_object_vma(struct upatch_process *proc,
+    dev_t dev, ino_t inode, char *name,
+    struct vm_area *vma, struct vm_hole *hole)
 {
     int object_type;
     unsigned char header_buf[1024];
-    struct object_file* o;
+    struct object_file *o;
 
     /* Event though process_get_object_type() return -1,
      * we still need continue process. */
-    object_type = process_get_object_type(proc, vma, name, header_buf,
-                                          sizeof(header_buf));
-
+    object_type = process_get_object_type(proc, vma, name,
+        header_buf, sizeof(header_buf));
     if (object_type != OBJECT_UPATCH) {
         /* Is not a upatch, look if this is a vm_area of an already
          * enlisted object.
          */
         list_for_each_entry_reverse(o, &proc->objs, list) {
-            if ((dev && inode && o->dev == dev && o->inode == (ino_t)inode) ||
+            if ((dev && inode && o->dev == dev &&
+                 o->inode == (ino_t)inode) ||
                 (dev == 0 && !strcmp(o->name, name))) {
                 return object_add_vm_area(o, vma, hole);
             }
@@ -544,6 +524,7 @@ static int process_add_object_vma(struct upatch_process* proc,
             return -1;
         }
     }
+
     if (object_type == OBJECT_ELF) {
         o->is_elf = 1;
     }
@@ -551,12 +532,13 @@ static int process_add_object_vma(struct upatch_process* proc,
     return 0;
 }
 
-int upatch_process_parse_proc_maps(struct upatch_process* proc)
+int upatch_process_parse_proc_maps(struct upatch_process *proc)
 {
-    FILE* f;
-    int ret, is_libc_base_set = 0;
+    FILE *f;
+    int ret;
+    int is_libc_base_set = 0;
     unsigned long hole_start = 0;
-    struct vm_hole* hole = NULL;
+    struct vm_hole *hole = NULL;
 
     /*
      * 1. Create the list of all objects in the process
@@ -582,22 +564,27 @@ int upatch_process_parse_proc_maps(struct upatch_process* proc)
     do {
         struct vm_area vma;
         char line[1024];
-        unsigned long start, end, offset;
-        unsigned int maj, min, inode;
-        char perms[5], name_[256], *name = name_;
+        unsigned long start;
+        unsigned long end;
+        unsigned long offset;
+        unsigned int maj;
+        unsigned int min;
+        unsigned int inode;
+        char perms[5];
+        char name_[256];
+        char *name = name_;
         int r;
 
         if (!fgets(line, sizeof(line), f)) {
             break;
         }
 
-        r = sscanf(line, "%lx-%lx %s %lx %x:%x %d %255s", &start, &end, perms,
-                   &offset, &maj, &min, &inode, name_);
+        r = sscanf(line, "%lx-%lx %s %lx %x:%x %d %255s",
+            &start, &end, perms, &offset, &maj, &min, &inode, name_);
         if (r == EOF) {
             log_error("Failed to read maps: unexpected EOF");
             goto error;
         }
-
         if (r != 8) {
             strcpy(name, "[anonymous]");
         }
@@ -609,20 +596,18 @@ int upatch_process_parse_proc_maps(struct upatch_process* proc)
 
         /* Hole must be at least 2 pages for guardians */
         if (start - hole_start > (unsigned long)(2 * PAGE_SIZE)) {
-            hole =
-                process_add_vm_hole(proc, hole_start + (unsigned long)PAGE_SIZE,
-                                    start - (unsigned long)PAGE_SIZE);
+            hole = process_add_vm_hole(proc, hole_start + (unsigned long)PAGE_SIZE,
+                           start - (unsigned long)PAGE_SIZE);
             if (hole == NULL) {
                 log_error("Failed to add vma hole");
                 goto error;
             }
         }
         hole_start = end;
-
         name = name[0] == '/' ? basename(name) : name;
 
-        ret = process_add_object_vma(proc, makedev(maj, min), inode, name, &vma,
-                                     hole);
+        ret = process_add_object_vma(proc, makedev(maj, min), inode,
+            name, &vma, hole);
         if (ret < 0) {
             log_error("Failed to add object vma");
             goto error;
@@ -633,22 +618,15 @@ int upatch_process_parse_proc_maps(struct upatch_process* proc)
             proc->libc_base = start;
             is_libc_base_set = 1;
         }
-
     } while (1);
 
-    if (fclose(f) != 0) {
-        log_error("Failed to close file\n");
-        close(fd);
-        return -1;
-    }
-    
+    fclose(f);
     close(fd);
-
     log_debug("Found %d object file(s)\n", proc->num_objs);
 
     if (!is_libc_base_set) {
         log_error("Can't find libc_base required for manipulations: %d",
-                  proc->pid);
+            proc->pid);
         return -1;
     }
 
@@ -660,30 +638,22 @@ error:
     return -1;
 }
 
-int upatch_process_map_object_files(struct upatch_process* proc)
+int upatch_process_map_object_files(struct upatch_process *proc)
 {
     // we can get plt/got table from mem's elf_segments
     // Now we read them from the running file
     return upatch_process_parse_proc_maps(proc);
 }
 
-static int process_list_threads(struct upatch_process* proc,
-                                int** ppids,
-                                size_t* npids,
-                                size_t* alloc)
+static int process_list_threads(struct upatch_process *proc, int **ppids,
+    size_t *npids, size_t *alloc)
 {
-    DIR* dir = NULL;
-    struct dirent* de;
+    DIR *dir = NULL;
+    struct dirent *de;
     char path[PATH_MAX];
-    int* pids = *ppids;
-    ssize_t ret;
+    int *pids = *ppids;
 
-    ret = snprintf(path, sizeof(path), "/proc/%d/task", proc->pid);
-    if (ret < 0 || ret >= (ssize_t)sizeof(path)) {
-        log_error("snprintf failed to format path\n");
-        return -1;
-    }
-
+    (void) snprintf(path, sizeof(path), "/proc/%d/task", proc->pid);
     dir = opendir(path);
     if (!dir) {
         log_error("Failed to open directory '%s'\n", path);
@@ -692,28 +662,25 @@ static int process_list_threads(struct upatch_process* proc,
 
     *npids = 0;
     while ((de = readdir(dir))) {
-        int* t;
+        int *t;
         if (de->d_name[0] == '.') {
             continue;
         }
-
         if (*npids >= *alloc) {
             *alloc = *alloc ? *alloc * 2 : 1;
-
             t = realloc(pids, *alloc * sizeof(*pids));
             if (t == NULL) {
                 log_error("Failed to (re)allocate memory for pids\n");
                 goto dealloc;
             }
-
             pids = t;
         }
 
         pids[*npids] = atoi(de->d_name);
         (*npids)++;
     }
-    closedir(dir);
 
+    closedir(dir);
     *ppids = pids;
 
     return (int)*npids;
@@ -722,16 +689,23 @@ dealloc:
     if (dir) {
         closedir(dir);
     }
+
     free(pids);
     *ppids = NULL;
     *alloc = *npids = 0;
     return -1;
 }
 
-int upatch_process_attach(struct upatch_process* proc)
+int upatch_process_attach(struct upatch_process *proc)
 {
-    int *pids = NULL, ret;
-    size_t i, npids = 0, alloc = 0, prevnpids = 0, nattempts;
+    int *pids = NULL;
+    int ret;
+
+    size_t i;
+    size_t npids = 0;
+    size_t alloc = 0;
+    size_t prevnpids = 0;
+    size_t nattempts;
 
     if (upatch_process_mem_open(proc, MEM_WRITE) < 0) {
         return -1;
@@ -754,18 +728,12 @@ int upatch_process_attach(struct upatch_process* proc)
             if (prevnpids == npids) {
                 break;
             }
-
             log_debug("Found %lu new thread(s), attaching...\n",
-                      prevnpids - npids);
+                prevnpids - npids);
         }
 
         for (i = prevnpids; i < npids; i++) {
             int pid = pids[i];
-
-            // if (process_has_thread_pid(proc, pid)) {
-            // 	log_debug("already have pid %d\n", pid);
-            // 	continue;
-            // }
 
             ret = upatch_ptrace_attach_thread(proc, pid);
             if (ret < 0) {
@@ -796,9 +764,10 @@ detach:
     return -1;
 }
 
-void upatch_process_detach(struct upatch_process* proc)
+void upatch_process_detach(struct upatch_process *proc)
 {
-    struct upatch_ptrace_ctx *p, *ptmp;
+    struct upatch_ptrace_ctx *p;
+    struct upatch_ptrace_ctx *ptmp;
     int status;
     pid_t pid;
 
@@ -835,8 +804,8 @@ void upatch_process_detach(struct upatch_process* proc)
     log_debug("Process detached\n");
 }
 
-static inline struct vm_hole* next_hole(struct vm_hole* hole,
-                                        struct list_head* head)
+static inline struct vm_hole *next_hole(struct vm_hole *hole,
+    struct list_head *head)
 {
     if (hole == NULL || hole->list.next == head) {
         return NULL;
@@ -845,8 +814,8 @@ static inline struct vm_hole* next_hole(struct vm_hole* hole,
     return list_entry(hole->list.next, struct vm_hole, list);
 }
 
-static inline struct vm_hole* prev_hole(struct vm_hole* hole,
-                                        struct list_head* head)
+static inline struct vm_hole *prev_hole(struct vm_hole *hole,
+    struct list_head *head)
 {
     if (hole == NULL || hole->list.prev == head) {
         return NULL;
@@ -855,17 +824,17 @@ static inline struct vm_hole* prev_hole(struct vm_hole* hole,
     return list_entry(hole->list.prev, struct vm_hole, list);
 }
 
-static inline unsigned long hole_size(struct vm_hole* hole)
+static inline unsigned long hole_size(struct vm_hole *hole)
 {
     if (hole == NULL) {
         return 0;
     }
+
     return hole->end - hole->start;
 }
 
-int vm_hole_split(struct vm_hole* hole,
-                  unsigned long alloc_start,
-                  unsigned long alloc_end)
+int vm_hole_split(struct vm_hole *hole,
+    unsigned long alloc_start, unsigned long alloc_end)
 {
     unsigned long page_size = (unsigned long)PAGE_SIZE;
 
@@ -873,7 +842,7 @@ int vm_hole_split(struct vm_hole* hole,
     alloc_end = ROUND_UP(alloc_end, page_size) + page_size;
 
     if (alloc_start > hole->start) {
-        struct vm_hole* left = NULL;
+        struct vm_hole *left = NULL;
 
         left = malloc(sizeof(*hole));
         if (left == NULL) {
@@ -904,16 +873,16 @@ int vm_hole_split(struct vm_hole* hole,
  * from the obj.
  * eg: R_AARCH64_ADR_GOT_PAGE
  */
-unsigned long object_find_patch_region(struct object_file* obj,
-                                       size_t memsize,
-                                       struct vm_hole** hole)
+unsigned long object_find_patch_region(struct object_file *obj,
+    size_t memsize, struct vm_hole **hole)
 {
-    struct list_head* head = &obj->proc->vmaholes;
-    struct vm_hole* left_hole = obj->previous_hole;
-    struct vm_hole* right_hole = next_hole(left_hole, head);
+    struct list_head *head = &obj->proc->vmaholes;
+    struct vm_hole *left_hole = obj->previous_hole;
+    struct vm_hole *right_hole = next_hole(left_hole, head);
     unsigned long region_start = 0;
-    struct obj_vm_area* sovma;
-    unsigned long obj_start, obj_end;
+    struct obj_vm_area *sovma;
+    unsigned long obj_start;
+    unsigned long obj_end;
 
     sovma = list_first_entry(&obj->vma, struct obj_vm_area, list);
     obj_start = sovma->inmem.start;
@@ -942,12 +911,14 @@ unsigned long object_find_patch_region(struct object_file* obj,
         right_hole = next_hole(right_hole, head);
         left_hole = prev_hole(left_hole, head);
     }
+
     log_error("Cannot find suitable region for patch '%s'\n", obj->name);
     return -1UL;
+
 found:
     region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
-    log_debug("Found patch region for '%s' 0xat %lx\n", obj->name,
-              region_start);
+    log_debug("Found patch region for '%s' 0xat %lx\n",
+        obj->name, region_start);
 
     return region_start;
 }

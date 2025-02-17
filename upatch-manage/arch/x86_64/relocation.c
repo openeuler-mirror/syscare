@@ -25,43 +25,40 @@
 #include "upatch-relocation.h"
 
 int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
-                       unsigned int relsec)
+    unsigned int relsec)
 {
     unsigned int i;
     GElf_Sym *sym;
-    void *loc, *real_loc;
+    void *loc;
+    void *real_loc;
     u64 val;
     const char *sym_name;
     GElf_Xword tls_size;
     GElf_Shdr *shdrs = (void *)uelf->info.shdrs;
     GElf_Rela *rel = (void *)shdrs[relsec].sh_addr;
 
-    log_debug("Applying relocate section %u to %u\n", relsec, shdrs[relsec].sh_info);
+    log_debug("Applying relocate section %u to %u\n", relsec,
+        shdrs[relsec].sh_info);
 
     for (i = 0; i < shdrs[relsec].sh_size / sizeof(*rel); i++) {
         /* This is where to make the change, calculate it from kernel address */
-        loc = (void *)shdrs[shdrs[relsec].sh_info].sh_addr +
-                rel[i].r_offset;
-
+        loc = (void *)shdrs[shdrs[relsec].sh_info].sh_addr + rel[i].r_offset;
         real_loc = (void *)shdrs[shdrs[relsec].sh_info].sh_addralign +
-                rel[i].r_offset;
+            rel[i].r_offset;
 
         /* This is the symbol it is referring to.  Note that all
            undefined symbols have been resolved. */
-        sym = (GElf_Sym *)shdrs[symindex].sh_addr +
-                GELF_R_SYM(rel[i].r_info);
-
+        sym = (GElf_Sym *)shdrs[symindex].sh_addr + GELF_R_SYM(rel[i].r_info);
         if (GELF_ST_TYPE(sym[i].st_info) == STT_SECTION &&
             sym->st_shndx < uelf->info.hdr->e_shnum) {
-            sym_name = uelf->info.shstrtab +
-                    shdrs[sym->st_shndx].sh_name;
+            sym_name = uelf->info.shstrtab + shdrs[sym->st_shndx].sh_name;
         } else {
             sym_name = uelf->strtab + sym->st_name;
         }
 
         log_debug("type %d st_value %lx r_addend %lx loc %lx\n",
-                  (int)GELF_R_TYPE(rel[i].r_info), sym->st_value,
-                  rel[i].r_addend, (u64)loc);
+            (int)GELF_R_TYPE(rel[i].r_info), sym->st_value,
+            rel[i].r_addend, (u64)loc);
 
         val = sym->st_value + (unsigned long)rel[i].r_addend;
         switch (GELF_R_TYPE(rel[i].r_info)) {
@@ -102,7 +99,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 }
                 /* G + GOT + A */
                 val = sym->st_value + (unsigned long)rel[i].r_addend;
-                /* fallthrough */
+                /* fall through */
             case R_X86_64_PC32:
             case R_X86_64_PLT32:
                 if (*(u32 *)loc != 0) {
@@ -119,8 +116,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 memcpy(loc, &val, 8);
                 break;
             case R_X86_64_TPOFF32:
-                tls_size = ALIGN(uelf->relf->tls_size,
-                                 uelf->relf->tls_align);
+                tls_size = ALIGN(uelf->relf->tls_size, uelf->relf->tls_align);
                 // %fs + val - tls_size
                 if (val >= tls_size) {
                     goto overflow;
@@ -134,16 +130,16 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 return -ENOEXEC;
         }
     }
-	return 0;
+    return 0;
 
 invalid_relocation:
     log_error("upatch: Skipping invalid relocation target, \
-              existing value is nonzero for type %d, loc %p, name %s\n",
-              (int)GELF_R_TYPE(rel[i].r_info), loc, sym_name);
+        existing value is nonzero for type %d, loc %p, name %s\n",
+        (int)GELF_R_TYPE(rel[i].r_info), loc, sym_name);
     return -ENOEXEC;
 
 overflow:
     log_error("upatch: overflow in relocation type %d name %s\n",
-              (int)GELF_R_TYPE(rel[i].r_info), sym_name);
+        (int)GELF_R_TYPE(rel[i].r_info), sym_name);
     return -ENOEXEC;
 }

@@ -24,14 +24,16 @@
 #include <stdbool.h>
 #include <sys/time.h>
 
-#define ALLOC_LINK(_new, _list)               \
-    do {                                      \
-        (_new) = calloc(1, sizeof(*(_new)));  \
-        if (!(_new))                          \
-            ERROR("calloc");                  \
-        INIT_LIST_HEAD(&(_new)->list);        \
-        if (_list)                            \
+#define ALLOC_LINK(_new, _list) \
+    do { \
+        (_new) = calloc(1, sizeof(*(_new))); \
+        if (!(_new)) { \
+            ERROR("calloc"); \
+        } \
+        INIT_LIST_HEAD(&(_new)->list); \
+        if (_list) { \
             list_add(&(_new)->list, (_list)); \
+        } \
     } while (0)
 
 static inline int page_shift(long n)
@@ -51,6 +53,7 @@ static inline int page_shift(long n)
 #define PAGE_MASK (~(PAGE_SIZE - 1))
 #define PAGE_SHIFT page_shift(PAGE_SIZE)
 #endif
+
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
 #define ALIGN(x, a) (((x) + (a) - 1) & (~((a) - 1)))
 #define PAGE_ALIGN(x) ALIGN((x), (unsigned long)PAGE_SIZE)

@@ -55,25 +55,25 @@ struct upatch_info_func {
     struct upatch_func_addr addr;
     unsigned long old_insn[2];
     unsigned long new_insn;
-    char* name;
+    char *name;
 };
 
 struct upatch_info {
-    char magic[7];               // upatch magic
-    char id[UPATCH_ID_LEN + 1];  // upatch id
-    unsigned long size;          // upatch_info and upatch_info_func size
-    unsigned long start;         // upatch vma start
-    unsigned long end;           // upatch vma end
+    char magic[7]; // upatch magic
+    char id[UPATCH_ID_LEN + 1]; // upatch id
+    unsigned long size; // upatch_info and upatch_info_func size
+    unsigned long start; // upatch vma start
+    unsigned long end; // upatch vma end
     unsigned long changed_func_num;
-    struct upatch_info_func* funcs;
-    char* func_names;
+    struct upatch_info_func *funcs;
+    char *func_names;
     unsigned long func_names_size;
 };
 
 struct upatch_layout {
     /* The actual code + data. */
-    void* kbase;
-    void* base;
+    void *kbase;
+    void *base;
     /* Total size. */
     unsigned long size;
     /* The size of the executable code.  */
@@ -89,18 +89,18 @@ struct upatch_layout {
 struct upatch_patch_func {
     struct upatch_func_addr addr;
     unsigned long sympos; /* handle local symbols */
-    char* name;
+    char *name;
 };
 
 struct elf_info {
-    const char* name;
+    const char *name;
     ino_t inode;
-    void* patch_buff;
+    void *patch_buff;
     size_t patch_size;
 
-    GElf_Ehdr* hdr;
-    GElf_Shdr* shdrs;
-    char* shstrtab;
+    GElf_Ehdr *hdr;
+    GElf_Shdr *shdrs;
+    char *shstrtab;
 
     unsigned int num_build_id;
     bool is_pie;
@@ -111,10 +111,10 @@ struct running_elf {
     struct elf_info info;
 
     unsigned long num_syms;
-    char* strtab;
-    char* dynstrtab;
+    char *strtab;
+    char *dynstrtab;
 
-    GElf_Phdr* phdrs;
+    GElf_Phdr *phdrs;
     GElf_Xword tls_size;
     GElf_Xword tls_align;
 
@@ -133,7 +133,7 @@ struct upatch_elf {
     struct elf_info info;
 
     unsigned long num_syms;
-    char* strtab;
+    char *strtab;
 
     struct {
         unsigned int sym, str;
@@ -148,17 +148,17 @@ struct upatch_elf {
     /* memory layout for patch */
     struct upatch_layout core_layout;
 
-    struct running_elf* relf;
+    struct running_elf *relf;
 };
 
-int upatch_init(struct upatch_elf*, const char*);
-int binary_init(struct running_elf*, const char*);
-void upatch_close(struct upatch_elf*);
-void binary_close(struct running_elf*);
+int upatch_init(struct upatch_elf *, const char *);
+int binary_init(struct running_elf *, const char *);
+void upatch_close(struct upatch_elf *);
+void binary_close(struct running_elf *);
 
-bool check_build_id(struct elf_info*, struct elf_info*);
+bool check_build_id(struct elf_info *, struct elf_info *);
 
-bool is_upatch_section(const char*);
+bool is_upatch_section(const char *);
 
 bool is_note_section(GElf_Word);
 

@@ -31,8 +31,7 @@ int apply_relocations(struct upatch_elf *uelf)
     /* Now do relocations. */
     for (i = 1; i < uelf->info.hdr->e_shnum; i++) {
         unsigned int infosec = uelf->info.shdrs[i].sh_info;
-        const char *name =
-            uelf->info.shstrtab + uelf->info.shdrs[i].sh_name;
+        const char *name = uelf->info.shstrtab + uelf->info.shdrs[i].sh_name;
 
         /* Not a valid relocation section? */
         if (infosec >= uelf->info.hdr->e_shnum) {
@@ -55,5 +54,6 @@ int apply_relocations(struct upatch_elf *uelf)
             break;
         }
     }
+
     return err;
 }

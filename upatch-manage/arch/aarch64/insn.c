@@ -11,12 +11,12 @@
 #include "insn.h"
 
 static int aarch64_get_imm_shift_mask(enum aarch64_insn_imm_type type,
-				      u32 *maskp, int *shiftp)
+    u32 *maskp, int *shiftp)
 {
-	u32 mask;
-	int shift;
+    u32 mask;
+    int shift;
 
-	switch (type) {
+    switch (type) {
         case AARCH64_INSN_IMM_26:
             mask = BIT(26) - 1;
             shift = 0;
@@ -60,24 +60,28 @@ static int aarch64_get_imm_shift_mask(enum aarch64_insn_imm_type type,
             break;
         default:
             return -EINVAL;
-	}
+    }
 
-	*maskp = mask;
-	*shiftp = shift;
+    *maskp = mask;
+    *shiftp = shift;
 
-	return 0;
+    return 0;
 }
 
-u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type, u32 insn,
-				  u64 imm)
+u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type,
+    u32 insn, u64 imm)
 {
-	u32 immlo, immhi, mask;
-	int shift;
+    u32 immlo;
+    u32 immhi;
+    u32 mask;
 
-	if (insn == AARCH64_BREAK_FAULT)
-		return AARCH64_BREAK_FAULT;
+    int shift;
 
-	switch (type) {
+    if (insn == AARCH64_BREAK_FAULT) {
+        return AARCH64_BREAK_FAULT;
+    }
+
+    switch (type) {
         case AARCH64_INSN_IMM_ADR:
             shift = 0;
             immlo = (imm & ADR_IMM_LOMASK) << ADR_IMM_LOSHIFT;
@@ -89,42 +93,39 @@ u32 aarch64_insn_encode_immediate(enum aarch64_insn_imm_type type, u32 insn,
             break;
         default:
             if (aarch64_get_imm_shift_mask(type, &mask, &shift) < 0) {
-                log_error("upatch: unknown immediate encoding %d\n",
-                    type);
+                log_error("upatch: unknown immediate encoding %d\n", type);
                 return AARCH64_BREAK_FAULT;
             }
-	}
+    }
 
-	/* Update the immediate field. */
-	insn &= ~(mask << shift);
-	insn |= (u32)(imm & mask) << shift;
+    /* Update the immediate field. */
+    insn &= ~(mask << shift);
+    insn |= (u32)(imm & mask) << shift;
 
-	return insn;
+    return insn;
 }
 
 s64 extract_insn_imm(s64 sval, int len, int lsb)
 {
-	s64 imm, imm_mask;
+    s64 imm;
+    s64 imm_mask;
 
-	imm = sval >> lsb;
-	imm_mask = (s64)((BIT(lsb + len) - 1) >> lsb);
-	imm = imm & imm_mask;
+    imm = sval >> lsb;
+    imm_mask = (s64)((BIT(lsb + len) - 1) >> lsb);
+    imm = imm & imm_mask;
 
-	log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n", sval,
-		  (len + lsb - 1), lsb, imm);
-	return imm;
+    log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n",
+        sval, (len + lsb - 1), lsb, imm);
+    return imm;
 }
 
 s32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
 {
-	u32 insn, new_insn;
+    u32 insn = le32_to_cpu(*(__le32 *)place);
+    u32 new_insn = aarch64_insn_encode_immediate(imm_type, insn, imm);
 
-	insn = le32_to_cpu(*(__le32 *)place);
-	new_insn = aarch64_insn_encode_immediate(imm_type, insn, imm);
-
-	log_debug(
-		"upatch: insert imm, P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, "
-		"new_insn=0x%x\n",
-		(u64)place, insn, imm_type, imm, new_insn);
-	return (s32)new_insn;
+    log_debug("upatch: inset imm"
+        "P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, new_insn=0x%x\n",
+        (u64)place, insn, imm_type, imm, new_insn);
+    return (s32)new_insn;
 }

@@ -31,13 +31,13 @@
 #include "upatch-patch.h"
 #include "upatch-stack-check.h"
 
-#define PROG_VERSION "upatch-manage " BUILD_VERSION
+#define PROG_VERSION "upatch-manage "BUILD_VERSION
 #define COMMAND_SIZE 4
 
-enum loglevel loglevel = NORMAL;
-char* logprefix;
+enum log_level g_loglevel = NORMAL;
+char *g_logprefix;
 
-char* command[COMMAND_SIZE] = {"", "patch", "unpatch", "info"};
+char *command[COMMAND_SIZE] = { "", "patch", "unpatch", "info" };
 enum Command {
     DEFAULT,
     PATCH,
@@ -48,38 +48,39 @@ enum Command {
 struct arguments {
     int cmd;
     int pid;
-    char* upatch;
-    char* binary;
-    char* uuid;
+    char *upatch;
+    char *binary;
+    char *uuid;
     bool verbose;
 };
 
 static struct argp_option options[] = {
-    {"verbose", 'v', NULL, 0, "Show verbose output", 0},
-    {"uuid", 'U', "uuid", 0, "the uuid of the upatch", 0},
-    {"pid", 'p', "pid", 0, "the pid of the user-space process", 0},
-    {"upatch", 'u', "upatch", 0, "the upatch file", 0},
-    {"binary", 'b', "binary", 0, "the binary file", 0},
-    {"cmd", 0, "patch", 0, "Apply a upatch file to a user-space process", 0},
-    {"cmd", 0, "unpatch", 0, "Unapply a upatch file to a user-space process", 0},
-    {NULL}};
+    { "cmd", 0, "patch", 0, "Apply a upatch file to a process", 0 },
+    { "cmd", 0, "unpatch", 0, "Unapply a upatch file to a process", 0 },
+    { "pid", 'p', "pid", 0, "the pid of the user-space process", 0 },
+    { "uuid", 'U', "uuid", 0, "the uuid of the upatch", 0 },
+    { "upatch", 'u', "upatch", 0, "the upatch file", 0 },
+    { "binary", 'b', "binary", 0, "the binary file", 0 },
+    { "verbose", 'v', NULL, 0, "Show verbose output", 0 },
+    { NULL }
+};
 
-static char program_doc[] = "Operate a upatch file on the user-space process";
+static char program_doc[] = "Operate a upatch file on the process";
 
-static char args_doc[] =
-    "<cmd> --pid <Pid> --upatch <Upatch path> --binary <Binary path> --uuid "
-    "<Uuid>";
+static char args_doc[] = "<cmd> --pid <PID> --uuid <UUID> "
+    "--upatch <PATCH_FILE> --binary <BINARY_FILE>";
 
-const char* argp_program_version = PROG_VERSION;
+const char *argp_program_version = PROG_VERSION;
 
-static error_t check_opt(struct argp_state* state)
+static error_t check_opt(struct argp_state *state)
 {
-    struct arguments* arguments = state->input;
+    struct arguments *arguments = state->input;
 
     if (arguments->cmd == DEFAULT) {
         argp_usage(state);
         return ARGP_ERR_UNKNOWN;
     }
+
     switch (arguments->cmd) {
         case PATCH:
         case UNPATCH:
@@ -92,12 +93,13 @@ static error_t check_opt(struct argp_state* state)
         default:
             break;
     }
+
     return 0;
 }
 
-static error_t parse_opt(int key, char* arg, struct argp_state* state)
+static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
-    struct arguments* arguments = state->input;
+    struct arguments *arguments = state->input;
 
     switch (key) {
         case 'v':
@@ -137,11 +139,12 @@ static error_t parse_opt(int key, char* arg, struct argp_state* state)
     return 0;
 }
 
-static struct argp argp = {options, parse_opt, args_doc, program_doc,
-                           NULL,    NULL,      NULL};
+static struct argp argp = {
+    options, parse_opt, args_doc, program_doc, NULL, NULL, NULL
+};
 
-int patch_upatch(const char* uuid, const char* binary_path,
-                 const char* upatch_path, int pid)
+int patch_upatch(const char *uuid, const char *binary_path,
+    const char *upatch_path, int pid)
 {
     struct upatch_elf uelf;
     struct running_elf relf;
@@ -167,7 +170,7 @@ out:
     return ret;
 }
 
-int unpatch_upatch(const char* uuid, int pid)
+int unpatch_upatch(const char *uuid, int pid)
 {
     int ret = 0;
 
@@ -191,18 +194,19 @@ int info_upatch(int pid)
     return 0;
 }
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
-    struct arguments args;
     int ret;
+
+    struct arguments args;
 
     memset(&args, 0, sizeof(struct arguments));
     argp_parse(&argp, argc, argv, 0, NULL, &args);
     if (args.verbose) {
-        loglevel = DEBUG;
+        g_loglevel = DEBUG;
     }
 
-    logprefix = basename(args.upatch);
+    g_logprefix = basename(args.upatch);
     log_debug("PID: %d\n", args.pid);
     log_debug("UUID: %s\n", args.uuid);
     log_debug("Patch: %s\n", args.upatch);
