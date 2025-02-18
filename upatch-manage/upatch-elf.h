@@ -156,8 +156,6 @@ int binary_init(struct running_elf *, const char *);
 void upatch_close(struct upatch_elf *);
 void binary_close(struct running_elf *);
 
-bool check_build_id(struct elf_info *, struct elf_info *);
-
 bool is_upatch_section(const char *);
 
 bool is_note_section(GElf_Word);
