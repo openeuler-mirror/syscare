@@ -114,7 +114,7 @@ s64 extract_insn_imm(s64 sval, int len, int lsb)
     imm_mask = (s64)((BIT(lsb + len) - 1) >> lsb);
     imm = imm & imm_mask;
 
-    log_debug("upatch: extract imm, X=0x%lx, X[%d:%d]=0x%lx\n",
+    log_debug("imm: insn=0x%lx, insn[%d:%d]=0x%lx\n",
         sval, (len + lsb - 1), lsb, imm);
     return imm;
 }
@@ -124,8 +124,7 @@ s32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *place, u64 imm)
     u32 insn = le32_to_cpu(*(__le32 *)place);
     u32 new_insn = aarch64_insn_encode_immediate(imm_type, insn, imm);
 
-    log_debug("upatch: inset imm"
-        "P=0x%lx, insn=0x%x, imm_type=%d, imm=0x%lx, new_insn=0x%x\n",
-        (u64)place, insn, imm_type, imm, new_insn);
+    log_debug("insn: insn=0x%x, imm_type=%d, imm=0x%lx, new_insn=0x%x\n",
+        insn, imm_type, imm, new_insn);
     return (s32)new_insn;
 }
