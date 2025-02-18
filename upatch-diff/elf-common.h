@@ -35,6 +35,8 @@
 #include "list.h"
 #include "log.h"
 
+#define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
+
 #define ALLOC_LINK(_new, _list) \
     do { \
         (_new) = calloc(1, sizeof(*(_new))); \

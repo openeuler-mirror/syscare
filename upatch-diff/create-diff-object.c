@@ -681,24 +681,26 @@ static void replace_section_syms(struct upatch_elf *uelf)
 
 static void mark_ignored_sections(struct upatch_elf *uelf)
 {
-    /* Ignore any discarded sections */
-    struct section *sec;
+    static const char *const IGNORED_SECTIONS[] = {
+        ".comment",
+        ".discard",
+        ".rela.discard",
+        ".GCC.command.line",
+    };
 
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (!strncmp(sec->name, ".discard", strlen(".discard")) ||
-            !strncmp(sec->name, ".rela.discard", strlen(".rela.discard"))) {
-            log_debug("Found discard section '%s'\n", sec->name);
-            sec->ignore = 1;
+    for (size_t i = 0; i < ARRAY_SIZE(IGNORED_SECTIONS); i++) {
+        const char *const ignored_name = IGNORED_SECTIONS[i];
+        const size_t name_len = strlen(ignored_name);
+
+        struct section *sec = NULL;
+        list_for_each_entry(sec, &uelf->sections, list) {
+            if (strncmp(sec->name, ignored_name, name_len) == 0) {
+                sec->status = SAME;
+                break;
+            }
         }
     }
-
-    /* TODO: handle ignore information from sections or settings */
 }
-
-/*  TODO: we do not handle it now */
-static void mark_ignored_functions_same(void) {}
-static void mark_ignored_sections_same(void) {}
-
 /*
 * For a local symbol referenced in the rela list of a changing function,
 * if it has no section, it will link error in arm.
@@ -1078,9 +1080,6 @@ int main(int argc, char*argv[])
     upatch_compare_correlated_elements(&uelf_patched);
     mark_file_symbols(&uelf_source);
     find_debug_symbol(&uelf_source, &relf);
-
-    mark_ignored_functions_same();
-    mark_ignored_sections_same();
 
     include_standard_elements(&uelf_patched);
 
