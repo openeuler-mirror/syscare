@@ -259,27 +259,35 @@ static void layout_symtab(struct upatch_elf *uelf)
     log_debug("\t%s\n", uelf->info.shstrtab + strsect->sh_name);
 }
 
-static void *upatch_alloc(struct object_file *obj, size_t sz)
+static void *upatch_alloc(struct object_file *obj, size_t size)
 {
     struct vm_hole *hole = NULL;
 
-    unsigned long addr = object_find_patch_region(obj, sz, &hole);
-    if (!addr) {
+    uintptr_t addr = object_find_patch_region(obj, size, &hole);
+    if (addr == 0) {
+        log_error("Failed to find patch region\n");
         return NULL;
     }
 
-    addr = upatch_mmap_remote(proc2pctx(obj->proc), addr, sz,
+    struct upatch_ptrace_ctx *pctx = proc2pctx(obj->proc);
+    if (pctx == NULL) {
+        log_error("Failed to find process context\n");
+        return NULL;
+    }
+
+    addr = upatch_mmap_remote(pctx, addr, size,
         PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
         (unsigned long)-1, 0);
     if (addr == 0) {
+        log_error("Mmap failed, pctx=0x%lx, addr=0x%lx, size=0x%lu, ret=%d\n",
+            (uintptr_t)pctx, addr, size, errno);
         return NULL;
     }
+    log_debug("%s: Mmap addr=0x%lx, size=0x%lx\n", obj->name, addr, size);
 
-    log_debug("Allocated 0x%lx bytes at 0x%lx of '%s'\n", sz, addr, obj->name);
-    int ret = vm_hole_split(hole, addr, addr + sz);
-    if (ret) {
-        // TODO: clear
+    int ret = vm_hole_split(hole, addr, addr + size);
+    if (ret != 0) {
         log_error("Failed to split vm hole\n");
         return NULL;
     }
@@ -295,31 +303,21 @@ static void upatch_free(struct object_file *obj, void *base, unsigned long size)
     }
 }
 
-static int __alloc_memory(struct object_file *obj_file,
-    struct upatch_layout *layout)
-{
-    /* Do the allocs. */
-    layout->base = upatch_alloc(obj_file, layout->size);
-    if (!layout->base) {
-        return -errno;
-    }
-
-    layout->kbase = malloc(layout->size);
-    if (!layout->kbase) {
-        upatch_free(obj_file, layout->base, layout->size);
-        return -errno;
-    }
-
-    memset(layout->kbase, 0, layout->size);
-
-    return 0;
-}
-
 static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
 {
-    int ret = __alloc_memory(obj, &uelf->core_layout);
-    if (ret) {
-        return ret;
+    struct upatch_layout *layout = &uelf->core_layout;
+
+    layout->base = upatch_alloc(obj, layout->size);
+    if (layout->base == NULL) {
+        log_error("Failed to alloc patch memory\n");
+        return errno;
+    }
+
+    layout->kbase = calloc(1, layout->size);
+    if (!layout->kbase) {
+        log_error("Failed to alloc memory\n");
+        upatch_free(obj, layout->base, layout->size);
+        return -errno;
     }
 
     /* Transfer each section which specifies SHF_ALLOC */
@@ -331,17 +329,17 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
             continue;
         }
 
-        void *kdest = uelf->core_layout.kbase + shdr->sh_entsize;
-        void *dest = uelf->core_layout.base + shdr->sh_entsize;
+        void *dest = layout->base + shdr->sh_entsize;
+        void *kdest = layout->kbase + shdr->sh_entsize;
         if (shdr->sh_type != SHT_NOBITS) {
             memcpy(kdest, (void *)shdr->sh_addr, shdr->sh_size);
         }
 
-        shdr->sh_addr = (unsigned long)kdest;
+        shdr->sh_addr = (uintptr_t)kdest;
         /* overuse this attr to record user address */
-        shdr->sh_addralign = (unsigned long)dest;
-        log_debug("\t0x%lx %s <- 0x%lx\n", (long)kdest,
-            uelf->info.shstrtab + shdr->sh_name, (long)dest);
+        shdr->sh_addralign = (uintptr_t)dest;
+        log_debug("\t0x%lx %s <- 0x%lx\n", (uintptr_t)kdest,
+            uelf->info.shstrtab + shdr->sh_name, (uintptr_t)dest);
     }
 
     return 0;
@@ -349,16 +347,15 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
 
 static int post_memory(struct upatch_elf *uelf, struct object_file *obj)
 {
-    log_debug("Post kbase %lx(%lx) to base %lx\n",
-        (unsigned long)uelf->core_layout.kbase,
-        uelf->core_layout.size,
-        (unsigned long)uelf->core_layout.base);
+    log_debug("Post memory 0x%lx to 0x%lx, len=0x%lx\n",
+        (uintptr_t)uelf->core_layout.kbase, (uintptr_t)uelf->core_layout.base,
+        uelf->core_layout.size);
 
     int ret = upatch_process_mem_write(obj->proc,
         uelf->core_layout.kbase, (unsigned long)uelf->core_layout.base,
         uelf->core_layout.size);
     if (ret) {
-        log_error("Failed to move kbase to base, ret=%d\n", ret);
+        log_error("Failed to write process memory, ret=%d\n", ret);
     }
 
     return ret;
@@ -436,8 +433,8 @@ static struct object_file *upatch_find_obj(struct upatch_elf *uelf,
         uelf->relf->info.inode, proc->pid);
     return NULL;
 }
-static int complete_info(struct upatch_elf *uelf,
-    struct object_file *obj, const char *uuid)
+static int complete_info(struct upatch_elf *uelf, struct object_file *obj,
+    const char *uuid)
 {
     int ret = 0;
 
@@ -460,11 +457,20 @@ static int complete_info(struct upatch_elf *uelf,
 
     uinfo->func_names = (void *)uinfo + sizeof(*uinfo);
     uinfo->func_names_size = upatch_string->sh_size;
+    uinfo->funcs = (void *)uinfo->func_names + uinfo->func_names_size;
+
     memcpy(uinfo->func_names, (void *)upatch_string->sh_addr,
         upatch_string->sh_size);
 
-    log_debug("Changed insn:\n");
-    uinfo->funcs = (void *)uinfo->func_names + uinfo->func_names_size;
+    unsigned long offset = 0;
+    for (unsigned long i = 0; i < uinfo->changed_func_num; ++i) {
+        char *name = (char *)uinfo->func_names + offset;
+
+        uinfo->funcs[i].name = name;
+        offset += strlen(name) + 1;
+    }
+
+    log_debug("Changed function:\n");
     for (unsigned int i = 0; i < uinfo->changed_func_num; ++i) {
         struct upatch_info_func *upatch_func = &uinfo->funcs[i];
 
@@ -479,10 +485,10 @@ static int complete_info(struct upatch_elf *uelf,
         }
 
         upatch_func->new_insn = get_new_insn();
-        log_debug("\t0x%lx(0x%lx 0x%lx -> 0x%lx 0x%lx)\n",
-            upatch_func->addr.old_addr,
-            upatch_func->old_insn[0], upatch_func->old_insn[1],
-            upatch_func->new_insn, upatch_func->addr.new_addr);
+        log_debug("\taddr: 0x%lx -> 0x%lx, insn: 0x%lx -> 0x%lx, name: '%s'\n",
+            upatch_func->addr.old_addr, upatch_func->addr.new_addr,
+            upatch_func->old_insn[0], upatch_func->new_insn,
+            upatch_func->name);
     }
 
 out:
@@ -492,11 +498,14 @@ out:
 static int unapply_patch(struct object_file *obj,
     struct upatch_info_func *funcs, unsigned long changed_func_num)
 {
-    log_debug("Changed insn:\n");
+    log_debug("Changed function:\n");
     for (unsigned int i = 0; i < changed_func_num; ++i) {
-        log_debug("\t0x%lx(0x%lx -> 0x%lx)\n", funcs[i].addr.old_addr,
-            funcs[i].new_insn, funcs[i].old_insn[0]);
+        struct upatch_info_func *upatch_func = &funcs[i];
 
+        log_debug("\taddr: 0x%lx -> 0x%lx, insn: 0x%lx -> 0x%lx, name: '%s'\n",
+            upatch_func->addr.new_addr, upatch_func->addr.old_addr,
+            upatch_func->new_insn, upatch_func->old_insn[0],
+            upatch_func->name);
         int ret = upatch_process_mem_write(obj->proc, &funcs[i].old_insn,
             (unsigned long)funcs[i].addr.old_addr, get_origin_insn_len());
         if (ret) {
@@ -645,13 +654,11 @@ static int upatch_apply_patches(struct object_file *obj,
      */
     ret = alloc_memory(uelf, obj);
     if (ret) {
-        log_error("Failed to alloc patch memory\n");
         goto free;
     }
 
     ret = upatch_mprotect(uelf, obj);
     if (ret) {
-        log_error("Failed to set patch memory permission\n");
         goto free;
     }
 
@@ -782,7 +789,7 @@ int process_patch(int pid, struct upatch_elf *uelf, struct running_elf *relf,
         goto out;
     }
 
-    printf("Patch '%s' to ", uuid);
+    log_debug("Patch '%s' to ", uuid);
     upatch_process_print_short(&proc);
 
     ret = upatch_process_mem_open(&proc, MEM_READ);
@@ -895,7 +902,7 @@ int process_unpatch(int pid, const char *uuid)
         goto out;
     }
 
-    printf("Unpatch '%s' from ", uuid);
+    log_debug("Unpatch '%s' from ", uuid);
     upatch_process_print_short(&proc);
 
     ret = upatch_process_mem_open(&proc, MEM_READ);

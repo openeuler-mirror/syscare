@@ -54,8 +54,7 @@ static inline s64 calc_reloc(enum aarch64_reloc_op op, void *place, u64 val)
             break;
     }
 
-    log_debug("upatch: reloc, S+A=0x%lx, P=0x%lx, X=0x%lx\n",
-        val, (u64)place, sval);
+    log_debug("reloc: S+A=0x%lx, P=0x%lx, X=0x%lx\n", val, (u64)place, sval);
     return sval;
 }
 
@@ -92,7 +91,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
         /* val corresponds to (S + A) */
         val = (unsigned long)sym->st_value + (unsigned long)rel[i].r_addend;
         log_debug(
-            "upatch: reloc symbol, name=%s, k_addr=0x%lx, u_addr=0x%lx, "
+            "\nsymbol='%s', k_addr=0x%lx, u_addr=0x%lx, "
             "r_offset=0x%lx, st_value=0x%lx, r_addend=0x%lx\n",
             sym_name, shdrs[shdrs[relsec].sh_info].sh_addr,
             shdrs[shdrs[relsec].sh_info].sh_addralign,
@@ -155,7 +154,6 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 if (result < -(s64)BIT(20) || result >= (s64)BIT(20)) {
                     goto overflow;
                 }
-
                 result = extract_insn_imm(result, 21, 0);
                 result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc,
                     (unsigned long)result);

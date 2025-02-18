@@ -43,12 +43,13 @@ int apply_relocations(struct upatch_elf *uelf)
             continue;
         }
 
-        log_debug("Relocate '%s'\n", name);
+        log_debug("Relocate section '%s':\n", name);
         if (uelf->info.shdrs[i].sh_type == SHT_REL) {
             return -EPERM;
         } else if (uelf->info.shdrs[i].sh_type == SHT_RELA) {
             err = apply_relocate_add(uelf, uelf->index.sym, i);
         }
+        log_debug("\n");
 
         if (err < 0) {
             break;
