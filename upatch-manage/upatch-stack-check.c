@@ -85,7 +85,7 @@ static int stack_check_each_pid(struct upatch_process *proc,
     }
 
     stack_size = read_stack(proc, stack, stack_size, sp);
-    log_debug("[%d]Stack size %lu, region [0x%lx, 0x%lx]\n",
+    log_debug("[%d] Stack size %lu, region [0x%lx, 0x%lx]\n",
         pid, stack_size, sp, sp + stack_size);
 
     for (size_t i = 0; i < stack_size / sizeof(*stack); i++) {
