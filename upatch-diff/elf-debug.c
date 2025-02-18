@@ -33,19 +33,70 @@
 
 void upatch_print_changes(struct upatch_elf *uelf)
 {
-    struct symbol *sym;
+    struct symbol *sym = NULL;
+    struct section *sec = NULL;
 
+    log_normal("------------------------------\n");
+    log_normal("New symbol\n");
+    log_normal("------------------------------\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (!sym->include || !sym->sec ||
-            sym->type != STT_FUNC || sym->parent) {
-            continue;
-        }
         if (sym->status == NEW) {
-            log_normal("New function: %s\n", sym->name);
-        } else if (sym->status == CHANGED) {
-            log_normal("Changed function: %s\n", sym->name);
+            log_normal("idx: %04u, name: '%s'\n", sym->index, sym->name);
         }
     }
+    log_normal("------------------------------\n");
+    log_normal("\n");
+    log_normal("------------------------------\n");
+    log_normal("New section\n");
+    log_normal("------------------------------\n");
+    list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->status == NEW) {
+            log_normal("idx: %04u, name: '%s'\n", sec->index, sec->name);
+        }
+    }
+    log_normal("------------------------------\n");
+    log_normal("\n");
+    log_normal("------------------------------\n");
+    log_normal("Changed symbol\n");
+    log_normal("------------------------------\n");
+    list_for_each_entry(sym, &uelf->symbols, list) {
+        if (sym->status == CHANGED) {
+            log_normal("idx: %04u, name: '%s'\n", sym->index, sym->name);
+        }
+    }
+    log_normal("------------------------------\n");
+    log_normal("\n");
+    log_normal("------------------------------\n");
+    log_normal("Changed section\n");
+    log_normal("------------------------------\n");
+    list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->status == CHANGED) {
+            log_normal("idx: %04u, name: '%s'\n", sec->index, sec->name);
+        }
+    }
+    log_normal("------------------------------\n");
+    log_normal("\n");
+    log_normal("------------------------------\n");
+    log_normal("Included symbol\n");
+    log_normal("------------------------------\n");
+    list_for_each_entry(sym, &uelf->symbols, list) {
+        if (sym->include != 0) {
+            log_normal("idx: %04u, name: '%s', status: %s\n",
+                sym->index, sym->name, status_str(sym->status));
+        }
+    }
+    log_normal("------------------------------\n");
+    log_normal("\n");
+    log_normal("------------------------------\n");
+    log_normal("Included section\n");
+    log_normal("------------------------------\n");
+    list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->include != 0) {
+            log_normal("idx: %04u, name: '%s', status: %s\n",
+                sec->index, sec->name, status_str(sec->status));
+        }
+    }
+    log_normal("------------------------------\n");
 }
 
 void upatch_dump_kelf(struct upatch_elf *uelf)
