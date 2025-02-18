@@ -49,7 +49,6 @@ static int open_elf(struct elf_info *einfo, const char *name)
 {
     int ret = 0;
     int fd = -1;
-    char *sec_name;
     struct stat st;
 
     fd = open(name, O_RDONLY);
@@ -86,21 +85,6 @@ static int open_elf(struct elf_info *einfo, const char *name)
         (void *)einfo->shstrtab > einfo_eof) {
         log_error("File '%s' is not a valid elf\n", name);
         ret = -ENOEXEC;
-        goto out;
-    }
-
-    for (unsigned int i = 0; i < einfo->hdr->e_shnum; ++i) {
-        sec_name = einfo->shstrtab + einfo->shdrs[i].sh_name;
-        if (streql(sec_name, BUILD_ID_NAME) &&
-            einfo->shdrs[i].sh_type == SHT_NOTE) {
-            einfo->num_build_id = i;
-            break;
-        }
-    }
-
-    if (einfo->num_build_id == 0) {
-        ret = -EINVAL;
-        log_error("Cannot find section '%s'\n", BUILD_ID_NAME);
         goto out;
     }
 
@@ -218,26 +202,6 @@ int binary_init(struct running_elf *relf, const char *name)
     relf->info.is_dyn = is_dyn_elf(relf);
 
     return 0;
-}
-
-bool check_build_id(struct elf_info *uelf, struct elf_info *relf)
-{
-    GElf_Shdr *uelf_shdr = &uelf->shdrs[uelf->num_build_id];
-    GElf_Shdr *relf_shdr = &relf->shdrs[uelf->num_build_id];
-
-    if (uelf_shdr->sh_size != relf_shdr->sh_size) {
-        return false;
-    }
-
-    void* uelf_build_id = (void *)uelf->hdr + uelf_shdr->sh_offset;
-    void* relf_build_id = (void *)relf->hdr + relf_shdr->sh_offset;
-    size_t build_id_len = uelf_shdr->sh_size;
-
-    if (memcmp(uelf_build_id, relf_build_id, build_id_len) != 0) {
-        return false;
-    }
-
-    return true;
 }
 
 void binary_close(struct running_elf *relf)
