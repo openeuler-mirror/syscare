@@ -39,7 +39,7 @@
 #define TDATA_NAME ".tdata"
 #define TBSS_NAME ".tbss"
 
-#define JMP_TABLE_MAX_ENTRY 100
+#define JMP_TABLE_MAX_ENTRY 4096
 #define UPATCH_HEADER "UPATCH"
 #define UPATCH_HEADER_LEN 6
 #define UPATCH_ID_LEN 40
