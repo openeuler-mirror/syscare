@@ -61,7 +61,7 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
  * GOT only need record address and resolve it by [got_addr].
  * To simplify design, use same table for both jmp table and GOT.
  */
-static unsigned long setup_got_table(struct upatch_elf *uelf,
+unsigned long setup_got_table(struct upatch_elf *uelf,
     unsigned long jmp_addr, unsigned long tls_addr)
 {
     struct upatch_jmp_table_entry *table = uelf->core_layout.kbase +

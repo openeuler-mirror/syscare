@@ -36,6 +36,8 @@ unsigned long insert_plt_table(struct upatch_elf *, struct object_file *,
 unsigned long insert_got_table(struct upatch_elf *, struct object_file *,
     unsigned long, unsigned long);
 
+unsigned long setup_got_table(struct upatch_elf *uelf,
+    unsigned long, unsigned long);
 unsigned long search_insert_plt_table(struct upatch_elf *,
     unsigned long, unsigned long);
 
