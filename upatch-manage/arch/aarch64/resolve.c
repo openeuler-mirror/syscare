@@ -65,7 +65,7 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
         index * sizeof(struct upatch_jmp_table_entry));
 }
 
-static unsigned long setup_got_table(struct upatch_elf *uelf,
+unsigned long setup_got_table(struct upatch_elf *uelf,
     unsigned long jmp_addr, unsigned long tls_addr)
 {
     struct upatch_jmp_table_entry *table = uelf->core_layout.kbase +

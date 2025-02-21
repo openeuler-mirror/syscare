@@ -67,6 +67,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
     void *loc;
     void *uloc;
     u64 val;
+    u64 got;
     s64 result;
     GElf_Shdr *shdrs = (void *)uelf->info.shdrs;
     GElf_Rela *rel = (void *)shdrs[relsec].sh_addr;
@@ -251,7 +252,11 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 *(__le32 *)loc = cpu_to_le32((__le32)result);
                 break;
             case R_AARCH64_ADR_GOT_PAGE:
-                result = calc_reloc(RELOC_OP_PAGE, uloc, val);
+                got = (u64)setup_got_table(uelf, val, 0);
+                if (got == 0) {
+                    goto overflow;
+                }
+                result = calc_reloc(RELOC_OP_PAGE, uloc, got);
                 if (result < -(s64)BIT(32) || result >= (s64)BIT(32)) {
                     goto overflow;
                 }
@@ -261,7 +266,11 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                 *(__le32 *)loc = cpu_to_le32((__le32)result);
                 break;
             case R_AARCH64_LD64_GOT_LO12_NC:
-                result = calc_reloc(RELOC_OP_ABS, uloc, val);
+                got = (u64)setup_got_table(uelf, val, 0);
+                if (got == 0) {
+                    goto overflow;
+                }
+                result = calc_reloc(RELOC_OP_ABS, uloc, got);
                 // don't check result & 7 == 0.
                 // sometimes, result & 7 != 0, it works fine.
                 result = extract_insn_imm(result, 9, 3);
