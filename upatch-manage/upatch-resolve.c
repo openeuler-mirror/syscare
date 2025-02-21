@@ -99,8 +99,9 @@ static unsigned long resolve_rela_plt(struct upatch_elf *uelf,
     for (Elf64_Xword i = 0; i < rela_plt_shdr->sh_size / sizeof(GElf_Rela); i++) {
         unsigned long sym_idx = GELF_R_SYM(rela_plt[i].r_info);
         unsigned long sym_type = GELF_ST_TYPE(dynsym[sym_idx].st_info);
-
-        if (sym_type != STT_FUNC && sym_type != STT_TLS) {
+        if ((sym_type == STT_NOTYPE) &&
+            (sym_type != STT_FUNC) &&
+            (sym_type != STT_TLS)) {
             continue;
         }
 
