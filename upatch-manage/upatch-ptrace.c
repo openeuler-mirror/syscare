@@ -117,7 +117,7 @@ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
     struct upatch_ptrace_ctx *pctx = upatch_ptrace_ctx_alloc(proc);
     if (pctx == NULL) {
         log_error("Failed to alloc ptrace context");
-        return -1;
+        return ENOMEM;
     }
 
     pctx->pid = tid;
@@ -126,7 +126,7 @@ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
     long ret = ptrace(PTRACE_ATTACH, tid, NULL, NULL);
     if (ret < 0) {
         log_error("Failed to attach thread, pid=%d, ret=%ld\n", tid, ret);
-        return -1;
+        return errno;
     }
 
     do {
@@ -135,7 +135,7 @@ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
         ret = waitpid(tid, &status, __WALL);
         if (ret < 0) {
             log_error("Failed to wait thread, tid=%d, ret=%ld\n", tid, ret);
-            return -1;
+            return errno;
         }
 
         /* We are expecting SIGSTOP */
@@ -156,7 +156,7 @@ int upatch_ptrace_attach_thread(struct upatch_process *proc, int tid)
         ret = ptrace(PTRACE_CONT, tid, NULL, (void *)(uintptr_t)status);
         if (ret < 0) {
             log_error("Failed to continue thread, tid=%d, ret=%ld\n", tid, ret);
-            return -1;
+            return errno;
         }
     } while (1);
 
