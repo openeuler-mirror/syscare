@@ -736,7 +736,7 @@ int upatch_process_attach(struct upatch_process *proc)
             int pid = pids[i];
 
             ret = upatch_ptrace_attach_thread(proc, pid);
-            if (ret < 0) {
+            if ((ret != 0) && (ret != ESRCH)) {
                 goto detach;
             }
         }
