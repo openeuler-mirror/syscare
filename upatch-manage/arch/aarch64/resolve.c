@@ -135,7 +135,10 @@ unsigned long insert_got_table(struct upatch_elf *uelf, struct object_file *obj,
         goto out;
     }
 
-    elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
+    elf_addr = jmp_addr;
+    if (r_type != R_AARCH64_GLOB_DAT) {
+        elf_addr = setup_got_table(uelf, jmp_addr, tls_addr);
+    }
     log_debug("0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n", elf_addr,
         jmp_addr, tls_addr);
 
