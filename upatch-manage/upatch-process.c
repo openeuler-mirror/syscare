@@ -127,7 +127,7 @@ int upatch_process_init(struct upatch_process *proc, int pid)
 
     INIT_LIST_HEAD(&proc->ptrace.pctxs);
     INIT_LIST_HEAD(&proc->objs);
-    INIT_LIST_HEAD(&proc->vmaholes);
+    INIT_LIST_HEAD(&proc->vma_holes);
     proc->num_objs = 0;
 
     if (upatch_coroutines_init(proc)) {
@@ -185,7 +185,7 @@ static void upatch_process_memfree(struct upatch_process *proc)
         free(p);
     }
 
-    list_for_each_entry_safe(hole, hole_safe, &proc->vmaholes, list) {
+    list_for_each_entry_safe(hole, hole_safe, &proc->vma_holes, list) {
         free(hole);
     }
 
@@ -285,21 +285,19 @@ static unsigned int perms2prot(const char *perms)
 }
 
 static struct vm_hole *process_add_vm_hole(struct upatch_process *proc,
-    unsigned long hole_start, unsigned long hole_end)
+    unsigned long start, unsigned long end)
 {
-    struct vm_hole *hole;
-
-    hole = malloc(sizeof(*hole));
+    struct vm_hole *hole = malloc(sizeof(*hole));
     if (hole == NULL) {
         return NULL;
     }
 
-    memset(hole, 0, sizeof(*hole));
-    hole->start = hole_start;
-    hole->end = hole_end;
+    hole->start = start;
+    hole->end = end;
+    hole->len = end - start;
+    list_init(&hole->list);
 
-    list_add(&hole->list, &proc->vmaholes);
-
+    list_add(&hole->list, &proc->vma_holes);
     return hole;
 }
 
@@ -339,8 +337,8 @@ static int object_add_vm_area(struct object_file *o, struct vm_area *vma,
 {
     struct obj_vm_area *ovma;
 
-    if (o->previous_hole == NULL) {
-        o->previous_hole = hole;
+    if (o->prev_hole == NULL) {
+        o->prev_hole = hole;
     }
 
     list_for_each_entry(ovma, &o->vma, list) {
@@ -385,7 +383,7 @@ static struct object_file *process_new_object(struct upatch_process *proc,
     o->inode = inode;
     o->is_patch = 0;
 
-    o->previous_hole = hole;
+    o->prev_hole = hole;
     if (object_add_vm_area(o, vma, hole) < 0) {
         log_error("Cannot add vm area for %s\n", name);
         free(o);
@@ -488,7 +486,7 @@ static int add_upatch_object(struct upatch_process *proc, struct object_file *o,
 /**
  * Returns: 0 if everything is ok, -1 on error.
  */
-static int process_add_object_vma(struct upatch_process *proc,
+static int process_add_vma(struct upatch_process *proc,
     dev_t dev, ino_t inode, char *name,
     struct vm_area *vma, struct vm_hole *hole)
 {
@@ -532,13 +530,9 @@ static int process_add_object_vma(struct upatch_process *proc,
     return 0;
 }
 
-int upatch_process_parse_proc_maps(struct upatch_process *proc)
+int upatch_process_map_object_files(struct upatch_process *proc)
 {
-    FILE *f;
-    int ret;
-    int is_libc_base_set = 0;
-    unsigned long hole_start = 0;
-    struct vm_hole *hole = NULL;
+    int ret = 0;
 
     /*
      * 1. Create the list of all objects in the process
@@ -554,78 +548,81 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
     }
 
     lseek(fd, 0, SEEK_SET);
-    f = fdopen(fd, "r");
-    if (f == NULL) {
+    FILE *file = fdopen(fd, "r");
+    if (file == NULL) {
         log_error("unable to fdopen %d", fd);
         close(fd);
         return -1;
     }
 
-    do {
+    unsigned long hole_start = 0;
+
+    char line[1024];
+    while (fgets(line, sizeof(line), file) != NULL) {
         struct vm_area vma;
-        char line[1024];
-        unsigned long start;
-        unsigned long end;
+        unsigned long vma_start;
+        unsigned long vma_end;
         unsigned long offset;
         unsigned int maj;
         unsigned int min;
         unsigned int inode;
         char perms[5];
-        char name_[256];
-        char *name = name_;
-        int r;
+        char name_buf[256];
+        char *name = name_buf;
 
-        if (!fgets(line, sizeof(line), f)) {
-            break;
-        }
-
-        r = sscanf(line, "%lx-%lx %s %lx %x:%x %d %255s",
-            &start, &end, perms, &offset, &maj, &min, &inode, name_);
-        if (r == EOF) {
+        ret = sscanf(line, "%lx-%lx %s %lx %x:%x %u %255s",
+            &vma_start, &vma_end, perms, &offset,
+            &maj, &min, &inode, name_buf);
+        if (ret == EOF) {
             log_error("Failed to read maps: unexpected EOF");
             goto error;
         }
-        if (r != 8) {
-            strcpy(name, "[anonymous]");
+        if (ret != 8) {
+            name = "[anonymous]";
         }
 
-        vma.start = start;
-        vma.end = end;
+        vma.start = vma_start;
+        vma.end = vma_end;
         vma.offset = offset;
         vma.prot = perms2prot(perms);
 
         /* Hole must be at least 2 pages for guardians */
-        if (start - hole_start > (unsigned long)(2 * PAGE_SIZE)) {
-            hole = process_add_vm_hole(proc, hole_start + (unsigned long)PAGE_SIZE,
-                           start - (unsigned long)PAGE_SIZE);
+        struct vm_hole *hole = NULL;
+        if ((hole_start != 0) &&
+            (vma_start - hole_start > 2 * (uintptr_t)PAGE_SIZE)) {
+            uintptr_t start = hole_start + (uintptr_t)PAGE_SIZE;
+            uintptr_t end = vma_start - (uintptr_t)PAGE_SIZE;
+
+            hole = process_add_vm_hole(proc, start, end);
             if (hole == NULL) {
                 log_error("Failed to add vma hole");
                 goto error;
             }
+            log_debug("vm_hole: start=0x%lx, end=0x%lx, len=0x%lx\n",
+                hole->start, hole->end, hole->len);
         }
-        hole_start = end;
-        name = name[0] == '/' ? basename(name) : name;
+        hole_start = vma_end;
 
-        ret = process_add_object_vma(proc, makedev(maj, min), inode,
-            name, &vma, hole);
+        name = name[0] == '/' ? basename(name) : name;
+        ret = process_add_vma(proc, makedev(maj, min), inode, name, &vma, hole);
         if (ret < 0) {
             log_error("Failed to add object vma");
             goto error;
         }
 
-        if (!is_libc_base_set && !strncmp(basename(name), "libc", 4) &&
-            (vma.prot & PROT_EXEC)) {
-            proc->libc_base = start;
-            is_libc_base_set = 1;
+        if ((proc->libc_base == 0) &&
+            (vma.prot & PROT_EXEC) &&
+            !strncmp(basename(name), "libc", 4)) {
+            proc->libc_base = vma_start;
         }
-    } while (1);
+    }
 
-    fclose(f);
-    close(fd);
+    (void)fclose(file);
+    (void)close(fd);
     log_debug("Found %d object file(s)\n", proc->num_objs);
 
-    if (!is_libc_base_set) {
-        log_error("Can't find libc_base required for manipulations: %d",
+    if (proc->libc_base == 0) {
+        log_error("Cannot find libc_base, pid=%d",
             proc->pid);
         return -1;
     }
@@ -633,16 +630,9 @@ int upatch_process_parse_proc_maps(struct upatch_process *proc)
     return 0;
 
 error:
-    fclose(f);
-    close(fd);
+    (void)fclose(file);
+    (void)close(fd);
     return -1;
-}
-
-int upatch_process_map_object_files(struct upatch_process *proc)
-{
-    // we can get plt/got table from mem's elf_segments
-    // Now we read them from the running file
-    return upatch_process_parse_proc_maps(proc);
 }
 
 static int process_list_threads(struct upatch_process *proc, int **ppids,
@@ -824,48 +814,65 @@ static inline struct vm_hole *prev_hole(struct vm_hole *hole,
     return list_entry(hole->list.prev, struct vm_hole, list);
 }
 
-static inline unsigned long hole_size(struct vm_hole *hole)
+int vm_hole_split(struct vm_hole *hole, uintptr_t start, uintptr_t end)
 {
-    if (hole == NULL) {
-        return 0;
-    }
+    uintptr_t new_start = ROUND_DOWN(start, PAGE_SIZE) - PAGE_SIZE;
+    uintptr_t new_end = ROUND_UP(end, PAGE_SIZE) + PAGE_SIZE;
 
-    return hole->end - hole->start;
-}
-
-int vm_hole_split(struct vm_hole *hole,
-    unsigned long alloc_start, unsigned long alloc_end)
-{
-    unsigned long page_size = (unsigned long)PAGE_SIZE;
-
-    alloc_start = ROUND_DOWN(alloc_start, page_size) - page_size;
-    alloc_end = ROUND_UP(alloc_end, page_size) + page_size;
-
-    if (alloc_start > hole->start) {
+    if (new_start > hole->start) {
         struct vm_hole *left = NULL;
 
         left = malloc(sizeof(*hole));
         if (left == NULL) {
             log_error("Failed to malloc for vm hole");
-            return -1;
+            return ENOMEM;
         }
 
         left->start = hole->start;
-        left->end = alloc_start;
+        left->end = new_start;
 
         list_add(&left->list, &hole->list);
     }
 
     /* Reuse hole pointer as the right hole since it is pointed to by
-     * the `previous_hole` of some `object_file`. */
-    hole->start = alloc_end;
-    hole->end = hole->end > alloc_end ? hole->end : alloc_end;
+     * the `prev_hole` of some `object_file`. */
+    hole->start = new_end;
+    hole->end = hole->end > new_end ? hole->end : new_end;
 
     return 0;
 }
 
+static bool is_vm_hole_suitable(struct obj_vm_area *vma,
+    struct vm_hole *hole, size_t len)
+{
+    uintptr_t vma_start = vma->inmem.start;
+    uintptr_t vma_end = vma->inmem.end;
+    uintptr_t hole_start = PAGE_ALIGN(hole->start);
+    uintptr_t hole_end = PAGE_ALIGN(hole->start + len);
+
+    log_debug("vma_start=0x%lx, vma_end=0x%lx, "
+        "hole_start=0x%lx, hole_end=0x%lx, hole_len=0x%lx\n",
+        vma_start, vma_end, hole->start, hole->end, hole->len);
+    if (hole->len < len) {
+        return false;
+    }
+
+    if (hole_end < vma_start) {
+        // hole is on the left side of the vma
+        if ((vma_start - hole_start) <= MAX_DISTANCE) {
+            return true;
+        }
+    } else if (hole_start > vma_end) {
+        // hole is on the right side of the vma
+        if ((hole_end - vma_end) <= MAX_DISTANCE) {
+            return true;
+        }
+    }
+
+    return false;
+}
 /*
- * Find region for a patch. Take object's `previous_hole` as a left candidate
+ * Take object's `prev_hole` as a left candidate
  * and the next hole as a right candidate. Pace through them until there is
  * enough space in the hole for the patch.
  *
@@ -873,52 +880,30 @@ int vm_hole_split(struct vm_hole *hole,
  * from the obj.
  * eg: R_AARCH64_ADR_GOT_PAGE
  */
-unsigned long object_find_patch_region(struct object_file *obj,
-    size_t memsize, struct vm_hole **hole)
+struct vm_hole *find_patch_region(struct object_file *obj, size_t len)
 {
-    struct list_head *head = &obj->proc->vmaholes;
-    struct vm_hole *left_hole = obj->previous_hole;
-    struct vm_hole *right_hole = next_hole(left_hole, head);
-    unsigned long region_start = 0;
-    struct obj_vm_area *sovma;
-    unsigned long obj_start;
-    unsigned long obj_end;
+    struct list_head *vma_holes = &obj->proc->vma_holes;
 
-    sovma = list_first_entry(&obj->vma, struct obj_vm_area, list);
-    obj_start = sovma->inmem.start;
-    sovma = list_entry(obj->vma.prev, struct obj_vm_area, list);
-    obj_end = sovma->inmem.end;
+    struct obj_vm_area *vma = NULL;
+    list_for_each_entry(vma, &obj->vma, list) {
+        struct vm_hole *left_hole = obj->prev_hole;
+        struct vm_hole *right_hole = next_hole(obj->prev_hole, vma_holes);
 
-    log_debug("Looking for patch region for '%s'...\n", obj->name);
-
-    while (right_hole != NULL || left_hole != NULL) {
-        if (hole_size(right_hole) > memsize) {
-            *hole = right_hole;
-            region_start = right_hole->start;
-            if (region_start + memsize - obj_start > MAX_DISTANCE) {
-                continue;
+        while ((left_hole != NULL) || (right_hole != NULL)) {
+            if (left_hole != NULL) {
+                if (is_vm_hole_suitable(vma, left_hole, len)) {
+                    return left_hole;
+                }
+                left_hole = prev_hole(left_hole, vma_holes);
             }
-            goto found;
-        }
-        if (hole_size(left_hole) > memsize) {
-            *hole = left_hole;
-            region_start = left_hole->end - memsize;
-            if (obj_end - region_start > MAX_DISTANCE) {
-                continue;
+            if (right_hole != NULL) {
+                if (is_vm_hole_suitable(vma, right_hole, len)) {
+                    return right_hole;
+                }
+                right_hole = next_hole(right_hole, vma_holes);
             }
-            goto found;
         }
-        right_hole = next_hole(right_hole, head);
-        left_hole = prev_hole(left_hole, head);
     }
 
-    log_error("Cannot find suitable region for patch '%s'\n", obj->name);
-    return -1UL;
-
-found:
-    region_start = (region_start >> PAGE_SHIFT) << PAGE_SHIFT;
-    log_debug("Found patch region for '%s' 0xat %lx\n",
-        obj->name, region_start);
-
-    return region_start;
+    return NULL;
 }

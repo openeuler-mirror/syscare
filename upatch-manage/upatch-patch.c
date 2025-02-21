@@ -259,36 +259,36 @@ static void layout_symtab(struct upatch_elf *uelf)
     log_debug("\t%s\n", uelf->info.shstrtab + strsect->sh_name);
 }
 
-static void *upatch_alloc(struct object_file *obj, size_t size)
+static void *upatch_alloc(struct object_file *obj, size_t len)
 {
-    struct vm_hole *hole = NULL;
-
-    uintptr_t addr = object_find_patch_region(obj, size, &hole);
-    if (addr == 0) {
-        log_error("Failed to find patch region\n");
-        return NULL;
-    }
-
     struct upatch_ptrace_ctx *pctx = proc2pctx(obj->proc);
     if (pctx == NULL) {
         log_error("Failed to find process context\n");
         return NULL;
     }
 
-    addr = upatch_mmap_remote(pctx, addr, size,
+    log_debug("Finding patch region for '%s', len=0x%lx\n", obj->name, len);
+    struct vm_hole *hole = find_patch_region(obj, len);
+    if (hole == NULL) {
+        log_error("Failed to find patch region for '%s'\n", obj->name);
+        return NULL;
+    }
+
+    uintptr_t addr = PAGE_ALIGN(hole->start);
+    log_debug("Found patch region at 0x%lx, size=0x%lx\n", addr, len);
+
+    addr = upatch_mmap_remote(pctx, addr, len,
         PROT_READ | PROT_WRITE | PROT_EXEC,
         MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
         (unsigned long)-1, 0);
     if (addr == 0) {
-        log_error("Mmap failed, pctx=0x%lx, addr=0x%lx, size=0x%lu, ret=%d\n",
-            (uintptr_t)pctx, addr, size, errno);
+        log_error("Failed to map patch region, ret=%d\n", errno);
         return NULL;
     }
-    log_debug("%s: Mmap addr=0x%lx, size=0x%lx\n", obj->name, addr, size);
 
-    int ret = vm_hole_split(hole, addr, addr + size);
+    int ret = vm_hole_split(hole, addr, (addr + len));
     if (ret != 0) {
-        log_error("Failed to split vm hole\n");
+        log_error("Failed to split vm hole, ret=%d\n", ret);
         return NULL;
     }
 
@@ -310,14 +310,14 @@ static int alloc_memory(struct upatch_elf *uelf, struct object_file *obj)
     layout->base = upatch_alloc(obj, layout->size);
     if (layout->base == NULL) {
         log_error("Failed to alloc patch memory\n");
-        return errno;
+        return ENOMEM;
     }
 
     layout->kbase = calloc(1, layout->size);
     if (!layout->kbase) {
         log_error("Failed to alloc memory\n");
         upatch_free(obj, layout->base, layout->size);
-        return -errno;
+        return ENOMEM;
     }
 
     /* Transfer each section which specifies SHF_ALLOC */

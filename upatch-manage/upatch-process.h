@@ -57,7 +57,7 @@ struct object_file {
     struct list_head vma;
 
     /* Pointer to the previous hole in the patient's mapping */
-    struct vm_hole *previous_hole;
+    struct vm_hole *prev_hole;
 
     /* Pointer to the applied patch list, if any */
     struct list_head applied_patch;
@@ -81,6 +81,7 @@ struct vm_area {
 struct vm_hole {
     unsigned long start;
     unsigned long end;
+    unsigned long len;
     struct list_head list;
 };
 
@@ -122,7 +123,7 @@ struct upatch_process {
     } coro;
 
     /* List of free VMA areas */
-    struct list_head vmaholes;
+    struct list_head vma_holes;
 
     // TODO: other base?
     /* libc's base address to use as a worksheet */
@@ -143,9 +144,8 @@ int upatch_process_attach(struct upatch_process *);
 
 void upatch_process_detach(struct upatch_process *proc);
 
-int vm_hole_split(struct vm_hole *, unsigned long, unsigned long);
+int vm_hole_split(struct vm_hole *, uintptr_t, uintptr_t);
 
-unsigned long object_find_patch_region(struct object_file *,
-    size_t, struct vm_hole **);
+struct vm_hole *find_patch_region(struct object_file *obj, size_t len);
 
 #endif
