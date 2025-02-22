@@ -53,14 +53,14 @@ endif()
 
 # Build flags
 list(APPEND PROJECT_C_BUILD_FLAGS
-    -std=gnu99 -g -Wall -O2 -Werror -Wextra
+    -std=gnu99 -Wall -O2 -Werror -Wextra
     -DBUILD_VERSION="${PROJECT_BUILD_VERSION}" -D_FORTIFY_SOURCE=2
     -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time
     -Wstack-usage=8192 -Wfloat-equal -Wswitch-default
     -Wshadow -Wconversion -Wcast-qual -Wcast-align -Wunused -Wundef
     -funsigned-char -fstack-protector-all -fpic -fpie -ftrapv
     -fstack-check -freg-struct-return -fno-canonical-system-headers
-    -pipe -fdebug-prefix-map=old=new
+    -fno-common -pipe -fdebug-prefix-map=old=new
 )
 list(APPEND PROJECT_RUST_FLAGS
     --cfg unsound_local_offset
@@ -80,6 +80,13 @@ list(APPEND PROJECT_C_LINK_FLAGS
     -Wl,-no-undefined
 )
 
+if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
+    list(APPEND PROJECT_C_BUILD_FLAGS -g)
+endif()
+if(CMAKE_BUILD_TYPE STREQUAL "Release")
+    list(APPEND PROJECT_C_LINK_FLAGS -s)
+endif()
+
 # Install directories
 set(SYSCARE_BINARY_DIR  "${CMAKE_INSTALL_FULL_BINDIR}")
 set(SYSCARE_LIBEXEC_DIR "${CMAKE_INSTALL_FULL_LIBEXECDIR}/syscare")
@@ -94,7 +101,8 @@ message("╚════██║  ╚██╔╝  ╚════██║█�
 message("███████║   ██║   ███████║╚██████╗██║  ██║██║  ██║███████╗")
 message("╚══════╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
 message("---------------------------------------------------------")
-message("-- Verion: ${PROJECT_BUILD_VERSION}")
+message("-- Build type: ${CMAKE_BUILD_TYPE}")
+message("-- Build Verion: ${PROJECT_BUILD_VERSION}")
 message("-- Rust flags: ${PROJECT_RUST_FLAGS}")
 message("-- Build flags: ${PROJECT_C_BUILD_FLAGS}")
 message("-- Link flags: ${PROJECT_C_LINK_FLAGS}")
