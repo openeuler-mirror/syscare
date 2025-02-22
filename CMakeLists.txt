@@ -82,8 +82,7 @@ list(APPEND PROJECT_C_LINK_FLAGS
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
     list(APPEND PROJECT_C_BUILD_FLAGS -g)
-endif()
-if(CMAKE_BUILD_TYPE STREQUAL "Release")
+elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
     list(APPEND PROJECT_C_LINK_FLAGS -s)
 endif()
 
@@ -102,7 +101,7 @@ message("███████║   ██║   ███████║╚█�
 message("╚══════╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
 message("---------------------------------------------------------")
 message("-- Build type: ${CMAKE_BUILD_TYPE}")
-message("-- Build Verion: ${PROJECT_BUILD_VERSION}")
+message("-- Build version: ${PROJECT_BUILD_VERSION}")
 message("-- Rust flags: ${PROJECT_RUST_FLAGS}")
 message("-- Build flags: ${PROJECT_C_BUILD_FLAGS}")
 message("-- Link flags: ${PROJECT_C_LINK_FLAGS}")
