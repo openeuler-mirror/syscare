@@ -816,8 +816,10 @@ static inline struct vm_hole *prev_hole(struct vm_hole *hole,
 
 int vm_hole_split(struct vm_hole *hole, uintptr_t start, uintptr_t end)
 {
-    uintptr_t new_start = ROUND_DOWN(start, PAGE_SIZE) - PAGE_SIZE;
-    uintptr_t new_end = ROUND_UP(end, PAGE_SIZE) + PAGE_SIZE;
+    uintptr_t new_start = ROUND_DOWN(start, (uintptr_t)PAGE_SIZE) -
+        (uintptr_t)PAGE_SIZE;
+    uintptr_t new_end = ROUND_UP(end, (uintptr_t)PAGE_SIZE) +
+        (uintptr_t)PAGE_SIZE;
 
     if (new_start > hole->start) {
         struct vm_hole *left = NULL;
