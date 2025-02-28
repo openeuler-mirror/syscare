@@ -296,6 +296,7 @@ impl SyscareBuild {
             pkg_build_root,
             build_entry,
             kernel_build_entry,
+            kernel_config: self.args.kconfig.to_owned(),
             patch_name: self.args.patch_name.to_owned(),
             patch_version: self.args.patch_version.to_owned(),
             patch_release: self.args.patch_release,

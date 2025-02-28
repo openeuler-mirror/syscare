@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use syscare_abi::{PackageInfo, PatchFile, PatchType};
 
@@ -30,6 +30,7 @@ pub struct BuildParameters {
     pub pkg_build_root: PackageBuildRoot,
     pub build_entry: BuildEntry,
     pub kernel_build_entry: Option<BuildEntry>,
+    pub kernel_config: OsString,
     pub patch_name: String,
     pub patch_type: PatchType,
     pub patch_version: String,
@@ -61,6 +62,11 @@ impl std::fmt::Display for BuildParameters {
         if let Some(k) = &self.kernel_build_entry {
             writeln!(f, "kernel_source:       {}", k.build_source.display())?;
             writeln!(f, "kernel_spec:         {}", k.build_spec.display())?;
+            writeln!(
+                f,
+                "kernel_config:       {}",
+                self.kernel_config.to_string_lossy()
+            )?;
         }
         writeln!(f, "jobs:                {}", self.jobs)?;
         writeln!(f, "skip_compiler_check: {}", self.skip_compiler_check)?;

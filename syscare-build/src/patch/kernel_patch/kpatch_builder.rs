@@ -22,6 +22,7 @@ use syscare_abi::{PackageInfo, PatchEntity, PatchFile, PatchInfo, PatchType};
 use syscare_common::{
     concat_os,
     ffi::OsStrExt,
+    fs,
     process::{Command, CommandArgs, CommandEnvs},
     util::digest,
 };
@@ -35,6 +36,7 @@ use crate::{
 use super::kpatch_helper::{KernelPatchHelper, KPATCH_SUFFIX, VMLINUX_FILE_NAME};
 
 const KPATCH_BUILD_BIN: &str = "kpatch-build";
+const GENERATED_KCONFIG_NAME: &str = ".config";
 
 struct KBuildParameters {
     pkg_build_dir: PathBuf,
@@ -98,13 +100,33 @@ impl KernelPatchBuilder {
         let kernel_debug_dir = &build_params.build_root.package.debuginfo;
         let oot_source_dir = oot_module_entry.map(|build_entry| build_entry.build_source.clone());
 
-        info!("- Generating kernel default config");
-        KernelPatchHelper::generate_defconfig(&kernel_source_dir)
-            .context("Failed to generate default config")?;
+        /*
+         * Kernel config:
+         * If it's a valid path, use it directly as an exteral file.
+         * Otherwise, we treat it as a kernel config name.
+         */
+        let config_file = match fs::canonicalize(&build_params.kernel_config).ok() {
+            Some(file_path) => {
+                info!(
+                    "- Using kernel config file '{}'",
+                    build_params.kernel_config.to_string_lossy()
+                );
+                file_path
+            }
+            None => {
+                info!(
+                    "- Using kernel config '{}'",
+                    build_params.kernel_config.to_string_lossy()
+                );
+                KernelPatchHelper::generate_config_file(
+                    &kernel_source_dir,
+                    &build_params.kernel_config,
+                )
+                .context("Failed to generate kernel config")?;
 
-        info!("- Finding kernel config");
-        let config_file = KernelPatchHelper::find_kernel_config(&kernel_source_dir)
-            .context("Cannot find kernel config")?;
+                kernel_source_dir.join(GENERATED_KCONFIG_NAME)
+            }
+        };
 
         info!("- Finding vmlinux");
         let vmlinux_file = KernelPatchHelper::find_vmlinux(kernel_debug_dir)

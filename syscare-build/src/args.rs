@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::{ensure, Result};
 use clap::{AppSettings, ColorChoice, Parser};
@@ -25,6 +25,7 @@ use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 const DEFAULT_PATCH_VERSION: &str = "1";
 const DEFAULT_PATCH_RELEASE: &str = "1";
 const DEFAULT_PATCH_DESCRIPTION: &str = "(none)";
+const DEFAULT_KERNEL_CONFIG: &str = "openeuler_defconfig";
 const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
@@ -75,6 +76,10 @@ pub struct Arguments {
     /// Debuginfo package(s)
     #[clap(short, long, multiple = true, required = true)]
     pub debuginfo: Vec<PathBuf>,
+
+    /// Kernel config name or path (kernel patch only)
+    #[clap(short, long, default_value = DEFAULT_KERNEL_CONFIG, hide_default_value = true)]
+    pub kconfig: OsString,
 
     /// Patch file(s)
     #[clap(short, long, multiple = true, required = true)]

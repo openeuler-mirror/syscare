@@ -12,7 +12,10 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::{Path, PathBuf};
+use std::{
+    ffi::OsStr,
+    path::{Path, PathBuf},
+};
 
 use anyhow::Result;
 use log::Level;
@@ -26,29 +29,18 @@ const MAKE_BIN: &str = "make";
 pub struct KernelPatchHelper;
 
 impl KernelPatchHelper {
-    pub fn generate_defconfig<P: AsRef<Path>>(source_dir: P) -> Result<()> {
-        const DEFCONFIG_FILE_NAME: &str = "openeuler_defconfig";
-
+    pub fn generate_config_file<P, S>(source_dir: P, name: S) -> Result<()>
+    where
+        P: AsRef<Path>,
+        S: AsRef<OsStr>,
+    {
         Command::new(MAKE_BIN)
             .arg("-C")
             .arg(source_dir.as_ref())
-            .arg(DEFCONFIG_FILE_NAME)
+            .arg(name)
             .stdout(Level::Debug)
             .run_with_output()?
             .exit_ok()
-    }
-
-    pub fn find_kernel_config<P: AsRef<Path>>(directory: P) -> Result<PathBuf> {
-        const KERNEL_CONFIG_FILE_NAME: &str = ".config";
-
-        Ok(fs::find_file(
-            directory,
-            KERNEL_CONFIG_FILE_NAME,
-            fs::FindOptions {
-                fuzz: false,
-                recursive: true,
-            },
-        )?)
     }
 
     pub fn find_vmlinux<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
