@@ -50,6 +50,7 @@ impl RpmPackage {
             .arg("--query")
             .arg("--queryformat")
             .arg(format)
+            .arg("--nosignature")
             .arg("--package")
             .arg(pkg_path.as_ref().as_os_str())
             .run_with_output()?;
@@ -106,6 +107,7 @@ impl Package for RpmPackage {
         let output = Command::new(RPM_BIN)
             .arg("--query")
             .arg("--list")
+            .arg("--nosignature")
             .arg("--package")
             .arg(pkg_path)
             .run_with_output()?;
