@@ -175,7 +175,6 @@ bool upatch_handle_redis_line(const char *symname)
         !strncmp(symname, "RedisModule__Assert", 19)) {
         return true;
     }
-
     return false;
 }
 
@@ -362,6 +361,9 @@ static bool line_macro_change_only(struct upatch_elf *uelf, struct section *sec)
             return line_macro_change_only_aarch64(uelf, sec);
         case X86_64:
             return line_macro_change_only_x86_64(uelf, sec);
+        case RISCV64:
+            /* TODO: not support */
+            break;
         default:
             ERROR("unsupported arch");
     }

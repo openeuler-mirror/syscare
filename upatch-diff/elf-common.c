@@ -26,6 +26,35 @@
 
 #include "elf-common.h"
 
+#ifdef __riscv
+/*
+ * .L local symbols are named as ".L" + "class prefix" + "number".
+ * The numbers are volatile due to code change.
+ * Compare class prefix(composed of letters) only.
+ */
+static int mangled_strcmp_dot_L(char *str1, char *str2)
+{
+    if (!*str2 || strncmp(str2, ".L", 2)) {
+        return 1;
+    }
+
+    /* RISCV_FAKE_LABEL_NAME matched exactly */
+    if (!strcmp(str1, ".L0 ") || !strcmp(str2, ".L0 ")) {
+        return strcmp(str1, str2);
+    }
+
+    char *p = str1 + 2;
+    char *q = str2 + 2;
+    while (*p < '0' || *p > '9') p++;
+    while (*q < '0' || *q > '9') q++;
+    if ((p - str1 != q - str2) || strncmp(str1, str2, p - str1)) {
+        return 1;
+    }
+
+    return 0;
+}
+#endif
+
 int mangled_strcmp(char *str1, char *str2)
 {
     /*
@@ -34,6 +63,12 @@ int mangled_strcmp(char *str1, char *str2)
     if (strstr(str1, ".str1.")) {
         return strcmp(str1, str2);
     }
+
+#ifdef __riscv
+    if (!strncmp(str1, ".L", 2)) {
+        return mangled_strcmp_dot_L(str1, str2);
+    }
+#endif
 
     while (*str1 == *str2) {
         if (!*str2) {
@@ -100,7 +135,6 @@ int offset_of_string(struct list_head *list, char *name)
 
     ALLOC_LINK(string, list);
     string->name = name;
-
     return index;
 }
 
@@ -112,16 +146,17 @@ bool is_gcc6_localentry_bundled_sym(struct upatch_elf *uelf)
             return false;
         case X86_64:
             return false;
+        case RISCV64:
+            return false;
         default:
             ERROR("unsupported arch");
     }
-
     return false;
 }
 
 bool is_mapping_symbol(struct upatch_elf *uelf, struct symbol *sym)
 {
-    if (uelf->arch != AARCH64) {
+    if ((uelf->arch != AARCH64) && (uelf->arch != RISCV64)) {
         return false;
     }
     if (sym->name && sym->name[0] == '$' &&

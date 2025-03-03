@@ -89,7 +89,7 @@ static void create_section_list(struct upatch_elf *uelf)
         }
 
         log_debug("ndx %02d, data %p, size %zu, name %s\n",
-            sec->index, sec->data->d_buf, sec->data->d_size, sec->name);
+                  sec->index, sec->data->d_buf, sec->data->d_size, sec->name);
     }
 
     if (elf_nextscn(uelf->elf, scn)) {
@@ -111,7 +111,6 @@ static void create_symbol_list(struct upatch_elf *uelf)
     if (!symtab) {
         ERROR("can't find symbol table");
     }
-
     symbols_nr = (unsigned int)(symtab->sh.sh_size / symtab->sh.sh_entsize);
 
     log_debug("\n=== symbol list (%d entries) ===\n", symbols_nr);
@@ -130,7 +129,6 @@ static void create_symbol_list(struct upatch_elf *uelf)
         if (!sym->name) {
             ERROR("elf_strptr with error %s", elf_errmsg(0));
         }
-
         sym->type = GELF_ST_TYPE(sym->sym.st_info);
         sym->bind = GELF_ST_BIND(sym->sym.st_info);
 
@@ -367,6 +365,16 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
             break;
         case EM_X86_64:
             uelf->arch = X86_64;
+            break;
+        case EM_RISCV:
+            /*
+            | Val | Macros     | Description |
+            | 1   | ELFCLASS32 | riscv32     |
+            | 2   | ELFCLASS64 | riscv64     |
+            */
+            if (ehdr.e_ident[EI_CLASS] == ELFCLASS64) {
+                uelf->arch = RISCV64;
+            }
             break;
         default:
             ERROR("unsupported architecture here");

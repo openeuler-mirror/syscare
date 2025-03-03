@@ -66,6 +66,8 @@ long rela_target_offset(struct upatch_elf *uelf, struct section *relasec, struct
     long add_off;
 
     switch (uelf->arch) {
+        case RISCV64:
+            /* fall through */
         case AARCH64:
             add_off = 0;
             break;
@@ -105,6 +107,12 @@ unsigned int insn_length(struct upatch_elf *uelf, void *addr)
             insn_init(&decoded_insn, addr, 1);
             insn_get_length(&decoded_insn);
             return decoded_insn.length;
+        case RISCV64:
+            /* LSB 2 bits distinguish insn size. Now only RV32, RVC supported. */
+            if ((*(char *)addr & 0x3) == 0x3) {
+                return RISCV64_INSN_LEN_4;
+            }
+            return RISCV64_INSN_LEN_2;
         default:
             ERROR("unsupported arch");
     }

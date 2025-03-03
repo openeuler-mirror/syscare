@@ -224,6 +224,8 @@ static inline unsigned int absolute_rela_type(struct upatch_elf *uelf)
             return R_AARCH64_ABS64;
         case X86_64:
             return R_X86_64_64;
+        case RISCV64:
+            return R_RISCV_64;
         default:
             ERROR("unsupported arch");
     }

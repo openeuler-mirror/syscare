@@ -22,6 +22,9 @@
 #define __UPATCH_PTRACE__
 
 #include <sys/user.h>
+#ifdef __riscv
+#include <asm/ptrace.h>
+#endif
 
 #include "upatch-process.h"
 #include "list.h"
@@ -79,6 +82,11 @@ long upatch_execute_remote(struct upatch_ptrace_ctx *,
 size_t get_origin_insn_len(void);
 size_t get_upatch_insn_len(void);
 size_t get_upatch_addr_len(void);
+
+#ifdef __riscv
+unsigned long get_new_insn(unsigned long old_addr, unsigned long new_addr);
+#else
 unsigned long get_new_insn(void);
+#endif
 
 #endif

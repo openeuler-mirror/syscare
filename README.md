@@ -33,6 +33,8 @@
 
   * 编译并安装
 
+    PS: 直接编译在应用补丁的时候会显示缺少依赖，建议通过rpm包安装
+
     ```bash
     git clone https://gitee.com/openeuler/syscare.git
     cd syscare
@@ -41,6 +43,11 @@
     cmake -DCMAKE_INSTALL_PREFIX=/usr -DKERNEL_VERSION=$(uname -r) ..
     make
     make install
+
+    mkdir -p /usr/lib/syscare/patches
+    systemctl daemon-reload
+    systemctl enable syscare
+    systemctl start syscare
     ```
 
   * 离线编译
@@ -63,7 +70,11 @@
 ```bash
 rpm -ivh syscare-*.rpm
 ```
+或者
 
+```
+dnf install syscare-*.rpm
+```
 
 
 ## 使用说明

@@ -86,7 +86,6 @@ void relf_init(char *elf_name, struct running_elf *relf)
     if (!data) {
         ERROR("elf_getdata with error %s", elf_errmsg(0));
     }
-
     relf->obj_nr = (int)(shdr.sh_size / shdr.sh_entsize);
     relf->obj_syms = calloc((size_t)relf->obj_nr, sizeof(struct debug_symbol));
     if (!relf->obj_syms) {
