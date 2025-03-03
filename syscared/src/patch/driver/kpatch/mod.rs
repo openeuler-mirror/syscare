@@ -254,7 +254,7 @@ impl KernelPatchDriver {
         );
 
         ensure!(
-            self.blocked_targets.contains(&patch.target_name),
+            !self.blocked_targets.contains(&patch.target_name),
             "Patch target '{}' is blocked",
             patch.target_name.to_string_lossy(),
         );
