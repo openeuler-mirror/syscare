@@ -87,16 +87,15 @@ impl KernelPatchBuilder {
         let patch_output_dir: PathBuf = build_params.build_root.patch.output.clone();
 
         let kernel_pkg = &kernel_entry.target_pkg;
-        let kernel_source_dir: PathBuf = self
-            .pkg_impl
-            .find_source_directory(
-                &kernel_entry.build_source,
-                &format!(
-                    "linux-{}-{}.{}",
-                    kernel_pkg.version, kernel_pkg.release, kernel_pkg.arch
-                ),
-            )
-            .context("Cannot find kernel source directory")?;
+        let kernel_source_dir: PathBuf = fs::find_dir(
+            &kernel_entry.build_source,
+            format!("linux-{}", kernel_pkg.version),
+            fs::FindOptions {
+                fuzz: true,
+                recursive: true,
+            },
+        )
+        .context("Cannot find kernel source directory")?;
         let kernel_debug_dir = &build_params.build_root.package.debuginfo;
         let oot_source_dir = oot_module_entry.map(|build_entry| build_entry.build_source.clone());
 
