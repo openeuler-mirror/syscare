@@ -68,7 +68,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
     void *uloc;
     u64 val;
     u64 got;
-    s64 result;
+    s64 result = 0;
     GElf_Shdr *shdrs = (void *)uelf->info.shdrs;
     GElf_Rela *rel = (void *)shdrs[relsec].sh_addr;
 
