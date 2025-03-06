@@ -12,129 +12,129 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, process, rc::Rc};
+use std::{env, ffi::OsString, os::unix::process::CommandExt, process::Command};
 
-use anyhow::{Context, Result};
-use flexi_logger::{DeferredNow, LogSpecification, Logger, LoggerHandle, WriteMode};
-use log::{debug, error, LevelFilter, Record};
+use anyhow::{bail, Context, Result};
+use args::SubCommand;
+use flexi_logger::{LogSpecification, Logger, WriteMode};
+use log::{debug, LevelFilter};
+
+use syscare_common::{concat_os, ffi::OsStrExt, os};
 
 mod args;
-mod executor;
 mod rpc;
 
-use args::Arguments;
-use executor::{build::BuildCommandExecutor, patch::PatchCommandExecutor, CommandExecutor};
-use rpc::{RpcProxy, RpcRemote};
-use syscare_common::{concat_os, os};
+use self::{
+    args::Arguments,
+    rpc::{PatchProxy, RpcClient},
+};
 
 pub const CLI_NAME: &str = env!("CARGO_PKG_NAME");
 pub const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const CLI_ABOUT: &str = env!("CARGO_PKG_DESCRIPTION");
-const CLI_UMASK: u32 = 0o077;
+pub const CLI_UMASK: u32 = 0o022;
 
 const PATH_ENV_NAME: &str = "PATH";
 const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
+const EXTERNAL_CMD_PREFIX: &str = "syscare-";
 
-const SOCKET_FILE_NAME: &str = "syscared.sock";
-const PATCH_OP_LOCK_NAME: &str = "patch_op.lock";
+fn exec_external_cmd(mut args: Vec<OsString>) -> Result<()> {
+    let program = concat_os!(EXTERNAL_CMD_PREFIX, args.remove(0).trim());
 
-struct SyscareCLI {
-    args: Arguments,
-    logger: LoggerHandle,
-}
-
-impl SyscareCLI {
-    fn format_log(
-        w: &mut dyn std::io::Write,
-        _now: &mut DeferredNow,
-        record: &Record,
-    ) -> std::io::Result<()> {
-        write!(w, "{}", &record.args())
-    }
-
-    fn new() -> Result<Self> {
-        // Initialize arguments & prepare environments
-        os::umask::set_umask(CLI_UMASK);
-        if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
-            env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+    let error = Command::new(&program).args(&args).exec();
+    match error.kind() {
+        std::io::ErrorKind::NotFound => {
+            bail!(
+                "External command '{}' is not installed",
+                program.to_string_lossy()
+            );
         }
-
-        let args = Arguments::new()?;
-
-        // Initialize logger
-        let log_level_max = if args.verbose {
-            LevelFilter::Trace
-        } else {
-            LevelFilter::Info
-        };
-        let log_spec = LogSpecification::builder().default(log_level_max).build();
-        let logger = Logger::with(log_spec)
-            .log_to_stdout()
-            .format(Self::format_log)
-            .write_mode(WriteMode::Direct)
-            .start()
-            .context("Failed to initialize logger")?;
-
-        Ok(Self { args, logger })
-    }
-}
-
-impl SyscareCLI {
-    fn run(&self) -> Result<i32> {
-        debug!("Start with {:#?}", self.args);
-
-        debug!("Initializing remote procedure call client...");
-        let socket_file = self.args.work_dir.join(SOCKET_FILE_NAME);
-        let remote = Rc::new(RpcRemote::new(socket_file));
-
-        debug!("Initializing remote procedure calls...");
-        let patch_proxy = RpcProxy::new(remote);
-
-        debug!("Initializing command executors...");
-        let patch_lock_file = self.args.work_dir.join(PATCH_OP_LOCK_NAME);
-        let executors: Vec<Box<dyn CommandExecutor>> = vec![
-            Box::new(BuildCommandExecutor),
-            Box::new(PatchCommandExecutor::new(patch_proxy, patch_lock_file)),
-        ];
-
-        let command = &self.args.command;
-        debug!("Invoking command: {:#?}", command);
-        for executor in &executors {
-            if let Some(exit_code) = executor.invoke(command)? {
-                debug!("Done");
-                return Ok(exit_code);
-            }
+        _ => {
+            bail!(
+                "Failed to execute '{}', {}",
+                program.to_string_lossy(),
+                error
+            );
         }
-
-        Ok(0)
     }
 }
 
-impl Drop for SyscareCLI {
-    fn drop(&mut self) {
-        self.logger.flush();
-        self.logger.shutdown();
-    }
-}
+fn main() -> Result<()> {
+    // Parse arguments
+    let args = Arguments::new()?;
 
-fn main() {
-    let cli = match SyscareCLI::new() {
-        Ok(instance) => instance,
-        Err(e) => {
-            eprintln!("Error: {:?}", e);
-            process::exit(-1);
-        }
+    // Set up environments
+    os::umask::set_umask(CLI_UMASK);
+    if let Some(path_env) = env::var_os(PATH_ENV_NAME) {
+        env::set_var(PATH_ENV_NAME, concat_os!(PATH_ENV_VALUE, ":", path_env));
+    }
+
+    // Initialize logger
+    let max_log_level = if args.verbose {
+        LevelFilter::Trace
+    } else {
+        LevelFilter::Info
     };
+    let log_spec = LogSpecification::builder().default(max_log_level).build();
+    let _ = Logger::with(log_spec)
+        .log_to_stdout()
+        .format(|w, _, record| write!(w, "{}", record.args()))
+        .write_mode(WriteMode::Direct)
+        .start()
+        .context("Failed to initialize logger")?;
 
-    match cli.run() {
-        Ok(exit_code) => {
-            process::exit(exit_code);
-        }
-        Err(e) => {
-            error!("Error: {:?}", e);
-
-            drop(cli);
-            process::exit(-1);
-        }
+    debug!("Start with {:#?}", args);
+    if let SubCommand::External(cmd_args) = args.subcommand {
+        self::exec_external_cmd(cmd_args)?;
+        return Ok(());
     }
+
+    debug!("Initializing rpc client...");
+    let client = RpcClient::new(&args.work_dir).context("Failed to initialize rpc client")?;
+
+    debug!("Invoking rpc call...");
+    match &args.subcommand {
+        SubCommand::Info { identifiers } => {
+            PatchProxy::new(&client).show_patch_info(identifiers)?;
+        }
+        SubCommand::Target { identifiers } => {
+            PatchProxy::new(&client).show_patch_target(identifiers)?;
+        }
+        SubCommand::Status { identifiers } => {
+            PatchProxy::new(&client).show_patch_status(identifiers)?;
+        }
+        SubCommand::List => {
+            PatchProxy::new(&client).show_patch_list()?;
+        }
+        SubCommand::Check { identifiers } => {
+            PatchProxy::new(&client).check_patches(identifiers)?;
+        }
+        SubCommand::Apply { identifiers, force } => {
+            PatchProxy::new(&client).apply_patches(identifiers, *force)?;
+        }
+        SubCommand::Remove { identifiers } => {
+            PatchProxy::new(&client).remove_patches(identifiers)?;
+        }
+        SubCommand::Active { identifiers, force } => {
+            PatchProxy::new(&client).active_patches(identifiers, *force)?;
+        }
+        SubCommand::Deactive { identifiers } => {
+            PatchProxy::new(&client).deactive_patches(identifiers)?;
+        }
+        SubCommand::Accept { identifiers } => {
+            PatchProxy::new(&client).accept_patches(identifiers)?;
+        }
+        SubCommand::Save => {
+            PatchProxy::new(&client).save_patches()?;
+        }
+        SubCommand::Restore { accepted } => {
+            PatchProxy::new(&client).restore_patches(*accepted)?;
+        }
+        SubCommand::Rescan => {
+            PatchProxy::new(&client).rescan_all_patches()?;
+        }
+        _ => unreachable!(),
+    }
+
+    Ok(())
 }

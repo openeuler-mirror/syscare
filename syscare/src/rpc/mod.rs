@@ -12,9 +12,8 @@
  * See the Mulan PSL v2 for more details.
  */
 
-mod args;
+mod client;
 mod proxy;
-mod remote;
 
-pub use proxy::*;
-pub use remote::*;
+pub use client::RpcClient;
+pub use proxy::PatchProxy;
