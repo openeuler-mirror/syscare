@@ -43,7 +43,7 @@ impl PatchFunction {
 #[derive(Debug)]
 pub struct PatchTarget {
     name: OsString,
-    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
+    function_map: IndexMap<OsString, Vec<PatchFunction>>, // function addr -> function collision list
 }
 
 impl PatchTarget {
@@ -69,7 +69,7 @@ impl PatchTarget {
                 continue;
             }
             self.function_map
-                .entry(function.old_addr)
+                .entry(function.name.clone())
                 .or_default()
                 .push(PatchFunction::new(uuid, function));
         }
@@ -83,14 +83,14 @@ impl PatchTarget {
             if self.name != function.object {
                 continue;
             }
-            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
+            if let Some(collision_list) = self.function_map.get_mut(&function.name) {
                 if let Some(index) = collision_list
                     .iter()
                     .position(|patch_function| patch_function.is_same_function(uuid, function))
                 {
                     collision_list.remove(index);
                     if collision_list.is_empty() {
-                        self.function_map.remove(&function.old_addr);
+                        self.function_map.remove(&function.name);
                     }
                 }
             }
@@ -111,7 +111,7 @@ impl PatchTarget {
                 return None;
             }
             self.function_map
-                .get(&function.old_addr)
+                .get(&function.name)
                 .and_then(|list| list.last())
         })
     }
@@ -129,7 +129,7 @@ impl PatchTarget {
                 return None;
             }
             self.function_map
-                .get(&function.old_addr)
+                .get(&function.name)
                 .and_then(|list| list.last())
                 .filter(|patch_function| !patch_function.is_same_function(uuid, function))
         })
