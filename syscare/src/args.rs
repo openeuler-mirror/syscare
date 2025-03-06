@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::PathBuf;
+use std::{ffi::OsString, path::PathBuf};
 
 use anyhow::Result;
 use clap::{AppSettings, ColorChoice, Parser, Subcommand};
@@ -28,6 +28,7 @@ const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
     bin_name = CLI_NAME,
     version = CLI_VERSION,
     about = CLI_ABOUT,
+    allow_external_subcommands(true),
     arg_required_else_help(true),
     color(ColorChoice::Never),
     disable_help_subcommand(true),
@@ -37,7 +38,7 @@ const DEFAULT_WORK_DIR: &str = "/var/run/syscare";
 pub struct Arguments {
     /// Command name
     #[clap(subcommand)]
-    pub command: SubCommand,
+    pub subcommand: SubCommand,
 
     /// Path for working directory
     #[clap(short, long, default_value=DEFAULT_WORK_DIR)]
@@ -50,13 +51,6 @@ pub struct Arguments {
 
 #[derive(Debug, Clone, Subcommand)]
 pub enum SubCommand {
-    /// Build a patch
-    #[clap(
-        disable_help_flag(true),
-        subcommand_precedence_over_arg(true),
-        allow_hyphen_values(true)
-    )]
-    Build { args: Vec<String> },
     /// Show patch info
     Info {
         /// Patch identifier
@@ -129,6 +123,9 @@ pub enum SubCommand {
     },
     /// Rescan all patches
     Rescan,
+    /// External subcommand
+    #[clap(external_subcommand)]
+    External(Vec<OsString>),
 }
 
 impl Arguments {
