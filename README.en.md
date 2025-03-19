@@ -72,7 +72,7 @@ $ syscare build \
    --patch ./0001-test.patch
 ```
 
-For detailed instructions on patch production, please see builder/README.md
+For detailed instructions on patch production, please see syscare-build/README.md
 
 ### Patch management
 
