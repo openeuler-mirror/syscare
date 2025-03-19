@@ -104,7 +104,7 @@ $ syscare build \
    --patch ./0001-test.patch
 ```
 
-补丁制作详细使用说明请见[builder/README.md](https://gitee.com/openeuler/syscare/blob/master/builder/README.md)
+补丁制作详细使用说明请见[syscare-build/README.md](https://gitee.com/openeuler/syscare/blob/master/syscare-build/README.md)
 
 
 
