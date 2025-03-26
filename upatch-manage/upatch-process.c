@@ -889,7 +889,14 @@ struct vm_hole *find_patch_region(struct object_file *obj, size_t len)
     struct obj_vm_area *vma = NULL;
     list_for_each_entry(vma, &obj->vma, list) {
         struct vm_hole *left_hole = obj->prev_hole;
-        struct vm_hole *right_hole = next_hole(obj->prev_hole, vma_holes);
+        struct vm_hole *right_hole = NULL;
+        if (left_hole) {
+            right_hole = next_hole(left_hole, vma_holes);
+        } else {
+            if (!list_empty(vma_holes)) {
+                right_hole = list_first_entry(vma_holes, struct vm_hole, list);
+            }
+        }
 
         while ((left_hole != NULL) || (right_hole != NULL)) {
             if (left_hole != NULL) {
