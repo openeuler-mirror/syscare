@@ -137,7 +137,7 @@ impl RpcClient {
         match error {
             jsonrpc::Error::Transport(err) => self.parse_transport_error(err),
             jsonrpc::Error::Json(_) => anyhow!("Response format error"),
-            jsonrpc::Error::Rpc(_) => anyhow!("Request is unrecognized"),
+            jsonrpc::Error::Rpc(e) => anyhow!(e.message),
             _ => anyhow!("Unknown response error"),
         }
     }
