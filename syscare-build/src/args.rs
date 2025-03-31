@@ -97,6 +97,10 @@ pub struct Arguments {
     #[clap(short, long, default_value = &DEFAULT_BUILD_JOBS)]
     pub jobs: usize,
 
+    /// Keep line macro unchanged (userspace patch only)
+    #[clap(long)]
+    pub keep_line_macros: bool,
+
     /// Skip compiler version check (not recommended)
     #[clap(long)]
     pub skip_compiler_check: bool,
