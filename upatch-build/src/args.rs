@@ -90,6 +90,10 @@ pub struct Arguments {
     #[clap(short, long, default_value = DEFAULT_OUTPUT_DIR)]
     pub output_dir: PathBuf,
 
+    /// Keep line macro unchanged
+    #[clap(long)]
+    pub keep_line_macros: bool,
+
     /// Skip compiler version check (not recommended)
     #[clap(long)]
     pub skip_compiler_check: bool,
