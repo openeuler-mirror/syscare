@@ -17,7 +17,7 @@ use std::{
     ffi::{OsStr, OsString},
     fs::File,
     io::Write,
-    os::unix::ffi::OsStrExt,
+    os::unix::ffi::{OsStrExt as _, OsStringExt},
     path::{Path, PathBuf},
 };
 
@@ -27,7 +27,7 @@ use log::{debug, Level};
 use which::which;
 
 use crate::{args::Arguments, build_root::BuildRoot, compiler::CompilerInfo, dwarf::ProducerType};
-use syscare_common::{concat_os, fs, process::Command};
+use syscare_common::{concat_os, ffi::OsStrExt, fs, process::Command};
 
 const PATCH_BIN: &str = "patch";
 const UPATCH_HELPER_BIN: &str = "upatch-helper";
@@ -171,6 +171,25 @@ impl Project<'_> {
     pub fn test_patches(&self) -> Result<()> {
         self.apply_patches()?;
         self.remove_patches()?;
+
+        Ok(())
+    }
+
+    pub fn override_line_macros(&self) -> Result<()> {
+        const LINE_MACRO_NAME: &str = "__LINE__";
+        const LINE_MACRO_VALUE: &str = "0";
+
+        let file_list = fs::list_files(self.source_dir, fs::TraverseOptions { recursive: true })?;
+        for file_path in file_list {
+            let old_contents = fs::read(&file_path)?;
+            let new_contents = OsStr::from_bytes(&old_contents)
+                .replace(LINE_MACRO_NAME, LINE_MACRO_VALUE)
+                .into_vec();
+            if old_contents != new_contents {
+                debug!("* {}", file_path.display());
+                fs::write(&file_path, new_contents)?;
+            }
+        }
 
         Ok(())
     }

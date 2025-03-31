@@ -281,6 +281,13 @@ impl UpatchBuild {
             .prepare()
             .with_context(|| format!("Failed to prepare {}", project))?;
 
+        if !self.args.keep_line_macros {
+            info!("Overriding line macros");
+            project
+                .override_line_macros()
+                .context("Failed to override line macros")?;
+        }
+
         info!("Building '{}'", project);
         project
             .build()
@@ -299,6 +306,13 @@ impl UpatchBuild {
         project
             .apply_patches()
             .with_context(|| format!("Failed to patch {}", project))?;
+
+        if !self.args.keep_line_macros {
+            info!("Overriding line macros");
+            project
+                .override_line_macros()
+                .context("Failed to override line macros")?;
+        }
 
         info!("Building '{}'", project);
         project
