@@ -275,10 +275,9 @@ static void *upatch_alloc(struct object_file *obj, size_t sz)
 	if (!addr)
 		return NULL;
 
-	addr = upatch_mmap_remote(proc2pctx(obj->proc), addr, sz,
-				  PROT_READ | PROT_WRITE | PROT_EXEC,
-				  MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
-				  (unsigned long)-1, 0);
+    addr = upatch_mmap_remote(proc2pctx(obj->proc), addr, sz,
+        PROT_READ | PROT_EXEC, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
+        (unsigned long)-1, 0);
 	if (addr == 0) {
 		return NULL;
 	}
