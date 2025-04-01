@@ -278,8 +278,7 @@ static void *upatch_alloc(struct object_file *obj, size_t len)
     log_debug("Found patch region at 0x%lx, size=0x%lx\n", addr, len);
 
     addr = upatch_mmap_remote(pctx, addr, len,
-        PROT_READ | PROT_WRITE | PROT_EXEC,
-        MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
+        PROT_READ | PROT_EXEC, MAP_FIXED | MAP_PRIVATE | MAP_ANONYMOUS,
         (unsigned long)-1, 0);
     if (addr == 0) {
         log_error("Failed to map patch region, ret=%d\n", errno);
