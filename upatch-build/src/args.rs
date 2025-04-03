@@ -23,8 +23,8 @@ use which::which;
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
 const DEFAULT_EMPTY_VALUE: &str = "";
-const DEFAULT_SOURCE_EXT: [&str; 8] = ["h", "hpp", "hxx", "c", "cpp", "cxx", "in", "inc"];
-const DEFAULT_COMPILERS: [&str; 2] = ["gcc", "g++"];
+const DEFAULT_SOURCE_EXTS: &[&str] = &["h", "hpp", "hxx", "c", "cpp", "cxx", "in", "inc"];
+const DEFAULT_COMPILERS: &[&str] = &["gcc", "g++"];
 const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
 
@@ -52,7 +52,7 @@ pub struct Arguments {
     pub source_dir: PathBuf,
 
     /// Source file extension(s)
-    #[clap(long, multiple = true, default_values = &DEFAULT_SOURCE_EXT)]
+    #[clap(long, multiple = true, default_values = &DEFAULT_SOURCE_EXTS)]
     pub source_ext: Vec<OsString>,
 
     /// Build compiler(s)
@@ -60,14 +60,14 @@ pub struct Arguments {
     pub compiler: Vec<PathBuf>,
 
     /// Build prepare command
-    #[clap(long, default_value = DEFAULT_EMPTY_VALUE)]
+    #[clap(long, default_value = DEFAULT_EMPTY_VALUE, hide_default_value = true)]
     pub prepare_cmd: OsString,
 
     /// Build command
     #[clap(short('c'), long)]
     pub build_cmd: OsString,
 
-    /// Build clean command [default: <PREPARE_CMD>]
+    /// Build clean command
     #[clap(long, default_value = DEFAULT_EMPTY_VALUE, hide_default_value = true)]
     pub clean_cmd: OsString,
 
@@ -138,9 +138,6 @@ impl Arguments {
         }
         if self.binary_dir.as_os_str().is_empty() {
             self.binary_dir = self.source_dir.clone();
-        }
-        if self.clean_cmd.is_empty() {
-            self.clean_cmd = self.prepare_cmd.clone();
         }
 
         self
