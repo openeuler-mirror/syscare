@@ -276,10 +276,19 @@ impl UpatchBuild {
             self.check_debuginfo().context("Debuginfo check failed")?;
         }
 
-        info!("Preparing '{}'", project);
-        project
-            .prepare()
-            .with_context(|| format!("Failed to prepare {}", project))?;
+        if !self.args.prepare_cmd.is_empty() {
+            info!("Preparing '{}'", project);
+            project
+                .prepare()
+                .with_context(|| format!("Failed to prepare {}", project))?;
+        }
+
+        if !self.args.clean_cmd.is_empty() {
+            info!("Cleaning '{}'", project);
+            project
+                .clean()
+                .with_context(|| format!("Failed to clean {}", project))?;
+        }
 
         if !self.args.keep_line_macros {
             info!("Overriding line macros");
@@ -297,10 +306,19 @@ impl UpatchBuild {
         self.file_relation
             .collect_original_build(object_dir, original_dir)?;
 
-        info!("Cleaning '{}'", project);
-        project
-            .clean()
-            .with_context(|| format!("Failed to clean {}", project))?;
+        if !self.args.prepare_cmd.is_empty() {
+            info!("Preparing '{}'", project);
+            project
+                .prepare()
+                .with_context(|| format!("Failed to prepare {}", project))?;
+        }
+
+        if !self.args.clean_cmd.is_empty() {
+            info!("Cleaning '{}'", project);
+            project
+                .clean()
+                .with_context(|| format!("Failed to clean {}", project))?;
+        }
 
         info!("Patching '{}'", project);
         project
