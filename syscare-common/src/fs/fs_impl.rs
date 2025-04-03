@@ -620,6 +620,7 @@ pub fn glob<P: AsRef<Path>>(path: P) -> io::Result<Vec<PathBuf>> {
             if let Component::Normal(pattern) = components[comp_idx] {
                 if pattern == WILDCARD_RECURSIVE {
                     if let Ok(read_dir) = self::read_dir(&curr_dir) {
+                        stack.push((curr_dir.clone(), comp_idx + 1));
                         for dir_entry in read_dir.flatten() {
                             let next_path = dir_entry.path();
                             if next_path.is_dir() {
