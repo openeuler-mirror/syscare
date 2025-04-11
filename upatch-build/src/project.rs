@@ -49,6 +49,7 @@ pub struct Project<'a> {
     name: OsString,
     build_root: &'a BuildRoot,
     source_dir: &'a Path,
+    source_ext: &'a [OsString],
     prepare_cmd: &'a OsStr,
     build_cmd: &'a OsStr,
     clean_cmd: &'a OsStr,
@@ -92,6 +93,7 @@ impl<'a> Project<'a> {
                 .to_os_string(),
             build_root,
             source_dir: args.source_dir.as_path(),
+            source_ext: args.source_ext.as_slice(),
             prepare_cmd: args.prepare_cmd.as_os_str(),
             build_cmd: args.build_cmd.as_os_str(),
             clean_cmd: args.clean_cmd.as_os_str(),
@@ -181,6 +183,11 @@ impl Project<'_> {
 
         let file_list = fs::list_files(self.source_dir, fs::TraverseOptions { recursive: true })?;
         for file_path in file_list {
+            let file_ext = file_path.extension().unwrap_or_default();
+            if self.source_ext.iter().all(|ext| ext != file_ext) {
+                continue;
+            }
+
             let old_contents = fs::read(&file_path)?;
             let new_contents = OsStr::from_bytes(&old_contents)
                 .replace(LINE_MACRO_NAME, LINE_MACRO_VALUE)
