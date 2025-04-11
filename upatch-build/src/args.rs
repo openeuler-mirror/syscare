@@ -23,6 +23,7 @@ use which::which;
 use super::{CLI_ABOUT, CLI_NAME, CLI_VERSION};
 
 const DEFAULT_EMPTY_VALUE: &str = "";
+const DEFAULT_SOURCE_EXT: [&str; 8] = ["h", "hpp", "hxx", "c", "cpp", "cxx", "in", "inc"];
 const DEFAULT_COMPILERS: [&str; 2] = ["gcc", "g++"];
 const DEFAULT_BUILD_ROOT: &str = ".";
 const DEFAULT_OUTPUT_DIR: &str = ".";
@@ -49,6 +50,10 @@ pub struct Arguments {
     /// Source directory
     #[clap(short, long)]
     pub source_dir: PathBuf,
+
+    /// Source file extension(s)
+    #[clap(long, multiple = true, default_values = &DEFAULT_SOURCE_EXT)]
+    pub source_ext: Vec<OsString>,
 
     /// Build compiler(s)
     #[clap(long, multiple = true, default_values = &DEFAULT_COMPILERS)]
