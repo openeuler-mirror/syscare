@@ -12,15 +12,23 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, ffi::OsStr, fs::Permissions, os::unix::fs::PermissionsExt, path::Path, process};
+use std::{
+    env,
+    ffi::OsStr,
+    fs::Permissions,
+    os::unix::fs::PermissionsExt,
+    path::{Path, PathBuf},
+    process,
+};
 
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use flexi_logger::{
     DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
 };
 use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
 use object::{write, Object, ObjectKind, ObjectSection, SectionKind};
+
 use syscare_common::{
     concat_os,
     fs::{self, MappedFile},
@@ -37,12 +45,14 @@ mod file_relation;
 mod project;
 mod resolve;
 
-use args::Arguments;
-use build_root::BuildRoot;
-use compiler::CompilerInfo;
-use dwarf::{Dwarf, ProducerType};
-use file_relation::FileRelation;
-use project::Project;
+use crate::{
+    args::Arguments,
+    build_root::BuildRoot,
+    compiler::Compiler,
+    dwarf::{ProducerParser, ProducerType},
+    file_relation::FileRelation,
+    project::Project,
+};
 
 const CLI_NAME: &str = "upatch build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -59,7 +69,7 @@ struct UpatchBuild {
     args: Arguments,
     logger: LoggerHandle,
     build_root: BuildRoot,
-    compiler_map: IndexMap<ProducerType, CompilerInfo>,
+    compiler_map: IndexMap<ProducerType, Compiler>,
     file_relation: FileRelation,
 }
 
@@ -107,23 +117,99 @@ impl UpatchBuild {
         })
     }
 
-    fn check_debuginfo(&self) -> Result<()> {
-        let supported_compilers = self
-            .compiler_map
-            .values()
-            .flat_map(|info| &info.producers)
-            .collect::<IndexSet<_>>();
-        for debuginfo in &self.args.debuginfo {
-            for producer in Dwarf::parse(debuginfo)?.producers() {
-                ensure!(
-                    supported_compilers.contains(&producer),
-                    "{} is not supported",
-                    producer.to_string_lossy()
-                );
+    fn detect_compilers(&mut self) -> Result<()> {
+        let mut c_compilers = 0usize;
+        let mut cxx_compilers = 0usize;
+
+        for compiler_path in &self.args.compiler {
+            let compiler = Compiler::parse(compiler_path, &self.build_root.build_dir)
+                .with_context(|| format!("Failed to detect {}", compiler_path.display()))?;
+            match compiler.kind {
+                ProducerType::GnuC | ProducerType::ClangC => c_compilers += 1,
+                ProducerType::GnuCxx | ProducerType::ClangCxx => cxx_compilers += 1,
+                _ => bail!("Unknown compiler type"),
+            }
+            info!(
+                "[{}] name: {}, version: {}",
+                compiler.kind,
+                compiler,
+                compiler.version.to_string_lossy(),
+            );
+            self.compiler_map.insert(compiler.kind, compiler);
+        }
+
+        ensure!(
+            c_compilers <= 1 && cxx_compilers <= 1,
+            "Cannot define multiple C/C++ compilers"
+        );
+        self.compiler_map.sort_keys();
+
+        Ok(())
+    }
+
+    fn check_compiler_version(&self) -> Result<()> {
+        for path in &self.args.debuginfo {
+            let producer_parser = ProducerParser::open(path)
+                .with_context(|| format!("Failed to open {}", path.display()))?;
+            let producer_iter = producer_parser
+                .parse()
+                .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+            for parse_result in producer_iter {
+                let producer = parse_result.context("Failed to parse debuginfo producer")?;
+                if producer.is_assembler() {
+                    continue;
+                }
+                let matched = self
+                    .compiler_map
+                    .get(&producer.kind)
+                    .map(|compiler| compiler.version == producer.version)
+                    .unwrap_or(false);
+                ensure!(matched, "Producer {} mismatched", producer);
             }
         }
 
         Ok(())
+    }
+
+    fn find_linker(&self, objects: &[PathBuf]) -> Result<&Path> {
+        let mut producers = IndexSet::new();
+        for path in objects {
+            let producer_parser = ProducerParser::open(path)
+                .with_context(|| format!("Failed to open {}", path.display()))?;
+            let producer_iter = producer_parser
+                .parse()
+                .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+            for parse_result in producer_iter {
+                let producer = parse_result.context("Failed to parse object producer")?;
+                if producer.is_assembler() {
+                    continue;
+                }
+                producers.insert(producer);
+            }
+        }
+        producers.sort();
+
+        let producer = producers.pop().context("No object producer")?;
+        let compiler = self
+            .compiler_map
+            .get(&producer.kind)
+            .with_context(|| format!("Cannot find {} compiler", producer.kind))?;
+
+        Ok(compiler.linker.as_path())
+    }
+
+    fn link_objects(&self, objects: &[PathBuf], output: &Path) -> Result<()> {
+        let linker = self.find_linker(objects).context("Cannot find linker")?;
+
+        Command::new(linker)
+            .args(["-r", "-o"])
+            .arg(output)
+            .args(objects)
+            .stdout(Level::Trace)
+            .run_with_output()?
+            .exit_ok()
     }
 
     fn build_patch(&self, patch_name: &OsStr, binary: &Path, debuginfo: &Path) -> Result<()> {
@@ -170,9 +256,9 @@ impl UpatchBuild {
         }
 
         debug!("- Collecting changes");
-        let mut changed_objects =
-            elf::find_elf_files(&temp_dir, |_, obj_kind| obj_kind == ObjectKind::Relocatable)?;
-        if changed_objects.is_empty() {
+        let mut objects =
+            elf::find_elf_files(&temp_dir, |_, kind| matches!(kind, ObjectKind::Relocatable))?;
+        if objects.is_empty() {
             debug!("- No functional changes");
             return Ok(());
         }
@@ -181,25 +267,10 @@ impl UpatchBuild {
         let notes_object = temp_dir.join(NOTES_OBJECT_NAME);
         Self::create_note(&debuginfo_file, &notes_object)
             .context("Failed to create patch notes")?;
-        changed_objects.push(notes_object);
+        objects.push(notes_object);
 
-        debug!("- Linking patch objects");
-        let mut link_compiler = ProducerType::C;
-        for object in &changed_objects {
-            if Dwarf::parse(object)?
-                .producer_types()
-                .contains(&ProducerType::Cxx)
-            {
-                link_compiler = ProducerType::Cxx;
-                break;
-            }
-        }
-
-        let compiler_info = self
-            .compiler_map
-            .get(&link_compiler)
-            .with_context(|| format!("Failed to get link compiler {}", link_compiler))?;
-        Self::link_objects(&compiler_info.linker, &changed_objects, &output_file)
+        debug!("- Linking patch");
+        self.link_objects(&objects, &output_file)
             .context("Failed to link patch objects")?;
 
         debug!("- Resolving patch");
@@ -231,36 +302,16 @@ impl UpatchBuild {
     }
 
     fn run(&mut self) -> Result<()> {
-        let compilers = self.args.compiler.as_slice();
-        let binary_dir = self.args.binary_dir.as_path();
-        let object_dir = self.args.object_dir.as_path();
-        let binaries = self.args.binary.as_slice();
-        let debuginfos = self.args.debuginfo.as_slice();
-
-        let temp_dir = self.build_root.build_dir.as_path();
-        let original_dir = self.build_root.original_dir.as_path();
-        let patched_dir = self.build_root.patched_dir.as_path();
-
         info!("==============================");
         info!("{}", CLI_ABOUT);
         info!("==============================");
         trace!("{:#?}", self.args);
 
-        info!("Checking compiler(s)");
-        self.compiler_map = CompilerInfo::parse(compilers, temp_dir)?;
-
+        info!("Detecting compiler(s)");
         info!("------------------------------");
         info!("Compiler");
         info!("------------------------------");
-        for (producer_type, compiler_info) in &self.compiler_map {
-            info!(
-                "[{}] compiler: {}, assembler: {}, linker: {}",
-                producer_type,
-                compiler_info.binary.display(),
-                compiler_info.assembler.display(),
-                compiler_info.linker.display(),
-            );
-        }
+        self.detect_compilers()?;
 
         let project = Project::new(&self.args, &self.build_root, &self.compiler_map)?;
         info!("------------------------------");
@@ -269,11 +320,12 @@ impl UpatchBuild {
         info!("Testing patch file(s)");
         project.test_patches().context("Patch test failed")?;
 
-        info!("Checking debuginfo version(s)");
+        info!("Checking compiler version(s)");
         if self.args.skip_compiler_check {
             warn!("Warning: Skipped compiler version check!")
         } else {
-            self.check_debuginfo().context("Debuginfo check failed")?;
+            self.check_compiler_version()
+                .context("Compiler version check failed")?;
         }
 
         if !self.args.prepare_cmd.is_empty() {
@@ -296,6 +348,14 @@ impl UpatchBuild {
                 .override_line_macros()
                 .context("Failed to override line macros")?;
         }
+
+        let binary_dir = self.args.binary_dir.as_path();
+        let object_dir = self.args.object_dir.as_path();
+        let binaries = self.args.binary.as_slice();
+        let debuginfos = self.args.debuginfo.as_slice();
+
+        let original_dir = self.build_root.original_dir.as_path();
+        let patched_dir = self.build_root.patched_dir.as_path();
 
         info!("Building '{}'", project);
         project
@@ -425,22 +485,6 @@ impl UpatchBuild {
             .arg(output_file);
 
         command.stdout(Level::Trace).run_with_output()?.exit_ok()
-    }
-
-    fn link_objects<P, I, S, Q>(linker: P, objects: I, output: Q) -> Result<()>
-    where
-        P: AsRef<Path>,
-        I: IntoIterator<Item = S>,
-        S: AsRef<OsStr>,
-        Q: AsRef<Path>,
-    {
-        Command::new(linker.as_ref())
-            .args(["-r", "-o"])
-            .arg(output.as_ref())
-            .args(objects)
-            .stdout(Level::Trace)
-            .run_with_output()?
-            .exit_ok()
     }
 }
 

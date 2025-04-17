@@ -26,7 +26,7 @@ use indexmap::IndexMap;
 use log::{debug, Level};
 use which::which;
 
-use crate::{args::Arguments, build_root::BuildRoot, compiler::CompilerInfo, dwarf::ProducerType};
+use crate::{args::Arguments, build_root::BuildRoot, compiler::Compiler, dwarf::ProducerType};
 use syscare_common::{concat_os, ffi::OsStrExt, fs, process::Command};
 
 const PATCH_BIN: &str = "patch";
@@ -60,22 +60,25 @@ impl<'a> Project<'a> {
     pub fn new(
         args: &'a Arguments,
         build_root: &'a BuildRoot,
-        compiler_map: &'a IndexMap<ProducerType, CompilerInfo>,
+        compiler_map: &'a IndexMap<ProducerType, Compiler>,
     ) -> Result<Self> {
         let path_env = env::var_os(PATH_ENV)
             .with_context(|| format!("Cannot read environment variable '{}'", PATH_ENV))?;
         let upatch_helper = which(UPATCH_HELPER_BIN)
             .with_context(|| format!("Cannot find component '{}'", UPATCH_HELPER_BIN))?;
 
-        for (producer_type, compiler_info) in compiler_map {
-            let compiler_bin = compiler_info.binary.as_path();
-            let compiler_name = compiler_bin
+        for (kind, compiler) in compiler_map {
+            let compiler_path = compiler.path.as_path();
+            let compiler_name = compiler_path
                 .file_name()
                 .context("Failed to parse compiler name")?;
-
-            match producer_type {
-                ProducerType::C => env::set_var(UPATCH_CC_ENV, compiler_bin),
-                ProducerType::Cxx => env::set_var(UPATCH_CXX_ENV, compiler_bin),
+            match kind {
+                ProducerType::GnuC | ProducerType::ClangC => {
+                    env::set_var(UPATCH_CC_ENV, compiler_path)
+                }
+                ProducerType::GnuCxx | ProducerType::ClangCxx => {
+                    env::set_var(UPATCH_CXX_ENV, compiler_path)
+                }
                 _ => {}
             }
             fs::soft_link(&upatch_helper, build_root.bin_dir.join(compiler_name))?;
