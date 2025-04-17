@@ -1315,6 +1315,8 @@ dependencies = [
  "memmap2",
  "memoffset",
  "object",
+ "once_cell",
+ "regex",
  "serde",
  "syscare-common",
  "typed-arena",
