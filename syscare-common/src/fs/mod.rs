@@ -14,8 +14,10 @@
 
 mod flock;
 mod fs_impl;
+mod glob;
 mod mapped_file;
 
 pub use flock::*;
 pub use fs_impl::*;
+pub use glob::*;
 pub use mapped_file::*;
