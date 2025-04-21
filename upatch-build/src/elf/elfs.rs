@@ -25,8 +25,18 @@ use syscare_common::fs;
 
 use super::{Endian, Endianness};
 
-pub fn parse_file_kind<P: AsRef<Path>>(file_path: P) -> Result<ObjectKind> {
-    Ok(object::File::parse(fs::MappedFile::open(&file_path)?.as_bytes())?.kind())
+fn parse_elf_kind<P: AsRef<Path>>(file_path: P) -> Result<ObjectKind> {
+    let path = file_path.as_ref();
+    let mmap =
+        fs::mmap(path).with_context(|| format!("Failed to mmap file {}", path.display()))?;
+    let file = object::File::parse(mmap.as_ref())
+        .with_context(|| format!("Failed to parse {}", path.display()))?;
+
+    Ok(file.kind())
+}
+
+pub fn elf_kind<P: AsRef<Path>>(file_path: P) -> ObjectKind {
+    self::parse_elf_kind(file_path).unwrap_or(ObjectKind::Unknown)
 }
 
 pub fn find_elf_files<P, F>(directory: P, predicate: F) -> Result<Vec<PathBuf>>
@@ -36,7 +46,7 @@ where
 {
     let mut elf_files = Vec::new();
     for file_path in fs::list_files(&directory, fs::TraverseOptions { recursive: true })? {
-        if let Ok(obj_kind) = self::parse_file_kind(&file_path) {
+        if let Ok(obj_kind) = self::parse_elf_kind(&file_path) {
             if predicate(&file_path, obj_kind) {
                 elf_files.push(file_path);
             }
