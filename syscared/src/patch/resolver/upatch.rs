@@ -93,9 +93,9 @@ pub struct UpatchResolverImpl;
 impl UpatchResolverImpl {
     #[inline]
     fn resolve_patch_elf(patch: &mut UserPatch) -> Result<()> {
-        let patch_file =
-            fs::MappedFile::open(&patch.patch_file).context("Failed to map patch file")?;
-        let patch_elf = NativeFile::parse(patch_file.as_bytes()).context("Invalid patch format")?;
+        let patch_file = fs::mmap(&patch.patch_file)
+            .with_context(|| format!("Failed to mmap file {}", patch.patch_file.display()))?;
+        let patch_elf = NativeFile::parse(patch_file.as_ref()).context("Invalid patch format")?;
 
         // Read sections
         let function_section = patch_elf
