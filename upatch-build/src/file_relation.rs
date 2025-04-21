@@ -75,31 +75,36 @@ impl FileRelation {
         let mut debuginfo_iter = debuginfos.into_iter();
 
         while let (Some(binary), Some(debuginfo)) = (binary_iter.next(), debuginfo_iter.next()) {
-            let binary_path = binary_dir.as_ref().join(&binary);
-            let binary_files =
-                fs::list_files(&binary_dir, fs::TraverseOptions { recursive: true })?
-                    .into_iter()
-                    .filter(|file_path| {
-                        file_path.ends_with(binary.as_ref().as_os_str())
-                            && matches!(
+            let binary_dir = binary_dir.as_ref();
+            let binary_path = binary.as_ref().as_os_str();
+
+            let mut binary_files = IndexSet::new();
+            for match_result in fs::glob(binary_dir) {
+                let matched_dir = match_result.with_context(|| {
+                    format!("Cannot match binary directory {}", binary_dir.display())
+                })?;
+                let found_files =
+                    fs::list_files(matched_dir, fs::TraverseOptions { recursive: true })?
+                        .into_iter()
+                        .filter(|file_path| file_path.ends_with(binary_path))
+                        .filter(|file_path| {
+                            matches!(
                                 elf::parse_file_kind(file_path).unwrap_or(ObjectKind::Unknown),
                                 ObjectKind::Executable | ObjectKind::Dynamic
                             )
-                    })
-                    .collect::<IndexSet<_>>();
-
+                        });
+                binary_files.extend(found_files);
+            }
+            let binary_file = binary_files
+                .pop()
+                .with_context(|| format!("Cannot find any binary in {}", binary_dir.display()))?;
             ensure!(
-                !binary_files.is_empty(),
-                "Path {} does not match to any file",
-                binary_path.display()
-            );
-            ensure!(
-                binary_files.len() == 1,
-                "Path {} matches to too many file",
-                binary_path.display()
+                binary_files.is_empty(),
+                "Binary {} matched to too many files",
+                binary_path.to_string_lossy()
             );
             self.binary_debuginfo_map
-                .insert(binary_files[0].clone(), debuginfo.as_ref().to_path_buf());
+                .insert(binary_file, debuginfo.as_ref().to_path_buf());
         }
 
         Ok(())
