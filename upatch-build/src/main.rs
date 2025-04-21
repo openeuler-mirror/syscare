@@ -29,12 +29,7 @@ use indexmap::{IndexMap, IndexSet};
 use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
 use object::{write, Object, ObjectKind, ObjectSection, SectionKind};
 
-use syscare_common::{
-    concat_os,
-    fs::{self, MappedFile},
-    os,
-    process::Command,
-};
+use syscare_common::{concat_os, fs, os, process::Command};
 
 mod args;
 mod build_root;
@@ -425,18 +420,20 @@ impl UpatchBuild {
         write!(w, "{}", record.args())
     }
 
-    fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(debuginfo: P, output_file: Q) -> Result<()> {
-        let debuginfo_file = MappedFile::open(&debuginfo)?;
-        let object_file = object::File::parse(debuginfo_file.as_bytes())
-            .with_context(|| format!("Failed to parse {}", debuginfo.as_ref().display()))?;
+    fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(
+        debuginfo_file: P,
+        output_file: Q,
+    ) -> Result<()> {
+        let debuginfo_file = debuginfo_file.as_ref();
+        let mmap = fs::mmap(debuginfo_file)
+            .with_context(|| format!("Failed to mmap file {}", debuginfo_file.display()))?;
+        let file = object::File::parse(mmap.as_ref())
+            .with_context(|| format!("Failed to parse {}", debuginfo_file.display()))?;
 
-        let mut new_object = write::Object::new(
-            object_file.format(),
-            object_file.architecture(),
-            object_file.endianness(),
-        );
+        let mut new_object =
+            write::Object::new(file.format(), file.architecture(), file.endianness());
 
-        for section in object_file.sections() {
+        for section in file.sections() {
             if section.kind() != SectionKind::Note {
                 continue;
             }
