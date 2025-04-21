@@ -89,7 +89,7 @@ impl FileRelation {
                         .filter(|file_path| file_path.ends_with(binary_path))
                         .filter(|file_path| {
                             matches!(
-                                elf::parse_file_kind(file_path).unwrap_or(ObjectKind::Unknown),
+                                elf::elf_kind(file_path),
                                 ObjectKind::Executable | ObjectKind::Dynamic
                             )
                         });
@@ -228,10 +228,7 @@ impl FileRelation {
                 fs::list_files(&matched_dir, fs::TraverseOptions { recursive: true })?
                     .into_iter()
                     .filter(|file_path| {
-                        matches!(
-                            elf::parse_file_kind(file_path).unwrap_or(ObjectKind::Unknown),
-                            ObjectKind::Relocatable
-                        )
+                        matches!(elf::elf_kind(file_path), ObjectKind::Relocatable)
                     });
             object_files.extend(found_files);
         }

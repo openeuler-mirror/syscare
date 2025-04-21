@@ -12,10 +12,11 @@ use gimli::{
     constants::*, AttributeValue, DebugInfoUnitHeadersIter, DebuggingInformationEntry, DwLang,
     Dwarf, EndianRcSlice, Endianity, Reader, RunTimeEndian, SectionId, Unit, UnitOffset,
 };
-use memmap2::Mmap;
 use object::{Endianness, Object, ObjectSection, ObjectSymbol, RelocationKind, RelocationTarget};
 use once_cell::sync::Lazy;
 use regex::bytes::Regex;
+
+use syscare_common::fs::{self, FileMmap};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum ProducerType {
@@ -67,22 +68,18 @@ impl std::fmt::Display for Producer {
 }
 
 pub struct ProducerParser {
-    _file: std::fs::File,
-    mmap: Mmap,
+    mmap: FileMmap,
     data_map: RefCell<HashMap<SectionId, Rc<[u8]>>>,
 }
 
 impl ProducerParser {
     pub fn open<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let _file = std::fs::File::open(path)?;
-        let mmap = unsafe { Mmap::map(&_file)? };
-        mmap.advise(memmap2::Advice::Random)?;
-
-        Ok(Self {
-            _file,
-            mmap,
+        let parser = Self {
+            mmap: fs::mmap(&path)
+                .with_context(|| format!("Failed to mmap file {}", path.as_ref().display()))?,
             data_map: RefCell::new(HashMap::new()),
-        })
+        };
+        Ok(parser)
     }
 
     pub fn parse(&self) -> Result<ProducerIterator<impl Reader<Offset = usize> + '_>> {
