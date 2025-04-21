@@ -26,7 +26,6 @@ use syscare_common::{concat_os, ffi::OsStrExt, fs};
 
 use crate::elf;
 
-const BUILD_ROOT_PREFIX: &str = "upatch-build.";
 const UPATCH_ID_PREFIX: &str = ".upatch_";
 
 const NON_EXIST_PATH: &str = "/dev/null";
@@ -205,31 +204,41 @@ impl FileRelation {
     }
 
     fn collect_objects<P, Q>(
-        search_dir: P,
+        object_dir: P,
         target_dir: Q,
     ) -> Result<IndexMap<OsString, (PathBuf, PathBuf)>>
     where
         P: AsRef<Path>,
         Q: AsRef<Path>,
     {
-        let mut object_files = IndexSet::new();
+        let object_dir = object_dir.as_ref();
+        let target_dir = target_dir.as_ref();
 
-        let matched_dirs = fs::glob(&search_dir)
-            .with_context(|| format!("Cannot match path {}", search_dir.as_ref().display()))?;
-        for matched_dir in matched_dirs {
-            object_files.extend(elf::find_elf_files(&matched_dir, |obj_path, obj_kind| {
-                !obj_path.contains(BUILD_ROOT_PREFIX) && (obj_kind == ObjectKind::Relocatable)
-            })?);
+        let mut object_files = IndexSet::new();
+        for match_result in fs::glob(object_dir) {
+            let matched_dir = match_result.with_context(|| {
+                format!("Cannot match object directory {}", object_dir.display())
+            })?;
+            let found_files =
+                fs::list_files(&matched_dir, fs::TraverseOptions { recursive: true })?
+                    .into_iter()
+                    .filter(|file_path| {
+                        matches!(
+                            elf::parse_file_kind(file_path).unwrap_or(ObjectKind::Unknown),
+                            ObjectKind::Relocatable
+                        )
+                    });
+            object_files.extend(found_files);
         }
         ensure!(
             !object_files.is_empty(),
-            "Cannot find any valid objects in {}, please add compile flag '-save-temps' manually",
-            search_dir.as_ref().display()
+            "Cannot find any object in {}",
+            object_dir.display()
         );
 
         let mut object_relations = Vec::with_capacity(object_files.len());
         for (file_id, object_file) in object_files.into_iter().enumerate() {
-            let object_archive = target_dir.as_ref().join(concat_os!(
+            let object_archive = target_dir.join(concat_os!(
                 format!("{:04}-", file_id),
                 object_file.file_name().with_context(|| {
                     format!("Failed to parse file name of {}", object_file.display())
