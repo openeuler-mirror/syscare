@@ -17,6 +17,19 @@ pub struct Glob {
 }
 
 impl Glob {
+    fn new<P: AsRef<Path>>(path: P) -> Self {
+        let match_dir = path.as_ref().to_path_buf();
+        let matching = match_dir
+            .components()
+            .map(|c| c.as_os_str().to_os_string())
+            .collect::<Vec<_>>();
+
+        Glob {
+            components: matching,
+            stack: vec![(match_dir, 0)],
+        }
+    }
+
     fn match_chars<I, P>(name: I, mut pattern: P) -> bool
     where
         I: Iterator<Item = CharByte>,
@@ -153,14 +166,5 @@ impl Iterator for Glob {
 }
 
 pub fn glob<P: AsRef<Path>>(path: P) -> Glob {
-    let match_dir = path.as_ref().to_path_buf();
-    let matching = match_dir
-        .components()
-        .map(|c| c.as_os_str().to_os_string())
-        .collect::<Vec<_>>();
-
-    Glob {
-        components: matching,
-        stack: vec![(match_dir, 0)],
-    }
+    Glob::new(path)
 }

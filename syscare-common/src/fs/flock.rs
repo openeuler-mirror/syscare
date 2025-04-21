@@ -14,11 +14,12 @@
 
 use std::{
     fs::File,
-    os::unix::io::{AsRawFd, RawFd},
-    path::{Path, PathBuf},
+    io::Result,
+    ops::{Deref, DerefMut},
+    os::unix::io::AsRawFd,
+    path::Path,
 };
 
-use anyhow::{anyhow, Context, Result};
 use nix::fcntl;
 
 #[derive(Debug)]
@@ -31,112 +32,104 @@ pub enum FileLockType {
 
 #[derive(Debug)]
 pub struct FileLock {
-    path: PathBuf,
     file: File,
-    kind: FileLockType,
 }
 
 impl FileLock {
-    pub fn new<P: AsRef<Path>>(path: P, kind: FileLockType) -> Result<Self> {
-        let file_path = path.as_ref();
-
-        let file = if file_path.is_file() {
-            File::open(file_path)
-                .map_err(|e| anyhow!("Failed to open lock file {}, {}", file_path.display(), e))?
-        } else {
-            File::create(file_path)
-                .map_err(|e| anyhow!("Failed to create lock file {}, {}", file_path.display(), e))?
-        };
-
+    fn new<P: AsRef<Path>>(file_path: P, kind: FileLockType) -> Result<Self> {
+        let file_path = file_path.as_ref();
         let flock = Self {
-            path: file_path.to_path_buf(),
-            file,
-            kind,
+            file: if file_path.exists() {
+                File::open(file_path)?
+            } else {
+                File::create(file_path)?
+            },
         };
-        flock.acquire_lock()?;
+        flock.acquire(kind)?;
 
         Ok(flock)
     }
-}
 
-impl FileLock {
     #[inline]
-    fn acquire_lock(&self) -> Result<()> {
+    fn acquire(&self, kind: FileLockType) -> Result<()> {
         let fd = self.file.as_raw_fd();
-        let arg = match self.kind {
+        let arg = match kind {
             FileLockType::Shared => fcntl::FlockArg::LockShared,
             FileLockType::Exclusive => fcntl::FlockArg::LockExclusive,
             FileLockType::SharedNonBlock => fcntl::FlockArg::LockSharedNonblock,
             FileLockType::ExclusiveNonBlock => fcntl::FlockArg::LockExclusiveNonblock,
         };
-        fcntl::flock(fd, arg)
-            .with_context(|| format!("Failed to acquire flock on {}", self.path.display()))
+        fcntl::flock(fd, arg)?;
+
+        Ok(())
     }
 
     #[inline]
-    fn release_lock(&self) -> Result<()> {
+    fn release(&self) {
         let fd = self.file.as_raw_fd();
         let arg = fcntl::FlockArg::Unlock;
-        fcntl::flock(fd, arg)
-            .with_context(|| format!("Failed to release flock on {}", self.path.display()))
+        fcntl::flock(fd, arg).expect("Failed to release file lock");
     }
 }
 
-impl AsRawFd for FileLock {
-    fn as_raw_fd(&self) -> RawFd {
-        self.file.as_raw_fd()
+impl Deref for FileLock {
+    type Target = File;
+
+    fn deref(&self) -> &Self::Target {
+        &self.file
+    }
+}
+
+impl DerefMut for FileLock {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.file
     }
 }
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        self.release_lock().ok();
+        self.release();
     }
 }
 
+pub fn flock<P: AsRef<Path>>(file_path: P, kind: FileLockType) -> Result<FileLock> {
+    FileLock::new(file_path, kind)
+}
+
 #[test]
-fn test() {
+fn test() -> anyhow::Result<()> {
+    use anyhow::{ensure, Context};
+
     use std::fs;
 
-    const EXIST_FILE: &str = "/etc/os-release";
-    const NON_EXIST_FILE: &str = "/tmp/flock_test";
+    let file_path = std::env::temp_dir().join("flock_test");
+    fs::remove_file(&file_path)?;
 
-    println!("Testing exclusive flock on {}...", NON_EXIST_FILE);
-    fs::remove_file(NON_EXIST_FILE).ok();
-
-    let exclusive_lock = FileLock::new(NON_EXIST_FILE, FileLockType::ExclusiveNonBlock)
-        .expect("Failed to create exclusive flock");
-    drop(exclusive_lock);
-
-    println!("Testing shared flock on {}...", NON_EXIST_FILE);
-    fs::remove_file(NON_EXIST_FILE).ok();
-    let shared_lock = FileLock::new(NON_EXIST_FILE, FileLockType::SharedNonBlock)
-        .expect("Failed to create shared flock");
+    println!("Testing shared flock on {}...", file_path.display());
+    let shared_lock = self::flock(&file_path, FileLockType::SharedNonBlock)
+        .context("Failed to create shared flock")?;
+    let shared_lock1 = self::flock(&file_path, FileLockType::SharedNonBlock)
+        .context("Failed to create shared flock")?;
+    ensure!(
+        self::flock(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
+        "Exclusive flock should be failed"
+    );
     drop(shared_lock);
+    drop(shared_lock1);
 
-    fs::remove_file(NON_EXIST_FILE).ok();
-
-    println!("Testing exclusive flock on {}...", EXIST_FILE);
-    let exclusive_lock = FileLock::new(EXIST_FILE, FileLockType::ExclusiveNonBlock)
-        .expect("Failed to create exclusive flock");
-    let _exclusive_err = FileLock::new(EXIST_FILE, FileLockType::ExclusiveNonBlock)
-        .expect_err("Exclusive flock should be failed");
-    let _shared_err = FileLock::new(EXIST_FILE, FileLockType::SharedNonBlock)
-        .expect_err("Shared flock should be failed");
+    println!("Testing exclusive flock on {}...", file_path.display());
+    let exclusive_lock = self::flock(&file_path, FileLockType::ExclusiveNonBlock)
+        .context("Failed to create exclusive flock")?;
+    ensure!(
+        self::flock(&file_path, FileLockType::SharedNonBlock).is_err(),
+        "Shared flock should be failed"
+    );
+    ensure!(
+        self::flock(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
+        "Exclusive flock should be failed"
+    );
 
     drop(exclusive_lock);
 
-    println!("Testing shared flock on {}...", EXIST_FILE);
-    let shared_lock1 = FileLock::new(EXIST_FILE, FileLockType::SharedNonBlock)
-        .expect("Failed to create shared flock");
-    let shared_lock2 = FileLock::new(EXIST_FILE, FileLockType::SharedNonBlock)
-        .expect("Failed to create shared flock");
-    let _exclusive_err = FileLock::new(EXIST_FILE, FileLockType::ExclusiveNonBlock)
-        .expect_err("Exclusive flock should be failed");
-    let shared_lock3 = FileLock::new(EXIST_FILE, FileLockType::SharedNonBlock)
-        .expect("Failed to create shared flock");
-
-    drop(shared_lock1);
-    drop(shared_lock2);
-    drop(shared_lock3);
+    Ok(())
 }
