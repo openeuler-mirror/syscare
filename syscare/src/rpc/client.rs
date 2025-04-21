@@ -17,7 +17,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::{anyhow, ensure, Error, Result};
+use anyhow::{anyhow, ensure, Context, Error, Result};
 use jsonrpc::{
     serde_json::value::RawValue,
     simple_uds::{self, UdsTransport},
@@ -26,7 +26,7 @@ use jsonrpc::{
 use log::debug;
 use serde::{Deserialize, Serialize};
 
-use syscare_common::fs::{FileLock, FileLockType};
+use syscare_common::fs::{self, FileLock};
 
 #[derive(Debug, Default)]
 pub struct RpcArguments {
@@ -80,7 +80,8 @@ impl RpcClient {
     }
 
     pub fn lock(&self) -> Result<FileLock> {
-        FileLock::new(&self.lock, FileLockType::Exclusive)
+        fs::flock(&self.lock, fs::FileLockType::Exclusive)
+            .with_context(|| format!("Failed to lock {}", self.lock.display()))
     }
 
     pub fn call<T>(&self, cmd: &str) -> Result<T>
