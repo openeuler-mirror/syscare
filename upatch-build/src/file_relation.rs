@@ -173,15 +173,20 @@ impl FileRelation {
 impl FileRelation {
     fn parse_upatch_ids<P: AsRef<Path>>(file_path: P) -> Result<IndexSet<OsString>> {
         let file_path = file_path.as_ref();
-        let elf_file = elf::read::Elf::parse(file_path).context("Failed to parse elf")?;
-        let symbols = elf_file.symbols().context("Failed to read elf symbols")?;
+        let mmap = fs::mmap(file_path)
+            .with_context(|| format!("Failed to mmap {}", file_path.display()))?;
+        let file = object::File::parse(mmap.as_ref())
+            .with_context(|| format!("Failed to parse {}", file_path.display()))?;
 
         let mut upatch_ids = IndexSet::new();
-        for symbol in symbols {
-            let symbol_name = symbol.get_st_name();
-            if symbol_name.starts_with(UPATCH_ID_PREFIX) {
-                upatch_ids.insert(symbol_name.to_os_string());
+        for symbol in file.symbols() {
+            let name_slice = symbol.name_bytes().with_context(|| {
+                format!("Failed to parse symbol name, index={}", symbol.index().0)
+            })?;
+            if !name_slice.starts_with(UPATCH_ID_PREFIX.as_bytes()) {
+                continue;
             }
+            upatch_ids.insert(OsStr::from_bytes(name_slice).to_os_string());
         }
 
         Ok(upatch_ids)
