@@ -259,7 +259,7 @@ impl UpatchBuild {
         }
 
         debug!("- Creating patch notes");
-        let notes_object = temp_dir.join(NOTES_OBJECT_NAME);
+        let notes_object = temp_dir.join(concat_os!(patch_name, "-", NOTES_OBJECT_NAME));
         Self::create_note(&debuginfo_file, &notes_object)
             .context("Failed to create patch notes")?;
         objects.push(notes_object);
