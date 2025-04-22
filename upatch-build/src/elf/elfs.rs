@@ -27,8 +27,7 @@ use super::{Endian, Endianness};
 
 fn parse_elf_kind<P: AsRef<Path>>(file_path: P) -> Result<ObjectKind> {
     let path = file_path.as_ref();
-    let mmap =
-        fs::mmap(path).with_context(|| format!("Failed to mmap file {}", path.display()))?;
+    let mmap = fs::mmap(path).with_context(|| format!("Failed to mmap file {}", path.display()))?;
     let file = object::File::parse(mmap.as_ref())
         .with_context(|| format!("Failed to parse {}", path.display()))?;
 
