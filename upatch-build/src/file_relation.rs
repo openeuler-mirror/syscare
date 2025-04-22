@@ -13,7 +13,8 @@
  */
 
 use std::{
-    ffi::OsString,
+    ffi::{OsStr, OsString},
+    os::unix::ffi::OsStrExt,
     path::{Path, PathBuf},
 };
 
@@ -21,8 +22,9 @@ use anyhow::{ensure, Context, Result};
 
 use indexmap::{IndexMap, IndexSet};
 use log::warn;
-use object::ObjectKind;
-use syscare_common::{concat_os, ffi::OsStrExt, fs};
+use object::{Object, ObjectKind, ObjectSymbol};
+
+use syscare_common::{concat_os, ffi::OsStrExt as _, fs};
 
 use crate::elf;
 
@@ -224,59 +226,87 @@ impl FileRelation {
         let object_dir = object_dir.as_ref();
         let target_dir = target_dir.as_ref();
 
-        let mut object_files = IndexSet::new();
+        let mut file_id = 1usize;
+        let mut object_info = Vec::new();
         for match_result in fs::glob(object_dir) {
             let matched_dir = match_result.with_context(|| {
                 format!("Cannot match object directory {}", object_dir.display())
             })?;
-            let found_files =
-                fs::list_files(&matched_dir, fs::TraverseOptions { recursive: true })?
-                    .into_iter()
-                    .filter(|file_path| {
-                        matches!(elf::elf_kind(file_path), ObjectKind::Relocatable)
-                    });
-            object_files.extend(found_files);
+
+            let file_list = fs::list_files(&matched_dir, fs::TraverseOptions { recursive: true })?;
+            for object_file in file_list {
+                let mmap = fs::mmap(&object_file)
+                    .with_context(|| format!("Failed to mmap {}", object_file.display()))?;
+
+                // Try to parse file as elf
+                let file = match object::File::parse(mmap.as_ref()) {
+                    Ok(f) => f,
+                    Err(_) => continue,
+                };
+
+                // We only care about object file
+                if !matches!(file.kind(), ObjectKind::Relocatable) {
+                    continue;
+                }
+
+                // Copy object file to target directory
+                let obj_name = object_file.file_name().unwrap_or_default();
+                let archive_file =
+                    target_dir.join(concat_os!(format!("{:04}-", file_id), obj_name));
+                fs::copy(&object_file, &archive_file)?;
+                file_id += 1;
+
+                // Parse upatch id of the object
+                let upatch_ids = file
+                    .symbols()
+                    .filter_map(|symbol| {
+                        let sym_name = symbol.name_bytes().unwrap_or_default();
+                        if !sym_name.starts_with(UPATCH_ID_PREFIX.as_bytes()) {
+                            return None;
+                        }
+                        Some(OsStr::from_bytes(sym_name).to_os_string())
+                    })
+                    .collect::<Vec<_>>();
+                if upatch_ids.is_empty() {
+                    warn!(
+                        "Object {} does not contain upatch id",
+                        object_file.display()
+                    );
+                    continue;
+                }
+
+                object_info.push((object_file, archive_file, upatch_ids));
+            }
         }
         ensure!(
-            !object_files.is_empty(),
+            !object_info.is_empty(),
             "Cannot find any object in {}",
             object_dir.display()
         );
 
-        let mut object_relations = Vec::with_capacity(object_files.len());
-        for (file_id, object_file) in object_files.into_iter().enumerate() {
-            let object_archive = target_dir.join(concat_os!(
-                format!("{:04}-", file_id),
-                object_file.file_name().with_context(|| {
-                    format!("Failed to parse file name of {}", object_file.display())
-                })?
-            ));
-            fs::copy(&object_file, &object_archive)?;
+        // We want subsequent objects to contain more identifiers.
+        object_info.sort_by(|(_, _, lhs), (_, _, rhs)| lhs.len().cmp(&rhs.len()));
 
-            let upatch_ids = Self::parse_upatch_ids(&object_file).with_context(|| {
-                format!("Failed to parse upatch id of {}", object_file.display())
-            })?;
-            object_relations.push((object_file, object_archive, upatch_ids));
-        }
-
-        let mut id_object_map = IndexMap::with_capacity(object_relations.len());
-        for (object_file, object_archive, object_ids) in &object_relations {
-            if object_relations.iter().all(|(obj, _, ids)| {
-                if (obj != object_file) && !ids.is_empty() && ids.is_subset(object_ids) {
-                    warn!("Skipped object {}", object_archive.display());
-                    return false;
-                }
-                true
-            }) {
-                id_object_map.extend(object_ids.iter().map(|id| {
-                    (
-                        id.to_os_string(),
-                        (object_file.clone(), object_archive.clone()),
-                    )
-                }));
+        let mut upatch_id_map = IndexMap::new();
+        while let Some((object_file, archive_file, mut upatch_ids)) = object_info.pop() {
+            // Remove identifiers in other objects
+            for (_, _, ids) in &object_info {
+                upatch_ids.retain(|id| !ids.contains(id));
+            }
+            // Current object is fully composed of other objects, we skip it.
+            if upatch_ids.is_empty() {
+                warn!("Skipped {}", object_file.display());
+            }
+            for upatch_id in upatch_ids {
+                upatch_id_map.insert(upatch_id, (object_file.clone(), archive_file.clone()));
             }
         }
+        ensure!(
+            !upatch_id_map.is_empty(),
+            "Cannot find any upatch id in {}",
+            object_dir.display()
+        );
 
-        Ok(id_object_map)
+        Ok(upatch_id_map)
     }
 }
