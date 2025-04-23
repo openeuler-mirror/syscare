@@ -2,10 +2,6 @@
 
 set(UPATCH_MANAGE "upatch-manage")
 
-EXECUTE_PROCESS(COMMAND uname -m
-                OUTPUT_VARIABLE ARCH
-                OUTPUT_STRIP_TRAILING_WHITESPACE)
-
 set(ARCH_PATH arch/${ARCH})
 
 include_directories(

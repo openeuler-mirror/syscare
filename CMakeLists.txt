@@ -4,6 +4,11 @@ cmake_minimum_required(VERSION 3.14)
 
 project(syscare)
 
+# Arch
+EXECUTE_PROCESS(COMMAND uname -m
+                OUTPUT_VARIABLE ARCH
+                OUTPUT_STRIP_TRAILING_WHITESPACE)
+
 # Includes
 include(GNUInstallDirs)
 find_package(Git QUIET)
