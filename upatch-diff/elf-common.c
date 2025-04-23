@@ -47,7 +47,7 @@ static int mangled_strcmp_dot_L(char *str1, char *str2)
     char *q = str2 + 2;
     while (*p < '0' || *p > '9') p++;
     while (*q < '0' || *q > '9') q++;
-    if ((p - str1 != q - str2) || strncmp(str1, str2, p - str1)) {
+    if ((p - str1 != q - str2) || strncmp(str1, str2, (size_t)(p - str1))) {
         return 1;
     }
 
