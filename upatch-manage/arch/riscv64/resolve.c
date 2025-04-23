@@ -65,9 +65,9 @@ static unsigned long setup_jmp_table(struct upatch_elf *uelf,
                            index * sizeof(struct upatch_jmp_table_entry));
 }
 
-static unsigned long setup_got_table(struct upatch_elf *uelf,
-                                     unsigned long jmp_addr,
-                                     unsigned long tls_addr)
+unsigned long setup_got_table(struct upatch_elf *uelf,
+                              unsigned long jmp_addr,
+                              unsigned long tls_addr)
 {
     struct upatch_jmp_table_entry *table =
         uelf->core_layout.kbase + uelf->jmp_offs;
@@ -88,7 +88,7 @@ static unsigned long setup_got_table(struct upatch_elf *uelf,
 }
 
 unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
-                               unsigned long r_type, unsigned long addr)
+                               unsigned long r_type __attribute__((unused)), unsigned long addr)
 {
     unsigned long jmp_addr = 0xffffffff;
     unsigned long tls_addr = 0xffffffff;

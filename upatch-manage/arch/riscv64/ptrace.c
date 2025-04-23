@@ -22,6 +22,7 @@
 #include <sys/socket.h>
 #include <sys/syscall.h>
 #include <asm/ptrace.h>
+#include <stdlib.h>
 
 #include "upatch-ptrace.h"
 
@@ -100,19 +101,29 @@ long upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
                                      const void *data)
 {
     struct user_regs_struct orig_regs, regs;
-    unsigned char orig_code[codelen];
+    if (!codelen) {
+        log_error("Invalid codelen\n");
+        return -1;
+    }
+    unsigned char *orig_code = (unsigned char *)malloc(sizeof(*orig_code) * codelen);
+    if (orig_code == NULL) {
+        log_error("Malloc orig_code failed\n");
+        return -1;
+    }
     long ret;
     struct upatch_process *proc = pctx->proc;
     unsigned long libc_base = proc->libc_base;
 
     ret = read_gregs(pctx->pid, &orig_regs);
     if (ret < 0) {
+        free(orig_code);
         return -1;
     }
     ret = upatch_process_mem_read(proc, libc_base,
                                   (unsigned long *)orig_code, codelen);
     if (ret < 0) {
         log_error("can't peek original code - %d\n", pctx->pid);
+        free(orig_code);
         return -1;
     }
     ret = upatch_process_mem_write(proc, (const unsigned long *)code, libc_base,
@@ -153,6 +164,7 @@ long upatch_arch_execute_remote_func(struct upatch_ptrace_ctx *pctx,
 poke_back:
     upatch_process_mem_write(proc, (unsigned long *)orig_code, libc_base,
                              codelen);
+    free(orig_code);
     return ret;
 }
 
