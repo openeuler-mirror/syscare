@@ -34,7 +34,7 @@
  */
 
 #define container_of(ptr, type, member) \
-    ((type *)(((char *)(ptr)) - offsetof(type, member)))
+    ((type *)(((void *)(ptr)) - offsetof(type, member)))
 
 struct list_head {
     struct list_head *next, *prev;
