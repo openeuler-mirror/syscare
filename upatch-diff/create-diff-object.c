@@ -978,8 +978,10 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched,
         list_add_tail(&sec->list, &uelf_out->sections);
         sec->index = 0;
 
-        if (!is_rela_section(sec) && sec->secsym && !sec->secsym->include) {
-            sec->secsym = NULL; // break link to non-included section symbol
+        if (!is_rela_section(sec)) {
+            if (sec->secsym && !sec->secsym->include) {
+                sec->secsym = NULL; // break link to non-included section symbol
+            }
         }
     }
 
