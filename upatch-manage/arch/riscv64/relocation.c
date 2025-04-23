@@ -51,6 +51,9 @@ static unsigned long find_pcrel_hi_value(GElf_Rela *r, int idx, GElf_Sym *st, un
  * The patch is a .o file, has only static relocations, all symbols
  * have been resolved with our jump table act as got/plt.
  */
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wconversion"
+#pragma GCC diagnostic ignored "-Wsign-conversion"
 int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                        unsigned int relsec)
 {
@@ -240,3 +243,4 @@ overflow:
               (int)GELF_R_TYPE(rel[i].r_info), val);
     return -ENOEXEC;
 }
+#pragma GCC diagnostic pop

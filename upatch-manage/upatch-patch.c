@@ -484,8 +484,8 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj,
          * new_insn field is only 8 bytes. We can only jump into
          * +-2G ranges. Here do the check.
          */
-        long offset = upatch_func->addr.new_addr - upatch_func->addr.old_addr;
-        if (offset >= RISCV_MAX_JUMP_RANGE || offset < -RISCV_MAX_JUMP_RANGE) {
+        long riscv_offset = (long)(upatch_func->addr.new_addr - upatch_func->addr.old_addr);
+        if (riscv_offset >= RISCV_MAX_JUMP_RANGE || riscv_offset < -RISCV_MAX_JUMP_RANGE) {
             log_error("new_addr=%lx old_addr=%lx exceed +-2G range\n",
                 upatch_func->addr.new_addr, upatch_func->addr.old_addr);
             goto out;
