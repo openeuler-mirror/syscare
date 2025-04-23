@@ -10,8 +10,6 @@ members = [
 ]
 
 [profile.release]
-opt-level = 's'
+opt-level = 3
 debug = true
 rpath = false
-debug-assertions = false
-overflow-checks = false
