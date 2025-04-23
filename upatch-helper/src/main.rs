@@ -19,14 +19,17 @@ use uuid::Uuid;
 
 const UPATCH_CC_ENV: &str = "UPATCH_HELPER_CC";
 const UPATCH_CXX_ENV: &str = "UPATCH_HELPER_CXX";
+const UPATCH_ID_PREFIX: &str = ".upatch_";
 
 const OUTPUT_FLAG: &str = "-o";
-const APPEND_ARGS: [&str; 3] = [
-    "-gdwarf", /* obtain debug information */
-    "-ffunction-sections",
-    "-fdata-sections",
+
+const APPEND_FLAGS: &[&str] = &[
+    "-gdwarf",             // generate dwarf debuginfo
+    "-ffunction-sections", // generate corresponding section for each function
+    "-fdata-sections",     // generate corresponding section for each data
+    "-fmerge-constants",   // merge constants with same value into one
+    "-fno-common",         // avoid generating common block for uninitialized global variables
 ];
-const UPATCH_ID_PREFIX: &str = ".upatch_";
 
 fn main() -> anyhow::Result<()> {
     let exec_args = std::env::args_os().collect::<Vec<_>>();
@@ -48,7 +51,7 @@ fn main() -> anyhow::Result<()> {
 
     command.args(exec_args.iter().skip(1));
     if exec_args.iter().any(|arg| arg == OUTPUT_FLAG) {
-        command.args(APPEND_ARGS);
+        command.args(APPEND_FLAGS);
         command.arg(format!(
             "-Wa,--defsym,{}{}=0",
             UPATCH_ID_PREFIX,
