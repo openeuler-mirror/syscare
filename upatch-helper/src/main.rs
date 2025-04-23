@@ -77,6 +77,22 @@ fn find_compiler(arg0: &OsStr) -> Result<PathBuf> {
             .with_context(|| format!("Environment variable '{}' was not set", env_name));
     }
 
+    // exec name matched, read environment variable directly
+    let exec_path = std::env::current_exe()?;
+    let exec_name = exec_path.file_name().unwrap_or_default();
+    if exec_name == file_name {
+        return HELPER_ENV_NAMES
+            .iter()
+            .rev()
+            .find_map(|&(_, env_name)| std::env::var_os(env_name).map(PathBuf::from))
+            .with_context(|| {
+                format!(
+                    "Environment variables '{}' and '{}' were not set",
+                    HELPER_ENV_NAME_CC, HELPER_ENV_NAME_CXX
+                )
+            });
+    }
+
     bail!("No compiler found");
 }
 
