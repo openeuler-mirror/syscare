@@ -62,11 +62,23 @@ list(APPEND PROJECT_C_BUILD_FLAGS
     -DBUILD_VERSION="${PROJECT_BUILD_VERSION}" -D_FORTIFY_SOURCE=2
     -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time
     -Wstack-usage=8192 -Wfloat-equal -Wswitch-default
-    -Wshadow -Wconversion -Wcast-qual -Wcast-align -Wunused -Wundef
+    -Wshadow -Wconversion -Wcast-qual -Wunused -Wundef
     -funsigned-char -fstack-protector-all -fpic -fpie -ftrapv
     -fstack-check -freg-struct-return -fno-canonical-system-headers
     -fno-common -pipe -fdebug-prefix-map=old=new
 )
+
+# The -Werror=cast-align compiler flag causes issues on riscv64 GCC,
+# while the same operations do not error on aarch64. This appears to be
+# a compiler-specific problem. Temporarily disable this option as a 
+# workaround since applying fixes would require intrusive code changes
+# across multiple files.
+if(NOT ARCH STREQUAL "riscv64")
+    list(APPEND PROJECT_C_BUILD_FLAGS
+        -Wcast-align
+    )
+endif()
+
 list(APPEND PROJECT_RUST_FLAGS
     --cfg unsound_local_offset
     -C relocation_model=pic
