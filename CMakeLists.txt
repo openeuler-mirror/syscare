@@ -81,10 +81,12 @@ endif()
 
 list(APPEND PROJECT_RUST_FLAGS
     --cfg unsound_local_offset
-    -C relocation_model=pic
     -D warnings
     -C link-arg=-s
-    -C overflow_checks
+    -C strip=symbols
+    -C overflow_checks=yes
+    -C relocation_model=pic
+    -C force-frame-pointers=yes
     -W rust_2021_incompatible_closure_captures
 )
 
