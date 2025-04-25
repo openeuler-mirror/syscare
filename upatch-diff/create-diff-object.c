@@ -910,34 +910,39 @@ static bool has_tls_included(struct upatch_elf *uelf)
 
 static void verify_patchability(struct upatch_elf *uelf)
 {
-    struct section *sec;
+    struct section *sec = NULL;
+    struct rela *rela = NULL;
     int errs = 0;
 
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->status == CHANGED && !sec->include && !is_rela_section(sec)) {
-            log_normal("Section '%s' changed, but not included\n", sec->name);
-            errs++;
+        if (sec->status != SAME) { // NEW or CHANGED
+            if ((sec->include == 0) && !is_rela_section(sec)) {
+                log_warn("Section '%s' is changed, but it is not included\n",
+                    sec->name);
+                errs++;
+            }
+            if ((sec->grouped != 0) || is_group_section(sec)) {
+                log_warn("Section '%s' is changed, but it is in a group\n",
+                    sec->name);
+                errs++;
+            }
         }
-
-        if (sec->status != SAME && sec->grouped) {
-            log_normal("Section '%s' is changed, but it is in section group\n",
-                sec->name);
-            errs++;
-        }
-
-        if (sec->sh.sh_type == SHT_GROUP && sec->status == NEW) {
-            log_normal("Section '%s' is new, but it is not supported\n",
-                sec->name);
-            errs++;
-        }
-
-        if ((sec->include && sec->status != NEW) &&
-            (!strncmp(sec->name, ".data", 5) ||
-                !strncmp(sec->name, ".bss", 4)) &&
-            (strcmp(sec->name, ".data.unlikely") &&
-                strcmp(sec->name, ".data.once"))) {
-            log_normal("Data section '%s' is included", sec->name);
-            errs++;
+        if (sec->status != NEW) { // SAME or CHANGED
+            if (sec->rela == NULL) {
+                continue;
+            }
+            if (!is_data_section(sec) && !is_bss_section(sec)) {
+                continue;
+            }
+            list_for_each_entry(rela, &sec->rela->relas, list) {
+                if ((rela->sym == NULL) || (rela->sym->status == NEW)) {
+                    continue;
+                }
+                if (!is_string_literal_section(rela->sym->sec)) {
+                    log_warn("Data section '%s' is changed\n", sec->name);
+                    errs++;
+                }
+            }
         }
     }
 
