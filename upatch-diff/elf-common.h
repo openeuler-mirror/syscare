@@ -49,31 +49,40 @@
         } \
     } while (0)
 
-static inline bool is_rela_section(struct section *sec)
-{
-    /*
-     * An architecture usually only accepts one type.
-     * And, X86_64 only uses RELA
-     */
-    return (sec->sh.sh_type == SHT_RELA);
-}
-
-
 static inline bool is_text_section(struct section *sec)
 {
-    return (sec->sh.sh_type == SHT_PROGBITS &&
-        (sec->sh.sh_flags & SHF_EXECINSTR));
+    return (sec != NULL) &&
+        (sec->sh.sh_type == SHT_PROGBITS) &&
+        (sec->sh.sh_flags & SHF_EXECINSTR);
 }
 
-static inline bool is_string_section(struct section *sec)
+static inline bool is_data_section(struct section *sec)
 {
-    return sec->sh.sh_flags & SHF_STRINGS;
+    return (sec != NULL) &&
+        (sec->sh.sh_type == SHT_PROGBITS) &&
+        (sec->sh.sh_flags & SHF_WRITE);
 }
 
-/* used for c++ exception handle */
-static inline bool is_except_section(struct section *sec)
+static inline bool is_rodata_section(struct section *sec)
 {
-    return !strncmp(sec->name, ".gcc_except_table", 17);
+    return (sec != NULL) &&
+        (sec->sh.sh_type == SHT_PROGBITS) &&
+        ((sec->sh.sh_flags & SHF_WRITE) == 0);
+}
+
+static inline bool is_symtab_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_type == SHT_SYMTAB);
+}
+
+static inline bool is_strtab_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_type == SHT_STRTAB);
+}
+
+static inline bool is_rela_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_type == SHT_RELA);
 }
 
 static inline bool is_note_section(struct section *sec)
@@ -81,7 +90,40 @@ static inline bool is_note_section(struct section *sec)
     if (is_rela_section(sec)) {
         sec = sec->base;
     }
-    return sec->sh.sh_type == SHT_NOTE;
+    return (sec->sh.sh_type == SHT_NOTE);
+}
+
+static inline bool is_bss_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_type == SHT_NOBITS);
+}
+
+static inline bool is_group_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_type == SHT_GROUP);
+}
+
+static inline bool is_read_only_section(struct section *sec)
+{
+    return (sec != NULL) && ((sec->sh.sh_flags & SHF_WRITE) == 0);
+}
+
+static inline bool is_string_section(struct section *sec)
+{
+    return (sec != NULL) && (sec->sh.sh_flags & SHF_STRINGS);
+}
+
+static inline bool is_string_literal_section(struct section *sec)
+{
+    return (sec != NULL) &&
+        (sec->sh.sh_flags & SHF_STRINGS) &&
+        ((sec->sh.sh_flags & SHF_WRITE) == 0);
+}
+
+/* used for c++ exception handle */
+static inline bool is_except_section(struct section *sec)
+{
+    return !strncmp(sec->name, ".gcc_except_table", 17);
 }
 
 static inline bool is_eh_frame(struct section *sec)
@@ -158,12 +200,6 @@ static inline struct section *find_section_by_name(struct list_head *list, const
     }
 
     return NULL;
-}
-
-// section like .rodata.str1. and .rodata.__func__.
-static inline bool is_string_literal_section(struct section *sec)
-{
-    return !strncmp(sec->name, ".rodata.", 8) && (strstr(sec->name, ".str") || strstr(sec->name, "__func__"));
 }
 
 static inline bool has_digit_tail(char *tail)
