@@ -901,64 +901,86 @@ static void include_debug_sections(struct upatch_elf *uelf)
 /* currently, there si no special section need to be handled */
 static void process_special_sections(void) {}
 
-static bool has_tls_included(struct upatch_elf *uelf)
+static int verify_symbol_patchability(struct upatch_elf *uelf)
 {
-    struct symbol *sym;
+    int err_count = 0;
 
+    struct symbol *sym = NULL;
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->include == 1 && sym->type == STT_TLS) {
-            log_normal("TLS symbol '%s' is not supported", sym->name);
-            return true;
+        if (sym->include == 0) {
+            continue;
+        }
+        if (sym->type == STT_TLS) {
+            log_warn("Symbol '%s' is included, but TLS is not supported\n",
+                sym->name);
+            err_count++;
+        }
+        if (sym->type == STT_GNU_IFUNC) {
+            log_warn("Symbol '%s' is included, but IFUNC is not supported\n",
+                sym->name);
+            err_count++;
         }
     }
-    return false;
+
+    return err_count;
+}
+
+static int verify_section_patchability(struct upatch_elf *uelf)
+{
+    int err_count = 0;
+
+    struct section *sec = NULL;
+    list_for_each_entry(sec, &uelf->sections, list) {
+        if ((sec->status == NEW) && (sec->include == 0)) {
+            // new sections should be included
+            log_warn("Section '%s' is %s, but it is not included\n",
+                sec->name, status_str(sec->status));
+            err_count++;
+        } else if ((sec->status == CHANGED) && (sec->include == 0)) {
+            // changed sections should be included, except rela & debug section
+            if (is_rela_section(sec) || is_debug_section(sec)) {
+                continue;
+            }
+            log_warn("Section '%s' is %s, but it is not included\n",
+                sec->name, status_str(sec->status));
+            err_count++;
+        } else if ((sec->status == CHANGED) && (sec->include != 0)) {
+            // changed group section cannot be included
+            if (is_group_section(sec) || (sec->grouped != 0)) {
+                log_warn("Section '%s' is %s, but it is not supported\n",
+                    sec->name, status_str(sec->status));
+                err_count++;
+            }
+            // changed .data & .bss section cannot be included
+            if (is_data_section(sec) || is_bss_section(sec)) {
+                struct rela *rela = NULL;
+                list_for_each_entry(rela, &sec->rela->relas, list) {
+                    if ((rela->sym == NULL) || (rela->sym->status != CHANGED)) {
+                        continue;
+                    }
+                    if (is_read_only_section(rela->sym->sec) ||
+                        is_string_literal_section(rela->sym->sec)) {
+                        continue;
+                    }
+                    log_warn("Section '%s' is %s, but it is not supported\n",
+                        sec->name, status_str(sec->status));
+                    err_count++;
+                }
+            }
+        }
+    }
+
+    return err_count;
 }
 
 static void verify_patchability(struct upatch_elf *uelf)
 {
-    struct section *sec = NULL;
-    struct rela *rela = NULL;
-    int errs = 0;
+    int err_count = 0;
 
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->status != SAME) { // NEW or CHANGED
-            if ((sec->include == 0) && !is_rela_section(sec)) {
-                log_warn("Section '%s' is changed, but it is not included\n",
-                    sec->name);
-                errs++;
-            }
-            if ((sec->grouped != 0) || is_group_section(sec)) {
-                log_warn("Section '%s' is changed, but it is in a group\n",
-                    sec->name);
-                errs++;
-            }
-        }
-        if (sec->status != NEW) { // SAME or CHANGED
-            if (sec->rela == NULL) {
-                continue;
-            }
-            if (!is_data_section(sec) && !is_bss_section(sec)) {
-                continue;
-            }
-            list_for_each_entry(rela, &sec->rela->relas, list) {
-                if ((rela->sym == NULL) || (rela->sym->status != CHANGED)) {
-                    continue;
-                }
-                if (is_read_only_section(sec) ||
-                    is_string_literal_section(rela->sym->sec)) {
-                    continue;
-                }
-                log_warn("Data section '%s' is changed\n", sec->name);
-                errs++;
-            }
-        }
-    }
-
-    if (errs) {
-        ERROR("%d, Unsupported section changes", errs);
-    }
-    if (has_tls_included(uelf)) {
-        ERROR("Unsupported symbol included");
+    err_count += verify_symbol_patchability(uelf);
+    err_count += verify_section_patchability(uelf);
+    if (err_count != 0) {
+        ERROR("Found %d unexpected changes", err_count);
     }
 }
 
