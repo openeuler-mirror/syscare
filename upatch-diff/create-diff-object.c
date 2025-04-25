@@ -937,10 +937,12 @@ static void verify_patchability(struct upatch_elf *uelf)
                 if ((rela->sym == NULL) || (rela->sym->status != CHANGED)) {
                     continue;
                 }
-                if (!is_string_literal_section(rela->sym->sec)) {
-                    log_warn("Data section '%s' is changed\n", sec->name);
-                    errs++;
+                if (is_read_only_section(sec) ||
+                    is_string_literal_section(rela->sym->sec)) {
+                    continue;
                 }
+                log_warn("Data section '%s' is changed\n", sec->name);
+                errs++;
             }
         }
     }
