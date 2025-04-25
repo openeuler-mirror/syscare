@@ -770,24 +770,24 @@ static void include_symbol(struct symbol *sym)
 
 static void include_section(struct section *sec)
 {
-    struct rela *rela;
+    struct rela *rela = NULL;
 
-    if (sec->include) {
+    if (sec->include != 0) {
         return;
     }
 
     sec->include = 1;
-    if (sec->secsym) {
-        sec->secsym->include = 1;
-    }
 
-    if (!sec->rela) {
-        return;
-    }
-
-    sec->rela->include = 1;
-    list_for_each_entry(rela, &sec->rela->relas, list) {
-        include_symbol(rela->sym);
+    if (!is_rela_section(sec)) {
+        if (sec->secsym != NULL) {
+            sec->secsym->include = 1;
+        }
+        if (sec->rela != NULL) {
+            sec->rela->include = 1;
+            list_for_each_entry(rela, &sec->rela->relas, list) {
+                include_symbol(rela->sym);
+            }
+        }
     }
 }
 
@@ -815,27 +815,26 @@ static void include_standard_elements(struct upatch_elf *uelf)
     list_entry(uelf->symbols.next, struct symbol, list)->include = 1;
 }
 
-static int include_changed_functions(struct upatch_elf *uelf)
+static int include_changes(struct upatch_elf *uelf)
 {
     struct symbol *sym;
     int changed_nr = 0;
 
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->status == CHANGED &&
-            sym->type == STT_FUNC) {
+        if (sym->status != CHANGED) {
+            continue;
+        }
+
+        if (sym->type == STT_FUNC) {
             changed_nr++;
             include_symbol(sym);
-        }
-        /* exception handler is a special function */
-        if (sym->status == CHANGED &&
-            sym->type == STT_SECTION &&
-            sym->sec && is_except_section(sym->sec)) {
-            log_warn("Exception section '%s' is changed\n", sym->sec->name);
-            changed_nr++;
+        } else if (sym->type == STT_SECTION) {
+            if (is_string_literal_section(sym->sec) || is_except_section(sym->sec)) {
+                changed_nr++;
+                include_symbol(sym);
+            }
+        } else if (sym->type == STT_FILE) {
             include_symbol(sym);
-        }
-        if (sym->type == STT_FILE) {
-            sym->include = 1;
         }
     }
 
@@ -942,7 +941,7 @@ static void verify_patchability(struct upatch_elf *uelf)
                 continue;
             }
             list_for_each_entry(rela, &sec->rela->relas, list) {
-                if ((rela->sym == NULL) || (rela->sym->status == NEW)) {
+                if ((rela->sym == NULL) || (rela->sym->status != CHANGED)) {
                     continue;
                 }
                 if (!is_string_literal_section(rela->sym->sec)) {
@@ -1090,7 +1089,7 @@ int main(int argc, char*argv[])
 
     include_standard_elements(&uelf_patched);
 
-    num_changed = include_changed_functions(&uelf_patched);
+    num_changed = include_changes(&uelf_patched);
     new_globals_exist = include_new_globals(&uelf_patched);
     if (!num_changed && !new_globals_exist) {
         log_normal("No functional changes\n");
