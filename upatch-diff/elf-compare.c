@@ -29,24 +29,33 @@
 #include "elf-compare.h"
 #include "elf-insn.h"
 
-static void compare_correlated_symbol(struct symbol *sym,
-    struct symbol *symtwin)
+static int compare_correlated_section(struct section *sec, struct section *twin);
+
+static void compare_correlated_symbol(struct symbol *sym, struct symbol *twin)
 {
-    // compare bind and type info
-    if (sym->sym.st_info != symtwin->sym.st_info ||
-        (sym->sec && !symtwin->sec) ||
-        (symtwin->sec && !sym->sec)) {
-        ERROR("symbol info mismatch: %s", sym->name);
+    // symbol type & binding cannot be changed
+    if (sym->type != twin->type) {
+        ERROR("symbol '%s' type mismatched", sym->name);
     }
-    // check if correlated symbols have correlated sections
-    if (sym->sec && symtwin->sec && sym->sec->twin != symtwin->sec) {
-        ERROR("symbol changed sections: %s", sym->name);
+    if (sym->sym.st_info != twin->sym.st_info) {
+        ERROR("symbol '%s' binding mismatched", sym->name);
     }
-    // data object can't change size
-    if (sym->type == STT_OBJECT && sym->sym.st_size != symtwin->sym.st_size) {
-        ERROR("object size mismatch: %s", sym->name);
+    // object symbol size cannot be changed
+    if ((sym->type == STT_OBJECT) && (sym->sym.st_size != twin->sym.st_size)) {
+        ERROR("symbol '%s' object size mismatched", sym->name);
     }
-    if (sym->sym.st_shndx == SHN_UNDEF || sym->sym.st_shndx == SHN_ABS) {
+
+    // compare symbol sections
+    if ((sym->sec != NULL) && (twin->sec != NULL)) {
+        // symbol section correlation cannot be changed
+        if (sym->sec->twin != twin->sec) {
+            ERROR("symbol '%s' section mismatched", sym->name);
+        }
+        compare_correlated_section(sym->sec, twin->sec);
+        sym->status = sym->sec->status;
+    }
+
+    if ((sym->sym.st_shndx == SHN_UNDEF) || (sym->sym.st_shndx == SHN_ABS)) {
         sym->status = SAME;
     }
     /*
