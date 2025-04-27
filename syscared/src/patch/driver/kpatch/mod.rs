@@ -134,7 +134,7 @@ impl KernelPatchDriver {
         debug!("Patch target:   '{}'", patch_target);
         debug!("Current kernel: '{}'", current_kernel.to_string_lossy());
 
-        if !patch_target.starts_with("KERNEL_NAME_PREFIX") {
+        if !patch_target.starts_with(KERNEL_NAME_PREFIX) {
             return Ok(());
         }
         ensure!(
