@@ -12,7 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 use anyhow::{Context, Result};
 use log::{info, Level};
@@ -241,14 +241,17 @@ impl KernelPatchBuilder {
         cmd_args
     }
 
-    fn parse_kbuild_cmd_envs(&self, build_root: &Path) -> CommandEnvs {
+    fn parse_kbuild_cmd_envs(&self, kbuild_params: &KBuildParameters) -> CommandEnvs {
         let mut cmd_envs = CommandEnvs::new();
         cmd_envs
-            .env("CACHEDIR", build_root)
+            .env("CACHEDIR", &kbuild_params.patch_build_root)
             .env("NO_PROFILING_CALLS", "yes")
             .env("DISABLE_AFTER_LOAD", "yes")
             .env("KEEP_JUMP_LABEL", "yes");
-
+        if let Some(oot_source_dir) = &kbuild_params.oot_source_dir {
+            cmd_envs.env("OOT_MODULE", "yes");
+            cmd_envs.env("USERMODBUILDDIR", oot_source_dir);
+        }
         cmd_envs
     }
 
@@ -263,7 +266,7 @@ impl KernelPatchBuilder {
         for mut kbuild_entity in kpatch_entities {
             Command::new(KPATCH_BUILD_BIN)
                 .args(self.parse_kbuild_cmd_args(kbuild_params, &kbuild_entity))
-                .envs(self.parse_kbuild_cmd_envs(&kbuild_params.patch_build_root))
+                .envs(self.parse_kbuild_cmd_envs(kbuild_params))
                 .stdout(Level::Debug)
                 .run_with_output()?
                 .exit_ok()?;
