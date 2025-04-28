@@ -35,32 +35,42 @@ static void compare_correlated_symbol(struct symbol *sym, struct symbol *twin)
 {
     // symbol type & binding cannot be changed
     if (sym->type != twin->type) {
-        ERROR("symbol '%s' type mismatched", sym->name);
+        ERROR("Symbol '%s' type mismatched", sym->name);
     }
     if (sym->sym.st_info != twin->sym.st_info) {
-        ERROR("symbol '%s' binding mismatched", sym->name);
+        ERROR("Symbol '%s' st_info mismatched", sym->name);
     }
     // object symbol size cannot be changed
     if ((sym->type == STT_OBJECT) && (sym->sym.st_size != twin->sym.st_size)) {
-        ERROR("symbol '%s' object size mismatched", sym->name);
+        ERROR("Symbol '%s' object size mismatched", sym->name);
     }
 
-    // compare symbol sections
-    if ((sym->sec != NULL) && (twin->sec != NULL)) {
-        // symbol section correlation cannot be changed
-        if (sym->sec->twin != twin->sec) {
-            ERROR("symbol '%s' section mismatched", sym->name);
-        }
-        compare_correlated_section(sym->sec, twin->sec);
-        sym->status = sym->sec->status;
-    }
-
-    if ((sym->sym.st_shndx == SHN_UNDEF) || (sym->sym.st_shndx == SHN_ABS)) {
-        sym->status = SAME;
-    }
     /*
      * For local symbols, we handle them based on their matching sections.
      */
+    if ((sym->sym.st_shndx == SHN_UNDEF) || (sym->sym.st_shndx == SHN_ABS)) {
+        sym->status = SAME;
+        return;
+    }
+
+    if ((sym->sec == NULL) || (sym->sym.st_shndx == SHN_ABS)) {
+        ERROR("Symbol '%s' don't have section\n", sym->name);
+    }
+
+    if (sym->sec->twin != twin->sec) {
+        ERROR("Symbol '%s' section mismatched", sym->name);
+    }
+
+    compare_correlated_section(sym->sec, twin->sec);
+    if (sym->sec->status == CHANGED) {
+        sym->status = CHANGED;
+    } else if (!is_rela_section(sym->sec) &&
+        (sym->sec->rela != NULL) &&
+        (sym->sec->rela->status == CHANGED)) {
+        sym->status = CHANGED;
+    } else {
+        sym->status = SAME;
+    }
 }
 
 void upatch_compare_symbols(struct upatch_elf *uelf)
@@ -128,22 +138,21 @@ static void compare_correlated_nonrela_section(struct section *sec,
 }
 
 // we may change status of sec, they are not same
-static int compare_correlated_section(struct section *sec,
-    struct section *sectwin)
+static int compare_correlated_section(struct section *sec, struct section *twin)
 {
     /* compare section headers */
     if (!is_debug_section(sec)) {
-        if ((sec->sh.sh_type != sectwin->sh.sh_type) ||
-            (sec->sh.sh_flags != sectwin->sh.sh_flags) ||
-            (sec->sh.sh_entsize != sectwin->sh.sh_entsize) ||
-            ((sec->sh.sh_addralign != sectwin->sh.sh_addralign) &&
+        if ((sec->sh.sh_type != twin->sh.sh_type) ||
+            (sec->sh.sh_flags != twin->sh.sh_flags) ||
+            (sec->sh.sh_entsize != twin->sh.sh_entsize) ||
+            ((sec->sh.sh_addralign != twin->sh.sh_addralign) &&
             !is_text_section(sec) &&
             !is_string_section(sec) &&
             !is_rodata_section(sec))) {
             /* shaddralign of .rodata may be changed from 0 to 8 bytes
                once string length is over 30 */
             ERROR("%s section header details differ from %s",
-                sec->name, sectwin->name);
+                sec->name, twin->name);
             return -1;
         }
     }
@@ -159,17 +168,17 @@ static int compare_correlated_section(struct section *sec,
         goto out;
     }
     /* compare file size and data size(memory size) */
-    if (sec->sh.sh_size != sectwin->sh.sh_size ||
-        sec->data->d_size != sectwin->data->d_size ||
-        (sec->rela && !sectwin->rela) || (!sec->rela && sectwin->rela)) {
+    if (sec->sh.sh_size != twin->sh.sh_size ||
+        sec->data->d_size != twin->data->d_size ||
+        (sec->rela && !twin->rela) || (!sec->rela && twin->rela)) {
         sec->status = CHANGED;
         goto out;
     }
 
     if (is_rela_section(sec)) {
-        compare_correlated_rela_section(sec, sectwin);
+        compare_correlated_rela_section(sec, twin);
     } else {
-        compare_correlated_nonrela_section(sec, sectwin);
+        compare_correlated_nonrela_section(sec, twin);
     }
 
 out:
