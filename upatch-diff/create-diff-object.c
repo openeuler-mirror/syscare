@@ -682,20 +682,28 @@ static void replace_section_syms(struct upatch_elf *uelf)
 static void mark_ignored_sections(struct upatch_elf *uelf)
 {
     static const char *const IGNORED_SECTIONS[] = {
+        ".eh_frame",
+        ".note",
+        ".debug_",
         ".comment",
         ".discard",
         ".rela.discard",
         ".GCC.command.line",
     };
+    static const size_t IGNORED_SECTION_NUM =
+        sizeof(IGNORED_SECTIONS) / sizeof(IGNORED_SECTIONS[0]);
 
-    for (size_t i = 0; i < ARRAY_SIZE(IGNORED_SECTIONS); i++) {
-        const char *const ignored_name = IGNORED_SECTIONS[i];
-        const size_t name_len = strlen(ignored_name);
-
-        struct section *sec = NULL;
-        list_for_each_entry(sec, &uelf->sections, list) {
-            if (strncmp(sec->name, ignored_name, name_len) == 0) {
-                sec->status = SAME;
+    struct section *sec = NULL;
+    list_for_each_entry(sec, &uelf->sections, list) {
+        for (size_t i = 0; i < IGNORED_SECTION_NUM; i++) {
+            const char *const ignored_name = IGNORED_SECTIONS[i];
+            const size_t name_len = strlen(ignored_name);
+            const char *sec_name = is_rela_section(sec) ?
+                sec->base->name : sec->name;
+            if (strncmp(sec_name, ignored_name, name_len) == 0) {
+                sec->ignored = true;
+                log_debug("Marking section '%s' (%d) as ignored\n",
+                    sec->name, sec->index);
                 break;
             }
         }
@@ -797,6 +805,9 @@ static void include_standard_elements(struct upatch_elf *uelf)
     struct section *sec = NULL;
 
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         if (is_symtab_section(sec) || is_strtab_section(sec)) {
             include_section(sec);
         }
@@ -811,7 +822,7 @@ static int include_changes(struct upatch_elf *uelf)
 
     struct symbol *sym = NULL;
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->status == SAME) {
+        if ((sym->status == SAME) || is_symbol_ignored(sym)) {
             continue;
         }
 
@@ -823,8 +834,7 @@ static int include_changes(struct upatch_elf *uelf)
             include_symbol(sym);
             count++;
         } else if (sym->type == STT_SECTION) {
-            if ((sym->sec != NULL) &&
-                (is_rela_section(sym->sec) || is_debug_section(sym->sec))) {
+            if ((sym->sec != NULL) && is_rela_section(sym->sec)) {
                 continue;
             }
             include_symbol(sym);
@@ -860,6 +870,9 @@ static int verify_section_patchability(struct upatch_elf *uelf)
 
     struct section *sec = NULL;
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         if ((sec->status == NEW) && !sec->include) {
             // new sections should be included
             log_warn("Section '%s' is %s, but it is not included\n",
@@ -867,7 +880,7 @@ static int verify_section_patchability(struct upatch_elf *uelf)
             err_count++;
         } else if ((sec->status == CHANGED) && !sec->include) {
             // changed sections should be included
-            if (is_rela_section(sec) || is_debug_section(sec)) {
+            if (is_rela_section(sec)) {
                 continue;
             }
             log_warn("Section '%s' is %s, but it is not included\n",
@@ -1021,6 +1034,9 @@ int main(int argc, char*argv[])
     detect_child_functions(&uelf_source);
     detect_child_functions(&uelf_patched);
 
+    mark_ignored_sections(&uelf_source);
+    mark_ignored_sections(&uelf_patched);
+
     mark_grouped_sections(&uelf_patched);
 
     replace_section_syms(&uelf_source);
@@ -1028,10 +1044,6 @@ int main(int argc, char*argv[])
 
     upatch_correlate_elf(&uelf_source, &uelf_patched);
     upatch_correlate_static_local_variables(&uelf_source, &uelf_patched);
-
-    /* Now, we can only check uelf_patched, all we need is in the twin part */
-    /* Also, we choose part of uelf_patched and output new object */
-    mark_ignored_sections(&uelf_patched);
 
     upatch_compare_correlated_elements(&uelf_patched);
     mark_file_symbols(&uelf_source);
