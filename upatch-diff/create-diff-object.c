@@ -837,11 +837,6 @@ static int verify_symbol_patchability(struct upatch_elf *uelf)
         if (sym->include == 0) {
             continue;
         }
-        if (sym->type == STT_TLS) {
-            log_warn("Symbol '%s' is included, but TLS is not supported\n",
-                sym->name);
-            err_count++;
-        }
         if (sym->type == STT_GNU_IFUNC) {
             log_warn("Symbol '%s' is included, but IFUNC is not supported\n",
                 sym->name);
