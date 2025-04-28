@@ -221,8 +221,7 @@ static bool need_dynrela(struct running_elf *relf, struct section *relasec,
 {
     struct lookup_result symbol;
 
-    if (is_debug_section(relasec) ||
-        is_note_section(relasec)) {
+    if (relasec->ignored) {
         return false;
     }
 
@@ -521,6 +520,9 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
     /* determine size of string table */
     size = 1;
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         size += strlen(sec->name) + 1;
     }
 
@@ -531,6 +533,9 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
 
     offset = 1;
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         len = strlen(sec->name) + 1;
         sec->sh.sh_name = (unsigned int)offset;
         memcpy(buf + offset, sec->name, len);
@@ -551,6 +556,9 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
     log_debug("\n");
 
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         log_debug("%s @ shstrtab offset %d\n", sec->name, sec->sh.sh_name);
     }
 }
@@ -713,6 +721,10 @@ void upatch_write_output_elf(struct upatch_elf *uelf, Elf *elf,
 
     /* add changed sections */
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
+
         scn = elf_newscn(elfout);
         if (!scn) {
             ERROR("elf_newscn failed.");

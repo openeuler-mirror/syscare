@@ -78,6 +78,9 @@ void upatch_compare_symbols(struct upatch_elf *uelf)
     struct symbol *sym;
 
     list_for_each_entry(sym, &uelf->symbols, list) {
+        if (is_symbol_ignored(sym)) {
+            continue;
+        }
         if (sym->twin) {
             compare_correlated_symbol(sym, sym->twin);
         } else {
@@ -141,20 +144,18 @@ static void compare_correlated_nonrela_section(struct section *sec,
 static int compare_correlated_section(struct section *sec, struct section *twin)
 {
     /* compare section headers */
-    if (!is_debug_section(sec)) {
-        if ((sec->sh.sh_type != twin->sh.sh_type) ||
-            (sec->sh.sh_flags != twin->sh.sh_flags) ||
-            (sec->sh.sh_entsize != twin->sh.sh_entsize) ||
-            ((sec->sh.sh_addralign != twin->sh.sh_addralign) &&
-            !is_text_section(sec) &&
-            !is_string_section(sec) &&
-            !is_rodata_section(sec))) {
-            /* shaddralign of .rodata may be changed from 0 to 8 bytes
-               once string length is over 30 */
-            ERROR("%s section header details differ from %s",
-                sec->name, twin->name);
-            return -1;
-        }
+    if ((sec->sh.sh_type != twin->sh.sh_type) ||
+        (sec->sh.sh_flags != twin->sh.sh_flags) ||
+        (sec->sh.sh_entsize != twin->sh.sh_entsize) ||
+        ((sec->sh.sh_addralign != twin->sh.sh_addralign) &&
+        !is_text_section(sec) &&
+        !is_string_section(sec) &&
+        !is_rodata_section(sec))) {
+        /* shaddralign of .rodata may be changed from 0 to 8 bytes
+            once string length is over 30 */
+        ERROR("%s section header details differ from %s",
+            sec->name, twin->name);
+        return -1;
     }
 
     if (is_note_section(sec)) {
@@ -213,6 +214,9 @@ void upatch_compare_sections(struct upatch_elf *uelf)
     struct section *sec = NULL;
 
     list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->ignored) {
+            continue;
+        }
         if (sec->twin == NULL) {
             sec->status = NEW;
         } else {
