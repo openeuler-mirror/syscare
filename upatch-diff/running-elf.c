@@ -124,14 +124,12 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
     struct lookup_result *result)
 {
     struct debug_symbol *symbol = NULL;
-    unsigned long sympos = 0;
 
     log_debug("looking up symbol '%s'\n", lookup_sym->name);
     memset(result, 0, sizeof(*result));
 
     for (int i = 0; i < relf->obj_nr; i++) {
         symbol = &relf->obj_syms[i];
-        sympos++;
 
         if (result->symbol != NULL && symbol->type == STT_FILE) {
             break;
@@ -148,7 +146,7 @@ bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
         }
 
         result->symbol = symbol;
-        result->sympos = sympos;
+        result->sympos = (unsigned long)i;
         result->global =
             ((symbol->bind == STB_GLOBAL) || (symbol->bind == STB_WEAK));
         log_debug("found symbol '%s'\n", lookup_sym->name);
