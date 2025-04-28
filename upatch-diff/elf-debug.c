@@ -110,10 +110,10 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
         log_debug("%02d %s (%s)",
             sec->index, sec->name, status_str(sec->status));
         if (is_rela_section(sec)) {
-            log_debug(", base-> %s\n", sec->base->name);
-            if (is_debug_section(sec) || is_note_section(sec)) {
-                goto next;
+            if (sec->ignored) {
+                continue;
             }
+            log_debug(", base-> %s\n", sec->base->name);
             log_debug("rela section expansion\n");
             list_for_each_entry(rela, &sec->relas, list) {
                 log_debug("sym %d, offset %ld, type %d, %s %s %ld\n",
@@ -133,7 +133,6 @@ void upatch_dump_kelf(struct upatch_elf *uelf)
                 log_debug(", rela-> %s", sec->rela->name);
             }
         }
-next:
         log_debug("\n");
     }
 

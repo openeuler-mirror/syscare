@@ -150,6 +150,11 @@ static inline bool is_debug_section(struct section *sec)
         !strncmp(name, ".eh_frame", 9);
 }
 
+static inline bool is_symbol_ignored(struct symbol *sym)
+{
+    return (sym->sec != NULL) && sym->sec->ignored;
+}
+
 static inline struct symbol *find_symbol_by_index(struct list_head *list, unsigned int index)
 {
     struct symbol *sym;

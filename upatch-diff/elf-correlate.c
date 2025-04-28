@@ -54,6 +54,9 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source,
     struct symbol *sym_patched;
 
     list_for_each_entry(sym_orig, &uelf_source->symbols, list) {
+        if (is_symbol_ignored(sym_orig)) {
+            continue;
+        }
         if (sym_orig->twin) {
             continue;
         }
