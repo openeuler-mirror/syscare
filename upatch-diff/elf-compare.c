@@ -132,18 +132,20 @@ static int compare_correlated_section(struct section *sec,
     struct section *sectwin)
 {
     /* compare section headers */
-    if ((sec->sh.sh_type != sectwin->sh.sh_type) ||
-        (sec->sh.sh_flags != sectwin->sh.sh_flags) ||
-        (sec->sh.sh_entsize != sectwin->sh.sh_entsize) ||
-        ((sec->sh.sh_addralign != sectwin->sh.sh_addralign) &&
-        !is_text_section(sec) &&
-        !is_string_section(sec) &&
-        !is_rodata_section(sec))) {
-        /* shaddralign of .rodata may be changed from 0 to 8 bytes
-           once string length is over 30 */
-        ERROR("%s section header details differ from %s",
-            sec->name, sectwin->name);
-        return -1;
+    if (!is_debug_section(sec)) {
+        if ((sec->sh.sh_type != sectwin->sh.sh_type) ||
+            (sec->sh.sh_flags != sectwin->sh.sh_flags) ||
+            (sec->sh.sh_entsize != sectwin->sh.sh_entsize) ||
+            ((sec->sh.sh_addralign != sectwin->sh.sh_addralign) &&
+            !is_text_section(sec) &&
+            !is_string_section(sec) &&
+            !is_rodata_section(sec))) {
+            /* shaddralign of .rodata may be changed from 0 to 8 bytes
+               once string length is over 30 */
+            ERROR("%s section header details differ from %s",
+                sec->name, sectwin->name);
+            return -1;
+        }
     }
 
     if (is_note_section(sec)) {
