@@ -71,9 +71,9 @@ struct section {
     enum data_source data_source;
     enum data_source dbuf_source;
     GElf_Shdr sh;
-    int ignore;
-    int include;
-    int grouped;
+    bool ignored;
+    bool include;
+    bool grouped;
     unsigned int index;
     enum status status;
     union {
@@ -118,7 +118,7 @@ struct symbol {
     unsigned char type;
     enum status status;
     union {
-        int include; /* used in the patched elf */
+        bool include; /* used in the patched elf */
         enum symbol_strip strip; /* used in the output elf */
     };
 };
