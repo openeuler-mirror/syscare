@@ -266,8 +266,9 @@ static void check_static_variable_correlate(struct upatch_elf *uelf_source,
                 continue;
             }
             if (!sym->twin || !relasec->twin) {
-                ERROR("reference to static local variable %s in %s was removed",
+                log_warn("reference to static local variable %s in %s was removed",
                     sym->name, section_function_name(relasec));
+                continue;
             }
             if (!find_static_twin_ref(relasec->twin, sym)) {
                 ERROR("static local %s has been correlated with %s, "
@@ -424,8 +425,9 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source,
 
             patched_sym = find_static_twin(relasec, sym);
             if (!patched_sym) {
-                ERROR("reference to static local variable %s in %s was removed",
+                log_warn("reference to static local variable %s in %s was removed",
                     sym->name, section_function_name(relasec));
+                continue;
             }
 
             patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
