@@ -542,7 +542,7 @@ static void mark_grouped_sections(struct upatch_elf *uelf)
             if (!sec) {
                 ERROR("Group section not found");
             }
-            sec->grouped = 1;
+            sec->grouped = true;
             log_debug("Marking section '%s' (%d) as grouped\n",
                 sec->name, sec->index);
             data++;
@@ -725,12 +725,12 @@ static void include_special_local_section(struct upatch_elf *uelf) {
             if (sym->sec && sym->bind == STB_LOCAL &&
                 sym->status == SAME && !sym->sec->include) {
                 sym->sym.st_other |= SYM_OTHER;
-                sym->sec->include = 1;
+                sym->sec->include = true;
                 sym->sec->data->d_buf = NULL;
                 sym->sec->data->d_size = 0;
                 // arm error: (.debug_info+0x...) undefined reference to `no symbol'
                 if (sym->sec->secsym) {
-                    sym->sec->secsym->include = 1;
+                    sym->sec->secsym->include = true;
                 }
             }
         }
@@ -740,7 +740,7 @@ static void include_special_local_section(struct upatch_elf *uelf) {
 static void include_section(struct section *sec);
 static void include_symbol(struct symbol *sym)
 {
-    if ((sym == NULL) || (sym->include != 0)) {
+    if ((sym == NULL) || sym->include) {
         return;
     }
     /*
@@ -750,7 +750,7 @@ static void include_symbol(struct symbol *sym)
      */
     log_debug("Include symbol '%s', status: %s\n",
         sym->name, status_str(sym->status));
-    sym->include = 1;
+    sym->include = true;
     /*
      * For a function/object symbol, if it has a section, we only need to
      * include the section if it has changed. Otherwise the symbol will be
@@ -772,13 +772,13 @@ static void include_symbol(struct symbol *sym)
 
 static void include_section(struct section *sec)
 {
-    if ((sec == NULL) || (sec->include != 0)) {
+    if ((sec == NULL) || sec->include) {
         return;
     }
 
     log_debug("Include section '%s', status: %s\n",
         sec->name, status_str(sec->status));
-    sec->include = 1;
+    sec->include = true;
 
     if (is_rela_section(sec)) {
         struct rela *rela = NULL;
@@ -841,7 +841,7 @@ static int verify_symbol_patchability(struct upatch_elf *uelf)
 
     struct symbol *sym = NULL;
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->include == 0) {
+        if (!sym->include) {
             continue;
         }
         if (sym->type == STT_GNU_IFUNC) {
@@ -860,22 +860,22 @@ static int verify_section_patchability(struct upatch_elf *uelf)
 
     struct section *sec = NULL;
     list_for_each_entry(sec, &uelf->sections, list) {
-        if ((sec->status == NEW) && (sec->include == 0)) {
+        if ((sec->status == NEW) && !sec->include) {
             // new sections should be included
             log_warn("Section '%s' is %s, but it is not included\n",
                 sec->name, status_str(sec->status));
             err_count++;
-        } else if ((sec->status == CHANGED) && (sec->include == 0)) {
-            // changed sections should be included, except rela & debug section
+        } else if ((sec->status == CHANGED) && !sec->include) {
+            // changed sections should be included
             if (is_rela_section(sec) || is_debug_section(sec)) {
                 continue;
             }
             log_warn("Section '%s' is %s, but it is not included\n",
                 sec->name, status_str(sec->status));
             err_count++;
-        } else if ((sec->status == CHANGED) && (sec->include != 0)) {
+        } else if ((sec->status == CHANGED) && sec->include) {
             // changed group section cannot be included
-            if (is_group_section(sec) || (sec->grouped != 0)) {
+            if (is_group_section(sec) || sec->grouped) {
                 log_warn("Section '%s' is %s, but it is not supported\n",
                     sec->name, status_str(sec->status));
                 err_count++;

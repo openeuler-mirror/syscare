@@ -80,7 +80,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("Included symbol\n");
     log_normal("------------------------------\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->include != 0) {
+        if (sym->include) {
             log_normal("idx: %04u, name: '%s', status: %s\n",
                 sym->index, sym->name, status_str(sym->status));
         }
@@ -91,7 +91,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("Included section\n");
     log_normal("------------------------------\n");
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->include != 0) {
+        if (sec->include) {
             log_normal("idx: %04u, name: '%s', status: %s\n",
                 sec->index, sec->name, status_str(sec->status));
         }
