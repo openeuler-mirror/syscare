@@ -739,7 +739,7 @@ static void include_special_local_section(struct upatch_elf *uelf) {
 static void include_section(struct section *sec);
 static void include_symbol(struct symbol *sym)
 {
-    if (sym->include) {
+    if ((sym == NULL) || (sym->include != 0)) {
         return;
     }
     /*
@@ -747,6 +747,8 @@ static void include_symbol(struct symbol *sym)
      * might be needed: either permanently for a rela, or temporarily for
      * the later creation of a dynrela.
      */
+    log_debug("Include symbol '%s', status: %s\n",
+        sym->name, status_str(sym->status));
     sym->include = 1;
     /*
      * For a function/object symbol, if it has a section, we only need to
@@ -756,143 +758,75 @@ static void include_symbol(struct symbol *sym)
      * For section symbols, we always include the section because
      * references to them can't otherwise be resolved externally.
      */
-    if (sym->sec && (sym->type == STT_SECTION || sym->status != SAME)) {
+    if ((sym->status != SAME) || (sym->type == STT_SECTION)) {
         include_section(sym->sec);
     }
 }
 
 static void include_section(struct section *sec)
 {
-    struct rela *rela = NULL;
-
-    if (sec->include != 0) {
+    if ((sec == NULL) || (sec->include != 0)) {
         return;
     }
 
+    log_debug("Include section '%s', status: %s\n",
+        sec->name, status_str(sec->status));
     sec->include = 1;
 
-    if (!is_rela_section(sec)) {
-        if (sec->secsym != NULL) {
-            sec->secsym->include = 1;
+    if (is_rela_section(sec)) {
+        struct rela *rela = NULL;
+        list_for_each_entry(rela, &sec->relas, list) {
+            include_symbol(rela->sym);
         }
-        if (sec->rela != NULL) {
-            sec->rela->include = 1;
-            list_for_each_entry(rela, &sec->rela->relas, list) {
-                include_symbol(rela->sym);
-            }
-        }
+        return;
+    } else {
+        include_symbol(sec->secsym);
+        include_section(sec->rela);
     }
 }
 
 static void include_standard_elements(struct upatch_elf *uelf)
 {
-    struct section *sec;
-    struct symbol *sym;
+    struct section *sec = NULL;
 
     list_for_each_entry(sec, &uelf->sections, list) {
-        if (!strcmp(sec->name, ".shstrtab") ||
-            !strcmp(sec->name, ".strtab") ||
-            !strcmp(sec->name, ".symtab") ||
-            !strcmp(sec->name, ".rodata") ||
-            is_string_literal_section(sec)) {
+        if (is_symtab_section(sec) || is_strtab_section(sec)) {
             include_section(sec);
         }
     }
-
-    list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->sec && is_string_literal_section(sym->sec)) {
-            sym->include = 1;
-        }
-    }
     /* include the NULL symbol */
-    list_entry(uelf->symbols.next, struct symbol, list)->include = 1;
+    include_symbol(list_entry(uelf->symbols.next, struct symbol, list));
 }
 
 static int include_changes(struct upatch_elf *uelf)
 {
-    struct symbol *sym;
-    int changed_nr = 0;
+    int count = 0;
 
+    struct symbol *sym = NULL;
     list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->status != CHANGED) {
+        if (sym->status == SAME) {
             continue;
         }
 
-        if (sym->type == STT_FUNC) {
-            changed_nr++;
+        if ((sym->type == STT_OBJECT) ||
+            (sym->type == STT_FUNC) ||
+            (sym->type == STT_COMMON) ||
+            (sym->type == STT_TLS) ||
+            (sym->type == STT_GNU_IFUNC)) {
             include_symbol(sym);
+            count++;
         } else if (sym->type == STT_SECTION) {
-            if (is_string_literal_section(sym->sec) || is_except_section(sym->sec)) {
-                changed_nr++;
-                include_symbol(sym);
+            if ((sym->sec != NULL) &&
+                (is_rela_section(sym->sec) || is_debug_section(sym->sec))) {
+                continue;
             }
-        } else if (sym->type == STT_FILE) {
             include_symbol(sym);
+            count++;
         }
     }
 
-    return changed_nr;
+    return count;
 }
-
-static int include_new_globals(struct upatch_elf *uelf)
-{
-    struct symbol *sym;
-    int nr = 0;
-
-    list_for_each_entry(sym, &uelf->symbols, list) {
-        if (sym->bind == STB_GLOBAL && sym->sec && sym->status == NEW) {
-            include_symbol(sym);
-            nr++;
-        }
-    }
-
-    return nr;
-}
-
-static void include_debug_sections(struct upatch_elf *uelf)
-{
-    struct rela *rela;
-    struct rela *saferela;
-    struct section *sec = NULL;
-    struct section *eh_sec = NULL;
-
-    /* include all .debug_* sections */
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (is_debug_section(sec)) {
-            sec->include = 1;
-            if (!is_rela_section(sec) && sec->secsym) {
-                sec->secsym->include = 1;
-            }
-            if (!is_rela_section(sec) && is_eh_frame(sec)) {
-                eh_sec = sec;
-            }
-        }
-    }
-
-    /*
-     * modify relocation entry here
-     * remove unincluded symbol in debug relocation section
-     * for eh_frame section, sync the FDE at the same time
-     */
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (!is_rela_section(sec) || !is_debug_section(sec)) {
-            continue;
-        }
-        list_for_each_entry_safe(rela, saferela, &sec->relas, list) {
-            // The shndex of symbol is SHN_COMMON, there is no related section
-            if (rela->sym && !rela->sym->include) {
-                list_del(&rela->list);
-                free(rela);
-            }
-        }
-    }
-    if (eh_sec) {
-        upatch_rebuild_eh_frame(eh_sec);
-    }
-}
-
-/* currently, there si no special section need to be handled */
-static void process_special_sections(void) {}
 
 static int verify_symbol_patchability(struct upatch_elf *uelf)
 {
@@ -1033,9 +967,6 @@ int main(int argc, char*argv[])
     struct upatch_elf uelf_out;
     struct running_elf relf;
 
-    int num_changed;
-    int new_globals_exist;
-
     memset(&arguments, 0, sizeof(arguments));
     argp_parse(&argp, argc, argv, 0, NULL, &arguments);
 
@@ -1087,9 +1018,8 @@ int main(int argc, char*argv[])
 
     include_standard_elements(&uelf_patched);
 
-    num_changed = include_changes(&uelf_patched);
-    new_globals_exist = include_new_globals(&uelf_patched);
-    if (!num_changed && !new_globals_exist) {
+    int change_count = include_changes(&uelf_patched);
+    if (change_count == 0) {
         log_normal("No functional changes\n");
         upatch_elf_destroy(&uelf_source);
         upatch_elf_destroy(&uelf_patched);
@@ -1100,10 +1030,6 @@ int main(int argc, char*argv[])
         relf_close(&relf);
         return 0;
     }
-
-    include_debug_sections(&uelf_patched);
-
-    process_special_sections();
 
     upatch_print_changes(&uelf_patched);
 

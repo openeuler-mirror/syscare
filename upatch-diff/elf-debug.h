@@ -31,6 +31,4 @@ void upatch_print_changes(struct upatch_elf *);
 
 void upatch_dump_kelf(struct upatch_elf *);
 
-void upatch_rebuild_eh_frame(struct section *);
-
 #endif /* __UPATCH_ELF_DEBUG_H_ */
