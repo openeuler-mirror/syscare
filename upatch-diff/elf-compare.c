@@ -143,19 +143,22 @@ static void compare_correlated_nonrela_section(struct section *sec,
 // we may change status of sec, they are not same
 static int compare_correlated_section(struct section *sec, struct section *twin)
 {
-    /* compare section headers */
+    /* We allow sh_flags and sh_addralign changes.
+       When we change the initial value of variables
+       sh_flags & sh_addralign may change in .rodata section */
     if ((sec->sh.sh_type != twin->sh.sh_type) ||
-        (sec->sh.sh_flags != twin->sh.sh_flags) ||
-        (sec->sh.sh_entsize != twin->sh.sh_entsize) ||
-        ((sec->sh.sh_addralign != twin->sh.sh_addralign) &&
-        !is_text_section(sec) &&
-        !is_string_section(sec) &&
-        !is_rodata_section(sec))) {
-        /* shaddralign of .rodata may be changed from 0 to 8 bytes
-            once string length is over 30 */
+        (sec->sh.sh_entsize != twin->sh.sh_entsize)) {
         ERROR("%s section header details differ from %s",
             sec->name, twin->name);
         return -1;
+    }
+    if (sec->sh.sh_flags != twin->sh.sh_flags) {
+        log_warn("Section '%s' sh_flags changed from %ld to %ld\n",
+            sec->name, sec->sh.sh_flags, twin->sh.sh_flags);
+    }
+    if (sec->sh.sh_addralign != twin->sh.sh_addralign) {
+        log_warn("Section '%s' sh_addralign changed from %ld to %ld\n",
+            sec->name, sec->sh.sh_addralign, twin->sh.sh_addralign);
     }
 
     if (is_note_section(sec)) {
