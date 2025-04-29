@@ -55,6 +55,89 @@ static int mangled_strcmp_dot_L(char *str1, char *str2)
 }
 #endif
 
+static bool is_dynamic_debug_symbol(struct symbol *sym)
+{
+    static const char *SEC_NAMES[] = {
+        "__verbose",
+        "__dyndbg",
+        NULL,
+    };
+
+    if ((sym->type == STT_OBJECT) || (sym->type == STT_SECTION)) {
+        const char **sec_name;
+        for (sec_name = SEC_NAMES; *sec_name; sec_name++) {
+            if (strcmp(sym->sec->name, *sec_name) == 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+bool is_special_static_symbol(struct symbol *sym)
+{
+    static const char *SYM_NAMES[] = {
+        ".__key",
+        ".__warned",
+        ".__already_done.",
+        ".__func__",
+        ".__FUNCTION__",
+        ".__PRETTY_FUNCTION__",
+        "._rs",
+        ".CSWTCH",
+        "._entry",
+        ".C",
+        NULL,
+    };
+
+    if (sym == NULL) {
+        return false;
+    }
+
+    /* pr_debug() uses static local variables in __verbose or __dyndbg section */
+    if (is_dynamic_debug_symbol(sym)) {
+        return true;
+    }
+
+    if (sym->type == STT_SECTION) {
+        /* make sure section is bundled */
+        if (is_rela_section(sym->sec) || (sym->sec->sym == NULL)) {
+            return false;
+        }
+        /* use bundled object object/function symbol for matching */
+        sym = sym->sec->sym;
+    }
+
+    if ((sym->type != STT_OBJECT) || (sym->bind != STB_LOCAL)) {
+        return false;
+    }
+    if (!strcmp(sym->sec->name, ".data.once")) {
+        return true;
+    }
+
+    const char **sym_name;
+    for (sym_name = SYM_NAMES; *sym_name; sym_name++) {
+        /* Check gcc-style statics: '<sym_name>.' */
+        if (strcmp(sym->name, (*sym_name + 1)) == 0) {
+            return true;
+        }
+        /* Check clang-style statics: '<function_name>.<sym_name>' */
+        if (strstr(sym->name, *sym_name)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool is_special_static_section(struct section *sec)
+{
+    struct symbol *sym = is_rela_section(sec) ?
+        sec->base->secsym : sec->secsym;
+    return is_special_static_symbol(sym);
+}
+
 int mangled_strcmp(char *str1, char *str2)
 {
     /*
@@ -113,11 +196,9 @@ bool is_normal_static_local(struct symbol *sym)
     if (!strchr(sym->name, '.')) {
         return false;
     }
-
-    /*
-     * TODO: Special static local variables should never be correlated and should always
-     * be included if they are referenced by an included function.
-     */
+    if (is_special_static_symbol(sym)) {
+        return false;
+    }
     return true;
 }
 
