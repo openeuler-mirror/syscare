@@ -348,6 +348,24 @@ static bool is_discarded_sym(struct running_elf *relf, struct symbol *sym)
     return false;
 }
 
+static bool has_function_prefix(const char *sym_name)
+{
+    static const char *SYM_NAMES[] = {
+        "__func__.",
+        "__FUNC__.",
+        "__PRETTY_FUNCTION__.",
+        NULL,
+    };
+
+    const char **name;
+    for (name = SYM_NAMES; *name; name++) {
+        if (strcmp(sym_name, *name) == 0) {
+            return true;
+        }
+    }
+    return false;
+}
+
 static struct symbol* match_uelf_local_symbol(struct upatch_elf *uelf,
     struct symbol *start_sym, struct debug_symbol *relf_sym)
 {
@@ -411,6 +429,9 @@ static void match_file_local_symbols(
             ((sym->type != STT_FUNC) && (sym->type != STT_OBJECT))) {
             continue;
         }
+        if (has_function_prefix(sym->name)) {
+            continue;
+        }
 
         struct symbol *matched = match_uelf_local_symbol(uelf, uelf_filesym, sym);
         if (matched == NULL) {
@@ -425,6 +446,9 @@ static void match_file_local_symbols(
         }
         if ((sym->bind != STB_LOCAL) ||
             ((sym->type != STT_FUNC) && (sym->type != STT_OBJECT))) {
+            continue;
+        }
+        if (has_function_prefix(sym->name)) {
             continue;
         }
         if (is_discarded_sym(relf, sym)) {
