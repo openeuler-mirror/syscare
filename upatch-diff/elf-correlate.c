@@ -60,17 +60,24 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source,
         if (sym_orig->twin) {
             continue;
         }
+        /*
+         * Special static local variables should never be correlated
+         * and should always be included if they are referenced by
+         * an included function.
+         */
+        if (is_special_static_symbol(sym_orig)) {
+            continue;
+        }
+
         /* find matched symbol */
         list_for_each_entry(sym_patched, &uelf_patched->symbols, list) {
             if (mangled_strcmp(sym_orig->name, sym_patched->name) ||
                 sym_orig->type != sym_patched->type || sym_patched->twin) {
                 continue;
             }
-            /*
-             * TODO: Special static local variables should never be correlated
-             * and should always be included if they are referenced by
-             * an included function.
-             */
+            if (is_special_static_symbol(sym_patched)) {
+                continue;
+            }
             /*
              * The .LCx symbols point to string literals in
              * '.rodata.<func>.str1.*' sections.  They get included
@@ -154,19 +161,27 @@ void upatch_correlate_sections(struct upatch_elf *uelf_source,
 
     list_for_each_entry(sec_orig, &uelf_source->sections, list) {
         /* already found */
-        if (sec_orig->twin) {
+        if (sec_orig->twin != NULL) {
+            continue;
+        }
+        /*
+         * Special static local variables should never be correlated
+         * and should always be included if they are referenced by
+         * an included function.
+         */
+        if (is_special_static_section(sec_orig)) {
             continue;
         }
         list_for_each_entry(sec_patched, &uelf_patched->sections, list) {
-            if (mangled_strcmp(sec_orig->name, sec_patched->name) ||
-                sec_patched->twin) {
+            if (sec_patched->twin != NULL) {
                 continue;
             }
-            /*
-             * TODO: Special static local variables should never be correlated
-             * and should always be included if they are referenced by
-             * an included function.
-             */
+            if (is_special_static_section(sec_patched)) {
+                continue;
+            }
+            if (mangled_strcmp(sec_orig->name, sec_patched->name)) {
+                continue;
+            }
             /*
              * Group sections must match exactly to be correlated.
              */
