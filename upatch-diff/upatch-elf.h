@@ -112,7 +112,7 @@ struct symbol {
     GElf_Sym sym;
     char *name;
     enum data_source name_source;
-    struct debug_symbol *relf_sym;
+    struct debug_symbol *debug_sym;
     unsigned int index;
     unsigned char bind;
     unsigned char type;
