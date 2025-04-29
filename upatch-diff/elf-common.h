@@ -303,4 +303,13 @@ bool is_gcc6_localentry_bundled_sym(struct upatch_elf *);
  */
 bool is_mapping_symbol(struct upatch_elf *, struct symbol *);
 
+/*
+ * This function detects whether the given symbol is a "special" static local
+ * variable (for lack of a better term).
+ * Special static local variables shoe never be correlated and should always
+ * be included if they are referenced by an included function.
+ */
+bool is_special_static_symbol(struct symbol *sym);
+bool is_special_static_section(struct section *sec);
+
 #endif

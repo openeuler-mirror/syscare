@@ -759,6 +759,13 @@ static void include_symbol(struct symbol *sym)
         sym->name, status_str(sym->status));
     sym->include = true;
     /*
+     * For special static symbols, we need include it's section
+     * to ensure we don't get link error.
+     */
+    if (is_special_static_symbol(sym)) {
+        sym->sec->include = true;
+    }
+    /*
      * For a function/object symbol, if it has a section, we only need to
      * include the section if it has changed. Otherwise the symbol will be
      * used by relas/dynrelas to link to the real symbol externally.
@@ -851,6 +858,12 @@ static int verify_symbol_patchability(struct upatch_elf *uelf)
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (!sym->include) {
             continue;
+        }
+        if ((sym->bind == STB_LOCAL) && (sym->sym.st_shndx == SHN_UNDEF) &&
+            (sym->index != 0)) {
+            log_warn("Symbol '%s' is local, but sh_shndx is SHN_UNDEF\n",
+                sym->name);
+            err_count++;
         }
         if (sym->type == STT_GNU_IFUNC) {
             log_warn("Symbol '%s' is included, but IFUNC is not supported\n",

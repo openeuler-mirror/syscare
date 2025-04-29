@@ -81,12 +81,14 @@ void upatch_compare_symbols(struct upatch_elf *uelf)
         if (is_symbol_ignored(sym)) {
             continue;
         }
-        if (sym->twin) {
-            compare_correlated_symbol(sym, sym->twin);
-        } else {
+        if (is_special_static_symbol(sym)) {
+            sym->status = SAME;
+        } else if (sym->twin == NULL) {
             sym->status = NEW;
+        } else {
+            compare_correlated_symbol(sym, sym->twin);
         }
-        log_debug("symbol %s is %s\n", sym->name, status_str(sym->status));
+        log_debug("Symbol '%s' is %s\n", sym->name, status_str(sym->status));
     }
 }
 
@@ -220,7 +222,9 @@ void upatch_compare_sections(struct upatch_elf *uelf)
         if (sec->ignored) {
             continue;
         }
-        if (sec->twin == NULL) {
+        if (is_special_static_section(sec)) {
+            sec->status = SAME;
+        } else if (sec->twin == NULL) {
             sec->status = NEW;
         } else {
             compare_correlated_section(sec, sec->twin);
