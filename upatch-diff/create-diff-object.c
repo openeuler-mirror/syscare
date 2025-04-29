@@ -1096,8 +1096,6 @@ int main(int argc, char*argv[])
 
     upatch_create_patches_sections(&uelf_out, &relf);
 
-    upatch_create_intermediate_sections(&uelf_out, &relf);
-
     create_kpatch_arch_section();
 
     upatch_build_strings_section_data(&uelf_out);
