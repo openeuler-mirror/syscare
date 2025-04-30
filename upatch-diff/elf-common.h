@@ -275,7 +275,9 @@ static inline unsigned int absolute_rela_type(struct upatch_elf *uelf)
 
 static inline bool is_null_sym(struct symbol *sym)
 {
-    return !strlen(sym->name);
+    return (sym->type == STT_NOTYPE) &&
+        (sym->bind == STB_LOCAL) &&
+        (strlen(sym->name) == 0);
 }
 
 static inline bool is_file_sym(struct symbol *sym)
