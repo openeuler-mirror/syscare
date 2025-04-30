@@ -760,7 +760,11 @@ static void include_standard_elements(struct upatch_elf *uelf)
             sym->include = 1;
 
     /* include the NULL symbol */
-    list_entry(uelf->symbols.next, struct symbol, list)->include = 1;
+    struct symbol *sym = find_symbol_by_index(&uelf->symbols, 0);
+    if (sym == NULL) {
+        ERROR("Cannot find null symbol");
+    }
+    include_symbol(sym);
 }
 
 static int include_changed_functions(struct upatch_elf *uelf)
