@@ -40,10 +40,6 @@ static void compare_correlated_symbol(struct symbol *sym, struct symbol *twin)
     if (sym->sym.st_info != twin->sym.st_info) {
         ERROR("Symbol '%s' st_info mismatched", sym->name);
     }
-    // object symbol size cannot be changed
-    if ((sym->type == STT_OBJECT) && (sym->sym.st_size != twin->sym.st_size)) {
-        ERROR("Symbol '%s' object size mismatched", sym->name);
-    }
 
     /*
      * For local symbols, we handle them based on their matching sections.
