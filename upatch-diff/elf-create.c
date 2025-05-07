@@ -161,6 +161,11 @@ void upatch_create_patches_sections(struct upatch_elf *uelf,
         nr++;
     }
 
+    if (nr == 0) {
+        log_warn("No functional changes\n");
+        return;
+    }
+
     /* create text/rela section pair */
     sec = create_section_pair(uelf, ".upatch.funcs", sizeof(*funcs),  nr);
     relasec = sec->rela;
