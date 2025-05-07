@@ -59,6 +59,7 @@ bool is_special_static_symbol(struct symbol *sym)
         ".CSWTCH",
         "._entry",
         ".C",
+        ".L",
         NULL,
     };
 
@@ -151,11 +152,6 @@ bool is_normal_static_local(struct symbol *sym)
 {
     // only handle local variable
     if (sym->type != STT_OBJECT || sym->bind != STB_LOCAL) {
-        return false;
-    }
-    // TODO: .Local ? need a example here
-    if (!strncmp(sym->name, ".L", 2)) {
-        ERROR("find no-local variable\n");
         return false;
     }
     if (!strchr(sym->name, '.')) {
