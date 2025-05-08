@@ -167,36 +167,25 @@ impl UpatchBuild {
         Ok(())
     }
 
-    fn find_linker(&self, objects: &[PathBuf]) -> Result<&Path> {
-        let mut producers = IndexSet::new();
-        for path in objects {
-            let producer_parser = ProducerParser::open(path)
-                .with_context(|| format!("Failed to open {}", path.display()))?;
-            let producer_iter = producer_parser
-                .parse()
-                .with_context(|| format!("Failed to parse {}", path.display()))?;
-
-            for parse_result in producer_iter {
-                let producer = parse_result.context("Failed to parse object producer")?;
-                if producer.is_assembler() {
-                    continue;
-                }
-                producers.insert(producer);
-            }
-        }
+    fn find_linker(&self, debuginfo: &Path) -> Result<&Path> {
+        let mut producers = ProducerParser::open(debuginfo)
+            .with_context(|| format!("Failed to open {}", debuginfo.display()))?
+            .parse()
+            .with_context(|| format!("Failed to parse {}", debuginfo.display()))?
+            .filter_map(|result| result.ok())
+            .collect::<IndexSet<_>>();
         producers.sort();
 
-        let producer = producers.pop().context("No object producer")?;
-        let compiler = self
-            .compiler_map
-            .get(&producer.kind)
-            .with_context(|| format!("Cannot find {} compiler", producer.kind))?;
+        let compiler = producers
+            .pop()
+            .and_then(|producer| self.compiler_map.get(&producer.kind))
+            .context("Cannot find linking compiler")?;
 
         Ok(compiler.linker.as_path())
     }
 
-    fn link_objects(&self, objects: &[PathBuf], output: &Path) -> Result<()> {
-        let linker = self.find_linker(objects).context("Cannot find linker")?;
+    fn link_objects(&self, objects: &[PathBuf], debuginfo: &Path, output: &Path) -> Result<()> {
+        let linker = self.find_linker(debuginfo).context("Cannot find linker")?;
 
         Command::new(linker)
             .args(["-r", "-o"])
@@ -265,7 +254,7 @@ impl UpatchBuild {
         objects.push(notes_object);
 
         debug!("- Linking patch");
-        self.link_objects(&objects, &output_file)
+        self.link_objects(&objects, &debuginfo_file, &output_file)
             .context("Failed to link patch objects")?;
 
         debug!("- Resolving patch");
