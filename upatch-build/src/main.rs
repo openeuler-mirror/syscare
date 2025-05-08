@@ -210,7 +210,9 @@ impl UpatchBuild {
         let output_file = output_dir.join(patch_name);
 
         fs::create_dir_all(&temp_dir)?;
-        fs::copy(debuginfo, &debuginfo_file)?;
+        if fs::hard_link(debuginfo, &debuginfo_file).is_err() {
+            fs::copy(debuginfo, &debuginfo_file)?;
+        }
         fs::set_permissions(&debuginfo_file, Permissions::from_mode(0o644))?;
 
         debug!("- Resolving debuginfo");
