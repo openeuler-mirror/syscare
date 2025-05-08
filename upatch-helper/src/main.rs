@@ -48,6 +48,7 @@ const COMPILE_OPTIONS_CLANG: &[&str] = &[
     "-fno-common",
     "-fno-slp-vectorize", // avoid converting scalar operations into SIMD instructions
     "-fno-integrated-as", // avoid using built-in llvm-as, which doesn't support "--defsym"
+    "-Werror=uninitialized", // uninitialized variable may generate unexpected code under O2 optimization
 ];
 
 const UPATCH_ID_PREFIX: &str = ".upatch_";
