@@ -257,7 +257,9 @@ impl FileRelation {
                 let obj_name = object_file.file_name().unwrap_or_default();
                 let archive_file =
                     target_dir.join(concat_os!(format!("{:04}-", file_id), obj_name));
-                fs::copy(&object_file, &archive_file)?;
+                if fs::hard_link(&object_file, &archive_file).is_err() {
+                    fs::copy(&object_file, &archive_file)?;
+                }
                 file_id += 1;
 
                 // Parse upatch id of the object
