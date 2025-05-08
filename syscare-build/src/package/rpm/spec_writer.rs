@@ -121,7 +121,7 @@ impl PackageSpecWriter for RpmSpecWriter {
         let mut lines_to_write = BTreeSet::new();
         let last_tag_id = source_tags
             .into_iter()
-            .last()
+            .next_back()
             .map(|tag| tag.id)
             .unwrap_or_default();
 
