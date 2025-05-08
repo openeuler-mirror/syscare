@@ -137,20 +137,24 @@ impl FileRelation {
             let mut object_relation = IndexMap::new();
 
             for upatch_id in upatch_ids {
-                let (object_file, patched_object) =
-                    id_object_map.get(&upatch_id).with_context(|| {
-                        format!(
-                            "Cannot find patched object of {}",
-                            upatch_id.to_string_lossy()
-                        )
-                    })?;
-                let original_object = self
-                    .original_object_map
-                    .get(object_file)
-                    .map(|p| p.as_path())
-                    .unwrap_or_else(|| Path::new(NON_EXIST_PATH));
-
-                object_relation.insert(patched_object.to_path_buf(), original_object.to_path_buf());
+                match id_object_map.get(&upatch_id) {
+                    Some((object_file, patched_object)) => {
+                        let original_object = self
+                            .original_object_map
+                            .get(object_file)
+                            .map(|p| p.as_path())
+                            .unwrap_or_else(|| Path::new(NON_EXIST_PATH));
+                        object_relation
+                            .insert(patched_object.to_path_buf(), original_object.to_path_buf());
+                    }
+                    None => {
+                        warn!(
+                            "Cannot find patched object of {} in target {}",
+                            upatch_id.to_string_lossy(),
+                            binary_file.display()
+                        );
+                    }
+                }
             }
             object_relation.sort_keys();
 
