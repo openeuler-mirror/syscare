@@ -57,7 +57,6 @@
 #include "elf-resolve.h"
 #include "elf-create.h"
 #include "running-elf.h"
-//#include "upatch-manage.h"
 #include "upatch-patch.h"
 
 #define PROG_VERSION "upatch-diff "BUILD_VERSION
@@ -75,36 +74,16 @@ struct arguments {
     bool debug;
 };
 
-static struct argp_option options[] = {
-    {"debug", 'd', NULL, 0, "Show debug output", 0},
-    {"source", 's', "source", 0, "Source object", 0},
-    {"patched", 'p', "patched", 0, "Patched object", 0},
-    {"running", 'r', "running", 0, "Running binary file", 0},
-    {"output", 'o', "output", 0, "Output object", 0},
+static const struct argp_option ARGP_OPTION[] = {
+    {"source",  's', "<file>", 0, "Source object",       0},
+    {"patched", 'p', "<file>", 0, "Patched object",      1},
+    {"running", 'r', "<file>", 0, "Running binary file", 2},
+    {"output",  'o', "<file>", 0, "Output object",       3},
+    {"debug",   'd', NULL,     0, "Show debug output",   4},
     {NULL}
 };
-
-static char program_doc[] =
-    "upatch-build -- generate a patch object based on the source object";
-
-static char args_doc[] =
-    "-s source_obj -p patched_obj -r elf_file -o output_obj";
-
+static const char ARGP_DOC[] = "Generate a patch object based on source object";
 const char *argp_program_version = PROG_VERSION;
-
-static error_t check_opt(struct argp_state *state)
-{
-    struct arguments *arguments = state->input;
-
-    if (arguments->source_obj == NULL ||
-        arguments->patched_obj == NULL ||
-        arguments->running_elf == NULL ||
-        arguments->output_obj == NULL) {
-        argp_usage(state);
-        return ARGP_ERR_UNKNOWN;
-    }
-    return 0;
-}
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
@@ -126,35 +105,43 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
         case 'o':
             arguments->output_obj = arg;
             break;
-        case ARGP_KEY_ARG:
-            break;
-        case ARGP_KEY_END:
-            return check_opt(state);
         default:
             return ARGP_ERR_UNKNOWN;
     }
     return 0;
 }
 
-static struct argp argp = {
-    options, parse_opt, args_doc, program_doc, NULL, NULL, NULL
-};
+static bool check_args(struct arguments *arguments)
+{
+    if (arguments->source_obj == NULL) {
+        log_error("The argument '--source <file>' requires a value\n");
+        return false;
+    }
+    if (arguments->patched_obj == NULL) {
+        log_error("The argument '--patched <file>' requires a value\n");
+        return false;
+    }
+    if (arguments->running_elf == NULL) {
+        log_error("The argument '--running <file>' requires a value\n");
+        return false;
+    }
+    if (arguments->output_obj == NULL) {
+        log_error("The argument '--output <file>' requires a value\n");
+        return false;
+    }
+    return true;
+}
 
-/*
- * Key point for chreate-diff-object:
- * 1. find changed func/data for each object
- * 2. link all these objects into a relocatable file
- * 3. add sections for management (hash/init/patch info etc.)
- * 4. locate old symbols for the relocatable file
- */
-
-/* Format of output file is the only export API */
 static void show_program_info(struct arguments *arguments)
 {
-    log_debug("source object: %s\n", arguments->source_obj);
+    log_debug("==============================\n");
+    log_debug("%s\n", PROG_VERSION);
+    log_debug("==============================\n");
+    log_debug("source object:  %s\n", arguments->source_obj);
     log_debug("patched object: %s\n", arguments->patched_obj);
     log_debug("running binary: %s\n", arguments->running_elf);
-    log_debug("output object: %s\n", arguments->output_obj);
+    log_debug("output object:  %s\n", arguments->output_obj);
+    log_debug("------------------------------\n\n");
 }
 
 static void compare_elf_headers(struct upatch_elf *uelf_source,
@@ -179,19 +166,6 @@ static void compare_elf_headers(struct upatch_elf *uelf_source,
         ehdr_source.e_phentsize != ehdr_patched.e_phentsize ||
         ehdr_source.e_shentsize != ehdr_patched.e_shentsize) {
         ERROR("compare_elf_headers failed.");
-    }
-}
-
-/* we can sure we only handle relocatable file, this is unnecessary */
-static void check_program_headers(struct upatch_elf *uelf)
-{
-    size_t ph_nr;
-
-    if (elf_getphdrnum(uelf->elf, &ph_nr)) {
-        ERROR("elf_getphdrnum with error %s.", elf_errmsg(0));
-    }
-    if (ph_nr != 0) {
-        ERROR("ELF contains program header.");
     }
 }
 
@@ -972,7 +946,6 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched,
     struct symbol *sym;
     struct symbol *safesym;
 
-    memset(uelf_out, 0, sizeof(struct upatch_elf));
     uelf_out->arch = uelf_patched->arch;
 
     INIT_LIST_HEAD(&uelf_out->sections);
@@ -1014,40 +987,48 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched,
     }
 }
 
-int main(int argc, char*argv[])
+/*
+ * Key point for upatch-diff:
+ * 1. find changed func/data for each object
+ * 2. link all these objects into a relocatable file
+ * 3. add sections for management (hash/init/patch info etc.)
+ * 4. locate old symbols for the relocatable file
+ */
+int main(int argc, char **argv)
 {
-    struct arguments arguments;
-    struct upatch_elf uelf_source;
-    struct upatch_elf uelf_patched;
-    struct upatch_elf uelf_out;
-    struct running_elf relf;
+    static const struct argp ARGP = {
+        ARGP_OPTION, parse_opt, NULL, ARGP_DOC, NULL, NULL, NULL
+    };
+    struct arguments args = { 0 };
+    struct upatch_elf uelf_source = { 0 };
+    struct upatch_elf uelf_patched = { 0 };
+    struct upatch_elf uelf_out = { 0 };
+    struct running_elf relf = { 0 };
 
-    memset(&arguments, 0, sizeof(arguments));
-    argp_parse(&argp, argc, argv, 0, NULL, &arguments);
-
-    if (arguments.debug) {
+    if (argp_parse(&ARGP, argc, argv, 0, NULL, &args) != 0) {
+        return EXIT_FAILURE;
+    }
+    if (!check_args(&args)) {
+        return EXIT_FAILURE;
+    }
+    if (args.debug) {
         g_loglevel = DEBUG;
     }
-    g_logprefix = basename(arguments.source_obj);
-    show_program_info(&arguments);
+    show_program_info(&args);
 
     if (elf_version(EV_CURRENT) == EV_NONE) {
-        ERROR("ELF library initialization failed");
+        log_error("Failed to initialize elf library\n");
+        return EXIT_FAILURE;
     }
 
-    /* TODO: with debug info, this may changed */
-    g_uelf_name = arguments.source_obj;
-    g_relf_name = arguments.running_elf;
+    uelf_open(&uelf_source, args.source_obj);
+    uelf_open(&uelf_patched, args.patched_obj);
+    relf_open(&relf, args.running_elf);
 
-    /* check error in log, since errno may be from libelf */
-    upatch_elf_open(&uelf_source, arguments.source_obj);
-    upatch_elf_open(&uelf_patched, arguments.patched_obj);
-
-    relf_init(arguments.running_elf, &relf);
-
+    g_logprefix = basename(args.source_obj);
+    g_uelf_name = args.source_obj;
+    g_relf_name = args.running_elf;
     compare_elf_headers(&uelf_source, &uelf_patched);
-    check_program_headers(&uelf_source);
-    check_program_headers(&uelf_patched);
 
     bundle_symbols(&uelf_source);
     bundle_symbols(&uelf_patched);
@@ -1057,7 +1038,6 @@ int main(int argc, char*argv[])
 
     mark_ignored_sections(&uelf_source);
     mark_ignored_sections(&uelf_patched);
-
     mark_grouped_sections(&uelf_patched);
 
     replace_section_syms(&uelf_source);
@@ -1075,12 +1055,8 @@ int main(int argc, char*argv[])
     int change_count = include_changes(&uelf_patched);
     if (change_count == 0) {
         log_normal("No functional changes\n");
-        upatch_elf_destroy(&uelf_source);
-        upatch_elf_destroy(&uelf_patched);
-
-        upatch_elf_close(&uelf_source);
-        upatch_elf_close(&uelf_patched);
-
+        uelf_close(&uelf_source);
+        uelf_close(&uelf_patched);
         relf_close(&relf);
         return 0;
     }
@@ -1129,22 +1105,15 @@ int main(int argc, char*argv[])
 
     upatch_dump_kelf(&uelf_out);
 
-    upatch_write_output_elf(&uelf_out, uelf_patched.elf, arguments.output_obj,
-        0664);
+    upatch_write_output_elf(&uelf_out, uelf_patched.elf, args.output_obj, 0664);
+    log_normal("Done\n");
 
-    upatch_elf_destroy(&uelf_source);
-    upatch_elf_destroy(&uelf_patched);
-    upatch_elf_destroy(&uelf_out);
-
-    upatch_elf_close(&uelf_source);
-    upatch_elf_close(&uelf_patched);
-    upatch_elf_close(&uelf_out);
-
+    uelf_close(&uelf_source);
+    uelf_close(&uelf_patched);
+    uelf_close(&uelf_out);
     relf_close(&relf);
 
-    log_normal("Done\n");
     fflush(stdout);
     fflush(stderr);
-
-    return 0;
+    return EXIT_SUCCESS;
 }

@@ -35,71 +35,62 @@
 #include "running-elf.h"
 #include "log.h"
 
-/* TODO:
- * need to judge whether running_elf is a Position-Independent Executable file
- * https://github.com/bminor/binutils-gdb/blob/master/binutils/readelf.c
- */
-static bool is_pie(void)
-{
-    return true;
-}
-
-static bool is_exec(struct Elf *elf)
+void relf_open(struct running_elf *relf, const char *name)
 {
     GElf_Ehdr ehdr;
-
-    if (!gelf_getehdr(elf, &ehdr)) {
-        ERROR("gelf_getehdr running_file failed for %s.", elf_errmsg(0));
-    }
-    return ehdr.e_type == ET_EXEC || (ehdr.e_type == ET_DYN && is_pie());
-}
-
-void relf_init(char *elf_name, struct running_elf *relf)
-{
     GElf_Shdr shdr;
-    Elf_Scn *scn = NULL;
-    Elf_Data *data;
     GElf_Sym sym;
 
-    relf->fd = open(elf_name, O_RDONLY);
+    if (relf == NULL) {
+        return;
+    }
+
+    relf->fd = open(name, O_RDONLY);
     if (relf->fd == -1) {
-        ERROR("open with errno = %d", errno);
+        ERROR("Failed to open '%s', %s", name, strerror(errno));
     }
 
     relf->elf = elf_begin(relf->fd, ELF_C_READ, NULL);
     if (!relf->elf) {
-        ERROR("elf_begin with error %s", elf_errmsg(0));
+        ERROR("Failed to read file '%s', %s", name, elf_errmsg(0));
     }
 
-    relf->is_exec = is_exec(relf->elf);
+    if (!gelf_getehdr(relf->elf, &ehdr)) {
+        ERROR("Failed to read file '%s' elf header, %s", name, elf_errmsg(0));
+    }
+    relf->is_exec = ((ehdr.e_type == ET_EXEC) || (ehdr.e_type == ET_DYN));
 
+    Elf_Scn *scn = NULL;
     while ((scn = elf_nextscn(relf->elf, scn)) != NULL) {
         if (!gelf_getshdr(scn, &shdr)) {
-            ERROR("gelf_getshdr with error %s", elf_errmsg(0));
+            ERROR("Failed to read file '%s' section header, %s",
+                name, elf_errmsg(0));
         }
         if (shdr.sh_type == SHT_SYMTAB) {
             break;
         }
     }
 
-    data = elf_getdata(scn, NULL);
+    Elf_Data *data = elf_getdata(scn, NULL);
     if (!data) {
-        ERROR("elf_getdata with error %s", elf_errmsg(0));
+        ERROR("Failed to read file '%s' section data, %s", name, elf_errmsg(0));
     }
     relf->obj_nr = (int)(shdr.sh_size / shdr.sh_entsize);
     relf->obj_syms = calloc((size_t)relf->obj_nr, sizeof(struct debug_symbol));
     if (!relf->obj_syms) {
-        ERROR("calloc with errno = %d", errno);
+        ERROR("Failed to alloc memory, %s", strerror(errno));
     }
 
     for (int i = 0; i < relf->obj_nr; i++) {
         if (!gelf_getsym(data, i, &sym)) {
-            ERROR("gelf_getsym with error %s", elf_errmsg(0));
+            ERROR("Failed to read file '%s' symbol, index=%d, %s",
+                name, i, elf_errmsg(0));
         }
         relf->obj_syms[i].name = elf_strptr(relf->elf,
             shdr.sh_link, sym.st_name);
         if (!relf->obj_syms[i].name) {
-            ERROR("elf_strptr with error %s", elf_errmsg(0));
+            ERROR("Failed to read file '%s' symbol name, index=%d, %s",
+                name, i, elf_errmsg(0));
         }
         relf->obj_syms[i].type = GELF_ST_TYPE(sym.st_info);
         relf->obj_syms[i].bind = GELF_ST_BIND(sym.st_info);
@@ -109,15 +100,22 @@ void relf_init(char *elf_name, struct running_elf *relf)
     }
 }
 
-int relf_close(struct running_elf *relf)
+void relf_close(struct running_elf *relf)
 {
-    free(relf->obj_syms);
-    elf_end(relf->elf);
+    if (relf == NULL) {
+        return;
+    }
+    if (relf->obj_syms) {
+        free(relf->obj_syms);
+    }
+    if (relf->elf) {
+        elf_end(relf->elf);
+    }
+    if (relf->fd > 0) {
+        close(relf->fd);
+    }
     relf->elf = NULL;
-    close(relf->fd);
     relf->fd = -1;
-
-    return 0;
 }
 
 bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
