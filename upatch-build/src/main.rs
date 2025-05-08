@@ -22,11 +22,9 @@ use std::{
 };
 
 use anyhow::{bail, ensure, Context, Result};
-use flexi_logger::{
-    DeferredNow, Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode,
-};
+use flexi_logger::{Duplicate, FileSpec, LogSpecification, Logger, LoggerHandle, WriteMode};
 use indexmap::{IndexMap, IndexSet};
-use log::{debug, error, info, trace, warn, Level, LevelFilter, Record};
+use log::{debug, error, info, trace, warn, Level, LevelFilter};
 use object::{write, Object, ObjectKind, ObjectSection, SectionKind};
 
 use syscare_common::{concat_os, fs, os, process::Command};
@@ -98,7 +96,7 @@ impl UpatchBuild {
         let logger = Logger::with(log_spec)
             .log_to_file(file_spec)
             .duplicate_to_stdout(Duplicate::from(log_level_stdout))
-            .format(Self::format_log)
+            .format(|w, _, record| write!(w, "{}", record.args()))
             .write_mode(WriteMode::Direct)
             .start()
             .context("Failed to initialize logger")?;
@@ -403,23 +401,11 @@ impl UpatchBuild {
 
 /* Tool functions */
 impl UpatchBuild {
-    fn format_log(
-        w: &mut dyn std::io::Write,
-        _now: &mut DeferredNow,
-        record: &Record,
-    ) -> std::io::Result<()> {
-        write!(w, "{}", record.args())
-    }
-
-    fn create_note<P: AsRef<Path>, Q: AsRef<Path>>(
-        debuginfo_file: P,
-        output_file: Q,
-    ) -> Result<()> {
-        let debuginfo_file = debuginfo_file.as_ref();
-        let mmap = fs::mmap(debuginfo_file)
-            .with_context(|| format!("Failed to mmap file {}", debuginfo_file.display()))?;
+    fn create_note(debuginfo: &Path, output: &Path) -> Result<()> {
+        let mmap = fs::mmap(debuginfo)
+            .with_context(|| format!("Failed to mmap file {}", debuginfo.display()))?;
         let file = object::File::parse(mmap.as_ref())
-            .with_context(|| format!("Failed to parse {}", debuginfo_file.display()))?;
+            .with_context(|| format!("Failed to parse {}", debuginfo.display()))?;
 
         let mut new_object =
             write::Object::new(file.format(), file.architecture(), file.endianness());
@@ -428,7 +414,6 @@ impl UpatchBuild {
             if section.kind() != SectionKind::Note {
                 continue;
             }
-
             let section_name = section.name().context("Failed to get section name")?;
             let section_data = section.data().context("Failed to get section data")?;
             let section_id =
@@ -442,7 +427,7 @@ impl UpatchBuild {
         let contents = new_object
             .write()
             .context("Failed to serialize note object")?;
-        fs::write(output_file, contents)?;
+        fs::write(output, contents)?;
 
         Ok(())
     }
