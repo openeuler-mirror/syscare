@@ -32,15 +32,16 @@
 extern enum log_level g_loglevel;
 extern char *g_logprefix;
 
-enum exit_status {
-    EXIT_STATUS_SUCCESS = 0,
-    EXIT_STATUS_ERROR   = 1,
-};
-
 /* Since upatch-build is an one-shot program, we do not care about failure handler */
-#define ERROR(format, ...) \
-    error(EXIT_STATUS_ERROR, 0, "ERROR: %s: %s: %d: " format, \
-        g_logprefix, __FUNCTION__, __LINE__, ##__VA_ARGS__)
+#define ERROR(format, ...) do { \
+    if (g_logprefix) { \
+        error(EXIT_FAILURE, 0, "ERROR: %s: %s:%d: " format, \
+            g_logprefix, __func__, __LINE__, ##__VA_ARGS__); \
+    } else { \
+        error(EXIT_FAILURE, 0, "ERROR: %s:%d: " format, \
+            __func__, __LINE__, ##__VA_ARGS__); \
+    } \
+} while (0)
 
 /* it is time cost */
 #define log_debug(format, ...) log(DEBUG, format, ##__VA_ARGS__)
@@ -48,12 +49,10 @@ enum exit_status {
 #define log_warn(format, ...) log(WARN, format, ##__VA_ARGS__)
 #define log_error(format, ...) log(ERR, format, ##__VA_ARGS__)
 
-#define log(level, format, ...) \
-    do { \
-        if (g_loglevel <= (level)) { \
-            printf(format, ##__VA_ARGS__); \
-        } \
-    } while (0)
+#define log(level, format, ...) do { \
+    if (g_loglevel > (level)) { break; } \
+    fprintf((level <= NORMAL) ? stdout : stderr, format, ##__VA_ARGS__); \
+} while (0)
 
 #define REQUIRE(COND, message) \
     do { \
