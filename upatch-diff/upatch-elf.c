@@ -331,12 +331,12 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
 
     fd = open(name, O_RDONLY);
     if (fd == -1) {
-        ERROR("open %s failed with errno %d\n", name, errno);
+        ERROR("Failed to open '%s', %s", name, strerror(errno));
     }
 
     elf = elf_begin(fd, ELF_C_RDWR, NULL);
     if (!elf) {
-        ERROR("open elf %s failed with error %s\n", name, elf_errmsg(0));
+        ERROR("Failed to parse elf, %s", elf_errmsg(0));
     }
 
     memset(uelf, 0, sizeof(*uelf));
@@ -348,11 +348,10 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
     uelf->fd = fd;
 
     if (!gelf_getehdr(uelf->elf, &ehdr)) {
-        ERROR("get file %s elf header failed with error %s\n", name,
-            elf_errmsg(0));
+        ERROR("Failed to read elf header, %s", elf_errmsg(0));
     }
     if (ehdr.e_type != ET_REL) {
-        ERROR("only handles relocatable files\n");
+        ERROR("File is not an object");
     }
 
     /*
@@ -377,7 +376,7 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
             }
             break;
         default:
-            ERROR("unsupported architecture here");
+            ERROR("Unsupported architecture");
     }
 
     create_section_list(uelf);
