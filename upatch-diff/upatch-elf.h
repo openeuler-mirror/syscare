@@ -139,12 +139,7 @@ struct upatch_elf {
     int fd;
 };
 
-// init a upatch_elf from a path
-void upatch_elf_open(struct upatch_elf *, const char *);
-
-// Destory upatch_elf struct
-void upatch_elf_destroy(struct upatch_elf *);
-
-void upatch_elf_close(struct upatch_elf *);
+void uelf_open(struct upatch_elf *uelf, const char *name);
+void uelf_close(struct upatch_elf *uelf);
 
 #endif

@@ -56,9 +56,8 @@ struct running_elf {
     bool is_exec;
 };
 
-void relf_init(char *, struct running_elf *);
-
-int relf_close(struct running_elf *);
+void relf_open(struct running_elf *relf, const char *name);
+void relf_close(struct running_elf *relf);
 
 bool lookup_relf(struct running_elf *, struct symbol *, struct lookup_result *);
 

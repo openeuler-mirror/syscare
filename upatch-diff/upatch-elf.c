@@ -320,38 +320,34 @@ static void destroy_string_list(struct upatch_elf *uelf)
     INIT_LIST_HEAD(&uelf->strings);
 }
 
-void upatch_elf_open(struct upatch_elf *uelf, const char *name)
+void uelf_open(struct upatch_elf *uelf, const char *name)
 {
-    int fd = 1;
-
-    Elf *elf = NULL;
-
     GElf_Ehdr ehdr;
-    struct section *sec;
 
-    fd = open(name, O_RDONLY);
-    if (fd == -1) {
-        ERROR("Failed to open '%s', %s", name, strerror(errno));
+    if (uelf == NULL) {
+        return;
     }
-
-    elf = elf_begin(fd, ELF_C_RDWR, NULL);
-    if (!elf) {
-        ERROR("Failed to parse elf, %s", elf_errmsg(0));
-    }
-
-    memset(uelf, 0, sizeof(*uelf));
     INIT_LIST_HEAD(&uelf->sections);
     INIT_LIST_HEAD(&uelf->symbols);
     INIT_LIST_HEAD(&uelf->strings);
 
-    uelf->elf = elf;
+    int fd = open(name, O_RDONLY);
+    if (fd == -1) {
+        ERROR("Failed to open '%s', %s", name, strerror(errno));
+    }
     uelf->fd = fd;
 
+    Elf *elf = elf_begin(fd, ELF_C_READ, NULL);
+    if (!elf) {
+        ERROR("Failed to read file '%s', %s", name, elf_errmsg(0));
+    }
+    uelf->elf = elf;
+
     if (!gelf_getehdr(uelf->elf, &ehdr)) {
-        ERROR("Failed to read elf header, %s", elf_errmsg(0));
+        ERROR("Failed to read file '%s' elf header, %s", name, elf_errmsg(0));
     }
     if (ehdr.e_type != ET_REL) {
-        ERROR("File is not an object");
+        ERROR("File '%s' is not object file", name);
     }
 
     /*
@@ -382,6 +378,7 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
     create_section_list(uelf);
     create_symbol_list(uelf);
 
+    struct section *sec;
     list_for_each_entry(sec, &uelf->sections, list) {
         if (is_rela_section(sec)) {
             create_rela_list(uelf, sec);
@@ -389,16 +386,22 @@ void upatch_elf_open(struct upatch_elf *uelf, const char *name)
     }
 }
 
-void upatch_elf_destroy(struct upatch_elf *uelf)
+void uelf_close(struct upatch_elf *uelf)
 {
+    if (uelf == NULL) {
+        return;
+    }
     destroy_section_list(uelf);
     destroy_symbol_list(uelf);
     destroy_string_list(uelf);
-}
 
-void upatch_elf_close(struct upatch_elf *uelf)
-{
-    elf_end(uelf->elf);
-    close(uelf->fd);
-    memset(uelf, 0, sizeof(*uelf));
+    if (uelf->elf) {
+        elf_end(uelf->elf);
+    }
+    if (uelf->fd > 0) {
+        close(uelf->fd);
+    }
+    uelf->elf = NULL;
+    uelf->fd = -1;
+    uelf->symtab_shndx = NULL;
 }
