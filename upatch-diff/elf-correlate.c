@@ -42,8 +42,8 @@ static void correlate_symbol(struct symbol *sym_orig,
         sym_patched->name = sym_orig->name;
         sym_patched->name_source = DATA_SOURCE_REF;
     }
-    if (sym_orig->debug_sym && !sym_patched->debug_sym) {
-        sym_patched->debug_sym = sym_orig->debug_sym;
+    if (sym_orig->relf_sym && !sym_patched->relf_sym) {
+        sym_patched->relf_sym = sym_orig->relf_sym;
     }
 }
 

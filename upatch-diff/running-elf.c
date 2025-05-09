@@ -75,28 +75,29 @@ void relf_open(struct running_elf *relf, const char *name)
     if (!data) {
         ERROR("Failed to read file '%s' section data, %s", name, elf_errmsg(0));
     }
-    relf->obj_nr = (int)(shdr.sh_size / shdr.sh_entsize);
-    relf->obj_syms = calloc((size_t)relf->obj_nr, sizeof(struct debug_symbol));
-    if (!relf->obj_syms) {
+    relf->symbol_count = (int)(shdr.sh_size / shdr.sh_entsize);
+    relf->symbols = calloc((size_t)relf->symbol_count, sizeof(struct relf_symbol));
+    if (!relf->symbols) {
         ERROR("Failed to alloc memory, %s", strerror(errno));
     }
 
-    for (int i = 0; i < relf->obj_nr; i++) {
+    for (int i = 0; i < relf->symbol_count; i++) {
         if (!gelf_getsym(data, i, &sym)) {
             ERROR("Failed to read file '%s' symbol, index=%d, %s",
                 name, i, elf_errmsg(0));
         }
-        relf->obj_syms[i].name = elf_strptr(relf->elf,
+        relf->symbols[i].name = elf_strptr(relf->elf,
             shdr.sh_link, sym.st_name);
-        if (!relf->obj_syms[i].name) {
+        if (!relf->symbols[i].name) {
             ERROR("Failed to read file '%s' symbol name, index=%d, %s",
                 name, i, elf_errmsg(0));
         }
-        relf->obj_syms[i].type = GELF_ST_TYPE(sym.st_info);
-        relf->obj_syms[i].bind = GELF_ST_BIND(sym.st_info);
-        relf->obj_syms[i].shndx = sym.st_shndx;
-        relf->obj_syms[i].addr = sym.st_value;
-        relf->obj_syms[i].size = sym.st_size;
+        relf->symbols[i].index = i;
+        relf->symbols[i].type = GELF_ST_TYPE(sym.st_info);
+        relf->symbols[i].bind = GELF_ST_BIND(sym.st_info);
+        relf->symbols[i].shndx = sym.st_shndx;
+        relf->symbols[i].addr = sym.st_value;
+        relf->symbols[i].size = sym.st_size;
     }
 }
 
@@ -105,8 +106,8 @@ void relf_close(struct running_elf *relf)
     if (relf == NULL) {
         return;
     }
-    if (relf->obj_syms) {
-        free(relf->obj_syms);
+    if (relf->symbols) {
+        free(relf->symbols);
     }
     if (relf->elf) {
         elf_end(relf->elf);
@@ -121,13 +122,13 @@ void relf_close(struct running_elf *relf)
 bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
     struct lookup_result *result)
 {
-    struct debug_symbol *symbol = NULL;
+    struct relf_symbol *symbol = NULL;
 
     log_debug("looking up symbol '%s'\n", lookup_sym->name);
     memset(result, 0, sizeof(*result));
 
-    for (int i = 0; i < relf->obj_nr; i++) {
-        symbol = &relf->obj_syms[i];
+    for (int i = 0; i < relf->symbol_count; i++) {
+        symbol = &relf->symbols[i];
 
         if (result->symbol != NULL && symbol->type == STT_FILE) {
             break;
