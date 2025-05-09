@@ -63,6 +63,9 @@ static bool is_dynamic_debug_symbol(struct symbol *sym)
         NULL,
     };
 
+    if (sym->sec == NULL) {
+        return false;
+    }
     if ((sym->type == STT_OBJECT) || (sym->type == STT_SECTION)) {
         const char **sec_name;
         for (sec_name = SEC_NAMES; *sec_name; sec_name++) {
