@@ -288,6 +288,11 @@ static inline bool is_local_func_sym(struct symbol *sym)
     return sym->bind == STB_LOCAL && sym->type == STT_FUNC;
 }
 
+static inline bool is_subfunction_sym(struct symbol *sym)
+{
+    return sym->parent != NULL;
+}
+
 static inline bool is_local_sym(struct symbol *sym)
 {
     return sym->bind == STB_LOCAL;

@@ -438,6 +438,9 @@ static void match_file_local_symbols(
             ((sym->type != STT_FUNC) && (sym->type != STT_OBJECT))) {
             continue;
         }
+        if (is_subfunction_sym(sym)) {
+            continue;
+        }
         if (has_function_prefix(sym->name)) {
             continue;
         }
