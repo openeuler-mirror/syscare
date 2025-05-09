@@ -34,13 +34,8 @@
 
 struct symbol;
 
-struct lookup_result {
-    struct debug_symbol *symbol;
-    unsigned long sympos;
-    bool global;
-};
-
-struct debug_symbol {
+struct relf_symbol {
+    int index;
     char *name;
     unsigned char type, bind;
     unsigned int shndx;
@@ -49,11 +44,17 @@ struct debug_symbol {
 };
 
 struct running_elf {
-    int obj_nr;
-    struct debug_symbol *obj_syms;
     int fd;
     Elf *elf;
+    struct relf_symbol *symbols;
+    int symbol_count;
     bool is_exec;
+};
+
+struct lookup_result {
+    struct relf_symbol *symbol;
+    unsigned long sympos;
+    bool global;
 };
 
 void relf_open(struct running_elf *relf, const char *name);
