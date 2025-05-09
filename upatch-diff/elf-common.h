@@ -45,7 +45,7 @@
         } \
         INIT_LIST_HEAD(&(_new)->list); \
         if (_list) { \
-            list_add(&(_new)->list, (_list)); \
+            list_add_tail(&(_new)->list, (_list)); \
         } \
     } while (0)
 
