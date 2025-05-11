@@ -97,7 +97,7 @@ fn test_looger(){
     let log_dir=PathBuf::from("/var/log/kylin-warm");
     Logger::initialize(log_dir, LevelFilter::Trace,LevelFilter::Info);
     info!("test for kylin-warm-build logger!!!!!!");
-    let mut out_put=fs::read_to_string("/var/log/kylin-warm/build.log").unwr    ap();
+    let mut out_put=fs::read_to_string("/var/log/kylin-warm/build.log").unwrap();
     let mut result=String::new();
     if let Some(line) = out_put.lines().next() {
         result=line.to_string().to_owned();
