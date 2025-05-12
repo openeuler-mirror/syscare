@@ -27,8 +27,7 @@
 
 #include "upatch-elf.h"
 
-void upatch_print_changes(struct upatch_elf *);
-
-void upatch_dump_kelf(struct upatch_elf *);
+void upatch_print_correlation(struct upatch_elf *uelf);
+void upatch_print_changes(struct upatch_elf *uelf);
 
 #endif /* __UPATCH_ELF_DEBUG_H_ */

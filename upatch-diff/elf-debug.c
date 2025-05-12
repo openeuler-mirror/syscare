@@ -31,17 +31,58 @@
 #include "elf-debug.h"
 #include "upatch-elf.h"
 
+void upatch_print_correlation(struct upatch_elf *uelf)
+{
+    if (uelf == NULL) {
+        return;
+    }
+
+    log_debug("\n------------------------------\n");
+    log_debug("Section\n");
+    log_debug("------------------------------\n");
+    struct section *sec;
+    list_for_each_entry(sec, &uelf->sections, list) {
+        if (sec->twin != NULL) {
+            log_debug("index: %04d, name: '%s' -> index: %04d, name: '%s'\n",
+                sec->index, sec->name, sec->twin->index, sec->twin->name);
+        } else {
+            log_debug("index: %04d, name: '%s' -> None\n",
+                sec->index, sec->name);
+        }
+    }
+    log_debug("------------------------------\n");
+    log_debug("\n");
+    log_debug("------------------------------\n");
+    log_debug("Symbol\n");
+    log_debug("------------------------------\n");
+    struct symbol *sym;
+    list_for_each_entry(sym, &uelf->symbols, list) {
+        if (sym->twin != NULL) {
+            log_debug("index: %04d, name: '%s' -> index: %04d, name: '%s'\n",
+                sym->index, sym->name, sym->twin->index, sym->twin->name);
+        } else {
+            log_debug("index: %04d, name: '%s' -> None\n",
+                sym->index, sym->name);
+        }
+    }
+    log_debug("------------------------------\n");
+}
+
 void upatch_print_changes(struct upatch_elf *uelf)
 {
-    struct symbol *sym = NULL;
-    struct section *sec = NULL;
+    struct symbol *sym;
+    struct section *sec;
 
-    log_normal("------------------------------\n");
+    if (uelf == NULL) {
+        return;
+    }
+
+    log_normal("\n------------------------------\n");
     log_normal("New symbol\n");
     log_normal("------------------------------\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (sym->status == NEW) {
-            log_normal("idx: %04u, name: '%s'\n", sym->index, sym->name);
+            log_normal("index: %04d, name: '%s'\n", sym->index, sym->name);
         }
     }
     log_normal("------------------------------\n");
@@ -51,7 +92,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("------------------------------\n");
     list_for_each_entry(sec, &uelf->sections, list) {
         if (sec->status == NEW) {
-            log_normal("idx: %04u, name: '%s'\n", sec->index, sec->name);
+            log_normal("index: %04d, name: '%s'\n", sec->index, sec->name);
         }
     }
     log_normal("------------------------------\n");
@@ -61,7 +102,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("------------------------------\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (sym->status == CHANGED) {
-            log_normal("idx: %04u, name: '%s'\n", sym->index, sym->name);
+            log_normal("index: %04d, name: '%s'\n", sym->index, sym->name);
         }
     }
     log_normal("------------------------------\n");
@@ -71,7 +112,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("------------------------------\n");
     list_for_each_entry(sec, &uelf->sections, list) {
         if (sec->status == CHANGED) {
-            log_normal("idx: %04u, name: '%s'\n", sec->index, sec->name);
+            log_normal("index: %04d, name: '%s'\n", sec->index, sec->name);
         }
     }
     log_normal("------------------------------\n");
@@ -81,7 +122,7 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("------------------------------\n");
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (sym->include) {
-            log_normal("idx: %04u, name: '%s', status: %s\n",
+            log_normal("index: %04d, name: '%s', status: %s\n",
                 sym->index, sym->name, status_str(sym->status));
         }
     }
@@ -92,70 +133,9 @@ void upatch_print_changes(struct upatch_elf *uelf)
     log_normal("------------------------------\n");
     list_for_each_entry(sec, &uelf->sections, list) {
         if (sec->include) {
-            log_normal("idx: %04u, name: '%s', status: %s\n",
+            log_normal("index: %04d, name: '%s', status: %s\n",
                 sec->index, sec->name, status_str(sec->status));
         }
     }
     log_normal("------------------------------\n");
-}
-
-void upatch_dump_kelf(struct upatch_elf *uelf)
-{
-    struct section *sec;
-    struct symbol *sym;
-    struct rela *rela;
-
-    log_debug("\n=== Sections ===\n");
-    list_for_each_entry(sec, &uelf->sections, list) {
-        log_debug("%02d %s (%s)",
-            sec->index, sec->name, status_str(sec->status));
-        if (is_rela_section(sec)) {
-            if (sec->ignored) {
-                continue;
-            }
-            log_debug(", base-> %s\n", sec->base->name);
-            log_debug("rela section expansion\n");
-            list_for_each_entry(rela, &sec->relas, list) {
-                log_debug("sym %d, offset %ld, type %d, %s %s %ld\n",
-                    rela->sym->index, rela->offset,
-                    rela->type, rela->sym->name,
-                    (rela->addend < 0) ? "-" : "+",
-                    labs(rela->addend));
-            }
-        } else {
-            if (sec->sym) {
-                log_debug(", sym-> %s", sec->sym->name);
-            }
-            if (sec->secsym) {
-                log_debug(", secsym-> %s", sec->secsym->name);
-            }
-            if (sec->rela) {
-                log_debug(", rela-> %s", sec->rela->name);
-            }
-        }
-        log_debug("\n");
-    }
-
-    log_debug("\n=== Symbols ===\n");
-    list_for_each_entry(sym, &uelf->symbols, list) {
-        log_debug("sym %02d, type %d, bind %d, ndx %02d, name %s (%s)",
-            sym->index, sym->type, sym->bind, sym->sym.st_shndx,
-            sym->name, status_str(sym->status));
-        if (sym->sec && (sym->type == STT_FUNC || sym->type == STT_OBJECT)) {
-            log_debug(" -> %s", sym->sec->name);
-        }
-        log_debug("\n");
-    }
-}
-
-/* debuginfo releated */
-static inline bool skip_bytes(unsigned char **iter, unsigned char *end,
-    unsigned int len)
-{
-    if ((unsigned int)(end - *iter) < len) {
-        *iter = end;
-        return false;
-    }
-    *iter += len;
-    return true;
 }
