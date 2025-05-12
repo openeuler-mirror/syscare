@@ -44,7 +44,9 @@ static void compare_correlated_symbol(struct symbol *sym, struct symbol *twin)
     /*
      * For local symbols, we handle them based on their matching sections.
      */
-    if ((sym->sym.st_shndx == SHN_UNDEF) || (sym->sym.st_shndx == SHN_ABS)) {
+    if ((sym->sym.st_shndx == SHN_UNDEF) ||
+        (sym->sym.st_shndx == SHN_ABS) ||
+        (sym->sym.st_shndx == SHN_COMMON)) {
         sym->status = SAME;
         return;
     }
