@@ -138,7 +138,7 @@ void upatch_create_strings_elements(struct upatch_elf *uelf)
 
 /* create upatch func info section */
 void upatch_create_patches_sections(struct upatch_elf *uelf,
-    struct running_elf *relf)
+    struct running_elf *relf, unsigned long text_offset)
 {
     struct symbol *sym;
     struct symbol *strsym;
@@ -190,7 +190,11 @@ void upatch_create_patches_sections(struct upatch_elf *uelf,
             sym->name, symbol.symbol->name, symbol.sympos, symbol.symbol->size);
 
         /* ATTENTION: kpatch convert global symbols to local symbols here. */
-        funcs[index].old_addr = symbol.symbol->addr;
+        if (symbol.symbol->addr < text_offset) {
+            ERROR("Text section offset 0x%lx overflow, sym_addr=0x%lx",
+                text_offset, symbol.symbol->addr);
+        }
+        funcs[index].old_addr = symbol.symbol->addr - text_offset;
         funcs[index].old_size = symbol.symbol->size;
         funcs[index].new_size = sym->sym.st_size;
         funcs[index].sympos = symbol.sympos;

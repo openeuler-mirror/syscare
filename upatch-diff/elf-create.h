@@ -29,7 +29,8 @@
 
 void upatch_create_strings_elements(struct upatch_elf *);
 
-void upatch_create_patches_sections(struct upatch_elf *, struct running_elf *);
+void upatch_create_patches_sections(struct upatch_elf *, struct running_elf *,
+    unsigned long);
 
 static inline void create_kpatch_arch_section(void) {}
 
