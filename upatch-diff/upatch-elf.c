@@ -56,7 +56,6 @@ static void create_section_list(struct upatch_elf *uelf)
         ERROR("elf_getshdrstrndx with error %s", elf_errmsg(0));
     }
 
-    log_debug("=== section list (%zu) ===\n", sections_nr);
     while (sections_nr--) {
         ALLOC_LINK(sec, &uelf->sections);
 
@@ -87,9 +86,6 @@ static void create_section_list(struct upatch_elf *uelf)
         if (sec->sh.sh_type == SHT_SYMTAB_SHNDX) {
             uelf->symtab_shndx = sec->data; /* correct ? */
         }
-
-        log_debug("ndx %02d, data %p, size %zu, name %s\n",
-            sec->index, sec->data->d_buf, sec->data->d_size, sec->name);
     }
 
     if (elf_nextscn(uelf->elf, scn)) {
@@ -114,7 +110,6 @@ static void create_symbol_list(struct upatch_elf *uelf)
 
     symbols_nr = (unsigned int)(symtab->sh.sh_size / symtab->sh.sh_entsize);
 
-    log_debug("\n=== symbol list (%d entries) ===\n", symbols_nr);
     while (symbols_nr--) {
         ALLOC_LINK(sym, &uelf->symbols);
         INIT_LIST_HEAD(&sym->children);
@@ -157,12 +152,6 @@ static void create_symbol_list(struct upatch_elf *uelf)
                 sym->name = sym->sec->name;
             }
         }
-        log_debug("sym %02d, type %d, bind %d, ndx %02d, name %s",
-            sym->index, sym->type, sym->bind, sym->sym.st_shndx, sym->name);
-        if (sym->sec) {
-            log_debug(" -> %s", sym->sec->name);
-        }
-        log_debug("\n");
     }
 }
 
@@ -173,7 +162,6 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
 
     unsigned int symndx;
     int index = 0;
-    int skip = 0;
 
     INIT_LIST_HEAD(&relasec->relas);
 
@@ -182,22 +170,8 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
     if (!relasec->base) {
         ERROR("no base section found for relocation section %s", relasec->name);
     }
-
     relasec->base->rela = relasec;
     rela_nr = relasec->sh.sh_size / relasec->sh.sh_entsize;
-
-    log_debug("\n=== rela list for %s (%ld entries) ===\n",
-        relasec->base->name, rela_nr);
-
-    if (is_debug_section(relasec)) {
-        log_debug("skipping rela listing for .debug_* section\n");
-        skip = 1;
-    }
-
-    if (is_note_section(relasec)) {
-        log_debug("skipping rela listing for .note_* section\n");
-        skip = 1;
-    }
 
     while (rela_nr--) {
         ALLOC_LINK(rela, &relasec->relas);
@@ -226,19 +200,6 @@ static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
                     rela->sym->name, rela->addend);
             }
         }
-
-        if (skip) {
-            continue;
-        }
-
-        log_debug("offset %ld, type %d, %s %s %ld", rela->offset,
-            rela->type, rela->sym->name,
-            (rela->addend < 0) ? "-" : "+", labs(rela->addend));
-        if (rela->string)  {
-            // rela->string is not utf8
-            log_debug(" string = %s", rela->string);
-        }
-        log_debug("\n");
     }
 }
 

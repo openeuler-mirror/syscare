@@ -43,8 +43,6 @@ void upatch_reindex_elements(struct upatch_elf *);
 
 void upatch_rebuild_relocations(struct upatch_elf *);
 
-void upatch_check_relocations(void);
-
 void upatch_create_shstrtab(struct upatch_elf *);
 
 void upatch_create_strtab(struct upatch_elf *);
