@@ -71,28 +71,42 @@ struct arguments {
     char *patched_obj;
     char *running_elf;
     char *output_obj;
+    unsigned long text_offset;
     bool debug;
 };
 
 static const struct argp_option ARGP_OPTION[] = {
-    {"source",  's', "<file>", 0, "Source object",       0},
-    {"patched", 'p', "<file>", 0, "Patched object",      1},
-    {"running", 'r', "<file>", 0, "Running binary file", 2},
-    {"output",  'o', "<file>", 0, "Output object",       3},
-    {"debug",   'd', NULL,     0, "Show debug output",   4},
+    {"source",      's', "<file>",   0, "Source object",       0},
+    {"patched",     'p', "<file>",   0, "Patched object",      1},
+    {"running",     'r', "<file>",   0, "Running binary file", 2},
+    {"output",      'o', "<file>",   0, "Output object",       3},
+    {"text-offset", 't', "<offset>", 0, "Text section offset", 4},
+    {"debug",       'd', NULL,       0, "Show debug output",   5},
     {NULL}
 };
 static const char ARGP_DOC[] = "Generate a patch object based on source object";
 const char *argp_program_version = PROG_VERSION;
+
+static void parse_text_offset(struct argp_state *state, const char *arg)
+{
+    errno = 0;
+    char *endptr = NULL;
+
+    unsigned long offset = strtoul(arg, &endptr, 0);
+    if ((errno != 0) || (*endptr != '\0') ||
+        ((errno == ERANGE) && (offset == ULONG_MAX))) {
+        argp_error(state, "ERROR: Invalid text section offset '%s'", arg);
+    }
+
+    struct arguments *arguments = state->input;
+    arguments->text_offset = offset;
+}
 
 static error_t parse_opt(int key, char *arg, struct argp_state *state)
 {
     struct arguments *arguments = state->input;
 
     switch (key) {
-        case 'd':
-            arguments->debug = true;
-            break;
         case 's':
             arguments->source_obj = arg;
             break;
@@ -104,6 +118,12 @@ static error_t parse_opt(int key, char *arg, struct argp_state *state)
             break;
         case 'o':
             arguments->output_obj = arg;
+            break;
+        case 't':
+            parse_text_offset(state, arg);
+            break;
+        case 'd':
+            arguments->debug = true;
             break;
         default:
             return ARGP_ERR_UNKNOWN;
@@ -129,6 +149,13 @@ static bool check_args(struct arguments *arguments)
         log_error("The argument '--output <file>' requires a value\n");
         return false;
     }
+    if (arguments->text_offset > UINT32_MAX) {
+        ERROR("Text section offset 0x%lx overflow", arguments->text_offset);
+    }
+    if ((arguments->text_offset & 0xFFF) != 0) {
+        ERROR("Text section offset 0x%lx is not 4K-aligned",
+            arguments->text_offset);
+    }
     return true;
 }
 
@@ -141,6 +168,7 @@ static void show_program_info(struct arguments *arguments)
     log_debug("patched object: %s\n", arguments->patched_obj);
     log_debug("running binary: %s\n", arguments->running_elf);
     log_debug("output object:  %s\n", arguments->output_obj);
+    log_debug("text offset:    0x%lx\n", arguments->text_offset);
     log_debug("------------------------------\n\n");
 }
 
@@ -1059,7 +1087,7 @@ int main(int argc, char **argv)
 
     upatch_create_strings_elements(&uelf_out);
 
-    upatch_create_patches_sections(&uelf_out, &relf);
+    upatch_create_patches_sections(&uelf_out, &relf, args.text_offset);
 
     create_kpatch_arch_section();
 
