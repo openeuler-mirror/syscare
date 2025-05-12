@@ -194,6 +194,23 @@ impl UpatchBuild {
             .exit_ok()
     }
 
+    fn parse_text_offset(&self, binary: &Path) -> Result<u64> {
+        const TEXT_SECTION_NAME: &str = ".text";
+
+        let mmap = fs::mmap(binary)?;
+        let file = object::File::parse(mmap.as_ref())?;
+        let text_offset = file
+            .section_by_name(TEXT_SECTION_NAME)
+            .map(|section| {
+                let address = section.address();
+                let offset = section.file_range().map(|(start, _)| start).unwrap_or(0);
+                address - offset
+            })
+            .unwrap_or(0);
+
+        Ok(text_offset)
+    }
+
     fn build_patch(&self, patch_name: &OsStr, binary: &Path, debuginfo: &Path) -> Result<()> {
         const NOTES_OBJECT_NAME: &str = "notes.o";
 
@@ -222,6 +239,9 @@ impl UpatchBuild {
             .binary_objects(binary)
             .with_context(|| format!("Failed to find objects of {}", binary.display()))?;
 
+        let text_offset = self
+            .parse_text_offset(binary)
+            .with_context(|| format!("Failed to parse {} text section offset", binary.display()))?;
         for (patched_object, original_object) in binary_objects {
             debug!(
                 "* {}",
@@ -230,13 +250,19 @@ impl UpatchBuild {
                     .unwrap_or(patched_object.as_os_str())
                     .to_string_lossy()
             );
-            Self::create_diff_objs(original_object, patched_object, &debuginfo_file, &temp_dir)
-                .with_context(|| {
-                    format!(
-                        "Failed to create diff objects for {}",
-                        patch_name.to_string_lossy()
-                    )
-                })?;
+            Self::create_diff_objs(
+                original_object,
+                patched_object,
+                &debuginfo_file,
+                text_offset,
+                &temp_dir,
+            )
+            .with_context(|| {
+                format!(
+                    "Failed to create diff objects for {}",
+                    patch_name.to_string_lossy()
+                )
+            })?;
         }
 
         debug!("- Collecting changes");
@@ -436,6 +462,7 @@ impl UpatchBuild {
         original_object: &Path,
         patched_object: &Path,
         debuginfo: &Path,
+        text_offset: u64,
         output_dir: &Path,
     ) -> Result<()> {
         let ouput_name = original_object.file_name().with_context(|| {
@@ -453,9 +480,11 @@ impl UpatchBuild {
             .arg("-p")
             .arg(patched_object)
             .arg("-r")
-            .arg(debuginfo)
-            .arg("-o")
-            .arg(output_file);
+            .arg(debuginfo);
+        if text_offset > 0 {
+            command.arg("-t").arg(text_offset.to_string());
+        }
+        command.arg("-o").arg(output_file);
 
         command.stdout(Level::Trace).run_with_output()?.exit_ok()
     }
