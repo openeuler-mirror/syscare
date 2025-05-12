@@ -30,9 +30,6 @@
 static void correlate_symbol(struct symbol *sym_orig,
     struct symbol *sym_patched)
 {
-    log_debug("correlate symbol %s <-> %s\n",
-        sym_orig->name, sym_patched->name);
-
     sym_orig->twin = sym_patched;
     sym_patched->twin = sym_orig;
     sym_orig->status = sym_patched->status = SAME;
@@ -115,9 +112,6 @@ void upatch_correlate_symbols(struct upatch_elf *uelf_source,
 static void correlate_section_impl(struct section *sec_orig,
     struct section *sec_patched)
 {
-    log_debug("correlate section %s <-> %s\n",
-        sec_orig->name, sec_patched->name);
-
     sec_orig->twin = sec_patched;
     sec_patched->twin = sec_orig;
     /* set initial status, might change */
@@ -390,15 +384,12 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source,
             continue;
         }
 
-        log_debug("find normal symbol %s\n", sym->name);
         if (sym->twin) {
             uncorrelate_symbol(sym);
         }
 
         bundled = (sym == sym->sec->sym) ? 1 : 0;
         if (bundled && sym->sec->twin) {
-            log_debug("find bundled static symbol %s\n", sym->name);
-
             uncorrelate_section(sym->sec);
             if (sym->sec->secsym) {
                 uncorrelate_symbol(sym->sec->secsym);

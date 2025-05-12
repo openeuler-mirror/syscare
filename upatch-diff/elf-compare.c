@@ -86,7 +86,6 @@ void upatch_compare_symbols(struct upatch_elf *uelf)
         } else {
             compare_correlated_symbol(sym, sym->twin);
         }
-        log_debug("Symbol '%s' is %s\n", sym->name, status_str(sym->status));
     }
 }
 
@@ -163,31 +162,26 @@ static int compare_correlated_section(struct section *sec, struct section *twin)
 
     if (is_note_section(sec)) {
         sec->status = SAME;
-        goto out;
+        return 0;
     }
     /* As above but for aarch64 */
     if (!strcmp(sec->name, ".rela__patchable_function_entries") ||
         !strcmp(sec->name, "__patchable_function_entries")) {
         sec->status = SAME;
-        goto out;
+        return 0;
     }
     /* compare file size and data size(memory size) */
     if (sec->sh.sh_size != twin->sh.sh_size ||
         sec->data->d_size != twin->data->d_size ||
         (sec->rela && !twin->rela) || (!sec->rela && twin->rela)) {
         sec->status = CHANGED;
-        goto out;
+        return 0;
     }
 
     if (is_rela_section(sec)) {
         compare_correlated_rela_section(sec, twin);
     } else {
         compare_correlated_nonrela_section(sec, twin);
-    }
-
-out:
-    if (sec->status == CHANGED) {
-        log_debug("section %s has changed\n", sec->name);
     }
 
     return 0;

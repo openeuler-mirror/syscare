@@ -384,25 +384,6 @@ void upatch_rebuild_relocations(struct upatch_elf *uelf)
     }
 }
 
-void upatch_check_relocations(void)
-{
-    log_debug("upatch_check_relocations does not work now.\n");
-    return;
-}
-
-static void print_strtab(char *buf, size_t size)
-{
-    size_t i;
-
-    for (i = 0; i < size; i++) {
-        if (buf[i] == 0) {
-            log_debug("\\0");
-        } else {
-            log_debug("%c", buf[i]);
-        }
-    }
-}
-
 void upatch_create_shstrtab(struct upatch_elf *uelf)
 {
     struct section *shstrtab;
@@ -451,17 +432,6 @@ void upatch_create_shstrtab(struct upatch_elf *uelf)
     shstrtab->data->d_buf = buf;
     shstrtab->data->d_size = size;
     shstrtab->dbuf_source = DATA_SOURCE_ALLOC;
-
-    log_debug("shstrtab: ");
-    print_strtab(buf, size);
-    log_debug("\n");
-
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (sec->ignored) {
-            continue;
-        }
-        log_debug("%s @ shstrtab offset %d\n", sec->name, sec->sh.sh_name);
-    }
 }
 
 void upatch_create_strtab(struct upatch_elf *uelf)
@@ -507,14 +477,6 @@ void upatch_create_strtab(struct upatch_elf *uelf)
     strtab->data->d_buf = buf;
     strtab->data->d_size = size;
     strtab->dbuf_source = DATA_SOURCE_ALLOC;
-
-    log_debug("strtab: ");
-    print_strtab(buf, size);
-    log_debug("\n");
-
-    list_for_each_entry(sym, &uelf->symbols, list) {
-        log_debug("%s @ strtab offset %d\n", sym->name, sym->sym.st_name);
-    }
 }
 
 void upatch_create_symtab(struct upatch_elf *uelf)

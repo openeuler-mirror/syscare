@@ -522,8 +522,8 @@ static void mark_grouped_sections(struct upatch_elf *uelf)
                 ERROR("Group section not found");
             }
             sec->grouped = true;
-            log_debug("Marking section '%s' (%d) as grouped\n",
-                sec->name, sec->index);
+            log_debug("Marking section grouped, index: %d, name: '%s'\n",
+                sec->index, sec->name);
             data++;
         }
     }
@@ -555,17 +555,12 @@ static void replace_section_syms(struct upatch_elf *uelf)
                 rela->sym->type != STT_SECTION) {
                 continue;
             }
-            log_debug("Found replace symbol for section '%s'\n",
-                rela->sym->name);
-
             /*
              * for section symbol, rela->sym->sec is the section itself.
              * rela->sym->sec->sym is the bundleable symbol which is
              * a function or object.
              */
             if (rela->sym->sec->sym) {
-                log_debug("Act: Replace it with '%s' <- '%s'\n",
-                    rela->sym->sec->sym->name, rela->sym->sec->name);
                 rela->sym = rela->sym->sec->sym;
                 if (rela->sym->sym.st_value != 0) {
                     ERROR("Symbol offset is not zero.");
@@ -602,14 +597,10 @@ static void replace_section_syms(struct upatch_elf *uelf)
                     if (is_mapping_symbol(uelf, sym)) {
                         continue;
                     }
-                    log_debug("Find relocation reference for empty symbol.\n");
                 } else if (target_off < start || target_off >= end) {
                     continue;
                 }
 
-                log_debug("'%s': Replacing '%s+%ld' reference with '%s+%ld'\n",
-                    relasec->name, rela->sym->name, rela->addend,
-                    sym->name, rela->addend - start);
                 found = true;
                 rela->sym = sym;
                 rela->addend -= start;
@@ -681,8 +672,8 @@ static void mark_ignored_sections(struct upatch_elf *uelf)
                 sec->base->name : sec->name;
             if (strncmp(sec_name, ignored_name, name_len) == 0) {
                 sec->ignored = true;
-                log_debug("Marking section '%s' (%d) as ignored\n",
-                    sec->name, sec->index);
+                log_debug("Marking section ignored, index: %d, name: '%s'\n",
+                    sec->index, sec->name);
                 break;
             }
         }
@@ -735,8 +726,6 @@ static void include_symbol(struct symbol *sym)
      * might be needed: either permanently for a rela, or temporarily for
      * the later creation of a dynrela.
      */
-    log_debug("Include symbol '%s', status: %s\n",
-        sym->name, status_str(sym->status));
     sym->include = true;
     /*
      * For special static symbols, we need include it's section
@@ -770,8 +759,6 @@ static void include_section(struct section *sec)
         return;
     }
 
-    log_debug("Include section '%s', status: %s\n",
-        sec->name, status_str(sec->status));
     sec->include = true;
 
     if (is_rela_section(sec)) {
@@ -1047,13 +1034,13 @@ int main(int argc, char **argv)
 
     upatch_correlate_elf(&uelf_source, &uelf_patched);
     upatch_correlate_static_local_variables(&uelf_source, &uelf_patched);
+    upatch_print_correlation(&uelf_patched);
 
     upatch_compare_correlated_elements(&uelf_patched);
     mark_file_symbols(&uelf_source);
     match_local_symbols(&uelf_source, &relf);
 
     include_standard_elements(&uelf_patched);
-
     int change_count = include_changes(&uelf_patched);
     if (change_count == 0) {
         log_normal("No functional changes\n");
@@ -1062,10 +1049,7 @@ int main(int argc, char **argv)
         relf_close(&relf);
         return 0;
     }
-
     upatch_print_changes(&uelf_patched);
-
-    upatch_dump_kelf(&uelf_patched);
 
     verify_patchability(&uelf_patched);
 
@@ -1095,8 +1079,6 @@ int main(int argc, char **argv)
 
     upatch_rebuild_relocations(&uelf_out);
 
-    upatch_check_relocations();
-
     upatch_create_shstrtab(&uelf_out);
 
     upatch_create_strtab(&uelf_out);
@@ -1104,8 +1086,6 @@ int main(int argc, char **argv)
     upatch_partly_resolve(&uelf_out, &relf);
 
     upatch_create_symtab(&uelf_out);
-
-    upatch_dump_kelf(&uelf_out);
 
     upatch_write_output_elf(&uelf_out, uelf_patched.elf, args.output_obj, 0664);
     log_normal("Done\n");
