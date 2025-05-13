@@ -25,7 +25,8 @@
 #ifndef __UPATCH_CREATE_H_
 #define __UPATCH_CREATE_H_
 
-#include "upatch-elf.h"
+struct upatch_elf;
+struct running_elf;
 
 void upatch_create_strings_elements(struct upatch_elf *);
 

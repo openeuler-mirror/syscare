@@ -284,10 +284,10 @@ static void bundle_symbols(struct upatch_elf *uelf)
                 ERROR("Symbol '%s' at offset %lu of section '%s', expected 0.",
                     sym->name, sym->sym.st_value, sym->sec->name);
             }
-            sym->sec->sym = sym;
+            sym->sec->bundle_sym = sym;
         /* except handler is also a kind of bundle symbol */
         } else if (sym->type == STT_SECTION && is_except_section(sym->sec)) {
-            sym->sec->sym = sym;
+            sym->sec->bundle_sym = sym;
         }
     }
 }
@@ -353,24 +353,22 @@ static void mark_file_symbols(struct upatch_elf *uelf)
 static void mark_grouped_sections(struct upatch_elf *uelf)
 {
     struct section *groupsec;
-    struct section *sec;
-    unsigned int *data;
-    unsigned int *end;
-
     list_for_each_entry(groupsec, &uelf->sections, list) {
         if (groupsec->sh.sh_type != SHT_GROUP) {
             continue;
         }
-        data = groupsec->data->d_buf;
-        end = groupsec->data->d_buf + groupsec->data->d_size;
+
+        GElf_Word *data = groupsec->data->d_buf;
+        GElf_Word *end = groupsec->data->d_buf + groupsec->data->d_size;
         data++; /* skip first flag word (e.g. GRP_COMDAT) */
+
         while (data < end) {
-            sec = find_section_by_index(&uelf->sections, *data);
-            if (!sec) {
-                ERROR("Group section not found");
+            struct section *sec = find_section_by_index(&uelf->sections, (GElf_Section)*data);
+            if (sec == NULL) {
+                ERROR("Cannot find group section, index=%d", *data);
             }
             sec->grouped = true;
-            log_debug("Marking section grouped, index: %d, name: '%s'\n",
+            log_debug("Marking grouped section, index: %d, name: '%s'\n",
                 sec->index, sec->name);
             data++;
         }
@@ -408,8 +406,8 @@ static void replace_section_syms(struct upatch_elf *uelf)
              * rela->sym->sec->sym is the bundleable symbol which is
              * a function or object.
              */
-            if (rela->sym->sec->sym) {
-                rela->sym = rela->sym->sec->sym;
+            if (rela->sym->sec->bundle_sym) {
+                rela->sym = rela->sym->sec->bundle_sym;
                 if (rela->sym->sym.st_value != 0) {
                     ERROR("Symbol offset is not zero.");
                 }
@@ -519,7 +517,7 @@ static void mark_ignored_sections(struct upatch_elf *uelf)
                 sec->base->name : sec->name;
             if (strncmp(sec_name, ignored_name, name_len) == 0) {
                 sec->ignored = true;
-                log_debug("Marking section ignored, index: %d, name: '%s'\n",
+                log_debug("Marking ignored section, index: %d, name: '%s'\n",
                     sec->index, sec->name);
                 break;
             }
@@ -554,8 +552,8 @@ static void include_special_local_section(struct upatch_elf *uelf) {
                 sym->sec->data->d_buf = NULL;
                 sym->sec->data->d_size = 0;
                 // arm error: (.debug_info+0x...) undefined reference to `no symbol'
-                if (sym->sec->secsym) {
-                    sym->sec->secsym->include = true;
+                if (sym->sec->sym) {
+                    sym->sec->sym->include = true;
                 }
             }
         }
@@ -609,7 +607,7 @@ static void include_section(struct section *sec)
         }
         return;
     } else {
-        include_symbol(sec->secsym);
+        include_symbol(sec->sym);
         include_section(sec->rela);
     }
 }
@@ -775,8 +773,8 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched,
         sec->index = 0;
 
         if (!is_rela_section(sec)) {
-            if (sec->secsym && !sec->secsym->include) {
-                sec->secsym = NULL; // break link to non-included section symbol
+            if (sec->sym && !sec->sym->include) {
+                sec->sym = NULL; // break link to non-included section symbol
             }
         }
     }
@@ -790,7 +788,7 @@ static void migrate_included_elements(struct upatch_elf *uelf_patched,
         list_del(&sym->list);
         list_add_tail(&sym->list, &uelf_out->symbols);
         sym->index = 0;
-        sym->strip = SYMBOL_DEFAULT;
+        sym->strip = false;
 
         if (sym->sec && !sym->sec->include) {
             sym->sec = NULL; // break link to non-included section

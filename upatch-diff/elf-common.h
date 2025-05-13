@@ -155,7 +155,7 @@ static inline bool is_symbol_ignored(struct symbol *sym)
     return (sym->sec != NULL) && sym->sec->ignored;
 }
 
-static inline struct symbol *find_symbol_by_index(struct list_head *list, unsigned int index)
+static inline struct symbol *find_symbol_by_index(struct list_head *list, GElf_Word index)
 {
     struct symbol *sym;
 
@@ -181,7 +181,7 @@ static inline struct symbol *find_symbol_by_name(struct list_head *list, const c
     return NULL;
 }
 
-static inline struct section *find_section_by_index(struct list_head *list, unsigned int index)
+static inline struct section *find_section_by_index(struct list_head *list, GElf_Section index)
 {
     struct section *sec;
 
@@ -200,6 +200,19 @@ static inline struct section *find_section_by_name(struct list_head *list, const
 
     list_for_each_entry(sec, list, list) {
         if (!strcmp(sec->name, name)) {
+            return sec;
+        }
+    }
+
+    return NULL;
+}
+
+static inline struct section *find_section_by_type(struct list_head *list, GElf_Word type)
+{
+    struct section *sec;
+
+    list_for_each_entry(sec, list, list) {
+        if (sec->sh.sh_type == type) {
             return sec;
         }
     }
@@ -238,7 +251,7 @@ static inline char *section_function_name(struct section *sec)
     if (is_rela_section(sec)) {
         sec = sec->base;
     }
-    return sec->sym ? sec->sym->name : sec->name;
+    return sec->bundle_sym ? sec->bundle_sym->name : sec->name;
 }
 
 static inline char *status_str(enum status status)

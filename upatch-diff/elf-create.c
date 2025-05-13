@@ -34,6 +34,8 @@
 #include "elf-create.h"
 #include "upatch-patch.h"
 #include "upatch-dynrela.h"
+#include "upatch-elf.h"
+#include "running-elf.h"
 
 /* create text and relocation sections */
 static struct section *create_section_pair(struct upatch_elf *uelf, char *name,
@@ -148,7 +150,6 @@ void upatch_create_patches_sections(struct upatch_elf *uelf,
 
     struct upatch_patch_func *funcs;
     struct rela *rela;
-    struct lookup_result symbol;
 
     unsigned int nr = 0;
     unsigned int index = 0;
@@ -180,24 +181,26 @@ void upatch_create_patches_sections(struct upatch_elf *uelf,
         if (sym->type != STT_FUNC || sym->status != CHANGED || sym->parent) {
             continue;
         }
-        if (!lookup_relf(relf, sym, &symbol)) {
+
+        struct relf_symbol *symbol = lookup_relf(relf, sym);
+        if (symbol == NULL) {
             ERROR("Cannot find symbol '%s' in %s", sym->name, g_relf_name);
         }
-        if (sym->bind == STB_LOCAL && symbol.global) {
+        if ((sym->bind == STB_LOCAL) && (symbol->bind != STB_LOCAL)) {
             ERROR("Cannot find local symbol '%s' in symbol table.", sym->name);
         }
-        log_debug("lookup for %s: symbol name %s sympos=%lu size=%lu.\n",
-            sym->name, symbol.symbol->name, symbol.sympos, symbol.symbol->size);
+        log_debug("lookup for %s: symbol name %s sympos=%u size=%lu.\n",
+            sym->name, symbol->name, symbol->index, symbol->size);
 
         /* ATTENTION: kpatch convert global symbols to local symbols here. */
-        if (symbol.symbol->addr < text_offset) {
+        if (symbol->addr < text_offset) {
             ERROR("Text section offset 0x%lx overflow, sym_addr=0x%lx",
-                text_offset, symbol.symbol->addr);
+                text_offset, symbol->addr);
         }
-        funcs[index].old_addr = symbol.symbol->addr - text_offset;
-        funcs[index].old_size = symbol.symbol->size;
+        funcs[index].old_addr = symbol->addr - text_offset;
+        funcs[index].old_size = symbol->size;
         funcs[index].new_size = sym->sym.st_size;
-        funcs[index].sympos = symbol.sympos;
+        funcs[index].sympos = symbol->index;
 
         log_debug("change func %s from 0x%lx.\n",
             sym->name, funcs[index].old_addr);
@@ -300,7 +303,7 @@ void upatch_strip_unneeded_syms(struct upatch_elf *uelf)
     struct symbol *sym, *sym_safe;
 
     list_for_each_entry_safe(sym, sym_safe, &uelf->symbols, list) {
-        if (sym->strip == SYMBOL_STRIP) {
+        if (sym->strip) {
             list_del(&sym->list);
             free(sym);
         }
@@ -311,7 +314,7 @@ void upatch_reindex_elements(struct upatch_elf *uelf)
 {
     struct section *sec;
     struct symbol *sym;
-    unsigned int index;
+    GElf_Section index;
 
     index = 1;
     list_for_each_entry(sec, &uelf->sections, list) {
@@ -324,7 +327,7 @@ void upatch_reindex_elements(struct upatch_elf *uelf)
         sym->index = index;
         index++;
         if (sym->sec) {
-            sym->sym.st_shndx = (unsigned short)sym->sec->index;
+            sym->sym.st_shndx = sym->sec->index;
         } else if (sym->sym.st_shndx != SHN_ABS) {
             sym->sym.st_shndx = SHN_UNDEF;
         }

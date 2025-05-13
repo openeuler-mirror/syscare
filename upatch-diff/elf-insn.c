@@ -25,6 +25,7 @@
 
 #include <string.h>
 
+#include "insn/asm/insn.h"
 #include "elf-common.h"
 #include "elf-insn.h"
 

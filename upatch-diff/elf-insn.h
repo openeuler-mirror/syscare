@@ -26,8 +26,11 @@
 #ifndef __UPATCH_INSN_H_
 #define __UPATCH_INSN_H_
 
-#include "asm/insn.h"
-#include "upatch-elf.h"
+#include <stdbool.h>
+
+struct section;
+struct rela;
+struct insn;
 
 #define ARM64_INSTR_LEN 4
 

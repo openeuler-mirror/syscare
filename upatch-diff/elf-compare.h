@@ -25,7 +25,7 @@
 #ifndef __UPATCH_ELF_COMPARE_H_
 #define __UPATCH_ELF_COMPARE_H_
 
-#include "upatch-elf.h"
+struct upatch_elf;
 
 void upatch_compare_symbols(struct upatch_elf *);
 

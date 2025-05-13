@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#include "upatch-elf.h"
 #include "running-elf.h"
 #include "log.h"
 
@@ -75,14 +76,14 @@ void relf_open(struct running_elf *relf, const char *name)
     if (!data) {
         ERROR("Failed to read file '%s' section data, %s", name, elf_errmsg(0));
     }
-    relf->symbol_count = (int)(shdr.sh_size / shdr.sh_entsize);
+    relf->symbol_count = (GElf_Word)(shdr.sh_size / shdr.sh_entsize);
     relf->symbols = calloc((size_t)relf->symbol_count, sizeof(struct relf_symbol));
     if (!relf->symbols) {
         ERROR("Failed to alloc memory, %s", strerror(errno));
     }
 
-    for (int i = 0; i < relf->symbol_count; i++) {
-        if (!gelf_getsym(data, i, &sym)) {
+    for (GElf_Word i = 0; i < relf->symbol_count; i++) {
+        if (!gelf_getsym(data, (int)i, &sym)) {
             ERROR("Failed to read file '%s' symbol, index=%d, %s",
                 name, i, elf_errmsg(0));
         }
@@ -119,37 +120,26 @@ void relf_close(struct running_elf *relf)
     relf->fd = -1;
 }
 
-bool lookup_relf(struct running_elf *relf, struct symbol *lookup_sym,
-    struct lookup_result *result)
+struct relf_symbol* lookup_relf(struct running_elf *relf, struct symbol *sym)
 {
-    struct relf_symbol *symbol = NULL;
+    struct relf_symbol *result = NULL;
 
-    log_debug("looking up symbol '%s'\n", lookup_sym->name);
-    memset(result, 0, sizeof(*result));
+    for (GElf_Word i = 0; i < relf->symbol_count; i++) {
+        struct relf_symbol *symbol = &relf->symbols[i];
 
-    for (int i = 0; i < relf->symbol_count; i++) {
-        symbol = &relf->symbols[i];
-
-        if (result->symbol != NULL && symbol->type == STT_FILE) {
+        if ((result != NULL) && (symbol->type == STT_FILE)) {
             break;
         }
-        if (strcmp(symbol->name, lookup_sym->name) != 0 ||
-            symbol->bind != lookup_sym->bind) {
+        if ((strcmp(symbol->name, sym->name) != 0) ||
+            (symbol->bind != sym->bind)) {
             continue;
         }
-
-        if ((result->symbol != NULL) &&
-            (result->symbol->bind == symbol->bind)) {
-            ERROR("Found duplicate symbol '%s' in %s",
-                lookup_sym->name, g_relf_name);
+        if ((result != NULL) && (result->bind == symbol->bind)) {
+            ERROR("Found duplicate symbol '%s' in %s", sym->name, g_relf_name);
         }
 
-        result->symbol = symbol;
-        result->sympos = (unsigned long)i;
-        result->global =
-            ((symbol->bind == STB_GLOBAL) || (symbol->bind == STB_WEAK));
-        log_debug("found symbol '%s'\n", lookup_sym->name);
+        result = symbol;
     }
 
-    return (result->symbol != NULL);
+    return result;
 }

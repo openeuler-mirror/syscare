@@ -25,7 +25,7 @@
 #ifndef __UPATCH_ELF_DEBUG_H_
 #define __UPATCH_ELF_DEBUG_H_
 
-#include "upatch-elf.h"
+struct upatch_elf;
 
 void upatch_print_correlation(struct upatch_elf *uelf);
 void upatch_print_changes(struct upatch_elf *uelf);
