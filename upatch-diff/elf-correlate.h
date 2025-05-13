@@ -25,7 +25,7 @@
 #ifndef __UPATCH_ELF_CORRELATE_H_
 #define __UPATCH_ELF_CORRELATE_H_
 
-#include "upatch-elf.h"
+struct upatch_elf;
 
 void upatch_correlate_sections(struct upatch_elf *, struct upatch_elf *);
 

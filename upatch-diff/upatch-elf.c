@@ -40,178 +40,142 @@
 
 static void create_section_list(struct upatch_elf *uelf)
 {
-    size_t shstrndx;
-    size_t sections_nr;
-
-    struct section *sec;
-    Elf_Scn *scn = NULL;
-
-    if (elf_getshdrnum(uelf->elf, &sections_nr)) {
-        ERROR("elf_getshdrnum with error %s", elf_errmsg(0));
+    size_t shstrndx = 0;
+    if (elf_getshdrstrndx(uelf->elf, &shstrndx) != 0) {
+        ERROR("Failed to get section header string index");
     }
 
-    sections_nr--;
+    Elf_Scn *scn = elf_nextscn(uelf->elf, NULL);
+    while (scn != NULL) {
+        GElf_Section index = (GElf_Section)elf_ndxscn(scn);
+        struct section *sec = NULL;
 
-    if (elf_getshdrstrndx(uelf->elf, &shstrndx)) {
-        ERROR("elf_getshdrstrndx with error %s", elf_errmsg(0));
-    }
-
-    while (sections_nr--) {
         ALLOC_LINK(sec, &uelf->sections);
+        if (gelf_getshdr(scn, &sec->sh) == NULL) {
+            ERROR("Failed to parse section, index=%d", index);
+        }
+
+        sec->index = (GElf_Section)index;
+        sec->name = elf_strptr(uelf->elf, shstrndx, sec->sh.sh_name);
+        if (sec->name == NULL) {
+            ERROR("Failed to get section name, index=%d", index);
+        }
+        sec->data = elf_getdata(scn, NULL);
+        if (sec->data == NULL) {
+            ERROR("Failed to get section '%s' data, index=%d",
+                sec->name, index);
+        }
+
+        sec->name_source = DATA_SOURCE_REF;
+        sec->data_source = DATA_SOURCE_REF;
+        sec->dbuf_source = DATA_SOURCE_REF;
+
+        INIT_LIST_HEAD(&sec->relas);
 
         scn = elf_nextscn(uelf->elf, scn);
-        if (!scn) {
-            ERROR("elf_nextscn with error %s", elf_errmsg(0));
-        }
-        if (!gelf_getshdr(scn, &sec->sh)) {
-            ERROR("gelf_getshdr with error %s", elf_errmsg(0));
-        }
-
-        sec->name = elf_strptr(uelf->elf, shstrndx, sec->sh.sh_name);
-        if (!sec->name) {
-            ERROR("elf_strptr with error %s", elf_errmsg(0));
-        }
-
-        sec->data = elf_getdata(scn, NULL);
-        if (!sec->data) {
-            ERROR("elf_getdata with error %s", elf_errmsg(0));
-        }
-
-        sec->name_source = DATA_SOURCE_ELF;
-        sec->data_source = DATA_SOURCE_ELF;
-        sec->dbuf_source = DATA_SOURCE_ELF;
-
-        sec->index = (unsigned int)elf_ndxscn(scn);
-        /* found extended section header */
-        if (sec->sh.sh_type == SHT_SYMTAB_SHNDX) {
-            uelf->symtab_shndx = sec->data; /* correct ? */
-        }
-    }
-
-    if (elf_nextscn(uelf->elf, scn)) {
-        ERROR("elf_nextscn with error %s", elf_errmsg(0));
     }
 }
 
 static void create_symbol_list(struct upatch_elf *uelf)
 {
-    struct section *symtab;
-    Elf32_Word shndx;
-
-    unsigned int symbols_nr;
-    unsigned int index = 0;
-    struct symbol *sym;
-
-    /* consider type first */
-    symtab = find_section_by_name(&uelf->sections, ".symtab");
-    if (!symtab) {
-        ERROR("can't find symbol table");
+    struct section *symtab = find_section_by_type(&uelf->sections, SHT_SYMTAB);
+    if (symtab == NULL) {
+        ERROR("Cannot find symbol table");
     }
-    symbols_nr = (unsigned int)(symtab->sh.sh_size / symtab->sh.sh_entsize);
 
-    while (symbols_nr--) {
+    GElf_Word count = (GElf_Word)(symtab->sh.sh_size / symtab->sh.sh_entsize);
+    for (GElf_Word i = 0; i < count; i++) {
+        struct symbol *sym = NULL;
+
         ALLOC_LINK(sym, &uelf->symbols);
-        INIT_LIST_HEAD(&sym->children);
-
-        sym->index = index;
-        if (!gelf_getsym(symtab->data, (int)index, &sym->sym)) {
-            ERROR("gelf_getsym with error %s", elf_errmsg(0));
+        if (gelf_getsym(symtab->data, (int)i, &sym->sym) == NULL) {
+            ERROR("Failed to parse symbol, index=%d", i);
         }
 
-        index++;
-
+        sym->index = i;
         sym->name = elf_strptr(uelf->elf, symtab->sh.sh_link, sym->sym.st_name);
-        if (!sym->name) {
-            ERROR("elf_strptr with error %s", elf_errmsg(0));
+        if (sym->name == NULL) {
+            ERROR("Failed to get symbol name, index=%d", i);
         }
-        sym->type = GELF_ST_TYPE(sym->sym.st_info);
+
+        sym->name_source = DATA_SOURCE_REF;
+
         sym->bind = GELF_ST_BIND(sym->sym.st_info);
-
-        shndx = sym->sym.st_shndx;
-        /* releated section located in extended header */
-        if (shndx == SHN_XINDEX &&
-            !gelf_getsymshndx(symtab->data, uelf->symtab_shndx,
-                (int)sym->index, &sym->sym, &shndx)) {
-            ERROR("gelf_getsymshndx with error %s", elf_errmsg(0));
-        }
-        if (sym->sym.st_shndx == SHN_XINDEX ||
-            (sym->sym.st_shndx > SHN_UNDEF &&
-                sym->sym.st_shndx < SHN_LORESERVE)) {
+        sym->type = GELF_ST_TYPE(sym->sym.st_info);
+        GElf_Section shndx = sym->sym.st_shndx;
+        if ((sym->sym.st_shndx > SHN_UNDEF) &&
+            (sym->sym.st_shndx < SHN_LORESERVE)) {
             sym->sec = find_section_by_index(&uelf->sections, shndx);
-            if (!sym->sec) {
-                ERROR("no releated section found for symbol %s\n", sym->name);
+            if (sym->sec == NULL) {
+                ERROR("Failed to find symbol '%s' section, index=%d, shndx=%d",
+                    sym->name, i, shndx);
             }
-
-            /* this symbol is releated with a section */
             if (sym->type == STT_SECTION) {
-                /* secsym must be the bundleable symbol */
-                sym->sec->secsym = sym;
+                /* sym must be the bundleable symbol */
+                sym->sec->sym = sym;
                 /* use section name as symbol name */
                 sym->name = sym->sec->name;
             }
         }
+
+        INIT_LIST_HEAD(&sym->children);
+        INIT_LIST_HEAD(&sym->subfunction_node);
     }
 }
 
-static void create_rela_list(struct upatch_elf *uelf, struct section *relasec)
+static void create_rela_list(struct upatch_elf *uelf, struct section *sec)
 {
-    struct rela *rela;
-    unsigned long rela_nr;
-
-    unsigned int symndx;
-    int index = 0;
-
-    INIT_LIST_HEAD(&relasec->relas);
-
     /* for relocation sections, sh_info is the index which these info apply */
-    relasec->base = find_section_by_index(&uelf->sections, relasec->sh.sh_info);
-    if (!relasec->base) {
-        ERROR("no base section found for relocation section %s", relasec->name);
+    sec->base = (struct section *)sec->info;
+    if (sec->base == NULL) {
+        ERROR("Cannot find section '%s' base section, index=%d",
+            sec->name, sec->index);
     }
-    relasec->base->rela = relasec;
-    rela_nr = relasec->sh.sh_size / relasec->sh.sh_entsize;
+    sec->base->rela = sec;
 
-    while (rela_nr--) {
-        ALLOC_LINK(rela, &relasec->relas);
+    GElf_Word count = (GElf_Word)(sec->sh.sh_size / sec->sh.sh_entsize);
+    for (GElf_Word i = 0; i < count; i++) {
+        struct rela *rela = NULL;
 
-        /* use index because we need to keep the order of rela */
-        if (!gelf_getrela(relasec->data, index, &rela->rela)) {
-            ERROR("gelf_getrela with error %s", elf_errmsg(0));
+        ALLOC_LINK(rela, &sec->relas);
+        if (gelf_getrela(sec->data, (int)i, &rela->rela) == NULL) {
+            ERROR("Failed to parse rela, index=%d", i);
         }
-        index++;
 
+        GElf_Word symndx = (GElf_Word)GELF_R_SYM(rela->rela.r_info);
+        rela->sym = find_symbol_by_index(&uelf->symbols, symndx);
+        if (rela->sym == NULL) {
+            ERROR("Cannot find rela symbol, index=%d, symndx=%d", i, symndx);
+        }
         rela->type = GELF_R_TYPE(rela->rela.r_info);
         rela->addend = rela->rela.r_addend;
-        rela->offset = (unsigned int)rela->rela.r_offset;
-        symndx = (unsigned int)GELF_R_SYM(rela->rela.r_info);
-        rela->sym = find_symbol_by_index(&uelf->symbols, symndx);
-        if (!rela->sym) {
-            ERROR("no rela entry symbol found\n");
-        }
+        rela->offset = rela->rela.r_offset;
 
-        if (rela->sym->sec && is_string_section(rela->sym->sec)) {
-            rela->string = rela->sym->sec->data->d_buf +
-                rela->sym->sym.st_value +
-                rela_target_offset(uelf, relasec, rela);
-            if (!rela->string) {
-                ERROR("could not lookup rela string for %s+%ld",
+        if (is_string_section(rela->sym->sec)) {
+            void *data = rela->sym->sec->data->d_buf;
+            GElf_Addr addr = rela->sym->sym.st_value;
+            long offset = rela_target_offset(uelf, sec, rela);
+
+            rela->string = data + addr + offset;
+            if (rela->string == NULL) {
+                ERROR("Cannot find rela string %s+%ld",
                     rela->sym->name, rela->addend);
             }
         }
     }
 }
 
-static void destroy_rela_list(struct section *relasec)
+static void destroy_rela_list(struct section *sec)
 {
     struct rela *rela = NULL;
-    struct rela *saferela = NULL;
+    struct rela *safe = NULL;
 
-    list_for_each_entry_safe(rela, saferela, &relasec->relas, list) {
+    list_for_each_entry_safe(rela, safe, &sec->relas, list) {
         list_del(&rela->list);
         free(rela);
     }
 
-    INIT_LIST_HEAD(&relasec->relas);
+    INIT_LIST_HEAD(&sec->relas);
 }
 
 static void destroy_section_list(struct upatch_elf *uelf)
@@ -281,6 +245,41 @@ static void destroy_string_list(struct upatch_elf *uelf)
     INIT_LIST_HEAD(&uelf->strings);
 }
 
+static void parse_section_metadata(struct upatch_elf *uelf)
+{
+    struct section *sec;
+    list_for_each_entry(sec, &uelf->sections, list) {
+        /* find sh_link */
+        if (sec->sh.sh_link != SHN_UNDEF) {
+            sec->link = find_section_by_index(&uelf->sections,
+                (GElf_Section)sec->sh.sh_link);
+            if (sec->link == NULL) {
+                ERROR("Cannot find '%s' link section, sh_link=%d",
+                    sec->name, sec->sh.sh_link);
+            }
+        }
+        /* find sh_info */
+        if ((sec->sh.sh_type == SHT_REL) || (sec->sh.sh_type == SHT_RELA)) {
+            sec->info = find_section_by_index(&uelf->sections,
+                (GElf_Section)sec->sh.sh_info);
+            if (sec->link == NULL) {
+                ERROR("Cannot find '%s' info section, sh_info=%d",
+                    sec->name, sec->sh.sh_link);
+            }
+        } else if (sec->sh.sh_type == SHT_GROUP) {
+            sec->info = find_symbol_by_index(&uelf->symbols, sec->sh.sh_info);
+            if (sec->link == NULL) {
+                ERROR("Cannot find '%s' info symbol, sh_info=%d",
+                    sec->name, sec->sh.sh_link);
+            }
+        }
+        /* handle rela section */
+        if (sec->sh.sh_type == SHT_RELA) {
+            create_rela_list(uelf, sec);
+        }
+    }
+}
+
 void uelf_open(struct upatch_elf *uelf, const char *name)
 {
     GElf_Ehdr ehdr;
@@ -338,13 +337,7 @@ void uelf_open(struct upatch_elf *uelf, const char *name)
 
     create_section_list(uelf);
     create_symbol_list(uelf);
-
-    struct section *sec;
-    list_for_each_entry(sec, &uelf->sections, list) {
-        if (is_rela_section(sec)) {
-            create_rela_list(uelf, sec);
-        }
-    }
+    parse_section_metadata(uelf);
 }
 
 void uelf_close(struct upatch_elf *uelf)
@@ -364,5 +357,4 @@ void uelf_close(struct upatch_elf *uelf)
     }
     uelf->elf = NULL;
     uelf->fd = -1;
-    uelf->symtab_shndx = NULL;
 }

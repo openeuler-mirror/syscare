@@ -23,6 +23,9 @@
 #ifndef __UPATCH_RESOLVE_H_
 #define __UPATCH_RESOLVE_H_
 
+struct upatch_elf;
+struct running_elf;
+
 void upatch_partly_resolve(struct upatch_elf *, struct running_elf *);
 
 #endif /* __UPATCH_RESOLVE_H_ */

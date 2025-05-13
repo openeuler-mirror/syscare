@@ -37,10 +37,6 @@ static void correlate_symbol(struct symbol *sym_orig,
         log_debug("renaming symbol %s to %s\n",
             sym_patched->name, sym_orig->name);
         sym_patched->name = sym_orig->name;
-        sym_patched->name_source = DATA_SOURCE_REF;
-    }
-    if (sym_orig->relf_sym && !sym_patched->relf_sym) {
-        sym_patched->relf_sym = sym_orig->relf_sym;
     }
 }
 
@@ -139,11 +135,11 @@ static void correlate_section(struct section *sec_orig,
     } else if (sec_orig->rela && sec_patched->rela) {
         correlate_section_impl(sec_orig->rela, sec_patched->rela);
     }
-    if (sec_orig->secsym && sec_patched->secsym) {
-        correlate_symbol(sec_orig->secsym, sec_patched->secsym);
-    }
-    if (sec_orig->sym) {
+    if (sec_orig->sym && sec_patched->sym) {
         correlate_symbol(sec_orig->sym, sec_patched->sym);
+    }
+    if (sec_orig->bundle_sym) {
+        correlate_symbol(sec_orig->bundle_sym, sec_patched->bundle_sym);
     }
 }
 
@@ -388,11 +384,11 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source,
             uncorrelate_symbol(sym);
         }
 
-        bundled = (sym == sym->sec->sym) ? 1 : 0;
+        bundled = (sym == sym->sec->bundle_sym) ? 1 : 0;
         if (bundled && sym->sec->twin) {
             uncorrelate_section(sym->sec);
-            if (sym->sec->secsym) {
-                uncorrelate_symbol(sym->sec->secsym);
+            if (sym->sec->sym) {
+                uncorrelate_symbol(sym->sec->sym);
             }
             if (sym->sec->rela) {
                 // uncorrelate relocation section which not equals to reference
@@ -424,7 +420,7 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source,
                 continue;
             }
 
-            bundled = (sym == sym->sec->sym) ? 1 : 0;
+            bundled = (sym == sym->sec->bundle_sym) ? 1 : 0;
             if (bundled && sym->sec == relasec->base) {
                 /*
                  * TODO:
@@ -445,7 +441,7 @@ void upatch_correlate_static_local_variables(struct upatch_elf *uelf_source,
                 continue;
             }
 
-            patched_bundled = (patched_sym == patched_sym->sec->sym) ? 1 : 0;
+            patched_bundled = (patched_sym == patched_sym->sec->bundle_sym) ? 1 : 0;
             if (bundled != patched_bundled) {
                 ERROR("bundle mismatch for symbol %s", sym->name);
             }

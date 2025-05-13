@@ -106,11 +106,11 @@ bool is_special_static_symbol(struct symbol *sym)
 
     if (sym->type == STT_SECTION) {
         /* make sure section is bundled */
-        if (is_rela_section(sym->sec) || (sym->sec->sym == NULL)) {
+        if (is_rela_section(sym->sec) || (sym->sec->bundle_sym == NULL)) {
             return false;
         }
         /* use bundled object object/function symbol for matching */
-        sym = sym->sec->sym;
+        sym = sym->sec->bundle_sym;
     }
 
     if ((sym->type != STT_OBJECT) || (sym->bind != STB_LOCAL)) {
@@ -138,7 +138,7 @@ bool is_special_static_symbol(struct symbol *sym)
 bool is_special_static_section(struct section *sec)
 {
     struct symbol *sym = is_rela_section(sec) ?
-        sec->base->secsym : sec->secsym;
+        sec->base->sym : sec->sym;
     return is_special_static_symbol(sym);
 }
 
