@@ -28,6 +28,8 @@
 #ifndef __UPATCH_LIST_H_
 #define __UPATCH_LIST_H_
 
+#include <stddef.h>
+
 /*
  * These are non-NULL pointers that will result in page faults
  * under normal circumstances, used to verify that nobody uses
@@ -35,11 +37,6 @@
  */
 #define LIST_POISON1 ((void *) 0x00100100)
 #define LIST_POISON2 ((void *) 0x00200200)
-
-/**
- * Get offset of a member
- */
-#define offsetof(TYPE, MEMBER) ((size_t) &((TYPE *)0)->MEMBER)
 
 /**
  * Casts a member of a structure out to the containing structure

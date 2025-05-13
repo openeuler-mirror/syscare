@@ -30,36 +30,29 @@
 #include <errno.h>
 #include <gelf.h>
 
-#include "upatch-elf.h"
-
 struct symbol;
 
 struct relf_symbol {
-    int index;
+    GElf_Word index;
     char *name;
-    unsigned char type, bind;
-    unsigned int shndx;
-    unsigned long addr;
-    unsigned long size;
+    unsigned char type;
+    unsigned char bind;
+    GElf_Section shndx;
+    GElf_Addr addr;
+    GElf_Xword size;
 };
 
 struct running_elf {
     int fd;
     Elf *elf;
     struct relf_symbol *symbols;
-    int symbol_count;
+    GElf_Word symbol_count;
     bool is_exec;
-};
-
-struct lookup_result {
-    struct relf_symbol *symbol;
-    unsigned long sympos;
-    bool global;
 };
 
 void relf_open(struct running_elf *relf, const char *name);
 void relf_close(struct running_elf *relf);
 
-bool lookup_relf(struct running_elf *, struct symbol *, struct lookup_result *);
+struct relf_symbol* lookup_relf(struct running_elf *relf, struct symbol *sym);
 
 #endif

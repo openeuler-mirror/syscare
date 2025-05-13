@@ -20,9 +20,10 @@
  * 02110-1301, USA.
  */
 
-
+#include <stddef.h>
 #include <gelf.h>
 
+#include "upatch-elf.h"
 #include "running-elf.h"
 #include "upatch-patch.h"
 
@@ -30,16 +31,15 @@
 void upatch_partly_resolve(struct upatch_elf *uelf, struct running_elf *relf)
 {
     struct symbol *sym;
-    struct lookup_result symbol;
-
     list_for_each_entry(sym, &uelf->symbols, list) {
         if (sym->sym.st_other & SYM_OTHER) {
-            if (!lookup_relf(relf, sym, &symbol)) {
+            struct relf_symbol *symbol = lookup_relf(relf, sym);
+            if (symbol == NULL) {
                 continue;
             }
             /* keep it undefined for link purpose */
-            sym->sym.st_value = symbol.symbol->addr;
-            sym->sym.st_size = symbol.symbol->size;
+            sym->sym.st_value = symbol->addr;
+            sym->sym.st_size = symbol->size;
         }
     }
 }

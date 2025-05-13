@@ -26,11 +26,10 @@
 #ifndef __UPATCH_ELF_H_
 #define __UPATCH_ELF_H_
 
-#include <gelf.h>
 #include <stdbool.h>
+#include <gelf.h>
 
 #include "list.h"
-#include "running-elf.h"
 
 extern char *g_relf_name;
 
@@ -39,104 +38,113 @@ struct section;
 struct rela;
 struct symbol;
 
+enum architecture {
+    X86_64  = 0x1 << 0,
+    AARCH64 = 0x1 << 1,
+    RISCV64 = 0x1 << 2,
+};
+
 enum data_source {
-    DATA_SOURCE_ELF,
     DATA_SOURCE_REF,
     DATA_SOURCE_ALLOC,
 };
 
 enum status {
-    NEW,
+    SAME,
     CHANGED,
-    SAME
-};
-
-enum symbol_strip {
-    SYMBOL_DEFAULT,
-    SYMBOL_USED,
-    SYMBOL_STRIP,
-};
-
-struct string {
-    struct list_head list;
-    char *name;
-};
-
-struct section {
-    struct list_head list;
-    struct section *twin;
-    char *name;
-    Elf_Data *data;
-    enum data_source name_source;
-    enum data_source data_source;
-    enum data_source dbuf_source;
-    GElf_Shdr sh;
-    bool ignored;
-    bool include;
-    bool grouped;
-    unsigned int index;
-    enum status status;
-    union {
-        // section with relocation information
-        struct {
-            struct section *base;
-            struct list_head relas;
-        };
-        // other function or data section
-        struct {
-            struct section *rela;
-            struct symbol *sym;
-            struct symbol *secsym;
-        };
-    };
-};
-
-struct rela {
-    struct list_head list;
-    GElf_Rela rela;
-    struct symbol *sym;
-    unsigned int type;
-    unsigned long offset;
-    long addend;
-    char *string;
-    bool need_dynrela;
-};
-
-struct symbol {
-    struct list_head list;
-    struct symbol *twin;
-    struct symbol *parent;
-    struct list_head children;
-    struct list_head subfunction_node;
-    struct section *sec;
-    GElf_Sym sym;
-    char *name;
-    enum data_source name_source;
-    struct relf_symbol *relf_sym;
-    unsigned int index;
-    unsigned char bind;
-    unsigned char type;
-    enum status status;
-    union {
-        bool include; /* used in the patched elf */
-        enum symbol_strip strip; /* used in the output elf */
-    };
-};
-
-enum architecture {
-    X86_64 = 0x1 << 0,
-    AARCH64 = 0x1 << 1,
-    RISCV64 = 0x1 << 2,
+    NEW,
 };
 
 struct upatch_elf {
+    int fd;
     Elf *elf;
     enum architecture arch;
     struct list_head sections;
     struct list_head symbols;
     struct list_head strings;
-    Elf_Data *symtab_shndx;
-    int fd;
+};
+
+struct section {
+    struct list_head list;
+    GElf_Shdr sh;
+
+    GElf_Section index;
+    char *name;
+    Elf_Data *data;
+
+    /* data source */
+    enum data_source name_source;
+    enum data_source data_source;
+    enum data_source dbuf_source;
+
+    /* section info */
+    struct section *link;
+    void *info;
+
+    /* symbol reference */
+    struct symbol *sym;
+    struct symbol *bundle_sym;
+
+    /* reloc reference */
+    struct section *base;
+    struct section *rela;
+    struct list_head relas;
+
+    /* diff metadata */
+    struct section *twin;
+    enum status status;
+    bool grouped;
+    bool ignored;
+    bool include;
+};
+
+struct symbol {
+    struct list_head list;
+    GElf_Sym sym;
+
+    GElf_Word index;
+    char *name;
+
+    /* data source */
+    enum data_source name_source;
+
+    /* symbol info */
+    unsigned char bind;
+    unsigned char type;
+
+    /* section reference */
+    struct section *sec;
+
+    /* subfunction reference */
+    struct symbol *parent;
+    struct list_head children;
+    struct list_head subfunction_node;
+
+    /* diff metadata */
+    struct symbol *twin;
+    enum status status;
+    bool include; /* used in the patched elf */
+    bool strip; /* used in the output elf */
+};
+
+struct rela {
+    struct list_head list;
+    GElf_Rela rela;
+
+    /* symbol reference */
+    struct symbol *sym;
+
+    /* rela info */
+    GElf_Word type;
+    GElf_Off offset;
+    GElf_Sxword addend;
+
+    char *string;
+};
+
+struct string {
+    struct list_head list;
+    char *name;
 };
 
 void uelf_open(struct upatch_elf *uelf, const char *name);
