@@ -935,9 +935,9 @@ int main(int argc, char **argv)
     upatch_write_output_elf(&uelf_out, uelf_patched.elf, args.output_obj, 0664);
     log_normal("Done\n");
 
-    uelf_close(&uelf_source);
-    uelf_close(&uelf_patched);
     uelf_close(&uelf_out);
+    uelf_close(&uelf_patched);
+    uelf_close(&uelf_source);
     relf_close(&relf);
 
     fflush(stdout);
