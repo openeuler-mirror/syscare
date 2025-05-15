@@ -54,6 +54,7 @@ struct KBuildParameters {
     patch_files: Vec<PatchFile>,
     jobs: usize,
     skip_compiler_check: bool,
+    verbose: bool,
 }
 
 struct KernelPatchEntity {
@@ -138,6 +139,7 @@ impl KernelPatchBuilder {
             patch_files: build_params.patch_files.to_owned(),
             jobs: build_params.jobs,
             skip_compiler_check: build_params.skip_compiler_check,
+            verbose: build_params.verbose,
         })
     }
 
@@ -235,6 +237,9 @@ impl KernelPatchBuilder {
 
         if kbuild_params.skip_compiler_check {
             cmd_args.arg("--skip-compiler-check");
+        }
+        if kbuild_params.verbose {
+            cmd_args.arg("--debug");
         }
         cmd_args.arg("--skip-cleanup");
 
