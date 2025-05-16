@@ -173,19 +173,23 @@ impl KernelPatchBuilder {
         match &kbuild_params.oot_source_dir {
             // Kernel patch
             None => {
-                let entity_uuid = Uuid::new_v4();
-                let entity_target = VMLINUX_FILE_NAME;
-                let entity_name = format!("{}-{}", entity_target, entity_uuid);
+                let uuid = Uuid::new_v4();
+                let uuid_short = uuid
+                    .to_string()
+                    .split_once('-')
+                    .map(|s| s.0.to_string())
+                    .expect("Unexpected kernel patch uuid");
 
+                let patch_entity = PatchEntity {
+                    uuid,
+                    patch_name: concat_os!(VMLINUX_FILE_NAME, "-", uuid_short),
+                    patch_target: VMLINUX_FILE_NAME.into(),
+                    checksum: String::new(),
+                };
                 entity_list.push(KernelPatchEntity {
                     source_dir: kbuild_params.kernel_source_dir.to_owned(),
                     module_path: None,
-                    patch_entity: PatchEntity {
-                        uuid: entity_uuid,
-                        patch_name: entity_name.into(),
-                        patch_target: entity_target.into(),
-                        checksum: String::default(),
-                    },
+                    patch_entity,
                 });
             }
             // Kernel module patch
@@ -193,31 +197,36 @@ impl KernelPatchBuilder {
                 let module_list =
                     KernelPatchHelper::find_kernel_modules(&kbuild_params.pkg_build_dir)
                         .context("Failed to find any kernel module")?;
-                let module_suffix = format!(".{}", KPATCH_SUFFIX);
-
                 for module_path in module_list {
+                    let uuid = Uuid::new_v4();
+                    let uuid_short = uuid
+                        .to_string()
+                        .split_once('-')
+                        .map(|s| s.0.to_string())
+                        .expect("Unexpected kernel module uuid");
                     let file_name = module_path
                         .file_name()
-                        .context("Cannot get patch file name")?;
-                    let module_name = file_name
-                        .strip_suffix(&module_suffix)
-                        .context("Unexpected patch suffix")?
-                        .to_string_lossy()
-                        .replace(['.', '-'], "_");
+                        .expect("Unexpected kernel module file name");
+                    let module_name = {
+                        let mut module_file = module_path.clone();
+                        module_file.set_extension("");
 
-                    let entity_uuid = Uuid::new_v4();
-                    let entitiy_name = format!("{}-{}", module_name, entity_uuid);
-                    let entity_target = file_name.to_os_string();
+                        module_file
+                            .file_name()
+                            .expect("Unexpected kernel module name")
+                            .replace(['.', '-'], "_")
+                    };
 
+                    let patch_entity = PatchEntity {
+                        uuid,
+                        patch_name: concat_os!(module_name, "-", uuid_short),
+                        patch_target: file_name.into(),
+                        checksum: String::new(),
+                    };
                     entity_list.push(KernelPatchEntity {
                         source_dir: oot_source_dir.to_owned(),
                         module_path: Some(module_path),
-                        patch_entity: PatchEntity {
-                            uuid: entity_uuid,
-                            patch_name: entitiy_name.into(),
-                            patch_target: entity_target.into(),
-                            checksum: String::default(),
-                        },
+                        patch_entity,
                     });
                 }
             }
