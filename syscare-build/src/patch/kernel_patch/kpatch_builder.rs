@@ -43,7 +43,7 @@ struct KBuildParameters {
     patch_build_root: PathBuf,
     patch_output_dir: PathBuf,
     kernel_source_dir: PathBuf,
-    oot_source_dir: Option<PathBuf>,
+    kmod_source_dir: Option<PathBuf>,
     config_file: PathBuf,
     vmlinux_file: PathBuf,
     patch_name: String,
@@ -61,7 +61,7 @@ struct KBuildParameters {
 
 struct KernelPatchEntity {
     source_dir: PathBuf,
-    module_path: Option<PathBuf>,
+    kmod_path: Option<PathBuf>,
     patch_entity: PatchEntity,
 }
 
@@ -97,8 +97,8 @@ impl KernelPatchBuilder {
             },
         )
         .context("Cannot find kernel source directory")?;
+        let kmod_source_dir = oot_module_entry.map(|entry| entry.build_source.clone());
         let kernel_debug_dir = &build_params.build_root.package.debuginfo;
-        let oot_source_dir = oot_module_entry.map(|build_entry| build_entry.build_source.clone());
 
         /*
          * Kernel config:
@@ -147,7 +147,7 @@ impl KernelPatchBuilder {
             patch_build_root,
             patch_output_dir,
             kernel_source_dir,
-            oot_source_dir,
+            kmod_source_dir,
             config_file,
             vmlinux_file,
             patch_name: build_params.patch_name.to_owned(),
@@ -170,7 +170,7 @@ impl KernelPatchBuilder {
     ) -> Result<Vec<KernelPatchEntity>> {
         let mut entity_list = Vec::new();
 
-        match &kbuild_params.oot_source_dir {
+        match &kbuild_params.kmod_source_dir {
             // Kernel patch
             None => {
                 let uuid = Uuid::new_v4();
@@ -188,30 +188,30 @@ impl KernelPatchBuilder {
                 };
                 entity_list.push(KernelPatchEntity {
                     source_dir: kbuild_params.kernel_source_dir.to_owned(),
-                    module_path: None,
+                    kmod_path: None,
                     patch_entity,
                 });
             }
             // Kernel module patch
-            Some(oot_source_dir) => {
-                let module_list =
+            Some(kmod_source_dir) => {
+                let kmod_list =
                     KernelPatchHelper::find_kernel_modules(&kbuild_params.pkg_build_dir)
                         .context("Failed to find any kernel module")?;
-                for module_path in module_list {
+                for kmod_path in kmod_list {
                     let uuid = Uuid::new_v4();
                     let uuid_short = uuid
                         .to_string()
                         .split_once('-')
                         .map(|s| s.0.to_string())
                         .expect("Unexpected kernel module uuid");
-                    let file_name = module_path
+                    let file_name = kmod_path
                         .file_name()
                         .expect("Unexpected kernel module file name");
                     let module_name = {
-                        let mut module_file = module_path.clone();
-                        module_file.set_extension("");
+                        let mut kmod_file = kmod_path.clone();
+                        kmod_file.set_extension("");
 
-                        module_file
+                        kmod_file
                             .file_name()
                             .expect("Unexpected kernel module name")
                             .replace(['.', '-'], "_")
@@ -224,8 +224,8 @@ impl KernelPatchBuilder {
                         checksum: String::new(),
                     };
                     entity_list.push(KernelPatchEntity {
-                        source_dir: oot_source_dir.to_owned(),
-                        module_path: Some(module_path),
+                        source_dir: kmod_source_dir.to_owned(),
+                        kmod_path: Some(kmod_path),
                         patch_entity,
                     });
                 }
@@ -250,20 +250,20 @@ impl KernelPatchBuilder {
             .arg("--config")
             .arg(&kbuild_params.config_file)
             .arg("--vmlinux")
-            .arg(&kbuild_params.vmlinux_file)
-            .arg("--jobs")
-            .arg(kbuild_params.jobs.to_string())
-            .arg("--output")
-            .arg(&kbuild_params.patch_output_dir)
-            .arg("--non-replace");
+            .arg(&kbuild_params.vmlinux_file);
 
-        if let Some(oot_module) = &kbuild_entity.module_path {
-            cmd_args.arg("--oot-module").arg(oot_module);
+        if let Some(kmod_path) = &kbuild_entity.kmod_path {
+            cmd_args.arg("--oot-module").arg(kmod_path);
             cmd_args
                 .arg("--oot-module-src")
                 .arg(&kbuild_entity.source_dir);
         }
-        cmd_args.args(kbuild_params.patch_files.iter().map(|patch| &patch.path));
+
+        cmd_args
+            .arg("--jobs")
+            .arg(kbuild_params.jobs.to_string())
+            .arg("--non-replace")
+            .arg("--skip-cleanup");
 
         if kbuild_params.skip_compiler_check {
             cmd_args.arg("--skip-compiler-check");
@@ -271,7 +271,11 @@ impl KernelPatchBuilder {
         if kbuild_params.verbose {
             cmd_args.arg("--debug");
         }
-        cmd_args.arg("--skip-cleanup");
+
+        cmd_args
+            .arg("--output")
+            .arg(&kbuild_params.patch_output_dir)
+            .args(kbuild_params.patch_files.iter().map(|f| &f.path));
 
         cmd_args
     }
@@ -283,9 +287,9 @@ impl KernelPatchBuilder {
             .env("NO_PROFILING_CALLS", "yes")
             .env("DISABLE_AFTER_LOAD", "yes")
             .env("KEEP_JUMP_LABEL", "yes");
-        if let Some(oot_source_dir) = &kbuild_params.oot_source_dir {
+        if let Some(kmod_source_dir) = &kbuild_params.kmod_source_dir {
             cmd_envs.env("OOT_MODULE", "yes");
-            cmd_envs.env("USERMODBUILDDIR", oot_source_dir);
+            cmd_envs.env("USERMODBUILDDIR", kmod_source_dir);
         }
         cmd_envs
     }
