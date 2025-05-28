@@ -321,6 +321,16 @@ void uelf_open(struct upatch_elf *uelf, const char *name)
         case EM_X86_64:
             uelf->arch = X86_64;
             break;
+        case EM_RISCV:
+            /*
+            | Val | Macros     | Description |
+            | 1   | ELFCLASS32 | riscv32     |
+            | 2   | ELFCLASS64 | riscv64     |
+            */
+            if (ehdr.e_ident[EI_CLASS] == ELFCLASS64) {
+                uelf->arch = RISCV64;
+            }
+            break;
         default:
             ERROR("Unsupported architecture");
     }
