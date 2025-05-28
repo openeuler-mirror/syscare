@@ -475,6 +475,23 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj,
 
         upatch_func->addr = upatch_funcs_addr[i].addr;
         upatch_func->addr.old_addr += uelf->relf->load_bias;
+
+#ifdef __riscv
+#define RISCV_MAX_JUMP_RANGE (1L << 31)
+        /*
+         * On RISC-V, to jump to arbitrary address, there must be
+         * at least 12 bytes to hold 3 instructors. Struct upatch_info
+         * new_insn field is only 8 bytes. We can only jump into
+         * +-2G ranges. Here do the check.
+         */
+        long riscv_offset = (long)(upatch_func->addr.new_addr - upatch_func->addr.old_addr);
+        if (riscv_offset >= RISCV_MAX_JUMP_RANGE || riscv_offset < -RISCV_MAX_JUMP_RANGE) {
+            log_error("new_addr=%lx old_addr=%lx exceed +-2G range\n",
+                upatch_func->addr.new_addr, upatch_func->addr.old_addr);
+            goto out;
+        }
+#endif
+
         ret = upatch_process_mem_read(obj->proc, upatch_func->addr.old_addr,
             &upatch_func->old_insn, get_origin_insn_len());
         if (ret) {
@@ -483,7 +500,12 @@ static int complete_info(struct upatch_elf *uelf, struct object_file *obj,
             goto out;
         }
 
+#ifdef __riscv
+        upatch_func->new_insn = get_new_insn(
+            upatch_func->addr.old_addr, upatch_func->addr.new_addr);
+#else
         upatch_func->new_insn = get_new_insn();
+#endif
         log_debug("\taddr: 0x%lx -> 0x%lx, insn: 0x%lx -> 0x%lx, name: '%s'\n",
             upatch_func->addr.old_addr, upatch_func->addr.new_addr,
             upatch_func->old_insn[0], upatch_func->new_insn,
