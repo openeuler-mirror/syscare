@@ -1171,10 +1171,11 @@ name = "syscare-common"
 version = "1.2.2"
 dependencies = [
  "anyhow",
- "lazy_static",
  "log",
  "memmap2",
  "nix",
+ "num_cpus",
+ "object",
  "regex",
  "serde",
  "serde_cbor",
