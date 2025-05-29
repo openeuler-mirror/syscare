@@ -59,10 +59,6 @@ const LOG_DIR_PERM: u32 = 0o700;
 const SOCKET_FILE_PERM: u32 = 0o660;
 const SOCKET_FILE_PERM_STRICT: u32 = 0o600;
 
-const MAIN_THREAD_NAME: &str = "main";
-const UNNAMED_THREAD_NAME: &str = "<unnamed>";
-const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
-
 struct Daemon {
     args: Arguments,
     config: Config,
@@ -74,15 +70,14 @@ impl Daemon {
         now: &mut DeferredNow,
         record: &Record,
     ) -> std::io::Result<()> {
+        const UNNAMED_THREAD_NAME: &str = "<unnamed>";
+        const LOG_FORMAT: &str = "%Y-%m-%d %H:%M:%S%.6f";
+
         thread_local! {
-            static THREAD_NAME: String = std::thread::current().name().and_then(|name| {
-                if name == MAIN_THREAD_NAME {
-                    return os::process::name().to_str();
-                }
-                Some(name)
-            })
-            .unwrap_or(UNNAMED_THREAD_NAME)
-            .to_string();
+            static THREAD_NAME: String = std::thread::current()
+                .name()
+                .unwrap_or(UNNAMED_THREAD_NAME)
+                .to_string();
         }
 
         THREAD_NAME.with(|thread_name| {
@@ -100,7 +95,7 @@ impl Daemon {
     fn new() -> Result<Self> {
         // Check root permission
         ensure!(
-            os::user::id() == 0,
+            os::user::uid() == 0,
             "This command has to be run with superuser privileges (under the root user on most systems)."
         );
 
