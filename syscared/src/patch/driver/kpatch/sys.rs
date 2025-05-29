@@ -19,7 +19,7 @@ use log::debug;
 use nix::kmod;
 
 use syscare_abi::PatchStatus;
-use syscare_common::{ffi::OsStrExt, fs, os};
+use syscare_common::{ffi::OsStrExt, fs, os::selinux};
 
 use crate::patch::entity::KernelPatch;
 
@@ -39,7 +39,7 @@ pub fn list_kernel_modules() -> Result<Vec<OsString>> {
 pub fn selinux_relable_patch(patch: &KernelPatch) -> Result<()> {
     const KPATCH_PATCH_SEC_TYPE: &str = "modules_object_t";
 
-    if os::selinux::get_status()? != os::selinux::Status::Enforcing {
+    if selinux::get_status() != selinux::Status::Enforcing {
         return Ok(());
     }
 
@@ -47,10 +47,10 @@ pub fn selinux_relable_patch(patch: &KernelPatch) -> Result<()> {
         "Relabeling patch module '{}'...",
         patch.module_name.to_string_lossy()
     );
-    let mut sec_context = os::selinux::get_security_context(&patch.patch_file)?;
-    if sec_context.kind != KPATCH_PATCH_SEC_TYPE {
-        sec_context.kind = OsString::from(KPATCH_PATCH_SEC_TYPE);
-        os::selinux::set_security_context(&patch.patch_file, sec_context)?;
+    let mut sec_context = selinux::get_security_context(&patch.patch_file)?;
+    if sec_context.get_type() != KPATCH_PATCH_SEC_TYPE {
+        sec_context.set_type(OsString::from(KPATCH_PATCH_SEC_TYPE))?;
+        selinux::set_security_context(&patch.patch_file, &sec_context)?;
     }
 
     Ok(())
