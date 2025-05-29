@@ -13,58 +13,57 @@
  */
 
 use std::{
-    ffi::OsString,
-    ops::Deref,
-    os::unix::process::ExitStatusExt,
-    process::{Child as StdChild, ExitStatus as StdExitStatus},
-    thread::JoinHandle,
+    ffi::OsString, ops::Deref, os::unix::process::ExitStatusExt, process, thread::JoinHandle,
 };
 
 use anyhow::{anyhow, ensure, Context, Result};
 use log::trace;
 
-use super::{Stdio, StdioLevel};
+use super::output;
 
 pub struct Child {
-    pub(super) id: u32,
     pub(super) name: String,
-    pub(super) stdio_level: StdioLevel,
-    pub(super) inner: StdChild,
+    pub(super) child: process::Child,
+    pub(super) log_level: output::LogLevel,
 }
 
 impl Child {
-    fn capture_stdio(&mut self) -> Result<JoinHandle<(OsString, OsString)>> {
-        Stdio::new(
-            self.name.clone(),
-            self.inner
-                .stdout
-                .take()
-                .context("Failed to capture stdout")?,
-            self.inner
-                .stderr
-                .take()
-                .context("Failed to capture stderr")?,
-            self.stdio_level,
-        )
-        .capture()
+    fn redirect_outputs(&mut self) -> Result<JoinHandle<(OsString, OsString)>> {
+        let stdout = self
+            .child
+            .stdout
+            .take()
+            .context("Failed to capture stdout")?;
+        let stderr = self
+            .child
+            .stderr
+            .take()
+            .context("Failed to capture stderr")?;
+        let outputs = output::Outputs::new(stdout, stderr, self.log_level);
+
+        std::thread::Builder::new()
+            .name(self.name.clone())
+            .spawn(|| outputs.redirect())
+            .with_context(|| format!("Failed to create thread {}", self.name))
     }
 }
 
 impl Child {
     pub fn kill(&mut self) -> Result<()> {
-        self.inner
+        let id = self.child.id();
+        self.child
             .kill()
-            .with_context(|| format!("Failed to kill process {} ({})", self.name, self.id))
+            .with_context(|| format!("Failed to kill process {} ({})", self.name, id))
     }
 
     pub fn wait(&mut self) -> Result<ExitStatus> {
+        let id = self.child.id();
         let status = self
-            .inner
+            .child
             .wait()
-            .with_context(|| format!("Failed to wait process {} ({})", self.name, self.id))?;
-
+            .with_context(|| format!("Failed to wait process {} ({})", self.name, id))?;
         let exit_status = ExitStatus {
-            id: self.id,
+            id,
             name: self.name.clone(),
             status,
         };
@@ -79,24 +78,25 @@ impl Child {
     }
 
     pub fn wait_with_output(&mut self) -> Result<Output> {
-        let stdio_thread = self.capture_stdio()?;
+        let thread = self.redirect_outputs()?;
         let status = self.wait()?;
-        let (stdout, stderr) = stdio_thread
+        let (stdout, stderr) = thread
             .join()
             .map_err(|_| anyhow!("Failed to join stdio thread"))?;
 
-        Ok(Output {
+        let output = Output {
             status,
             stdout,
             stderr,
-        })
+        };
+        Ok(output)
     }
 }
 
 pub struct ExitStatus {
     id: u32,
     name: String,
-    status: StdExitStatus,
+    status: process::ExitStatus,
 }
 
 impl ExitStatus {

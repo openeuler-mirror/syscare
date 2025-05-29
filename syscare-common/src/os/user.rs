@@ -12,80 +12,94 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    ffi::{CString, OsStr},
-    path::{Path, PathBuf},
-};
+use std::{ffi::OsString, os::unix::ffi::OsStringExt, path::PathBuf};
 
-use lazy_static::lazy_static;
-use nix::unistd::{getuid, Gid, Uid, User};
+use nix::unistd;
 
-use crate::ffi::CStrExt;
-
-fn info() -> &'static User {
-    lazy_static! {
-        static ref USER_INFO: User = User::from_uid(getuid())
-            .unwrap_or_default()
-            .unwrap_or(User {
-                name: String::from("root"),
-                passwd: CString::default(),
-                uid: Uid::from_raw(0),
-                gid: Gid::from_raw(0),
-                gecos: CString::default(),
-                dir: PathBuf::from("/root"),
-                shell: PathBuf::from("/bin/sh"),
-            });
-    }
-    &USER_INFO
+#[inline(always)]
+fn userinfo() -> unistd::User {
+    unistd::User::from_uid(unistd::getuid())
+        .expect("Failed to get user infomation")
+        .expect("Invalid user id")
 }
 
-pub fn name() -> &'static str {
-    self::info().name.as_str()
-}
-
-pub fn passwd() -> &'static OsStr {
-    self::info().passwd.as_os_str()
-}
-
-pub fn id() -> u32 {
-    self::info().uid.as_raw()
+pub fn uid() -> u32 {
+    unistd::getuid().as_raw()
 }
 
 pub fn gid() -> u32 {
-    self::info().gid.as_raw()
+    unistd::getgid().as_raw()
 }
 
-pub fn gecos() -> &'static OsStr {
-    self::info().gecos.as_os_str()
+pub fn name() -> String {
+    self::userinfo().name
 }
 
-pub fn home() -> &'static Path {
-    self::info().dir.as_path()
+pub fn passwd() -> OsString {
+    OsString::from_vec(self::userinfo().passwd.into_bytes())
 }
 
-pub fn shell() -> &'static Path {
-    self::info().shell.as_path()
+pub fn gecos() -> OsString {
+    OsString::from_vec(self::userinfo().gecos.into_bytes())
 }
 
-#[test]
-fn test() {
-    println!("name:   {}", self::name());
-    assert!(!self::name().is_empty());
+pub fn home() -> PathBuf {
+    self::userinfo().dir
+}
 
-    println!("passwd: {}", self::passwd().to_string_lossy());
-    assert!(!self::passwd().is_empty());
+pub fn shell() -> PathBuf {
+    self::userinfo().shell
+}
 
-    println!("id:     {}", self::id());
-    assert!(id() < u32::MAX);
+#[cfg(test)]
+mod test {
+    use super::*;
 
-    println!("gid:    {}", self::gid());
-    assert!(gid() < u32::MAX);
+    #[test]
+    fn test_uid() {
+        let uid = self::uid();
+        println!("uid: {}", uid);
+        assert!(uid < u32::MAX);
+    }
 
-    println!("gecos:  {}", self::gecos().to_string_lossy());
+    #[test]
+    fn test_gid() {
+        let gid = self::gid();
+        println!("gid: {}", gid);
+        assert!(gid < u32::MAX);
+    }
 
-    println!("home:   {}", self::home().display());
-    assert!(self::home().exists());
+    #[test]
+    fn test_name() {
+        let name = self::name();
+        println!("name: {}", name);
+        assert!(!name.is_empty());
+    }
 
-    println!("shell:  {}", self::shell().display());
-    assert!(self::home().exists());
+    #[test]
+    fn test_passwd() {
+        let passwd = self::passwd();
+        println!("passwd: {}", passwd.to_string_lossy());
+        assert!(!passwd.is_empty());
+    }
+
+    #[test]
+    fn test_gecos() {
+        let gecos = self::gecos();
+        println!("gecos: {}", gecos.to_string_lossy());
+    }
+
+    #[test]
+    fn test_home() {
+        let home = self::home();
+        println!("home: {}", home.display());
+        assert!(home.exists());
+    }
+
+    #[test]
+    fn test_shell() {
+        let shell = self::shell();
+        println!("shell:  {}", shell.display());
+        assert!(shell.exists());
+    }
 }

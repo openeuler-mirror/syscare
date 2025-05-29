@@ -15,8 +15,6 @@
 pub mod cpu;
 pub mod kernel;
 pub mod platform;
-pub mod proc_maps;
-pub mod proc_mounts;
 pub mod process;
 pub mod selinux;
 pub mod umask;

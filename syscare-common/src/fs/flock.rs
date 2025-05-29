@@ -16,7 +16,7 @@ use std::{
     fs::File,
     io::Result,
     ops::{Deref, DerefMut},
-    os::unix::io::AsRawFd,
+    os::{fd::RawFd, unix::io::AsRawFd},
     path::Path,
 };
 
@@ -36,23 +36,15 @@ pub struct FileLock {
 }
 
 impl FileLock {
-    fn new<P: AsRef<Path>>(file_path: P, kind: FileLockType) -> Result<Self> {
-        let file_path = file_path.as_ref();
-        let flock = Self {
-            file: if file_path.exists() {
-                File::open(file_path)?
-            } else {
-                File::create(file_path)?
-            },
-        };
-        flock.acquire(kind)?;
+    fn new(file_path: &Path, kind: FileLockType) -> Result<Self> {
+        let file = File::open(file_path)?;
+        Self::acquire_flock(file.as_raw_fd(), kind)?;
 
-        Ok(flock)
+        Ok(Self { file })
     }
 
     #[inline]
-    fn acquire(&self, kind: FileLockType) -> Result<()> {
-        let fd = self.file.as_raw_fd();
+    fn acquire_flock(fd: RawFd, kind: FileLockType) -> Result<()> {
         let arg = match kind {
             FileLockType::Shared => fcntl::FlockArg::LockShared,
             FileLockType::Exclusive => fcntl::FlockArg::LockExclusive,
@@ -65,10 +57,8 @@ impl FileLock {
     }
 
     #[inline]
-    fn release(&self) {
-        let fd = self.file.as_raw_fd();
-        let arg = fcntl::FlockArg::Unlock;
-        fcntl::flock(fd, arg).expect("Failed to release file lock");
+    fn release_flock(fd: RawFd) {
+        fcntl::flock(fd, fcntl::FlockArg::Unlock).expect("Failed to release file lock");
     }
 }
 
@@ -88,48 +78,110 @@ impl DerefMut for FileLock {
 
 impl Drop for FileLock {
     fn drop(&mut self) {
-        self.release();
+        Self::release_flock(self.file.as_raw_fd());
     }
 }
 
+pub fn flock_exists<P: AsRef<Path>>(file_path: P, kind: FileLockType) -> Result<FileLock> {
+    FileLock::new(file_path.as_ref(), kind)
+}
+
 pub fn flock<P: AsRef<Path>>(file_path: P, kind: FileLockType) -> Result<FileLock> {
-    FileLock::new(file_path, kind)
+    let file_path = file_path.as_ref();
+    if !file_path.exists() {
+        File::create(file_path)?;
+    }
+    self::flock_exists(file_path, kind)
 }
 
 #[test]
 fn test() -> anyhow::Result<()> {
-    use anyhow::{ensure, Context};
-
+    use anyhow::{anyhow, ensure};
     use std::fs;
 
     let file_path = std::env::temp_dir().join("flock_test");
-    fs::remove_file(&file_path)?;
+    let non_exist_file = std::env::temp_dir().join("flock_test_non_exist");
 
-    println!("Testing shared flock on {}...", file_path.display());
-    let shared_lock = self::flock(&file_path, FileLockType::SharedNonBlock)
-        .context("Failed to create shared flock")?;
-    let shared_lock1 = self::flock(&file_path, FileLockType::SharedNonBlock)
-        .context("Failed to create shared flock")?;
+    fs::remove_file(&file_path).ok();
+    fs::remove_file(&non_exist_file).ok();
+
+    fs::write(&file_path, "flock_test")?;
+
+    println!("Testing fs::flock_exists()...");
+    println!("- Shared flock '{}'...", file_path.display());
+    let shared_lock =
+        self::flock_exists(&file_path, FileLockType::SharedNonBlock).map_err(|e| {
+            anyhow!(
+                "Failed to create shared flock '{}', {}",
+                file_path.display(),
+                e
+            )
+        })?;
+    let shared_lock1 =
+        self::flock_exists(&file_path, FileLockType::SharedNonBlock).map_err(|e| {
+            anyhow!(
+                "Failed to create shared flock '{}', {}",
+                file_path.display(),
+                e
+            )
+        })?;
     ensure!(
-        self::flock(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
-        "Exclusive flock should be failed"
+        self::flock_exists(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
+        "Exclusive flock '{}' should be failed",
+        file_path.display()
     );
     drop(shared_lock);
     drop(shared_lock1);
 
-    println!("Testing exclusive flock on {}...", file_path.display());
-    let exclusive_lock = self::flock(&file_path, FileLockType::ExclusiveNonBlock)
-        .context("Failed to create exclusive flock")?;
+    println!("- Exclusive flock '{}'...", file_path.display());
+    let exclusive_lock =
+        self::flock_exists(&file_path, FileLockType::ExclusiveNonBlock).map_err(|e| {
+            anyhow!(
+                "Failed to create exclusive flock '{}', {}",
+                file_path.display(),
+                e
+            )
+        })?;
     ensure!(
-        self::flock(&file_path, FileLockType::SharedNonBlock).is_err(),
-        "Shared flock should be failed"
+        self::flock_exists(&file_path, FileLockType::SharedNonBlock).is_err(),
+        "Shared flock '{}' should be failed",
+        file_path.display()
     );
     ensure!(
-        self::flock(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
-        "Exclusive flock should be failed"
+        self::flock_exists(&file_path, FileLockType::ExclusiveNonBlock).is_err(),
+        "Exclusive flock '{}' should be failed",
+        file_path.display()
+    );
+    drop(exclusive_lock);
+
+    println!("- Non-exist flock '{}'...", non_exist_file.display());
+    ensure!(
+        self::flock_exists(&non_exist_file, FileLockType::SharedNonBlock).is_err(),
+        "Shared flock '{}' should be failed",
+        non_exist_file.display()
+    );
+    ensure!(
+        self::flock_exists(&non_exist_file, FileLockType::ExclusiveNonBlock).is_err(),
+        "Exclusive flock '{}' should be failed",
+        non_exist_file.display()
     );
 
-    drop(exclusive_lock);
+    println!("Testing fs::flock()...");
+    println!("- Non-exist flock '{}'...", non_exist_file.display());
+    let _ = self::flock(&non_exist_file, FileLockType::SharedNonBlock).map_err(|e| {
+        anyhow!(
+            "Failed to create shared flock '{}', {}",
+            file_path.display(),
+            e
+        )
+    })?;
+    let _ = self::flock(&non_exist_file, FileLockType::ExclusiveNonBlock).map_err(|e| {
+        anyhow!(
+            "Failed to create exclusive flock '{}', {}",
+            file_path.display(),
+            e
+        )
+    })?;
 
     Ok(())
 }

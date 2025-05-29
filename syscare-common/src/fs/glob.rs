@@ -69,7 +69,7 @@ impl Glob {
     }
 
     fn match_component(&mut self, path: PathBuf, index: usize) -> Result<Option<PathBuf>> {
-        let last_index = self.components.len() - 1;
+        let last_index = self.components.len().saturating_sub(1);
 
         for dir_entry in fs::read_dir(&path)? {
             let next_path = dir_entry?.path();
@@ -126,7 +126,7 @@ impl Iterator for Glob {
 
     fn next(&mut self) -> Option<Self::Item> {
         while let Some((mut curr_path, mut index)) = self.stack.pop() {
-            let last_index = self.components.len() - 1;
+            let last_index = self.components.len().saturating_sub(1);
 
             // iterate all of components over matching path
             while index <= last_index {

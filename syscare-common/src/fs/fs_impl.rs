@@ -14,15 +14,14 @@
 
 use std::{
     env,
-    ffi::{CStr, OsStr, OsString},
+    ffi::{OsStr, OsString},
     fs::{File, FileType, Metadata, Permissions, ReadDir},
     io,
-    os::{raw::c_void, unix::fs::PermissionsExt},
+    os::unix::fs::PermissionsExt,
     path::{Component, Path, PathBuf},
-    ptr::null_mut,
 };
 
-use crate::ffi::{CStrExt, OsStrExt};
+use crate::ffi::OsStrExt;
 
 trait RewriteError {
     fn rewrite_err(self, err_msg: String) -> Self;
@@ -194,96 +193,6 @@ pub fn file_ext<P: AsRef<Path>>(path: P) -> OsString {
         .extension()
         .map(OsStr::to_os_string)
         .unwrap_or_default()
-}
-
-pub fn getxattr<P, S>(path: P, name: S) -> std::io::Result<OsString>
-where
-    P: AsRef<Path>,
-    S: AsRef<OsStr>,
-{
-    let file_path = path.as_ref().to_cstring()?;
-    let xattr_name = name.as_ref().to_cstring()?;
-
-    /*
-     * SAFETY:
-     * This libc function is marked 'unsafe' as unchecked buffer may cause overflow.
-     * In our implementation, the buffer is checked properly, so that would be safe.
-     */
-    let mut ret =
-        unsafe { nix::libc::getxattr(file_path.as_ptr(), xattr_name.as_ptr(), null_mut(), 0) };
-    if ret == -1 {
-        return Err(std::io::Error::last_os_error()).rewrite_err(format!(
-            "Cannot get path {} xattr {}",
-            file_path.to_string_lossy(),
-            xattr_name.to_string_lossy()
-        ));
-    }
-
-    let mut buf = vec![0; ret.unsigned_abs()];
-    let value_ptr = buf.as_mut_ptr().cast::<c_void>();
-
-    /*
-     * SAFETY:
-     * This libc function is marked 'unsafe' as unchecked buffer may cause overflow.
-     * In our implementation, the buffer is checked properly, so that would be safe.
-     */
-    ret = unsafe {
-        nix::libc::getxattr(
-            file_path.as_ptr(),
-            xattr_name.as_ptr(),
-            value_ptr,
-            buf.len(),
-        )
-    };
-    if ret == -1 {
-        return Err(std::io::Error::last_os_error()).rewrite_err(format!(
-            "Cannot get path {} xattr {}",
-            file_path.to_string_lossy(),
-            xattr_name.to_string_lossy(),
-        ));
-    }
-
-    let value = CStr::from_bytes_with_nul(&buf[0..ret.unsigned_abs()])
-        .unwrap_or_default()
-        .to_os_string();
-
-    Ok(value)
-}
-
-pub fn setxattr<P, S, T>(path: P, name: S, value: T) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-    S: AsRef<OsStr>,
-    T: AsRef<OsStr>,
-{
-    let file_path = path.as_ref().to_cstring()?;
-    let xattr_name = name.as_ref().to_cstring()?;
-    let xattr_value = value.as_ref().to_cstring()?;
-    let size = xattr_value.to_bytes_with_nul().len();
-
-    /*
-     * SAFETY:
-     * This libc function is marked 'unsafe' as unchecked buffer may cause overflow.
-     * In our implementation, the buffer is checked properly, so that would be safe.
-     */
-    let ret = unsafe {
-        nix::libc::setxattr(
-            file_path.as_ptr(),
-            xattr_name.as_ptr(),
-            xattr_value.as_ptr().cast::<c_void>(),
-            size,
-            0,
-        )
-    };
-    if ret == -1 {
-        return Err(std::io::Error::last_os_error()).rewrite_err(format!(
-            "Cannot set {} xattr {}",
-            file_path.to_string_lossy(),
-            xattr_name.to_string_lossy()
-        ));
-    }
-
-    Ok(())
 }
 
 pub fn normalize<P: AsRef<Path>>(path: P) -> io::Result<PathBuf> {
