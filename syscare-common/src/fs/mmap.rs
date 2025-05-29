@@ -12,34 +12,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{io::Result, ops::Deref, os::fd::AsRawFd, path::Path};
+use std::{ops::Deref, os::unix::io::AsRawFd, path::Path};
 
 use memmap2::{Advice, Mmap, MmapOptions};
 
-use super::flock::*;
+use super::flock;
 
 #[derive(Debug)]
 pub struct FileMmap {
-    _lock: FileLock,
+    _lock: flock::FileLock,
     mmap: Mmap,
-}
-
-impl FileMmap {
-    fn new<P: AsRef<Path>>(file_path: P) -> Result<Self> {
-        /*
-         * SAFETY:
-         * All file-backed memory map constructors are marked unsafe because of the
-         * potential for Undefined Behavior (UB) using the map if the underlying file
-         * is subsequently modified, in or out of process.
-         * Our implementation uses shared file lock to avoid cross-process file access.
-         * This mapped area would be safe.
-         */
-        let lock = flock(file_path, FileLockType::Shared)?;
-        let mmap = unsafe { MmapOptions::new().map(lock.as_raw_fd())? };
-        mmap.advise(Advice::Random)?;
-
-        Ok(Self { _lock: lock, mmap })
-    }
 }
 
 impl Deref for FileMmap {
@@ -51,27 +33,58 @@ impl Deref for FileMmap {
 }
 
 pub fn mmap<P: AsRef<Path>>(file_path: P) -> std::io::Result<FileMmap> {
-    FileMmap::new(file_path)
+    /*
+     * SAFETY:
+     * All file-backed memory map constructors are marked unsafe because of the
+     * potential for Undefined Behavior (UB) using the map if the underlying file
+     * is subsequently modified, in or out of process.
+     * Our implementation uses shared file lock to avoid cross-process file access.
+     * This mapped area would be safe.
+     */
+    let lock = flock::flock_exists(file_path, flock::FileLockType::Shared)?;
+    let mmap = unsafe { MmapOptions::new().map(lock.as_raw_fd())? };
+    mmap.advise(Advice::Random)?;
+
+    Ok(FileMmap { _lock: lock, mmap })
 }
 
-#[test]
-fn test() -> anyhow::Result<()> {
-    use anyhow::Context;
+#[cfg(test)]
+mod test {
+    use std::fs;
 
-    const FILE_PATH: &str = "/etc/os-release";
-    const SYS_FS_PATH: &str = "/sys/kernel/vmcoreinfo";
-    const PROC_FS_PATH: &str = "/proc/version";
+    use super::*;
 
-    println!("Testing FileMmap...");
-    let orig_file =
-        std::fs::read(FILE_PATH).with_context(|| format!("Failed to open file {}", FILE_PATH))?;
-    let map_file =
-        self::mmap(FILE_PATH).with_context(|| format!("Failed to mmap file {}", FILE_PATH))?;
+    #[test]
+    fn mmap_file() -> std::io::Result<()> {
+        let file_path = std::env::temp_dir().join("mmap_test");
+        fs::remove_file(&file_path).ok();
+        fs::write(&file_path, "mmap_test")?;
 
-    let _ = self::mmap(SYS_FS_PATH).expect_err("Sysfs cannot not be mapped");
-    let _ = self::mmap(PROC_FS_PATH).expect_err("Procfs cannot not be mapped");
+        let orig_file = fs::read(&file_path)?;
+        let map_file = self::mmap(&file_path)?;
+        assert_eq!(orig_file, map_file.as_ref());
 
-    assert_eq!(orig_file, map_file.as_ref());
+        fs::remove_file(&file_path)?;
+        Ok(())
+    }
 
-    Ok(())
+    #[test]
+    fn mmap_non_exists_file() {
+        const NON_EXISTS_FILE: &str = "/non_exists_file";
+        fs::remove_file(NON_EXISTS_FILE).ok();
+
+        assert!(self::mmap(NON_EXISTS_FILE).is_err(),);
+    }
+
+    #[test]
+    fn mmap_proc_file() {
+        const PROC_FS_PATH: &str = "/proc/version";
+        assert!(self::mmap(PROC_FS_PATH).is_err(),);
+    }
+
+    #[test]
+    fn mmap_sys_file() {
+        const SYS_FS_PATH: &str = "/sys/kernel/vmcoreinfo";
+        assert!(self::mmap(SYS_FS_PATH).is_err(),);
+    }
 }
