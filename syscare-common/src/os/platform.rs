@@ -12,59 +12,71 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsStr;
+use std::ffi::OsString;
 
-use lazy_static::lazy_static;
-use nix::sys::utsname::{uname, UtsName};
+use nix::sys::utsname;
 
 #[inline(always)]
-fn info() -> &'static UtsName {
-    lazy_static! {
-        static ref PLATFORM_INFO: UtsName = uname().expect("Failed to get uname");
+fn sysinfo() -> utsname::UtsName {
+    utsname::uname().expect("Failed to get system infomation")
+}
+
+pub fn sysname() -> OsString {
+    self::sysinfo().sysname().to_os_string()
+}
+
+pub fn hostname() -> OsString {
+    self::sysinfo().nodename().to_os_string()
+}
+
+pub fn release() -> OsString {
+    self::sysinfo().release().to_os_string()
+}
+
+pub fn version() -> OsString {
+    self::sysinfo().version().to_os_string()
+}
+
+pub fn arch() -> OsString {
+    self::sysinfo().machine().to_os_string()
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_sysname() {
+        let sysname = self::sysname();
+        println!("sysname: {}", sysname.to_string_lossy());
+        assert!(!sysname.is_empty());
     }
-    &PLATFORM_INFO
-}
 
-pub fn hostname() -> &'static OsStr {
-    info().nodename()
-}
+    #[test]
+    fn test_hostname() {
+        let hostname = self::hostname();
+        println!("hostname: {}", hostname.to_string_lossy());
+        assert!(!hostname.is_empty());
+    }
 
-pub fn sysname() -> &'static OsStr {
-    info().sysname()
-}
+    #[test]
+    fn test_release() {
+        let release = self::release();
+        println!("release: {}", release.to_string_lossy());
+        assert!(!release.is_empty());
+    }
 
-pub fn release() -> &'static OsStr {
-    info().release()
-}
+    #[test]
+    fn test_version() {
+        let version = self::version();
+        println!("version: {}", version.to_string_lossy());
+        assert!(!version.is_empty());
+    }
 
-pub fn version() -> &'static OsStr {
-    info().version()
-}
-
-pub fn arch() -> &'static OsStr {
-    info().machine()
-}
-
-#[test]
-fn test() {
-    let sysname = sysname();
-    let hostname = hostname();
-    let release = release();
-    let version = version();
-    let arch = arch();
-
-    println!("sysname:  {}", sysname.to_string_lossy());
-    assert!(!sysname.is_empty());
-
-    println!("hostname: {}", hostname.to_string_lossy());
-    assert!(!hostname.is_empty());
-
-    println!("release:  {}", release.to_string_lossy());
-    assert!(!release.is_empty());
-
-    println!("version:  {}", version.to_string_lossy());
-    assert!(!version.is_empty());
-
-    println!("arch:     {}", arch.to_string_lossy());
-    assert!(!arch.is_empty());
+    #[test]
+    fn test_arch() {
+        let arch = self::arch();
+        println!("arch: {}", arch.to_string_lossy());
+        assert!(!arch.is_empty());
+    }
 }

@@ -13,72 +13,48 @@
  */
 
 use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use lazy_static::lazy_static;
-use nix::unistd::getpid;
-
-use crate::fs;
+use nix::errno::Errno;
+use nix::unistd;
 
 pub fn id() -> i32 {
-    lazy_static! {
-        static ref PROCESS_ID: i32 = getpid().as_raw();
-    }
-    *PROCESS_ID
+    unistd::getpid().as_raw()
 }
 
-pub fn path() -> &'static Path {
-    lazy_static! {
-        static ref PROCESS_PATH: PathBuf =
-            std::env::current_exe().unwrap_or_else(|_| PathBuf::from("/"));
-    }
-    PROCESS_PATH.as_path()
+pub fn path() -> std::io::Result<PathBuf> {
+    std::env::current_exe()
 }
 
-pub fn name() -> &'static OsStr {
-    lazy_static! {
-        static ref PROCESS_NAME: OsString = fs::file_name(path());
-    }
-    PROCESS_NAME.as_os_str()
+pub fn name() -> std::io::Result<OsString> {
+    self::path()?
+        .file_name()
+        .map(OsStr::to_os_string)
+        .ok_or(std::io::Error::from(Errno::EINVAL))
 }
 
 #[cfg(test)]
-mod tests_process {
-    use crate::os::process::{id, name, path};
-    use std::process::Command;
-    use std::{println, string::ToString};
-
-    fn build_commd(s: &str) -> String {
-        let mut cmd = "ps -ef |grep ".to_string();
-        cmd = cmd + s + "|grep -v grep";
-        let output = Command::new("bash").arg("-c").arg(cmd).output().unwrap();
-        String::from_utf8(output.stdout).unwrap()
-    }
+mod test {
+    use super::*;
 
     #[test]
     fn test_id() {
-        let process_id = id().to_string();
-        println!("This process id is {}", process_id);
-
-        let sys_proc = build_commd(&process_id);
-        assert!(!sys_proc.is_empty());
+        let pid = self::id();
+        println!("pid: {}", pid);
+        assert!(pid > 1)
     }
 
     #[test]
     fn test_path() {
-        let process_path = path().display().to_string();
-        println!("This path is {:#?}", process_path);
-
-        let sys_path = build_commd(&process_path);
-        assert!(!sys_path.is_empty());
+        let path = self::path().expect("Failed to get executable path");
+        println!("path: {}", path.display());
+        assert!(path.exists());
     }
 
     #[test]
     fn test_name() {
-        let process_name = name().to_string_lossy();
-        println!("This name is {:#?}", process_name);
-
-        let sys_name = build_commd(&process_name);
-        assert!(!sys_name.is_empty());
+        let name = self::name().expect("Failed to get executable name");
+        println!("name: {}", name.to_string_lossy());
+        assert!(!name.is_empty());
     }
 }

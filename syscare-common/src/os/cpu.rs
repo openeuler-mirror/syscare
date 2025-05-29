@@ -12,39 +12,35 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsStr;
+use std::ffi::OsString;
 
-use lazy_static::lazy_static;
-
-use nix::{
-    sched::{sched_getaffinity, CpuSet},
-    unistd::getpid,
-};
+use num_cpus;
 
 use super::platform;
 
-pub fn arch() -> &'static OsStr {
+pub fn arch() -> OsString {
     platform::arch()
 }
 
 pub fn num() -> usize {
-    lazy_static! {
-        static ref CPU_NUM: usize = {
-            let cpu_set = sched_getaffinity(getpid()).unwrap_or_default();
-            let mut cpu_count = 0;
-            for i in 0..CpuSet::count() {
-                if cpu_set.is_set(i).unwrap_or_default() {
-                    cpu_count += 1;
-                }
-            }
-            cpu_count
-        };
-    }
-    *CPU_NUM
+    num_cpus::get()
 }
 
-#[test]
-fn test() {
-    println!("arch: {}", arch().to_string_lossy());
-    println!("num: {}", num())
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_arch() {
+        let arch = self::arch();
+        println!("cpu arch: {}", arch.to_string_lossy());
+        assert!(!arch.is_empty());
+    }
+
+    #[test]
+    fn test_num() {
+        let num = self::num();
+        println!("cpu num: {}", num);
+        assert_ne!(num, 0);
+    }
 }

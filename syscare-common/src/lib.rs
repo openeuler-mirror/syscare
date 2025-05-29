@@ -14,7 +14,6 @@
 
 pub mod ffi;
 pub mod fs;
-pub mod io;
 mod macros;
 pub mod os;
 pub mod os_str;

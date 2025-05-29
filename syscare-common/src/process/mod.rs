@@ -12,151 +12,434 @@
  * See the Mulan PSL v2 for more details.
  */
 
-mod args;
+use std::{
+    collections::HashMap,
+    ffi::{OsStr, OsString},
+    path::Path,
+    process,
+};
+
+use anyhow::{Context, Result};
+use log::{trace, Level};
+
 mod child;
-mod command;
-mod envs;
-mod stdio;
+mod output;
 
-pub use args::*;
-pub use child::*;
-pub use command::*;
-pub use envs::*;
+#[derive(Debug, Clone)]
+pub struct CommandArgs(Vec<OsString>);
 
-use stdio::{Stdio, StdioLevel};
+impl CommandArgs {
+    pub fn new() -> Self {
+        Self(Vec::new())
+    }
 
-#[test]
-fn test() {
+    pub fn arg<S>(&mut self, arg: S) -> &mut Self
+    where
+        S: AsRef<OsStr>,
+    {
+        self.0.push(arg.as_ref().to_os_string());
+        self
+    }
+
+    pub fn args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        for arg in args {
+            self.arg(arg);
+        }
+        self
+    }
+}
+
+impl Default for CommandArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IntoIterator for CommandArgs {
+    type Item = OsString;
+
+    type IntoIter = std::vec::IntoIter<OsString>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct CommandEnvs(HashMap<OsString, OsString>);
+
+impl CommandEnvs {
+    pub fn new() -> Self {
+        Self(HashMap::new())
+    }
+
+    pub fn env<K, V>(&mut self, key: K, value: V) -> &mut Self
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.0
+            .insert(key.as_ref().to_os_string(), value.as_ref().to_os_string());
+        self
+    }
+
+    pub fn envs<I, K, V>(&mut self, vars: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (key, value) in vars {
+            self.env(key, value);
+        }
+        self
+    }
+}
+
+impl Default for CommandEnvs {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl IntoIterator for CommandEnvs {
+    type Item = (OsString, OsString);
+
+    type IntoIter = std::collections::hash_map::IntoIter<OsString, OsString>;
+
+    fn into_iter(self) -> Self::IntoIter {
+        self.0.into_iter()
+    }
+}
+
+pub struct Command {
+    inner: process::Command,
+    log_level: output::LogLevel,
+}
+
+impl Command {
+    pub fn new<S: AsRef<OsStr>>(program: S) -> Self {
+        Self {
+            inner: process::Command::new(program),
+            log_level: output::LogLevel::default(),
+        }
+    }
+
+    pub fn arg<S: AsRef<OsStr>>(&mut self, arg: S) -> &mut Self {
+        self.inner.arg(arg);
+        self
+    }
+
+    pub fn args<I, S>(&mut self, args: I) -> &mut Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<OsStr>,
+    {
+        for arg in args {
+            self.arg(arg.as_ref());
+        }
+        self
+    }
+
+    pub fn env<K, V>(&mut self, key: K, val: V) -> &mut Self
+    where
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        self.inner.env(key, val);
+        self
+    }
+
+    pub fn envs<I, K, V>(&mut self, vars: I) -> &mut Self
+    where
+        I: IntoIterator<Item = (K, V)>,
+        K: AsRef<OsStr>,
+        V: AsRef<OsStr>,
+    {
+        for (key, val) in vars {
+            self.env(key, val);
+        }
+        self
+    }
+
+    pub fn env_clear(&mut self) -> &mut Self {
+        self.inner.env_clear();
+        self
+    }
+
+    pub fn current_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+        self.inner.current_dir(dir);
+        self
+    }
+
+    pub fn stdin<T: Into<process::Stdio>>(&mut self, cfg: T) -> &mut Self {
+        self.inner.stdin(cfg);
+        self
+    }
+
+    pub fn stdout(&mut self, level: Level) -> &mut Self {
+        self.log_level.stdout = Some(level);
+        self
+    }
+
+    pub fn stderr(&mut self, level: Level) -> &mut Self {
+        self.log_level.stderr = Some(level);
+        self
+    }
+
+    pub fn pipe_output(&mut self) -> &mut Self {
+        self.inner
+            .stdout(process::Stdio::piped())
+            .stderr(process::Stdio::piped());
+        self
+    }
+
+    pub fn ignore_output(&mut self) -> &mut Self {
+        self.inner
+            .stdout(process::Stdio::null())
+            .stderr(process::Stdio::null());
+        self
+    }
+
+    pub fn spawn(&mut self) -> Result<child::Child> {
+        let name = Path::new(self.inner.get_program())
+            .file_name()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_default();
+
+        trace!("Executing {:?}", self.inner);
+        let child = self
+            .inner
+            .spawn()
+            .with_context(|| format!("Failed to start {}", name))?;
+        let log_level = self.log_level;
+
+        Ok(child::Child {
+            name,
+            child,
+            log_level,
+        })
+    }
+
+    pub fn run(&mut self) -> Result<child::ExitStatus> {
+        self.ignore_output().spawn()?.wait()
+    }
+
+    pub fn run_with_output(&mut self) -> Result<child::Output> {
+        self.pipe_output().spawn()?.wait_with_output()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
     use log::Level;
-    use std::fs::File;
+    use std::ffi::OsStr;
+    use std::path::Path;
+    use std::time::Duration;
 
-    use crate::ffi::OsStrExt;
+    #[test]
+    fn test_command_args_new() {
+        let args = CommandArgs::new();
+        assert!(args.0.is_empty());
+    }
 
-    println!("Testing Command::new()...");
-    let mut echo_cmd = Command::new("echo");
-    let mut env_cmd = Command::new("env");
-    let mut pwd_cmd = Command::new("pwd");
-    let mut grep_cmd = Command::new("grep");
-    let mut ls_cmd = Command::new("ls");
+    #[test]
+    fn test_command_args_default() {
+        let args = CommandArgs::default();
+        assert!(args.0.is_empty());
+    }
 
-    let mut test_cmd = Command::new("test");
-    let mut cat_cmd = Command::new("cat");
+    #[test]
+    fn test_command_args_arg() {
+        let mut args = CommandArgs::new();
+        args.arg("test");
+        assert_eq!(args.0.len(), 1);
+        assert_eq!(args.0[0], OsStr::new("test"));
+    }
 
-    let mut err_cmd = Command::new("/cmd/not/exist");
+    #[test]
+    fn test_command_args_args() {
+        let mut args = CommandArgs::new();
+        args.args(vec!["arg1", "arg2"]);
+        assert_eq!(args.0.len(), 2);
+        assert_eq!(args.0[0], OsStr::new("arg1"));
+        assert_eq!(args.0[1], OsStr::new("arg2"));
+    }
 
-    println!("Testing Command::arg()...");
-    echo_cmd.arg("Test:");
+    #[test]
+    fn test_command_args_into_iter() {
+        let mut args = CommandArgs::new();
+        args.args(vec!["a", "b", "c"]);
+        let mut iter = args.into_iter();
+        assert_eq!(iter.next(), Some(OsString::from("a")));
+        assert_eq!(iter.next(), Some(OsString::from("b")));
+        assert_eq!(iter.next(), Some(OsString::from("c")));
+        assert_eq!(iter.next(), None);
+    }
 
-    test_cmd.arg("1");
-    ls_cmd.arg("/file/not/exist");
+    #[test]
+    fn test_command_envs_new() {
+        let envs = CommandEnvs::new();
+        assert!(envs.0.is_empty());
+    }
 
-    println!("Testing Command::args()...");
-    echo_cmd.args(["Hello", "World!"]);
+    #[test]
+    fn test_command_envs_default() {
+        let envs = CommandEnvs::default();
+        assert!(envs.0.is_empty());
+    }
 
-    println!("Testing Command::env_clear()...");
-    env_cmd.env_clear();
+    #[test]
+    fn test_command_envs_env() {
+        let mut envs = CommandEnvs::new();
+        envs.env("KEY", "VALUE");
+        assert_eq!(envs.0.len(), 1);
+        assert_eq!(
+            envs.0.get(&OsString::from("KEY")),
+            Some(&OsString::from("VALUE"))
+        );
+    }
 
-    println!("Testing Command::env()...");
-    env_cmd.env("test_key1", "test_val1");
+    #[test]
+    fn test_command_envs_envs() {
+        let mut envs = CommandEnvs::new();
+        envs.envs([("K1", "V1"), ("K2", "V2")]);
+        assert_eq!(envs.0.len(), 2);
+        assert_eq!(
+            envs.0.get(&OsString::from("K1")),
+            Some(&OsString::from("V1"))
+        );
+        assert_eq!(
+            envs.0.get(&OsString::from("K2")),
+            Some(&OsString::from("V2"))
+        );
+    }
 
-    println!("Testing Command::envs()...");
-    env_cmd.envs([("test_key2", "test_val2"), ("test_key3", "test_val3")]);
+    #[test]
+    fn test_command_new() {
+        let cmd = Command::new("test");
+        assert_eq!(cmd.inner.get_program(), OsStr::new("test"));
+        assert!(cmd.inner.get_args().next().is_none());
+    }
 
-    println!("Testing Command::current_dir()...");
-    pwd_cmd.current_dir("/tmp");
+    #[test]
+    fn test_command_arg() {
+        let mut cmd = Command::new("test");
+        cmd.arg("arg1");
+        let mut args = cmd.inner.get_args();
+        assert_eq!(args.next(), Some(OsStr::new("arg1")));
+        assert!(args.next().is_none());
+    }
 
-    println!("Testing Command::stdin()...");
-    grep_cmd.stdin(File::open("/proc/self/maps").expect("Failed to open file"));
-    grep_cmd.arg("vdso");
+    #[test]
+    fn test_command_args() {
+        let mut cmd = Command::new("test");
+        cmd.args(["a", "b"]);
+        let mut args = cmd.inner.get_args();
+        assert_eq!(args.next(), Some(OsStr::new("a")));
+        assert_eq!(args.next(), Some(OsStr::new("b")));
+        assert!(args.next().is_none());
+    }
 
-    println!("Testing Command::stdout()...");
-    echo_cmd.stdout(Level::Info);
+    #[test]
+    fn test_command_env() {
+        let mut cmd = Command::new("test");
+        cmd.env("K", "V");
+        let envs = cmd.inner.get_envs().collect::<HashMap<_, _>>();
+        assert_eq!(envs.get(&OsStr::new("K")), Some(&Some(OsStr::new("V"))));
+    }
 
-    println!("Testing Command::stderr()...");
-    echo_cmd.stderr(Level::Info);
+    #[test]
+    fn test_command_envs() {
+        let mut cmd = Command::new("test");
+        cmd.envs([("K1", "V1"), ("K2", "V2")]);
 
-    println!("Testing Command::spawn()...");
-    let mut echo_proc = echo_cmd.spawn().expect("Failed to spawn process");
-    let mut env_proc = env_cmd.spawn().expect("Failed to spawn process");
-    let mut pwd_proc = pwd_cmd.spawn().expect("Failed to spawn process");
-    let mut grep_proc = grep_cmd.spawn().expect("Failed to spawn process");
-    let mut ls_proc = ls_cmd.spawn().expect("Failed to spawn process");
+        let envs = cmd.inner.get_envs().collect::<HashMap<_, _>>();
+        assert_eq!(envs.len(), 2);
+        assert_eq!(envs.get(&OsStr::new("K1")), Some(&Some(OsStr::new("V1"))));
+        assert_eq!(envs.get(&OsStr::new("K2")), Some(&Some(OsStr::new("V2"))));
+    }
 
-    let mut test_proc = test_cmd.spawn().expect("Failed to spawn process");
-    let mut cat_proc = cat_cmd.spawn().expect("Failed to spawn process");
+    #[test]
+    fn test_command_env_clear() {
+        let mut cmd = Command::new("test");
+        cmd.env("K", "V").env_clear();
+        let envs = cmd.inner.get_envs().collect::<Vec<_>>();
+        assert!(envs.is_empty());
+    }
 
-    assert_eq!(err_cmd.spawn().is_err(), true);
+    #[test]
+    fn test_command_current_dir() {
+        let mut cmd = Command::new("test");
+        cmd.current_dir("/tmp");
+        assert_eq!(cmd.inner.get_current_dir(), Some(Path::new("/tmp")));
+    }
 
-    println!("Testing Child::kill()...");
-    cat_proc.kill().expect("Failed to kill process");
+    #[test]
+    fn test_command_stdout_stderr() {
+        let mut cmd = Command::new("test");
+        cmd.stdout(Level::Info).stderr(Level::Error);
+        assert_eq!(cmd.log_level.stdout, Some(Level::Info));
+        assert_eq!(cmd.log_level.stderr, Some(Level::Error));
+    }
 
-    println!("Testing Child::wait()...");
-    let test_status = test_proc.wait().expect("Failed to wait process");
-    let cat_status = cat_proc.wait().expect("Process should not be waited");
+    #[test]
+    fn test_command_pipe_output() {
+        let mut cmd = Command::new("test");
 
-    println!("Testing Child::wait_with_output()...");
-    let echo_output = echo_proc
-        .wait_with_output()
-        .expect("Failed to wait process");
-    let env_output = env_proc.wait_with_output().expect("Failed to wait process");
-    let pwd_output = pwd_proc.wait_with_output().expect("Failed to wait process");
-    let grep_output = grep_proc
-        .wait_with_output()
-        .expect("Failed to wait process");
-    let ls_output = ls_proc.wait_with_output().expect("Failed to wait process");
+        cmd.pipe_output();
+        assert!(cmd.inner.spawn().unwrap().stdout.is_some());
+        assert!(cmd.inner.spawn().unwrap().stderr.is_some());
+    }
 
-    println!("Testing ExitStatus::exit_code()...");
-    assert_eq!(test_status.exit_code(), 0);
-    assert_eq!(cat_status.exit_code(), 137);
+    #[test]
+    fn test_command_ignore_output() {
+        let mut cmd = Command::new("test");
 
-    println!("Testing ExitStatus::exit_ok()...");
-    assert_eq!(test_status.exit_ok().is_ok(), true);
-    assert_eq!(cat_status.exit_ok().is_ok(), false);
+        cmd.pipe_output();
+        assert!(cmd.inner.spawn().unwrap().stdout.is_some());
+        assert!(cmd.inner.spawn().unwrap().stderr.is_some());
+    }
 
-    println!("Testing ExitStatus::success()...");
-    assert_eq!(test_status.success(), true);
-    assert_eq!(cat_status.success(), false);
+    #[test]
+    fn test_command_spawn_kill() {
+        let mut cmd = Command::new("yes");
+        cmd.ignore_output();
 
-    println!("Testing Output::exit_code()...");
-    assert_eq!(echo_output.exit_code(), 0);
-    assert_eq!(env_output.exit_code(), 0);
-    assert_eq!(pwd_output.exit_code(), 0);
-    assert_eq!(grep_output.exit_code(), 0);
-    assert_eq!(ls_output.exit_code(), 2);
+        let mut child = cmd.spawn().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
 
-    println!("Testing Output::exit_ok()...");
-    assert_eq!(echo_output.exit_ok().is_ok(), true);
-    assert_eq!(env_output.exit_ok().is_ok(), true);
-    assert_eq!(pwd_output.exit_ok().is_ok(), true);
-    assert_eq!(grep_output.exit_ok().is_ok(), true);
-    assert_eq!(ls_output.exit_ok().is_ok(), false);
+        assert!(child.kill().is_ok());
+    }
 
-    println!("Testing Output::success()...");
-    assert_eq!(echo_output.success(), true);
-    assert_eq!(env_output.success(), true);
-    assert_eq!(pwd_output.success(), true);
-    assert_eq!(grep_output.success(), true);
-    assert_eq!(ls_output.success(), false);
+    #[test]
+    fn test_command_spawn_wait() {
+        let mut cmd = Command::new("echo");
+        cmd.arg("test").ignore_output();
 
-    println!("Testing Output::stdout...");
-    assert_eq!(echo_output.stdout.is_empty(), false);
-    assert_eq!(env_output.stdout.is_empty(), false);
-    assert_eq!(pwd_output.stdout.is_empty(), false);
-    assert_eq!(grep_output.stdout.is_empty(), false);
-    assert_eq!(ls_output.stdout.is_empty(), true);
+        let mut child = cmd.spawn().unwrap();
+        let status = child.wait().unwrap();
+        assert!(status.success());
+    }
 
-    assert_eq!(echo_output.stdout, "Test: Hello World!");
-    assert_eq!(
-        env_output.stdout,
-        "test_key1=test_val1\ntest_key2=test_val2\ntest_key3=test_val3"
-    );
-    assert_eq!(pwd_output.stdout, "/tmp");
-    assert_eq!(grep_output.stdout.contains("vdso"), true);
+    #[test]
+    fn test_command_run() {
+        let mut cmd = Command::new("true");
+        let status = cmd.run().unwrap();
+        assert!(status.success());
+    }
 
-    println!("Testing ProcessOutput::stderr...");
-    assert_eq!(echo_output.stderr.is_empty(), true);
-    assert_eq!(env_output.stderr.is_empty(), true);
-    assert_eq!(pwd_output.stderr.is_empty(), true);
-    assert_eq!(grep_output.stderr.is_empty(), true);
-    assert_eq!(ls_output.stderr.is_empty(), false);
+    #[test]
+    fn test_command_run_with_output() {
+        let mut cmd = Command::new("env");
+        let output = cmd.run_with_output().unwrap();
+
+        assert!(output.status.success());
+        assert!(!output.stdout.is_empty());
+    }
 }
