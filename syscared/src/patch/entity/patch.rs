@@ -78,6 +78,9 @@ impl std::cmp::Ord for Patch {
 
 impl std::fmt::Display for Patch {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.name().to_string_lossy())
+        match self {
+            Patch::KernelPatch(patch) => write!(f, "{}", patch),
+            Patch::UserPatch(patch) => write!(f, "{}", patch),
+        }
     }
 }
