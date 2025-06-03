@@ -20,7 +20,7 @@ use std::{
     time::Duration,
 };
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, bail, Context, Result};
 use indexmap::IndexMap;
 use inotify::{Inotify, WatchDescriptor, WatchMask};
 use log::info;
@@ -75,13 +75,19 @@ impl UserPatchMonitor {
             Some(inotify) => {
                 let wd = inotify
                     .add_watch(watch_file, WatchMask::OPEN)
-                    .with_context(|| format!("Failed to watch file {}", watch_file.display()))?;
+                    .map_err(|e| {
+                        anyhow!(
+                            "Failed to watch file '{}', {}",
+                            watch_file.display(),
+                            e.to_string().to_lowercase()
+                        )
+                    })?;
 
                 self.watch_file_map
                     .write()
                     .insert(wd.clone(), watch_file.to_owned());
                 self.watch_wd_map.lock().insert(watch_file.to_owned(), wd);
-                info!("Start watching file {}", watch_file.display());
+                info!("Start watching file '{}'", watch_file.display());
             }
             None => bail!("Inotify does not exist"),
         }
@@ -97,10 +103,14 @@ impl UserPatchMonitor {
                 Some(inotify) => {
                     self.watch_file_map.write().remove(&wd);
 
-                    inotify.rm_watch(wd).with_context(|| {
-                        format!("Failed to stop watch file {}", ignore_file.display())
+                    inotify.rm_watch(wd).map_err(|e| {
+                        anyhow!(
+                            "Failed to stop watch file '{}', {}",
+                            ignore_file.display(),
+                            e.to_string().to_lowercase()
+                        )
                     })?;
-                    info!("Stop watching file {}", ignore_file.display());
+                    info!("Stop watching file '{}'", ignore_file.display());
                 }
                 None => bail!("Inotify does not exist"),
             }
@@ -124,7 +134,13 @@ where
         thread::Builder::new()
             .name(MONITOR_THREAD_NAME.to_string())
             .spawn(move || self.thread_main())
-            .with_context(|| format!("Failed to create thread '{}'", MONITOR_THREAD_NAME))
+            .map_err(|e| {
+                anyhow!(
+                    "Failed to create thread '{}', {}",
+                    MONITOR_THREAD_NAME,
+                    e.to_string().to_lowercase()
+                )
+            })
     }
 
     #[inline]

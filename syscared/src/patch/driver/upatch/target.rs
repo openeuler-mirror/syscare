@@ -12,125 +12,113 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsString;
+use std::{
+    collections::{hash_map::Entry, HashMap, HashSet},
+    path::PathBuf,
+};
 
-use indexmap::IndexMap;
+use indexmap::IndexSet;
 use uuid::Uuid;
 
-use crate::patch::entity::UserPatchFunction;
-
-use super::entity::PatchEntity;
-
-#[derive(Debug)]
-pub struct PatchFunction {
-    pub uuid: Uuid,
-    pub name: OsString,
-    pub size: u64,
-}
-
-impl PatchFunction {
-    pub fn new(uuid: Uuid, function: &UserPatchFunction) -> Self {
-        Self {
-            uuid,
-            name: function.name.to_os_string(),
-            size: function.new_size,
-        }
-    }
-
-    pub fn is_same_function(&self, uuid: &Uuid, function: &UserPatchFunction) -> bool {
-        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
-    }
-}
+use crate::patch::entity::UserPatch;
 
 #[derive(Debug, Default)]
 pub struct PatchTarget {
-    patch_map: IndexMap<Uuid, PatchEntity>, // patched file data
-    function_map: IndexMap<u64, Vec<PatchFunction>>, // function addr -> function collision list
+    process_list: HashSet<i32>,
+    patch_map: HashMap<Uuid, PathBuf>, // uuid -> patch file
+    collision_map: HashMap<u64, IndexSet<Uuid>>, // function old addr -> patch collision list
 }
 
 impl PatchTarget {
-    pub fn is_patched(&self) -> bool {
-        !self.patch_map.is_empty()
+    pub fn add_process(&mut self, pid: i32) {
+        self.process_list.insert(pid);
     }
 
-    pub fn add_patch(&mut self, uuid: Uuid, entity: PatchEntity) {
-        self.patch_map.insert(uuid, entity);
+    pub fn remove_process(&mut self, pid: i32) {
+        self.process_list.remove(&pid);
     }
 
-    pub fn remove_patch(&mut self, uuid: &Uuid) {
-        self.patch_map.remove(uuid);
+    pub fn clean_dead_process(&mut self, process_list: &HashSet<i32>) {
+        self.process_list.retain(|pid| process_list.contains(pid));
     }
 
-    pub fn get_patch(&mut self, uuid: &Uuid) -> Option<&mut PatchEntity> {
-        self.patch_map.get_mut(uuid)
+    pub fn need_actived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
+        process_list
+            .difference(&self.process_list)
+            .copied()
+            .collect()
     }
 
-    pub fn all_patches(&mut self) -> impl IntoIterator<Item = (&Uuid, &mut PatchEntity)> {
-        self.patch_map.iter_mut()
+    pub fn need_deactived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
+        process_list
+            .intersection(&self.process_list)
+            .copied()
+            .collect()
     }
 }
 
 impl PatchTarget {
-    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
-    where
-        I: IntoIterator<Item = &'a UserPatchFunction>,
-    {
-        for function in functions {
-            self.function_map
+    pub fn add_patch(&mut self, patch: &UserPatch) {
+        for function in &patch.functions {
+            self.collision_map
                 .entry(function.old_addr)
                 .or_default()
-                .push(PatchFunction::new(uuid, function));
+                .insert(patch.uuid);
         }
+        self.patch_map.insert(patch.uuid, patch.patch_file.clone());
     }
 
-    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
-    where
-        I: IntoIterator<Item = &'a UserPatchFunction>,
-    {
-        for function in functions {
-            if let Some(collision_list) = self.function_map.get_mut(&function.old_addr) {
-                if let Some(index) = collision_list
-                    .iter()
-                    .position(|patch_function| patch_function.is_same_function(uuid, function))
-                {
-                    collision_list.remove(index);
-                    if collision_list.is_empty() {
-                        self.function_map.remove(&function.old_addr);
-                    }
+    pub fn remove_patch(&mut self, patch: &UserPatch) {
+        for function in &patch.functions {
+            if let Entry::Occupied(mut entry) = self.collision_map.entry(function.old_addr) {
+                let patch_set = entry.get_mut();
+                patch_set.shift_remove(&patch.uuid);
+
+                if patch_set.is_empty() {
+                    entry.remove();
                 }
             }
         }
-    }
-}
-
-impl PatchTarget {
-    pub fn get_conflicts<'a, I>(
-        &'a self,
-        functions: I,
-    ) -> impl IntoIterator<Item = &'a PatchFunction>
-    where
-        I: IntoIterator<Item = &'a UserPatchFunction>,
-    {
-        functions.into_iter().filter_map(move |function| {
-            self.function_map
-                .get(&function.old_addr)
-                .and_then(|list| list.last())
-        })
+        self.patch_map.remove(&patch.uuid);
     }
 
-    pub fn get_overrides<'a, I>(
+    pub fn is_patched(&self) -> bool {
+        !self.collision_map.is_empty()
+    }
+
+    pub fn all_patches(&self) -> impl Iterator<Item = (Uuid, PathBuf)> + '_ {
+        self.patch_map
+            .iter()
+            .map(|(uuid, path)| (*uuid, path.to_path_buf()))
+    }
+
+    pub fn get_conflicted_patches<'a>(
         &'a self,
-        uuid: &'a Uuid,
-        functions: I,
-    ) -> impl IntoIterator<Item = &'a PatchFunction>
-    where
-        I: IntoIterator<Item = &'a UserPatchFunction>,
-    {
-        functions.into_iter().filter_map(move |function| {
-            self.function_map
-                .get(&function.old_addr)
-                .and_then(|list| list.last())
-                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
-        })
+        patch: &'a UserPatch,
+    ) -> impl Iterator<Item = Uuid> + 'a {
+        patch
+            .functions
+            .iter()
+            .filter_map(move |function| self.collision_map.get(&function.old_addr))
+            .flatten()
+            .copied()
+            .filter(move |&uuid| uuid != patch.uuid)
+    }
+
+    pub fn get_overridden_patches<'a>(
+        &'a self,
+        patch: &'a UserPatch,
+    ) -> impl Iterator<Item = Uuid> + 'a {
+        patch
+            .functions
+            .iter()
+            .filter_map(move |function| self.collision_map.get(&function.old_addr))
+            .flat_map(move |collision_list| {
+                collision_list
+                    .iter()
+                    .copied()
+                    .skip_while(move |&uuid| uuid != patch.uuid)
+                    .skip(1)
+            })
     }
 }

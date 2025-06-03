@@ -1,14 +1,27 @@
 use std::path::Path;
 
 use anyhow::{bail, Result};
-use log::Level;
+use log::{debug, Level};
 use uuid::Uuid;
 
 use syscare_common::process::Command;
 
 const UPATCH_MANAGE_BIN: &str = "upatch-manage";
 
-pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
+pub fn active_patch<P, Q>(uuid: &Uuid, pid: i32, target_elf: P, patch_file: Q) -> Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let target_elf = target_elf.as_ref();
+    let patch_file = patch_file.as_ref();
+
+    debug!(
+        "Upatch: Patching '{}' to '{}' (pid: {})...",
+        patch_file.display(),
+        target_elf.display(),
+        pid,
+    );
     let exit_code = Command::new(UPATCH_MANAGE_BIN)
         .arg("patch")
         .arg("--uuid")
@@ -29,7 +42,20 @@ pub fn active_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path)
     }
 }
 
-pub fn deactive_patch(uuid: &Uuid, pid: i32, target_elf: &Path, patch_file: &Path) -> Result<()> {
+pub fn deactive_patch<P, Q>(uuid: &Uuid, pid: i32, target_elf: P, patch_file: Q) -> Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let target_elf = target_elf.as_ref();
+    let patch_file = patch_file.as_ref();
+
+    debug!(
+        "Upatch: Unpatching '{}' from '{}' (pid: {})...",
+        patch_file.display(),
+        target_elf.display(),
+        pid,
+    );
     let exit_code = Command::new(UPATCH_MANAGE_BIN)
         .arg("unpatch")
         .arg("--uuid")
