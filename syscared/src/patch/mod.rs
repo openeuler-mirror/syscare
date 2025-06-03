@@ -16,7 +16,6 @@ pub mod driver;
 pub mod entity;
 pub mod manager;
 pub mod monitor;
-pub mod resolver;
 pub mod transaction;
 
 const PATCH_INFO_FILE_NAME: &str = "patch_info";
