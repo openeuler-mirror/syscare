@@ -83,17 +83,27 @@ pub struct Config {
 impl Config {
     pub fn parse<P: AsRef<Path>>(path: P) -> Result<Self> {
         let config_path = path.as_ref();
-        let instance = serde_yaml::from_reader(fs::open_file(config_path)?)
-            .map_err(|_| anyhow!("Failed to parse config {}", config_path.display()))?;
+        let config = serde_yaml::from_reader(fs::open_file(config_path)?).map_err(|e| {
+            anyhow!(
+                "Failed to parse config '{}', {}",
+                config_path.display(),
+                e.to_string().to_lowercase()
+            )
+        })?;
 
-        Ok(instance)
+        Ok(config)
     }
 
     pub fn write<P: AsRef<Path>>(&self, path: P) -> Result<()> {
         let config_path = path.as_ref();
         let config_file = fs::create_file(config_path)?;
-        serde_yaml::to_writer(config_file, self)
-            .map_err(|_| anyhow!("Failed to write config {}", config_path.display()))?;
+        serde_yaml::to_writer(config_file, self).map_err(|e| {
+            anyhow!(
+                "Failed to write config '{}', {}",
+                config_path.display(),
+                e.to_string().to_lowercase()
+            )
+        })?;
 
         Ok(())
     }

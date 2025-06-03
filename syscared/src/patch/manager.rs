@@ -24,10 +24,16 @@ use lazy_static::lazy_static;
 use log::{debug, error, info, trace, warn};
 use uuid::Uuid;
 
-use syscare_abi::PatchStatus;
+use syscare_abi::{PatchEntity, PatchInfo, PatchStatus, PatchType, PATCH_INFO_MAGIC};
 use syscare_common::{concat_os, ffi::OsStrExt, fs, util::serde};
 
-use crate::{config::PatchConfig, patch::resolver::PatchResolver};
+use crate::{
+    config::PatchConfig,
+    patch::{
+        entity::{KernelPatch, UserPatch},
+        PATCH_INFO_FILE_NAME,
+    },
+};
 
 use super::{
     driver::{PatchDriver, PatchOpFlag},
@@ -40,7 +46,7 @@ type TransitionAction =
     &'static (dyn Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<()> + Sync);
 
 const PATCH_CHECK: TransitionAction = &PatchManager::driver_check_patch;
-const PATCH_APPLY: TransitionAction = &PatchManager::driver_apply_patch;
+const PATCH_LOAD: TransitionAction = &PatchManager::driver_load_patch;
 const PATCH_REMOVE: TransitionAction = &PatchManager::driver_remove_patch;
 const PATCH_ACTIVE: TransitionAction = &PatchManager::driver_active_patch;
 const PATCH_DEACTIVE: TransitionAction = &PatchManager::driver_deactive_patch;
@@ -49,9 +55,9 @@ const PATCH_DECLINE: TransitionAction = &PatchManager::driver_decline_patch;
 
 lazy_static! {
     static ref STATUS_TRANSITION_MAP: IndexMap<Transition, Vec<TransitionAction>> = indexmap! {
-        (PatchStatus::NotApplied, PatchStatus::Deactived) => vec![PATCH_CHECK, PATCH_APPLY],
-        (PatchStatus::NotApplied, PatchStatus::Actived) => vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE],
-        (PatchStatus::NotApplied, PatchStatus::Accepted) => vec![PATCH_CHECK, PATCH_APPLY, PATCH_ACTIVE, PATCH_ACCEPT],
+        (PatchStatus::NotApplied, PatchStatus::Deactived) => vec![PATCH_CHECK, PATCH_LOAD],
+        (PatchStatus::NotApplied, PatchStatus::Actived) => vec![PATCH_CHECK, PATCH_LOAD, PATCH_ACTIVE],
+        (PatchStatus::NotApplied, PatchStatus::Accepted) => vec![PATCH_CHECK, PATCH_LOAD, PATCH_ACTIVE, PATCH_ACCEPT],
         (PatchStatus::Deactived, PatchStatus::NotApplied) => vec![PATCH_REMOVE],
         (PatchStatus::Deactived, PatchStatus::Actived) => vec![PATCH_CHECK, PATCH_ACTIVE],
         (PatchStatus::Deactived, PatchStatus::Accepted) => vec![PATCH_ACTIVE, PATCH_ACCEPT],
@@ -133,7 +139,7 @@ impl PatchManager {
             .unwrap_or_default();
 
         if status == PatchStatus::Unknown {
-            status = self.driver_patch_status(patch, PatchOpFlag::Normal)?;
+            status = self.driver_get_patch_status(patch)?;
             self.set_patch_status(patch, status)?;
         }
 
@@ -141,6 +147,7 @@ impl PatchManager {
     }
 
     pub fn check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
+        info!("Check patch '{}'", patch);
         self.driver.check_patch(patch, flag)?;
         self.driver.check_confliction(patch, flag)?;
 
@@ -245,20 +252,20 @@ impl PatchManager {
 
         debug!("Reading patch status...");
         let status_map: IndexMap<Uuid, PatchStatus> =
-            serde::deserialize(&self.patch_status_file).context("Failed to read patch status")?;
+            serde::deserialize(&self.patch_status_file)
+                .context("Failed to read patch status file")?;
         for (uuid, status) in &status_map {
             debug!("Patch '{}' status: {}", uuid, status);
         }
-
-        let restore_list = status_map
-            .into_iter()
-            .filter(|(_, status)| !accepted_only || (*status == PatchStatus::Accepted));
-        for (uuid, status) in restore_list {
+        for (uuid, status) in status_map {
+            if accepted_only && (status != PatchStatus::Accepted) {
+                continue;
+            }
             match self.find_patch_by_uuid(&uuid) {
                 Ok(patch) => {
-                    debug!("Restore patch '{}' status to '{}'", patch, status);
+                    info!("Restore patch '{}' status to '{}'", patch, status);
                     if let Err(e) = self.do_status_transition(&patch, status, PatchOpFlag::Force) {
-                        error!("{}", e);
+                        error!("{:?}", e);
                     }
                 }
                 Err(e) => {
@@ -277,7 +284,7 @@ impl PatchManager {
         let status_keys = self.status_map.keys().copied().collect::<Vec<_>>();
         for patch_uuid in status_keys {
             if !self.patch_map.contains_key(&patch_uuid) {
-                trace!("Patch '{}' was removed, remove its status", patch_uuid);
+                trace!("Patch '{}' was removed", patch_uuid);
                 self.status_map.remove(&patch_uuid);
             }
         }
@@ -329,19 +336,110 @@ impl PatchManager {
 }
 
 impl PatchManager {
+    fn parse_user_patch(
+        root_dir: &Path,
+        patch_info: Arc<PatchInfo>,
+        patch_entity: &PatchEntity,
+    ) -> Result<UserPatch> {
+        let patch_name = concat_os!(
+            patch_info.target.short_name(),
+            "/",
+            patch_info.name(),
+            "/",
+            patch_entity.patch_target.file_name().unwrap_or_default()
+        );
+        let patch_file = root_dir.join(&patch_entity.patch_name);
+
+        let patch = UserPatch::parse(&patch_name, patch_info, patch_entity, patch_file)
+            .with_context(|| {
+                format!(
+                    "Failed to parse patch '{}' ({})",
+                    patch_entity.uuid,
+                    patch_name.to_string_lossy(),
+                )
+            })?;
+
+        debug!("Found patch '{}' ({})", patch.uuid, patch);
+        Ok(patch)
+    }
+
+    fn parse_kernel_patch(
+        root_dir: &Path,
+        patch_info: Arc<PatchInfo>,
+        patch_entity: &PatchEntity,
+    ) -> Result<KernelPatch> {
+        const KPATCH_EXTENSION: &str = "ko";
+
+        let patch_name = concat_os!(
+            patch_info.target.short_name(),
+            "/",
+            patch_info.name(),
+            "/",
+            &patch_entity.patch_target,
+        );
+        let mut patch_file = root_dir.join(&patch_entity.patch_name);
+        patch_file.set_extension(KPATCH_EXTENSION);
+
+        let patch = KernelPatch::parse(&patch_name, patch_info, patch_entity, patch_file)
+            .with_context(|| {
+                format!(
+                    "Failed to parse patch '{}' ({})",
+                    patch_entity.uuid,
+                    patch_name.to_string_lossy(),
+                )
+            })?;
+
+        debug!("Found patch '{}' ({})", patch.uuid, patch);
+        Ok(patch)
+    }
+
+    fn parse_patches(root_dir: &Path) -> Result<Vec<Patch>> {
+        let root_name = root_dir.file_name().expect("Invalid patch root directory");
+        let patch_metadata = root_dir.join(PATCH_INFO_FILE_NAME);
+        let patch_info = Arc::new(
+            serde::deserialize_with_magic::<PatchInfo, _, _>(patch_metadata, PATCH_INFO_MAGIC)
+                .with_context(|| {
+                    format!(
+                        "Failed to parse patch '{}' metadata",
+                        root_name.to_string_lossy(),
+                    )
+                })?,
+        );
+
+        patch_info
+            .entities
+            .iter()
+            .map(|patch_entity| {
+                let patch_info = patch_info.clone();
+                match patch_info.kind {
+                    PatchType::UserPatch => Ok(Patch::UserPatch(Self::parse_user_patch(
+                        root_dir,
+                        patch_info,
+                        patch_entity,
+                    )?)),
+                    PatchType::KernelPatch => Ok(Patch::KernelPatch(Self::parse_kernel_patch(
+                        root_dir,
+                        patch_info,
+                        patch_entity,
+                    )?)),
+                }
+            })
+            .collect::<Result<Vec<_>>>()
+    }
+
     fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<IndexMap<Uuid, Arc<Patch>>> {
         const TRAVERSE_OPTION: fs::TraverseOptions = fs::TraverseOptions { recursive: false };
 
         let mut patch_map = IndexMap::new();
 
-        info!("Scanning patches from {}...", directory.as_ref().display());
-        for patch_dir in fs::list_dirs(directory, TRAVERSE_OPTION)? {
-            let resolve_result = PatchResolver::resolve_patch(&patch_dir)
-                .with_context(|| format!("Failed to resolve patch from {}", patch_dir.display()));
-            match resolve_result {
+        info!(
+            "Scanning patches from '{}'...",
+            directory.as_ref().display()
+        );
+        for root_dir in fs::list_dirs(directory, TRAVERSE_OPTION)? {
+            match Self::parse_patches(&root_dir) {
                 Ok(patches) => {
                     for patch in patches {
-                        debug!("Detected patch '{}'", patch);
                         patch_map.insert(*patch.uuid(), Arc::new(patch));
                     }
                 }
@@ -399,15 +497,12 @@ impl PatchManager {
             bail!("Cannot set patch '{}' status to '{}'", patch, value);
         }
 
-        let (index, _) = self.status_map.insert_full(*patch.uuid(), value);
-        if let Some(last_index) = self
-            .status_map
-            .last()
-            .and_then(|(key, _)| self.status_map.get_index_of(key))
-        {
-            if index != last_index {
-                self.status_map.move_index(index, last_index);
-            }
+        let uuid = *patch.uuid();
+        let (curr_index, _) = self.status_map.insert_full(uuid, value);
+
+        let last_index = self.status_map.len().saturating_sub(1);
+        if curr_index != last_index {
+            self.status_map.move_index(curr_index, last_index);
         }
 
         Ok(())
@@ -415,16 +510,16 @@ impl PatchManager {
 }
 
 impl PatchManager {
-    fn driver_patch_status(&self, patch: &Patch, _flag: PatchOpFlag) -> Result<PatchStatus> {
-        self.driver.patch_status(patch)
-    }
-
     fn driver_check_patch(&mut self, patch: &Patch, flag: PatchOpFlag) -> Result<()> {
         self.driver.check_patch(patch, flag)
     }
 
-    fn driver_apply_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
-        self.driver.apply_patch(patch)?;
+    fn driver_get_patch_status(&self, patch: &Patch) -> Result<PatchStatus> {
+        self.driver.get_patch_status(patch)
+    }
+
+    fn driver_load_patch(&mut self, patch: &Patch, _flag: PatchOpFlag) -> Result<()> {
+        self.driver.load_patch(patch)?;
         self.set_patch_status(patch, PatchStatus::Deactived)
     }
 

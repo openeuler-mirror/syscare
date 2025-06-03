@@ -12,126 +12,88 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::ffi::OsString;
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    ffi::OsString,
+};
 
-use indexmap::IndexMap;
+use indexmap::IndexSet;
 use uuid::Uuid;
 
-use crate::patch::entity::KernelPatchFunction;
-
-#[derive(Debug)]
-pub struct PatchFunction {
-    pub uuid: Uuid,
-    pub name: OsString,
-    pub size: u64,
-}
-
-impl PatchFunction {
-    fn new(uuid: Uuid, function: &KernelPatchFunction) -> Self {
-        Self {
-            uuid,
-            name: function.name.to_os_string(),
-            size: function.new_size,
-        }
-    }
-
-    fn is_same_function(&self, uuid: &Uuid, function: &KernelPatchFunction) -> bool {
-        (self.uuid == *uuid) && (self.name == function.name) && (self.size == function.new_size)
-    }
-}
+use crate::patch::entity::KernelPatch;
 
 #[derive(Debug)]
 pub struct PatchTarget {
-    name: OsString,
-    function_map: IndexMap<OsString, Vec<PatchFunction>>, // function addr -> function collision list
+    object_name: OsString,
+    collision_map: HashMap<OsString, IndexSet<Uuid>>, // function name -> patch collision list
 }
 
 impl PatchTarget {
-    pub fn new(name: OsString) -> Self {
+    pub fn new(object_name: OsString) -> Self {
         Self {
-            name,
-            function_map: IndexMap::new(),
+            object_name,
+            collision_map: HashMap::new(),
         }
     }
 }
 
 impl PatchTarget {
-    pub fn has_function(&self) -> bool {
-        self.function_map.is_empty()
-    }
-
-    pub fn add_functions<'a, I>(&mut self, uuid: Uuid, functions: I)
-    where
-        I: IntoIterator<Item = &'a KernelPatchFunction>,
-    {
-        for function in functions {
-            if self.name != function.object {
-                continue;
+    pub fn add_patch(&mut self, patch: &KernelPatch) {
+        if let Some(functions) = patch.functions.get(&self.object_name) {
+            for function in functions {
+                self.collision_map
+                    .entry(function.name.clone())
+                    .or_default()
+                    .insert(patch.uuid);
             }
-            self.function_map
-                .entry(function.name.clone())
-                .or_default()
-                .push(PatchFunction::new(uuid, function));
         }
     }
 
-    pub fn remove_functions<'a, I>(&mut self, uuid: &Uuid, functions: I)
-    where
-        I: IntoIterator<Item = &'a KernelPatchFunction>,
-    {
-        for function in functions {
-            if self.name != function.object {
-                continue;
-            }
-            if let Some(collision_list) = self.function_map.get_mut(&function.name) {
-                if let Some(index) = collision_list
-                    .iter()
-                    .position(|patch_function| patch_function.is_same_function(uuid, function))
+    pub fn remove_patch(&mut self, patch: &KernelPatch) {
+        if let Some(functions) = patch.functions.get(&self.object_name) {
+            for function in functions {
+                if let Entry::Occupied(mut entry) = self.collision_map.entry(function.name.clone())
                 {
-                    collision_list.remove(index);
-                    if collision_list.is_empty() {
-                        self.function_map.remove(&function.name);
+                    let patch_set = entry.get_mut();
+                    patch_set.shift_remove(&patch.uuid);
+
+                    if patch_set.is_empty() {
+                        entry.remove();
                     }
                 }
             }
         }
     }
-}
 
-impl PatchTarget {
-    pub fn get_conflicts<'a, I>(
-        &'a self,
-        functions: I,
-    ) -> impl IntoIterator<Item = &'a PatchFunction>
-    where
-        I: IntoIterator<Item = &'a KernelPatchFunction>,
-    {
-        functions.into_iter().filter_map(move |function| {
-            if self.name != function.object {
-                return None;
-            }
-            self.function_map
-                .get(&function.name)
-                .and_then(|list| list.last())
-        })
+    pub fn is_patched(&self) -> bool {
+        !self.collision_map.is_empty()
     }
 
-    pub fn get_overrides<'a, I>(
+    pub fn get_conflicted_patches<'a>(
         &'a self,
-        uuid: &'a Uuid,
-        functions: I,
-    ) -> impl IntoIterator<Item = &'a PatchFunction>
-    where
-        I: IntoIterator<Item = &'a KernelPatchFunction>,
-    {
-        functions.into_iter().filter_map(move |function| {
-            if self.name != function.object {
-                return None;
-            }
-            self.function_map
-                .get(&function.name)
-                .and_then(|list| list.last())
-                .filter(|patch_function| !patch_function.is_same_function(uuid, function))
-        })
+        patch: &'a KernelPatch,
+    ) -> impl Iterator<Item = Uuid> + 'a {
+        let functions = patch.functions.get(&self.object_name).into_iter().flatten();
+        functions
+            .filter_map(move |function| self.collision_map.get(&function.name))
+            .flatten()
+            .copied()
+            .filter(move |&uuid| uuid != patch.uuid)
+    }
+
+    pub fn get_overridden_patches<'a>(
+        &'a self,
+        patch: &'a KernelPatch,
+    ) -> impl Iterator<Item = Uuid> + 'a {
+        let functions = patch.functions.get(&self.object_name).into_iter().flatten();
+        functions
+            .filter_map(move |function| self.collision_map.get(&function.name))
+            .flat_map(move |collision_list| {
+                collision_list
+                    .iter()
+                    .copied()
+                    .skip_while(move |&uuid| uuid != patch.uuid)
+                    .skip(1)
+            })
     }
 }

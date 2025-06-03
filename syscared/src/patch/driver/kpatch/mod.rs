@@ -13,22 +13,23 @@
  */
 
 use std::{
-    ffi::{OsStr, OsString},
+    collections::{HashMap, HashSet},
+    ffi::OsString,
     fmt::Write,
     iter::FromIterator,
 };
 
-use anyhow::{ensure, Result};
-use indexmap::{indexset, IndexMap, IndexSet};
-use log::{debug, info};
+use anyhow::{anyhow, ensure, Context, Result};
+use log::debug;
 
 use syscare_abi::PatchStatus;
-use syscare_common::{concat_os, os, util::digest};
-
-use crate::{
-    config::KernelPatchConfig,
-    patch::entity::{KernelPatch, KernelPatchFunction},
+use syscare_common::{
+    concat_os,
+    os::{self, kernel, selinux},
+    util::digest,
 };
+
+use crate::{config::KernelPatchConfig, patch::entity::KernelPatch};
 
 mod sys;
 mod target;
@@ -36,80 +37,34 @@ mod target;
 use target::PatchTarget;
 
 pub struct KernelPatchDriver {
-    target_map: IndexMap<OsString, PatchTarget>,
-    blocked_targets: IndexSet<OsString>,
+    target_map: HashMap<OsString, PatchTarget>, // object name -> object
+    blocked_targets: HashSet<OsString>,
 }
 
 impl KernelPatchDriver {
     pub fn new(config: &KernelPatchConfig) -> Result<Self> {
         Ok(Self {
-            target_map: IndexMap::new(),
-            blocked_targets: IndexSet::from_iter(config.blocked.iter().cloned()),
+            target_map: HashMap::new(),
+            blocked_targets: HashSet::from_iter(config.blocked.iter().cloned()),
         })
     }
 }
 
 impl KernelPatchDriver {
-    fn group_patch_targets(patch: &KernelPatch) -> IndexSet<&OsStr> {
-        let mut patch_targets = IndexSet::new();
-
-        for function in &patch.functions {
-            patch_targets.insert(function.object.as_os_str());
-        }
-        patch_targets
-    }
-
-    pub fn group_patch_functions(
-        patch: &KernelPatch,
-    ) -> IndexMap<&OsStr, Vec<&KernelPatchFunction>> {
-        let mut patch_function_map: IndexMap<&OsStr, Vec<&KernelPatchFunction>> = IndexMap::new();
-
-        for function in &patch.functions {
-            patch_function_map
-                .entry(function.object.as_os_str())
-                .or_default()
-                .push(function);
-        }
-        patch_function_map
-    }
-}
-
-impl KernelPatchDriver {
-    fn add_patch_target(&mut self, patch: &KernelPatch) {
-        for target_name in Self::group_patch_targets(patch) {
-            if !self.target_map.contains_key(target_name) {
-                self.target_map.insert(
-                    target_name.to_os_string(),
-                    PatchTarget::new(target_name.to_os_string()),
-                );
-            }
+    fn register_patch(&mut self, patch: &KernelPatch) {
+        for object_name in patch.functions.keys() {
+            self.target_map
+                .entry(object_name.clone())
+                .or_insert_with(|| PatchTarget::new(object_name.clone()))
+                .add_patch(patch);
         }
     }
 
-    fn remove_patch_target(&mut self, patch: &KernelPatch) {
-        for target_name in Self::group_patch_targets(patch) {
-            if let Some(target) = self.target_map.get_mut(target_name) {
-                if !target.has_function() {
-                    self.target_map.remove(target_name);
-                }
-            }
-        }
-    }
-
-    fn add_patch_functions(&mut self, patch: &KernelPatch) {
-        for (target_name, functions) in Self::group_patch_functions(patch) {
-            if let Some(target) = self.target_map.get_mut(target_name) {
-                target.add_functions(patch.uuid, functions);
-            }
-        }
-    }
-
-    fn remove_patch_functions(&mut self, patch: &KernelPatch) {
-        for (target_name, functions) in Self::group_patch_functions(patch) {
-            if let Some(target) = self.target_map.get_mut(target_name) {
-                target.remove_functions(&patch.uuid, functions);
-            }
-        }
+    fn unregister_patch(&mut self, patch: &KernelPatch) {
+        self.target_map.retain(|_, object| {
+            object.remove_patch(patch);
+            object.is_patched()
+        });
     }
 }
 
@@ -130,13 +85,14 @@ impl KernelPatchDriver {
         const KERNEL_NAME_PREFIX: &str = "kernel-";
 
         let patch_target = patch.pkg_name.as_str();
+        if !patch_target.starts_with(KERNEL_NAME_PREFIX) {
+            return Ok(());
+        }
+
         let current_kernel = concat_os!(KERNEL_NAME_PREFIX, os::kernel::version());
         debug!("Patch target:   '{}'", patch_target);
         debug!("Current kernel: '{}'", current_kernel.to_string_lossy());
 
-        if !patch_target.starts_with(KERNEL_NAME_PREFIX) {
-            return Ok(());
-        }
         ensure!(
             current_kernel == patch_target,
             "Kpatch: Patch is incompatible",
@@ -147,156 +103,134 @@ impl KernelPatchDriver {
     fn check_dependency(patch: &KernelPatch) -> Result<()> {
         const VMLINUX_MODULE_NAME: &str = "vmlinux";
 
-        let mut non_exist_kmod = IndexSet::new();
+        let depend_modules = patch.functions.keys().cloned().collect::<HashSet<_>>();
+        let inserted_modules =
+            kernel::list_modules().context("Kpatch: Failed to list kernel modules")?;
+        let needed_modules = depend_modules
+            .difference(&inserted_modules)
+            .filter(|&module_name| module_name != VMLINUX_MODULE_NAME)
+            .collect::<Vec<_>>();
 
-        let kmod_list = sys::list_kernel_modules()?;
-        for kmod_name in Self::group_patch_targets(patch) {
-            if kmod_name == VMLINUX_MODULE_NAME {
-                continue;
+        ensure!(needed_modules.is_empty(), {
+            let mut msg = String::new();
+            writeln!(msg, "Kpatch: Patch target does not exist")?;
+            for name in needed_modules {
+                writeln!(msg, "* Module '{}'", name.to_string_lossy())?;
             }
-            if kmod_list.iter().any(|name| name == kmod_name) {
-                continue;
-            }
-            non_exist_kmod.insert(kmod_name);
-        }
-
-        ensure!(non_exist_kmod.is_empty(), {
-            let mut err_msg = String::new();
-
-            writeln!(&mut err_msg, "Kpatch: Patch target does not exist")?;
-            for kmod_name in non_exist_kmod {
-                writeln!(&mut err_msg, "* Module '{}'", kmod_name.to_string_lossy())?;
-            }
-            err_msg.pop();
-
-            err_msg
+            msg.pop();
+            msg
         });
         Ok(())
     }
 
-    pub fn check_conflict_functions(&self, patch: &KernelPatch) -> Result<()> {
-        let mut conflict_patches = indexset! {};
+    pub fn check_conflicted_patches(&self, patch: &KernelPatch) -> Result<()> {
+        let conflicted: HashSet<_> = self
+            .target_map
+            .values()
+            .flat_map(|object| object.get_conflicted_patches(patch))
+            .collect();
 
-        let target_functions = Self::group_patch_functions(patch);
-        for (target_name, functions) in target_functions {
-            if let Some(target) = self.target_map.get(target_name) {
-                conflict_patches.extend(
-                    target
-                        .get_conflicts(functions)
-                        .into_iter()
-                        .map(|record| record.uuid),
-                );
+        ensure!(conflicted.is_empty(), {
+            let mut msg = String::new();
+            writeln!(msg, "Kpatch: Patch is conflicted with")?;
+            for uuid in conflicted {
+                writeln!(msg, "* Patch '{}'", uuid)?;
             }
-        }
-
-        ensure!(conflict_patches.is_empty(), {
-            let mut err_msg = String::new();
-
-            writeln!(&mut err_msg, "Kpatch: Patch is conflicted with")?;
-            for uuid in conflict_patches.into_iter() {
-                writeln!(&mut err_msg, "* Patch '{}'", uuid)?;
-            }
-            err_msg.pop();
-
-            err_msg
+            msg.pop();
+            msg
         });
         Ok(())
     }
 
-    pub fn check_override_functions(&self, patch: &KernelPatch) -> Result<()> {
-        let mut override_patches = indexset! {};
+    pub fn check_overridden_patches(&self, patch: &KernelPatch) -> Result<()> {
+        let overridden: HashSet<_> = self
+            .target_map
+            .values()
+            .flat_map(|object| object.get_overridden_patches(patch))
+            .collect();
 
-        let target_functions = Self::group_patch_functions(patch);
-        for (target_name, functions) in target_functions {
-            if let Some(target) = self.target_map.get(target_name) {
-                override_patches.extend(
-                    target
-                        .get_overrides(&patch.uuid, functions)
-                        .into_iter()
-                        .map(|record| record.uuid),
-                );
+        ensure!(overridden.is_empty(), {
+            let mut msg = String::new();
+            writeln!(msg, "Kpatch: Patch is overridden by")?;
+            for uuid in overridden {
+                writeln!(msg, "* Patch '{}'", uuid)?;
             }
-        }
-
-        ensure!(override_patches.is_empty(), {
-            let mut err_msg = String::new();
-
-            writeln!(&mut err_msg, "Kpatch: Patch is overrided by")?;
-            for uuid in override_patches.into_iter() {
-                writeln!(&mut err_msg, "* Patch '{}'", uuid)?;
-            }
-            err_msg.pop();
-
-            err_msg
+            msg.pop();
+            msg
         });
         Ok(())
     }
 }
 
 impl KernelPatchDriver {
-    pub fn status(&self, patch: &KernelPatch) -> Result<PatchStatus> {
-        sys::read_patch_status(patch)
-    }
-
-    pub fn check(&self, patch: &KernelPatch) -> Result<()> {
+    pub fn check_patch(&self, patch: &KernelPatch) -> Result<()> {
         Self::check_consistency(patch)?;
         Self::check_compatiblity(patch)?;
         Self::check_dependency(patch)?;
-
         Ok(())
     }
 
-    pub fn apply(&mut self, patch: &KernelPatch) -> Result<()> {
-        info!(
-            "Applying patch '{}' ({})",
-            patch.uuid,
-            patch.patch_file.display()
-        );
+    pub fn get_patch_status(&self, patch: &KernelPatch) -> Result<PatchStatus> {
+        sys::get_patch_status(&patch.status_file).map_err(|e| {
+            anyhow!(
+                "Kpatch: Failed to get patch status, {}",
+                e.to_string().to_lowercase()
+            )
+        })
+    }
 
+    pub fn load_patch(&mut self, patch: &KernelPatch) -> Result<()> {
         ensure!(
             !self.blocked_targets.contains(&patch.target_name),
-            "Patch target '{}' is blocked",
+            "Kpatch: Patch target '{}' is blocked",
             patch.target_name.to_string_lossy(),
         );
-        sys::selinux_relable_patch(patch)?;
-        sys::apply_patch(patch)?;
-        self.add_patch_target(patch);
+
+        if selinux::get_status() == selinux::Status::Enforcing {
+            kernel::relable_module_file(&patch.patch_file).map_err(|e| {
+                anyhow!(
+                    "Kpatch: Failed to relable patch file, {}",
+                    e.to_string().to_lowercase()
+                )
+            })?;
+        }
+        sys::load_patch(&patch.patch_file).map_err(|e| {
+            anyhow!(
+                "Kpatch: Failed to load patch, {}",
+                e.to_string().to_lowercase()
+            )
+        })
+    }
+
+    pub fn remove_patch(&mut self, patch: &KernelPatch) -> Result<()> {
+        sys::remove_patch(&patch.module.name).map_err(|e| {
+            anyhow!(
+                "Kpatch: Failed to remove patch, {}",
+                e.to_string().to_lowercase()
+            )
+        })
+    }
+
+    pub fn active_patch(&mut self, patch: &KernelPatch) -> Result<()> {
+        sys::active_patch(&patch.status_file).map_err(|e| {
+            anyhow!(
+                "Kpatch: Failed to active patch, {}",
+                e.to_string().to_lowercase()
+            )
+        })?;
+        self.register_patch(patch);
 
         Ok(())
     }
 
-    pub fn remove(&mut self, patch: &KernelPatch) -> Result<()> {
-        info!(
-            "Removing patch '{}' ({})",
-            patch.uuid,
-            patch.patch_file.display()
-        );
-        sys::remove_patch(patch)?;
-        self.remove_patch_target(patch);
-
-        Ok(())
-    }
-
-    pub fn active(&mut self, patch: &KernelPatch) -> Result<()> {
-        info!(
-            "Activating patch '{}' ({})",
-            patch.uuid,
-            patch.patch_file.display()
-        );
-        sys::active_patch(patch)?;
-        self.add_patch_functions(patch);
-
-        Ok(())
-    }
-
-    pub fn deactive(&mut self, patch: &KernelPatch) -> Result<()> {
-        info!(
-            "Deactivating patch '{}' ({})",
-            patch.uuid,
-            patch.patch_file.display()
-        );
-        sys::deactive_patch(patch)?;
-        self.remove_patch_functions(patch);
+    pub fn deactive_patch(&mut self, patch: &KernelPatch) -> Result<()> {
+        sys::deactive_patch(&patch.status_file).map_err(|e| {
+            anyhow!(
+                "Kpatch: Failed to deactive patch, {}",
+                e.to_string().to_lowercase()
+            )
+        })?;
+        self.unregister_patch(patch);
 
         Ok(())
     }
