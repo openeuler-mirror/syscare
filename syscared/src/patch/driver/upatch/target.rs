@@ -12,10 +12,7 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    path::PathBuf,
-};
+use std::collections::{hash_map::Entry, HashMap};
 
 use indexmap::IndexSet;
 use uuid::Uuid;
@@ -24,37 +21,7 @@ use crate::patch::entity::UserPatch;
 
 #[derive(Debug, Default)]
 pub struct PatchTarget {
-    process_list: HashSet<i32>,
-    patch_map: HashMap<Uuid, PathBuf>, // uuid -> patch file
     collision_map: HashMap<u64, IndexSet<Uuid>>, // function old addr -> patch collision list
-}
-
-impl PatchTarget {
-    pub fn add_process(&mut self, pid: i32) {
-        self.process_list.insert(pid);
-    }
-
-    pub fn remove_process(&mut self, pid: i32) {
-        self.process_list.remove(&pid);
-    }
-
-    pub fn clean_dead_process(&mut self, process_list: &HashSet<i32>) {
-        self.process_list.retain(|pid| process_list.contains(pid));
-    }
-
-    pub fn need_actived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
-        process_list
-            .difference(&self.process_list)
-            .copied()
-            .collect()
-    }
-
-    pub fn need_deactived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
-        process_list
-            .intersection(&self.process_list)
-            .copied()
-            .collect()
-    }
 }
 
 impl PatchTarget {
@@ -65,7 +32,6 @@ impl PatchTarget {
                 .or_default()
                 .insert(patch.uuid);
         }
-        self.patch_map.insert(patch.uuid, patch.patch_file.clone());
     }
 
     pub fn remove_patch(&mut self, patch: &UserPatch) {
@@ -79,17 +45,10 @@ impl PatchTarget {
                 }
             }
         }
-        self.patch_map.remove(&patch.uuid);
     }
 
     pub fn is_patched(&self) -> bool {
         !self.collision_map.is_empty()
-    }
-
-    pub fn all_patches(&self) -> impl Iterator<Item = (Uuid, PathBuf)> + '_ {
-        self.patch_map
-            .iter()
-            .map(|(uuid, path)| (*uuid, path.to_path_buf()))
     }
 
     pub fn get_conflicted_patches<'a>(
