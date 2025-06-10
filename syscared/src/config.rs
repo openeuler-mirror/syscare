@@ -64,7 +64,7 @@ pub struct KernelPatchConfig {
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct UserPatchConfig {
-    pub skipped: Vec<PathBuf>,
+    pub blocked: Vec<PathBuf>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]

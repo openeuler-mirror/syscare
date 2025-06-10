@@ -12,70 +12,16 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{
-    collections::{hash_map::Entry, HashMap, HashSet},
-    path::PathBuf,
-};
+use std::collections::{hash_map::Entry, HashMap};
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexSet;
 use uuid::Uuid;
 
 use crate::patch::entity::UserPatch;
 
 #[derive(Debug, Default)]
 pub struct PatchTarget {
-    process_map: HashMap<i32, HashSet<Uuid>>, // pid -> patch list
-    patch_map: IndexMap<Uuid, PathBuf>,       // uuid -> patch file
     collision_map: HashMap<u64, IndexSet<Uuid>>, // function old addr -> patch collision list
-}
-
-impl PatchTarget {
-    pub fn process_register_patch(&mut self, pid: i32, uuid: &Uuid) {
-        self.process_map.entry(pid).or_default().insert(*uuid);
-    }
-
-    pub fn process_unregister_patch(&mut self, pid: i32, uuid: &Uuid) {
-        if let Some(patch_list) = self.process_map.get_mut(&pid) {
-            patch_list.remove(uuid);
-        }
-    }
-
-    pub fn need_actived_process(&self, process_list: &HashSet<i32>, uuid: &Uuid) -> HashSet<i32> {
-        let mut need_actived = HashSet::with_capacity(process_list.len());
-
-        for pid in process_list {
-            match self.process_map.get(pid) {
-                Some(patch_list) => {
-                    if !patch_list.contains(uuid) {
-                        need_actived.insert(*pid);
-                    }
-                }
-                None => {
-                    need_actived.insert(*pid);
-                }
-            }
-        }
-
-        need_actived
-    }
-
-    pub fn need_deactived_process(&self, process_list: &HashSet<i32>, uuid: &Uuid) -> HashSet<i32> {
-        let mut need_deactived = HashSet::with_capacity(process_list.len());
-
-        for pid in process_list {
-            if let Some(patch_list) = self.process_map.get(pid) {
-                if patch_list.contains(uuid) {
-                    need_deactived.insert(*pid);
-                }
-            }
-        }
-
-        need_deactived
-    }
-
-    pub fn clean_dead_process(&mut self, process_list: &HashSet<i32>) {
-        self.process_map.retain(|pid, _| process_list.contains(pid));
-    }
 }
 
 impl PatchTarget {
@@ -86,7 +32,6 @@ impl PatchTarget {
                 .or_default()
                 .insert(patch.uuid);
         }
-        self.patch_map.insert(patch.uuid, patch.patch_file.clone());
     }
 
     pub fn remove_patch(&mut self, patch: &UserPatch) {
@@ -100,17 +45,10 @@ impl PatchTarget {
                 }
             }
         }
-        self.patch_map.remove(&patch.uuid);
     }
 
     pub fn is_patched(&self) -> bool {
         !self.collision_map.is_empty()
-    }
-
-    pub fn all_patches(&self) -> impl Iterator<Item = (Uuid, PathBuf)> + '_ {
-        self.patch_map
-            .iter()
-            .map(|(uuid, path)| (*uuid, path.to_path_buf()))
     }
 
     pub fn get_conflicted_patches<'a>(
