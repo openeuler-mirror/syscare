@@ -37,29 +37,29 @@ if(GIT_FOUND)
         ERROR_QUIET
         WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
     )
-    set(PROJECT_BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
+    set(BUILD_VERSION "${BUILD_VERSION}-g${GIT_VERSION}")
 else()
-    set(PROJECT_BUILD_VERSION "${BUILD_VERSION}")
+    set(BUILD_VERSION "${BUILD_VERSION}")
 endif()
 
 # Build configurations
 if(ENABLE_ASAN)
-    set(PROJECT_BUILD_VERSION "${PROJECT_BUILD_VERSION}-asan")
-    list(APPEND PROJECT_C_BUILD_FLAGS -fsanitize=address -fno-omit-frame-pointer)
-    list(APPEND PROJECT_C_LIBRARIES asan)
+    set(BUILD_VERSION "${BUILD_VERSION}-asan")
+    list(APPEND BUILD_FLAGS_C -fsanitize=address -fno-omit-frame-pointer)
+    list(APPEND LINK_LIBRARIES_C asan)
 endif()
 
 if(ENABLE_GCOV)
-    set(PROJECT_BUILD_VERSION "${PROJECT_BUILD_VERSION}-gcov")
-    list(APPEND PROJECT_C_BUILD_FLAGS -ftest-coverage -fprofile-arcs)
-    list(APPEND PROJECT_RUST_FLAGS -C instrument-coverage)
-    list(APPEND PROJECT_C_LIBRARIES gcov)
+    set(BUILD_VERSION "${BUILD_VERSION}-gcov")
+    list(APPEND BUILD_FLAGS_C -ftest-coverage -fprofile-arcs)
+    list(APPEND BUILD_FLAGS_RUST -C instrument-coverage)
+    list(APPEND LINK_LIBRARIES_C gcov)
 endif()
 
 # Build flags
-list(APPEND PROJECT_C_BUILD_FLAGS
-    -std=gnu99 -Wall -O2 -Werror -Wextra
-    -DBUILD_VERSION="${PROJECT_BUILD_VERSION}" -D_FORTIFY_SOURCE=2
+list(APPEND BUILD_FLAGS_C
+    -std=gnu99 -O2 -Wall -Wextra -Werror
+    -DBUILD_VERSION="${BUILD_VERSION}" -D_FORTIFY_SOURCE=2
     -Wtrampolines -Wformat=2 -Wstrict-prototypes -Wdate-time
     -Wstack-usage=8192 -Wfloat-equal -Wswitch-default
     -Wshadow -Wconversion -Wcast-qual -Wunused -Wundef
@@ -70,16 +70,16 @@ list(APPEND PROJECT_C_BUILD_FLAGS
 
 # The -Werror=cast-align compiler flag causes issues on riscv64 GCC,
 # while the same operations do not error on aarch64. This appears to be
-# a compiler-specific problem. Temporarily disable this option as a 
+# a compiler-specific problem. Temporarily disable this option as a
 # workaround since applying fixes would require intrusive code changes
 # across multiple files.
 if(NOT ARCH STREQUAL "riscv64")
-    list(APPEND PROJECT_C_BUILD_FLAGS
+    list(APPEND BUILD_FLAGS_C
         -Wcast-align
     )
 endif()
 
-list(APPEND PROJECT_RUST_FLAGS
+list(APPEND BUILD_FLAGS_RUST
     --cfg unsound_local_offset
     -D warnings
     -C link-arg=-s
@@ -91,7 +91,7 @@ list(APPEND PROJECT_RUST_FLAGS
 )
 
 # Link flags
-list(APPEND PROJECT_C_LINK_FLAGS
+list(APPEND LINK_FLAGS_C
     -pie
     -Wl,-z,relro,-z,now
     -Wl,-z,noexecstack -rdynamic
@@ -100,9 +100,9 @@ list(APPEND PROJECT_C_LINK_FLAGS
 )
 
 if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
-    list(APPEND PROJECT_C_BUILD_FLAGS -g)
+    list(APPEND BUILD_FLAGS_C -g)
 elseif(CMAKE_BUILD_TYPE STREQUAL "Release")
-    list(APPEND PROJECT_C_LINK_FLAGS -s)
+    list(APPEND LINK_FLAGS_C -s)
 endif()
 
 # Install directories
@@ -120,44 +120,42 @@ message("███████║   ██║   ███████║╚█�
 message("╚══════╝   ╚═╝   ╚══════╝ ╚═════╝╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝")
 message("---------------------------------------------------------")
 message("-- Build type: ${CMAKE_BUILD_TYPE}")
-message("-- Build version: ${PROJECT_BUILD_VERSION}")
-message("-- Rust flags: ${PROJECT_RUST_FLAGS}")
-message("-- Build flags: ${PROJECT_C_BUILD_FLAGS}")
-message("-- Link flags: ${PROJECT_C_LINK_FLAGS}")
-message("-- Link libraries: ${PROJECT_C_LIBRARIES}")
+message("-- Build version: ${BUILD_VERSION}")
+message("-- Rust flags: ${BUILD_FLAGS_RUST}")
+message("-- Build flags: ${BUILD_FLAGS_C}")
+message("-- Link flags: ${LINK_FLAGS_C}")
+message("-- Link libraries: ${LINK_LIBRARIES_C}")
 message("-- Binary  directory: ${SYSCARE_BINARY_DIR}")
 message("-- Libexec directory: ${SYSCARE_LIBEXEC_DIR}")
 message("-- Service directory: ${SYSCARE_SERVICE_DIR}")
 message("---------------------------------------------------------")
 
 # Apply all flags
-add_compile_options(${PROJECT_C_BUILD_FLAGS})
-add_link_options(${PROJECT_C_LINK_FLAGS})
-link_libraries(${PROJECT_C_LIBRARIES})
+add_compile_options(${BUILD_FLAGS_C})
+add_link_options(${LINK_FLAGS_C})
+link_libraries(${LINK_LIBRARIES_C})
 
 # Build rust executables
-set(RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/rust")
+set(RUST_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/target")
 set(RUST_OUTPUT_DIR "${RUST_TARGET_DIR}/release")
-foreach(FLAG IN LISTS PROJECT_RUST_FLAGS)
-     set(RUST_FLAGS "${RUST_FLAGS} ${FLAG}")
+foreach(CURR_FLAG IN LISTS BUILD_FLAGS_RUST)
+    set(RUST_FLAGS "${RUST_FLAGS} ${CURR_FLAG}")
 endforeach()
 
-add_custom_target(rust-build ALL
-    COMMENT "Building rust executables..."
-    COMMAND ${CMAKE_COMMAND} -E env
-        "BUILD_VERSION=${PROJECT_BUILD_VERSION}"
-        "RUSTFLAGS=${RUST_FLAGS}"
-        cargo build --release --target-dir "${RUST_TARGET_DIR}"
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+add_custom_target(syscare ALL
+    COMMAND cargo build --release --target-dir ${RUST_TARGET_DIR}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
 )
 
-# Generate upatch helpers
-add_custom_target(generate-upatch-helpers ALL
-    COMMENT "Generating upatch helpers..."
+set_target_properties(syscare PROPERTIES
+    ENVIRONMENT "RUSTFLAGS=${RUST_FLAGS};BUILD_VERSION=${BUILD_VERSION}"
+    ADDITIONAL_CLEAN_FILES "${RUST_TARGET_DIR}"
+)
+
+add_custom_target(upatch-helpers ALL
     COMMAND ln -sf upatch-helper upatch-cc
     COMMAND ln -sf upatch-helper upatch-c++
-    DEPENDS
-        rust-build
+    DEPENDS syscare
     WORKING_DIRECTORY ${RUST_OUTPUT_DIR}
 )
 
