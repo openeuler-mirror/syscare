@@ -112,7 +112,7 @@ impl ProducerParser {
         let section_name = section_id.name();
         let section = match file.section_by_name(section_name) {
             Some(section) => section,
-            None => return Ok(EndianRcSlice::new(Rc::default(), endian)),
+            None => return Ok(EndianRcSlice::new(Rc::new([]), endian)),
         };
 
         let mut section_data = section
