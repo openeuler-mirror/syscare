@@ -1,0 +1,12 @@
+label: SysCare用户指南
+isManual: true
+description: 提供在线的热补丁修复能力
+sections:
+  - label: 认识SysCare
+    href: ./syscare_introduction.md
+  - label: 安装SysCare
+    href: ./installing_syscare.md
+  - label: 使用SysCare
+    href: ./using_syscare.md
+  - label: 约束限制
+    href: ./constraints.md
