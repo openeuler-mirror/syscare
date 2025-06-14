@@ -39,7 +39,7 @@ pub struct BuildParameters {
     pub patch_description: String,
     pub patch_files: Vec<PatchFile>,
     pub jobs: usize,
-    pub keep_line_macros: bool,
+    pub override_line_macros: bool,
     pub skip_compiler_check: bool,
     pub skip_cleanup: bool,
     pub verbose: bool,

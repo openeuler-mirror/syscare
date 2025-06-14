@@ -54,7 +54,7 @@ struct UBuildParameters {
     patch_target: PackageInfo,
     patch_description: String,
     patch_files: Vec<PatchFile>,
-    keep_line_macros: bool,
+    override_line_macros: bool,
     skip_compiler_check: bool,
     verbose: bool,
 }
@@ -182,7 +182,7 @@ impl UserPatchBuilder {
             patch_target: build_params.build_entry.target_pkg.to_owned(),
             patch_description: build_params.patch_description.to_owned(),
             patch_files: build_params.patch_files.to_owned(),
-            keep_line_macros: build_params.keep_line_macros,
+            override_line_macros: build_params.override_line_macros,
             skip_compiler_check: build_params.skip_compiler_check,
             verbose: build_params.verbose,
         };
@@ -225,8 +225,8 @@ impl UserPatchBuilder {
             .arg("--output-dir")
             .arg(&ubuild_params.patch_output_dir);
 
-        if ubuild_params.keep_line_macros {
-            cmd_args.arg("--keep-line-macros");
+        if ubuild_params.override_line_macros {
+            cmd_args.arg("--override-line-macros");
         }
         if ubuild_params.skip_compiler_check {
             cmd_args.arg("--skip-compiler-check");
