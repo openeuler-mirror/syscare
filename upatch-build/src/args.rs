@@ -95,9 +95,9 @@ pub struct Arguments {
     #[clap(short, long, default_value = DEFAULT_OUTPUT_DIR)]
     pub output_dir: PathBuf,
 
-    /// Keep line macro unchanged
+    /// Override line macros to a fixed value
     #[clap(long)]
-    pub keep_line_macros: bool,
+    pub override_line_macros: bool,
 
     /// Skip compiler version check (not recommended)
     #[clap(long)]
