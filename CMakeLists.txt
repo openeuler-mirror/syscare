@@ -198,4 +198,5 @@ install(
 
 # Build other components
 add_subdirectory(upatch-diff)
+add_subdirectory(upatch-manage)
 add_subdirectory(misc)
