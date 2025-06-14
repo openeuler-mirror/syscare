@@ -305,7 +305,7 @@ impl SyscareBuild {
             patch_type,
             patch_files,
             jobs: self.args.jobs,
-            keep_line_macros: self.args.keep_line_macros,
+            override_line_macros: self.args.override_line_macros,
             skip_compiler_check: self.args.skip_compiler_check,
             skip_cleanup: self.args.skip_cleanup,
             verbose: self.args.verbose,
