@@ -352,7 +352,7 @@ impl UpatchBuild {
                 .with_context(|| format!("Failed to clean {}", project))?;
         }
 
-        if !self.args.keep_line_macros {
+        if self.args.override_line_macros {
             info!("Overriding line macros");
             project
                 .override_line_macros()
@@ -395,7 +395,7 @@ impl UpatchBuild {
             .apply_patches()
             .with_context(|| format!("Failed to patch {}", project))?;
 
-        if !self.args.keep_line_macros {
+        if self.args.override_line_macros {
             info!("Overriding line macros");
             project
                 .override_line_macros()
