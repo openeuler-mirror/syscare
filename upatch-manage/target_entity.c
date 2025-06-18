@@ -40,9 +40,15 @@
 DEFINE_HASHTABLE(g_targets, TARGETS_HASH_BITS);
 DEFINE_MUTEX(g_target_table_lock);
 
-static void free_elf_meta(struct target_metadata *meta)
+static void destroy_target_metadata(struct target_metadata *meta)
 {
     KFREE_CLEAR(meta->file_name);
+
+    VFREE_CLEAR(meta->ehdr);
+    VFREE_CLEAR(meta->phdrs);
+    VFREE_CLEAR(meta->shdrs);
+    VFREE_CLEAR(meta->shstrtab);
+
     VFREE_CLEAR(meta->symtab);
     VFREE_CLEAR(meta->dynsym);
     VFREE_CLEAR(meta->dynamic);
@@ -52,209 +58,191 @@ static void free_elf_meta(struct target_metadata *meta)
     VFREE_CLEAR(meta->strtab);
 }
 
-static int parse_target_load_addr(struct target_metadata *meta, struct file *target)
+static int parse_target_address(struct target_metadata *meta)
 {
-    Elf_Ehdr elf_header;
-    Elf_Phdr *phdr = NULL;
-    Elf_Addr vma_base_addr = ELF_ADDR_MAX;
-    int size;
-    int i;
-    loff_t pos;
-    int ret;
+    int ret = 0;
+    Elf_Addr first_load_addr = ELF_ADDR_MAX;
 
-    meta->len = i_size_read(file_inode(target));
-
-    ret = kernel_read(target, &elf_header, sizeof(elf_header), 0);
-    if (ret != sizeof(elf_header)) {
-        log_err("failed to read elf header, ret=%d\n", ret);
-        ret = -ENOEXEC;
-        goto out;
-    }
-
-    size = sizeof(Elf_Phdr) * elf_header.e_phnum;
-    phdr = kmalloc(size, GFP_KERNEL);
-    if (!phdr) {
-        log_err("failed to kmalloc program headers\n");
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    pos = elf_header.e_phoff;
-    ret = kernel_read(target, phdr, size, &pos);
-    if (ret < 0) {
-        log_err("failed to read program headers, ret=%d\n", ret);
-        ret = -ENOEXEC;
-        goto out;
-    }
-
-    for (i = 0; i < elf_header.e_phnum; i++) {
-        if (phdr[i].p_type == PT_LOAD) {
-            vma_base_addr = min(vma_base_addr, phdr[i].p_vaddr);
+    for (Elf_Half i = 0; i < meta->ehdr->e_phnum; i++) {
+        if (meta->phdrs[i].p_type == PT_LOAD) {
+            first_load_addr = min(first_load_addr, meta->phdrs[i].p_vaddr);
         }
     }
 
-    for (i = 0; i < elf_header.e_phnum; i++) {
-        if ((phdr[i].p_type == PT_LOAD) && (phdr[i].p_flags & PF_X)) {
+    for (Elf_Half i = 0; i < meta->ehdr->e_phnum; i++) {
+        if (meta->phdrs[i].p_type == PT_TLS) {
+            meta->tls_size = meta->phdrs[i].p_memsz;
+            meta->tls_align = meta->phdrs[i].p_align;
+        }
+        if ((meta->phdrs[i].p_type == PT_LOAD) && (meta->phdrs[i].p_flags & PF_X)) {
             if (meta->code_vma_offset) {
                 log_err("found multiple executable PT_LOAD segments (expected one)\n");
                 ret = -ENOEXEC;
                 goto out;
             }
-            meta->code_vma_offset = (phdr[i].p_vaddr - vma_base_addr) & PAGE_MASK;
-            meta->code_virt_offset = phdr[i].p_vaddr - vma_base_addr - phdr[i].p_offset;
+            meta->code_vma_offset = (meta->phdrs[i].p_vaddr - first_load_addr) & PAGE_MASK;
+            meta->code_virt_offset = meta->phdrs[i].p_vaddr - first_load_addr - meta->phdrs[i].p_offset;
         }
     }
 
-    ret = 0;
 out:
-    KFREE_CLEAR(phdr);
     return ret;
 }
 
-static int process_section_header(struct file *target, Elf_Shdr *shdr, char *sh_name, struct target_metadata *meta)
+static int parse_target_sections(struct target_metadata *meta, struct file *target)
 {
+    int ret = 0;
+    Elf_Shdr *shdr = NULL;
+    char *sh_name = NULL;
     void *sh_data = NULL;
+
+    shdr = &meta->shdrs[meta->ehdr->e_shstrndx];
+    meta->shstrtab = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+    if (IS_ERR(meta->shstrtab)) {
+        ret = PTR_ERR(meta->shstrtab);
+        log_err("failed to read section '%s'\n", SHSTRTAB_NAME);
+        goto out;
+    }
+
+    for (Elf_Half i = 1; i < meta->ehdr->e_shnum; i++) {
+        shdr = &meta->shdrs[i];
+        sh_name = meta->shstrtab + shdr->sh_name;
+
+        switch (shdr->sh_type) {
+            case SHT_SYMTAB:
+                sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                meta->symtab = sh_data;
+                meta->num.symtab = shdr->sh_size / sizeof(Elf_Sym);
+                break;
+
+            case SHT_STRTAB:
+                if (strcmp(sh_name, STRTAB_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->strtab = sh_data;
+                } else if (strcmp(sh_name, DYNSTR_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->dynstr = sh_data;
+                }
+                break;
+
+            case SHT_REL:
+                if (strcmp(sh_name, DYN_REL_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->rela_dyn = sh_data;
+                    meta->num.rela_dyn = shdr->sh_size / sizeof(Elf_Rela);
+                } else if (strcmp(sh_name, PLT_REL_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->rela_plt = sh_data;
+                    meta->num.rela_plt = shdr->sh_size / sizeof(Elf_Rela);
+                }
+                break;
+
+            case SHT_RELA:
+                if (strcmp(sh_name, DYN_RELA_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->rela_dyn = sh_data;
+                    meta->num.rela_dyn = shdr->sh_size / sizeof(Elf_Rela);
+                } else if (strcmp(sh_name, PLT_RELA_NAME) == 0) {
+                    sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                    meta->rela_plt = sh_data;
+                    meta->num.rela_plt = shdr->sh_size / sizeof(Elf_Rela);
+                }
+                break;
+
+            case SHT_DYNAMIC:
+                sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                meta->dynamic = sh_data;
+                break;
+
+            case SHT_DYNSYM:
+                sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+                meta->dynsym = sh_data;
+                meta->num.dynsym = shdr->sh_size / sizeof(Elf_Sym);
+                break;
+
+            default:
+                // do nothing
+                break;
+        }
+
+        if (IS_ERR(sh_data)) {
+            ret = PTR_ERR(sh_data);
+            log_err("failed to read section '%s'\n", sh_name);
+            break;
+        }
+    }
+
+out:
+    return ret;
+}
+
+static int parse_target_metadata(struct target_metadata *meta, struct file *target)
+{
     int ret = 0;
 
-    if (shdr->sh_type == SHT_SYMTAB) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->symtab = sh_data;
-        meta->num.symtab = shdr->sh_size / sizeof(Elf_Sym);
-    } else if (strcmp(sh_name, STRTAB_NAME) == 0) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->strtab = sh_data;
-    } else if (strcmp(sh_name, DYNSTR_NAME) == 0) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->dynstr = sh_data;
-    } else if (strcmp(sh_name, DYN_RELA_NAME) == 0 || strcmp(sh_name, DYN_REL_NAME) == 0) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->rela_dyn = sh_data;
-        meta->num.rela_dyn = shdr->sh_size / sizeof(Elf_Rela);
-    } else if (strcmp(sh_name, PLT_RELA_NAME) == 0 || strcmp(sh_name, PLT_REL_NAME) == 0) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->rela_plt = sh_data;
-        meta->num.rela_plt = shdr->sh_size / sizeof(Elf_Rela);
-    } else if (shdr->sh_type == SHT_DYNAMIC) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->dynamic = sh_data;
-    } else if (shdr->sh_type == SHT_DYNSYM) {
-        sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-        meta->dynsym = sh_data;
-        meta->num.dynsym = shdr->sh_size / sizeof(Elf_Sym);
-    }
-
-    if (IS_ERR_VALUE(sh_data)) {
-        ret = PTR_ERR(sh_data);
-        log_err("failed to read section '%s'\n", sh_name);
-    }
-    return ret;
-}
-
-static int init_target_meta(struct target_metadata *meta, struct file *target)
-{
-    int ret;
-
-    Elf_Ehdr *ehdr = NULL;  // elf header
-    Elf_Shdr *shdrs = NULL; // section headers
-    char *shstrtab = NULL;  // section string table
-    Elf_Phdr *phdrs = NULL;
-
-    Elf_Shdr *shdr;
-    Elf_Half i;
-    char *sh_name;
-
-    const unsigned char *base_name;
-
-    meta->file_name = NULL;
-
-    // Check if target dentry are valid before accessing
+    // check if target dentry are valid before accessing
     if (!target->f_path.dentry) {
-        log_err("Invalid target file pointer or dentry\n");
+        log_err("invalid target file dentry\n");
         ret = -EINVAL;
         goto out;
     }
 
-    base_name = target->f_path.dentry->d_name.name;
-
-    meta->file_name = kstrdup(base_name, GFP_KERNEL);
+    // parse file info
+    meta->file_name = kstrdup(target->f_path.dentry->d_name.name, GFP_KERNEL);
     if (!meta->file_name) {
-        log_err("Failed to allocate memory for filename\n");
+        log_err("failed to alloc filename\n");
         ret = -ENOMEM;
         goto out;
     }
-
-    ret = parse_target_load_addr(meta, target);
-    if (ret) {
-        goto out;
-    }
+    meta->file_len = i_size_read(file_inode(target));
 
     // read elf header
-    ret = kernel_read(target, &meta->ehdr, sizeof(Elf_Ehdr), 0);
-    if (ret != sizeof(Elf_Ehdr)) {
-        ret = -ENOEXEC;
-        log_err("read elf header failed ret=%d\n", ret);
+    meta->ehdr = vmalloc_read(target, 0, sizeof(Elf_Ehdr));
+    if (IS_ERR(meta->ehdr)) {
+        ret = PTR_ERR(meta->ehdr);
+        log_err("failed to read elf header\n");
         goto out;
     }
 
-    ehdr = &meta->ehdr;
-    if (!is_elf_valid(ehdr, i_size_read(file_inode(target)), false)) {
+    // validate target elf format
+    if (!is_elf_valid(meta->ehdr, meta->file_len, false)) {
         ret = -ENOEXEC;
-        log_err("invalid target format\n");
+        log_err("invalid file format\n");
         goto out;
     }
 
     // read section headers
-    shdrs = vmalloc_read(target, ehdr->e_shoff, ehdr->e_shentsize * ehdr->e_shnum);
-    if (IS_ERR(shdrs)) {
-        ret = PTR_ERR(shdrs);
+    meta->phdrs = vmalloc_read(target, meta->ehdr->e_phoff, meta->ehdr->e_phentsize * meta->ehdr->e_phnum);
+    if (IS_ERR(meta->phdrs)) {
+        ret = PTR_ERR(meta->phdrs);
+        log_err("failed to read program header");
+        goto out;
+    }
+
+    // read section headers
+    meta->shdrs = vmalloc_read(target, meta->ehdr->e_shoff, meta->ehdr->e_shentsize * meta->ehdr->e_shnum);
+    if (IS_ERR(meta->shdrs)) {
+        ret = PTR_ERR(meta->shdrs);
         log_err("failed to read section header\n");
         goto out;
     }
 
-    // read section header string table
-    shdr = &shdrs[ehdr->e_shstrndx];
-    shstrtab = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
-    if (IS_ERR(shstrtab)) {
-        ret = PTR_ERR(shstrtab);
-        log_err("failed to read '%s' section\n", SHSTRTAB_NAME);
+    ret = parse_target_sections(meta, target);
+    if (ret) {
+        log_err("failed to parse target sections\n");
         goto out;
     }
 
-    // resolve section headers
-    for (i = 1; i < ehdr->e_shnum; i++) {
-        shdr = &shdrs[i];
-        sh_name = shstrtab + shdr->sh_name;
-
-        ret = process_section_header(target, shdr, sh_name, meta);
-        if (ret)
-            goto out;
-    }
-
-    phdrs = vmalloc_read(target, ehdr->e_phoff, ehdr->e_phentsize * ehdr->e_phnum);
-    if (IS_ERR(phdrs)) {
-        ret = PTR_ERR(phdrs);
-        log_err("failed to read program header\n");
+    ret = parse_target_address(meta);
+    if (ret) {
+        log_err("failed to parse target address\n");
         goto out;
     }
-
-    for (i = 0; i < ehdr->e_phnum; i++) {
-        if (phdrs[i].p_type == PT_TLS) {
-            meta->tls_size = phdrs[i].p_memsz;
-            meta->tls_align = phdrs[i].p_align;
-            log_debug("Found TLS size = %zd, align = %zd\n",
-                (size_t)meta->tls_size, (size_t)meta->tls_align);
-            break;
-        }
-    }
-    ret = 0;
 
 out:
     if (ret != 0) {
-        free_elf_meta(meta);
+        destroy_target_metadata(meta);
     }
-    VFREE_CLEAR(shdrs);
-    VFREE_CLEAR(shstrtab);
-    VFREE_CLEAR(phdrs);
     return ret;
 }
 
@@ -292,12 +280,11 @@ static int init_grab_target(struct target_entity *target, const char *file_path)
         goto fail;
     }
 
-    // resolve elf meta
-    ret = init_target_meta(&target->meta, file);
+    ret = parse_target_metadata(&target->meta, file);
     if (ret != 0) {
         iput(target->inode);
         KFREE_CLEAR(target->path);
-        log_err("failed to resolve elf meta\n");
+        log_err("failed to parse target metadata\n");
         goto fail;
     }
 
@@ -412,7 +399,7 @@ void free_target_entity(struct target_entity *target)
 
     iput(target->inode);
     KFREE_CLEAR(target->path);
-    free_elf_meta(&target->meta);
+    destroy_target_metadata(&target->meta);
     hash_del(&target->node);
 
     up_write(&target->patch_lock);

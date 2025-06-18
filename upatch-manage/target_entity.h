@@ -36,18 +36,20 @@ struct upatch_function;
 
 /* target elf metadata */
 struct target_metadata {
-    unsigned long len;  // file len
+    const char *file_name;
+    loff_t file_len;
 
-    Elf_Ehdr ehdr;
+    Elf_Ehdr *ehdr;
+    Elf_Phdr *phdrs;
+    Elf_Shdr *shdrs;
 
-    char *file_name;
-
-    // tables
     Elf_Sym *symtab;
     Elf_Sym *dynsym;
     Elf_Dyn *dynamic;
     Elf_Rela *rela_dyn;
     Elf_Rela *rela_plt;
+
+    char *shstrtab;
     char *strtab;
     char *dynstr;
 
