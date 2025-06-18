@@ -102,7 +102,7 @@ static struct process_entity *new_process(struct target_entity *target)
         return NULL;
     }
 
-    log_debug("Create process tgid %d for %s\n", task_tgid_nr(current), target->path);
+    log_debug("create process tgid %d for '%s'\n", task_tgid_nr(current), target->path);
     process->pid_s = get_task_pid(current, PIDTYPE_TGID);
     process->task = current;
     INIT_LIST_HEAD(&process->loaded_patches);
@@ -120,8 +120,7 @@ struct process_entity *get_process(struct target_entity *target)
     if (!process) {
         process = new_process(target);
         if (!process) {
-            log_err("cannot alloc process tgid %d, for target %s\n",
-                task_tgid_nr(current), target->path);
+            log_err("cannot alloc process tgid %d, for target '%s'\n", task_tgid_nr(current), target->path);
             goto out;
         }
     }

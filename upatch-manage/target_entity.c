@@ -36,6 +36,8 @@
 #define PLT_RELA_NAME   ".rela.plt"
 #define DYN_REL_NAME    ".rel.dyn"
 #define PLT_REL_NAME    ".rel.plt"
+#define PLT_NAME        ".plt"
+#define GOT_NAME        ".got"
 
 DEFINE_HASHTABLE(g_targets, TARGETS_HASH_BITS);
 DEFINE_MUTEX(g_target_table_lock);
@@ -58,56 +60,30 @@ static void destroy_target_metadata(struct target_metadata *meta)
     VFREE_CLEAR(meta->strtab);
 }
 
-static int parse_target_address(struct target_metadata *meta)
-{
-    int ret = 0;
-    Elf_Addr first_load_addr = ELF_ADDR_MAX;
-
-    for (Elf_Half i = 0; i < meta->ehdr->e_phnum; i++) {
-        if (meta->phdrs[i].p_type == PT_LOAD) {
-            first_load_addr = min(first_load_addr, meta->phdrs[i].p_vaddr);
-        }
-    }
-
-    for (Elf_Half i = 0; i < meta->ehdr->e_phnum; i++) {
-        if (meta->phdrs[i].p_type == PT_TLS) {
-            meta->tls_size = meta->phdrs[i].p_memsz;
-            meta->tls_align = meta->phdrs[i].p_align;
-        }
-        if ((meta->phdrs[i].p_type == PT_LOAD) && (meta->phdrs[i].p_flags & PF_X)) {
-            if (meta->code_vma_offset) {
-                log_err("found multiple executable PT_LOAD segments (expected one)\n");
-                ret = -ENOEXEC;
-                goto out;
-            }
-            meta->code_vma_offset = (meta->phdrs[i].p_vaddr - first_load_addr) & PAGE_MASK;
-            meta->code_virt_offset = meta->phdrs[i].p_vaddr - first_load_addr - meta->phdrs[i].p_offset;
-        }
-    }
-
-out:
-    return ret;
-}
-
 static int parse_target_sections(struct target_metadata *meta, struct file *target)
 {
     int ret = 0;
-    Elf_Shdr *shdr = NULL;
-    char *sh_name = NULL;
-    void *sh_data = NULL;
 
-    shdr = &meta->shdrs[meta->ehdr->e_shstrndx];
-    meta->shstrtab = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
+    Elf_Shdr *shstrtab_shdr = &meta->shdrs[meta->ehdr->e_shstrndx];
+    meta->shstrtab = vmalloc_read(target, shstrtab_shdr->sh_offset, shstrtab_shdr->sh_size);
     if (IS_ERR(meta->shstrtab)) {
         ret = PTR_ERR(meta->shstrtab);
         log_err("failed to read section '%s'\n", SHSTRTAB_NAME);
         goto out;
     }
+    meta->shstrtab_size = shstrtab_shdr->sh_size;
 
     for (Elf_Half i = 1; i < meta->ehdr->e_shnum; i++) {
-        shdr = &meta->shdrs[i];
-        sh_name = meta->shstrtab + shdr->sh_name;
+        const Elf_Shdr *shdr = &meta->shdrs[i];
+        const char *sh_name = meta->shstrtab + shdr->sh_name;
+        size_t max_len = meta->shstrtab_size - shdr->sh_name;
+        if (strnlen(sh_name, max_len) >= max_len) {
+            ret = -EINVAL;
+            log_err("section name overflow\n");
+            goto out;
+        }
 
+        void *sh_data;
         switch (shdr->sh_type) {
             case SHT_SYMTAB:
                 sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
@@ -119,9 +95,11 @@ static int parse_target_sections(struct target_metadata *meta, struct file *targ
                 if (strcmp(sh_name, STRTAB_NAME) == 0) {
                     sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
                     meta->strtab = sh_data;
+                    meta->strtab_size = shdr->sh_size;
                 } else if (strcmp(sh_name, DYNSTR_NAME) == 0) {
                     sh_data = vmalloc_read(target, shdr->sh_offset, shdr->sh_size);
                     meta->dynstr = sh_data;
+                    meta->dynstr_size = shdr->sh_size;
                 }
                 break;
 
@@ -171,6 +149,84 @@ static int parse_target_sections(struct target_metadata *meta, struct file *targ
             break;
         }
     }
+
+out:
+    return ret;
+}
+
+static int parse_target_address(struct target_metadata *meta)
+{
+    int ret = 0;
+
+    Elf_Addr min_load_addr = ELF_ADDR_MAX;
+    bool text_segment_found = false;
+
+    for (Elf_Half i = 0; i < meta->ehdr->e_phnum; i++) {
+        const Elf_Phdr *phdr = &meta->phdrs[i];
+
+        switch (phdr->p_type) {
+            case PT_LOAD: {
+                min_load_addr = min(min_load_addr, phdr->p_vaddr);
+                if (phdr->p_flags & PF_X) {
+                    if (text_segment_found) {
+                        log_err("found multiple executable PT_LOAD segments (expected one)\n");
+                        ret = -ENOEXEC;
+                        goto out;
+                    }
+                    meta->text_vma_start = (phdr->p_vaddr - min_load_addr) & PAGE_MASK;
+                    meta->text_offset = phdr->p_vaddr - min_load_addr - phdr->p_offset;
+                    text_segment_found = true;
+                }
+                break;
+            }
+
+            case PT_TLS:
+                meta->tls_size = phdr->p_memsz;
+                meta->tls_align = phdr->p_align;
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    if (!text_segment_found) {
+        log_err("cannot find any executable PT_LOAD segment\n");
+        ret = -ENOEXEC;
+        goto out;
+    }
+
+    for (Elf_Half i = 0; i < meta->ehdr->e_shnum; i++) {
+        if (meta->plt_offset && meta->got_offset) {
+            break;
+        }
+
+        const Elf_Shdr *shdr = &meta->shdrs[i];
+        if (shdr->sh_type != SHT_PROGBITS) {
+            continue;
+        }
+
+        const char *sh_name = meta->shstrtab + shdr->sh_name;
+        size_t max_len = meta->shstrtab_size - shdr->sh_name;
+        if (strnlen(sh_name, max_len) >= max_len) {
+            ret = -EINVAL;
+            log_err("section name overflow\n");
+            goto out;
+        }
+
+        if (!meta->plt_offset &&
+            (shdr->sh_flags & (SHF_ALLOC|SHF_EXECINSTR)) == (SHF_ALLOC|SHF_EXECINSTR) &&
+            strncmp(sh_name, PLT_NAME, max_len) == 0) {
+            meta->plt_offset = shdr->sh_addr;
+        }
+        if (!meta->got_offset &&
+            (shdr->sh_flags & SHF_ALLOC) == SHF_ALLOC &&
+            strncmp(sh_name, GOT_NAME, max_len) == 0) {
+            meta->got_offset = shdr->sh_addr;
+        }
+    }
+    log_debug("text_vma_start: 0x%llx, text_offset: 0x%llx, plt_offset: 0x%llx, got_offset: 0x%llx\n",
+        meta->text_vma_start, meta->text_offset, meta->plt_offset, meta->got_offset);
 
 out:
     return ret;
@@ -293,7 +349,7 @@ fail:
     return ret;
 }
 
-struct target_entity *get_target_entity_from_inode(struct inode *inode)
+struct target_entity *get_target_entity_by_inode(struct inode *inode)
 {
     struct target_entity *target;
     struct target_entity *found = NULL;
@@ -328,7 +384,7 @@ struct target_entity *get_target_entity(const char *path)
         return NULL;
     }
 
-    target = get_target_entity_from_inode(inode);
+    target = get_target_entity_by_inode(inode);
     iput(inode);
     return target;
 }

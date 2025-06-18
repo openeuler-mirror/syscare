@@ -65,8 +65,9 @@ struct upatch_info {
 
     struct target_metadata *meta;
 
-    // target vma start addr, the first vma could not be the text in LLVM
-    unsigned long vma_start_addr;
+    unsigned long load_bias;
+    unsigned long plt_addr;
+    unsigned long got_addr;
 };
 
 int upatch_resolve(struct target_entity *target, struct patch_entity *patch, struct process_entity *process,

@@ -212,7 +212,7 @@ static unsigned long find_vma_hole_and_vmmap(unsigned long vma_start, unsigned l
 static int alloc_mem_for_upatch(struct upatch_info *info, struct upatch_layout *layout)
 {
     /* find moudle location from code start place */
-    unsigned long vma_start = info->vma_start_addr;
+    unsigned long vma_start = info->load_bias;
 
     layout->base = find_vma_hole_and_vmmap(vma_start, layout->size);
     if (!layout->base)
@@ -385,7 +385,7 @@ static int simplify_symbols(struct upatch_info *info)
                     name, (unsigned long)sym[i].st_value);
                 break;
             case SHN_LIVEPATCH:
-                sym[i].st_value += info->vma_start_addr;
+                sym[i].st_value += info->load_bias;
                 log_debug("resolved livepatch symbol '%s' at 0x%lx\n",
                     name, (unsigned long)sym[i].st_value);
                 break;
@@ -528,9 +528,7 @@ static int create_relocated_pc_maps(struct process_entity *process, struct upatc
             free_patch_info(info);
             return -ENOMEM;
         }
-        pp->old_pc = funcs[i].old_addr +
-            load_info->vma_start_addr +
-            load_info->meta->code_virt_offset;
+        pp->old_pc = funcs[i].old_addr + load_info->load_bias + load_info->meta->text_offset;
         pp->new_pc = funcs[i].new_addr;
         hash_add(info->pc_maps, &pp->node, pp->old_pc);
         log_debug("function: 0x%08lx -> 0x%08lx\n", pp->old_pc, pp->new_pc);
@@ -545,16 +543,18 @@ static int create_relocated_pc_maps(struct process_entity *process, struct upatc
 
 /* The main idea is from insmod */
 int upatch_resolve(struct target_entity *target, struct patch_entity *patch, struct process_entity *process,
-    unsigned long target_code_start)
+    unsigned long text_vma_start)
 {
     struct upatch_info info;
     int err;
 
     memset(&info, 0, sizeof(info));
 
-    info.vma_start_addr = target_code_start - target->meta.code_vma_offset;
-    log_debug("process %d: vma_start=0x%lx, code_start=0x%lx\n",
-        task_pid_nr(current), info.vma_start_addr, target_code_start);
+    info.load_bias = text_vma_start - target->meta.text_vma_start;
+    info.plt_addr = info.load_bias + target->meta.plt_offset;
+    info.got_addr = info.load_bias + target->meta.got_offset;
+    log_debug("process %d: vma=0x%lx, load_bias=0x%lx, plt_addr=0x%lx, got_addr=0x%lx\n",
+        task_pid_nr(current), text_vma_start, info.load_bias, info.plt_addr, info.got_addr);
 
     info.meta = &target->meta;
 

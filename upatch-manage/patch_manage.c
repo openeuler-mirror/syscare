@@ -58,46 +58,36 @@ static int jump_to_new_pc(struct pt_regs *regs, struct patch_info *info, unsigne
     return UPROBE_ALTER_PC;
 }
 
-static struct file *get_target_file_from_pc(struct mm_struct *mm, unsigned long pc, unsigned long *code_start)
-{
-    struct vm_area_struct *vma = NULL;
-
-    vma = find_vma(mm, pc);
-    if (!vma) {
-        return NULL;
-    }
-
-    if (!vma->vm_file) {
-        return NULL;
-    }
-
-    *code_start = vma->vm_start;
-
-    return vma->vm_file;
-}
-
-static struct target_entity *get_target_from_pc(unsigned long pc, unsigned long *code_start)
+static struct target_entity *get_target_by_pc(unsigned long pc, unsigned long *vma_start)
 {
     struct target_entity *target;
 
     struct mm_struct *mm = current->mm;
+    struct vm_area_struct *vma = NULL;
     struct file *target_file;
 
     mmap_read_lock(mm);
-    target_file = get_target_file_from_pc(mm, pc, code_start);
-    mmap_read_unlock(mm);
-
-    if (!target_file) {
-        log_err("no backen file found for upatch\n");
+    vma = find_vma(mm, pc);
+    if (!vma) {
+        log_err("cannot find vma of pc, pc=0x%lx\n", pc);
+        mmap_read_unlock(mm);
         return NULL;
     }
+    *vma_start = vma->vm_start;
+    target_file = vma->vm_file;
+    if (!target_file) {
+        log_err("cannot find patch target file\n");
+        mmap_read_unlock(mm);
+        return NULL;
+    }
+    mmap_read_unlock(mm);
 
     get_file(target_file);
-    target = get_target_entity_from_inode(file_inode(target_file));
+    target = get_target_entity_by_inode(file_inode(target_file));
     fput(target_file);
 
     if (!target) {
-        log_err("no target found in patch handler\n");
+        log_err("cannot find patch target\n");
         return NULL;
     }
 
@@ -127,11 +117,11 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
     const char *name = current->comm;
     pid_t pid = task_pid_nr(current);
     pid_t tgid = task_tgid_nr(current);
-    unsigned long target_code_start;
+    unsigned long text_vma_start = 0;
 
     log_debug("upatch handler triggered on process '%s' (pid=%d, tgid=%d, pc=0x%lx)\n", name, pid, tgid, pc);
 
-    target = get_target_from_pc(pc, &target_code_start);
+    target = get_target_by_pc(pc, &text_vma_start);
     if (!target) {
         log_err("cannot find target entity of '%s'\n", name);
         return ret;
@@ -155,9 +145,8 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
     mutex_lock(&process->lock);
 
     if (!process->active_info) {
-        log_debug("applying new patch '%s' to '%s' (pid=%d, tgid=%d)...\n",
-            actived_patch->path, name, pid, tgid);
-        ret = upatch_resolve(target, actived_patch, process, target_code_start);
+        log_debug("applying new patch '%s' to '%s' (pid=%d, tgid=%d)...\n", actived_patch->path, name, pid, tgid);
+        ret = upatch_resolve(target, actived_patch, process, text_vma_start);
         if (ret) {
             log_err("failed to apply patch '%s' to '%s', ret=%d\n", actived_patch->path, name, ret);
             goto fail;
@@ -169,9 +158,8 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
             goto ok;
         }
 
-        log_debug("applying latest patch '%s' to '%s' (pid=%d, tgid=%d)...\n",
-            actived_patch->path, name, pid, tgid);
-        ret = upatch_resolve(target, actived_patch, process, target_code_start);
+        log_debug("applying latest patch '%s' to '%s' (pid=%d, tgid=%d)...\n", actived_patch->path, name, pid, tgid);
+        ret = upatch_resolve(target, actived_patch, process, text_vma_start);
         if (ret) {
             log_err("failed to apply patch '%s' to '%s', ret=%d\n", actived_patch->path, name, ret);
             goto fail;

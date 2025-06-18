@@ -51,7 +51,7 @@ static inline const char *patch_status(int status)
 }
 
 /* Patch function relocation */
-struct upatch_relocation {
+struct upatch_func_rela {
     Elf_Rela addr;
     Elf_Rela name;
 };
@@ -83,7 +83,7 @@ struct upatch_function {
 /* Patch metadata */
 struct upatch_metadata {
     struct upatch_function *funcs;   // this should vmalloc, if not, relocation of new_addr may fail
-    struct upatch_relocation *relas; // .rela.upatch.funcs
+    struct upatch_func_rela *relas;  // .rela.upatch.funcs
     char *strings;                   // .upatch.strings
 
     struct {
@@ -95,7 +95,7 @@ struct upatch_metadata {
     size_t got_rela_cnt;             // relocation type need add got table cnt
 
     void *patch_buff;
-    size_t patch_size;
+    loff_t patch_size;
 };
 
 /* Patch entity */

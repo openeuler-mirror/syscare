@@ -49,7 +49,7 @@ static unsigned long resolve_from_patch(struct upatch_info *info,
         return 0;
     }
 
-    elf_addr = info->vma_start_addr + patch_sym->st_value;
+    elf_addr = info->load_bias + patch_sym->st_value;
     log_debug("found symbol '%s' from patch at 0x%lx\n", name, elf_addr);
 
     return elf_addr;
@@ -85,7 +85,7 @@ static unsigned long resolve_from_rela_dyn(struct upatch_info *info,
         }
 
         /* for executable file, r_offset is virtual address of GOT table */
-        sym_addr = (void *)(info->vma_start_addr + rela_dyn[i].r_offset);
+        sym_addr = (void *)(info->load_bias + rela_dyn[i].r_offset);
         elf_addr = insert_got_table(info, ELF_R_TYPE(rela_dyn[i].r_info), sym_addr);
         log_debug("found symbol '%s' from '.rela.dyn' at 0x%lx, ret=0x%lx\n",
             sym_name, (unsigned long)sym_addr, elf_addr);
@@ -130,7 +130,7 @@ static unsigned long resolve_from_rela_plt(struct upatch_info *info,
         }
 
         /* for executable file, r_offset is virtual address of PLT table */
-        sym_addr = (void *)(info->vma_start_addr + rela_plt[i].r_offset);
+        sym_addr = (void *)(info->load_bias + rela_plt[i].r_offset);
         elf_addr = insert_plt_table(info, ELF_R_TYPE(rela_plt[i].r_info), sym_addr);
         if (!elf_addr) {
             return 0;
@@ -170,7 +170,7 @@ static unsigned long resolve_from_dynsym(struct upatch_info *info, const char *n
             continue;
         }
 
-        sym_addr = (void *)(info->vma_start_addr + dynsym[i].st_value);
+        sym_addr = (void *)(info->load_bias + dynsym[i].st_value);
         elf_addr = insert_got_table(info, 0, sym_addr);
         log_debug("found symbol '%s' from '.dynsym' at 0x%lx, ret=0x%lx\n",
             sym_name, (unsigned long)sym_addr, elf_addr);
@@ -611,7 +611,7 @@ static unsigned long resolve_from_symtab(struct upatch_info *info, const char *n
         sym_name = elf->strtab + sym[i].st_name;
 
         if (is_same_name(sym_name, name)) {
-            elf_addr = info->vma_start_addr + sym[i].st_value;
+            elf_addr = info->load_bias + sym[i].st_value;
             log_debug("found symbol '%s' from '.symtab' at 0x%lx\n", name, elf_addr);
             return elf_addr;
         }

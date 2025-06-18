@@ -53,6 +53,10 @@ struct target_metadata {
     char *strtab;
     char *dynstr;
 
+    size_t shstrtab_size;
+    size_t strtab_size;
+    size_t dynstr_size;
+
     // table entity number
     struct {
         unsigned int symtab, rela_dyn, rela_plt, dynsym;
@@ -61,13 +65,10 @@ struct target_metadata {
     Elf_Addr tls_size;
     Elf_Addr tls_align;
 
-    // In LLVM, offset != virtaddr, target VMA start != vma_code_start - offset
-    // code_vma_offset = VirtAddr round down to PAGE_SIZE
-    // The target VMA start = vma_code_start - code_vma_offset
-    Elf_Addr code_vma_offset;
-
-    // code LOAD segment VirtAddr - offset
-    unsigned long code_virt_offset;
+    Elf_Addr text_vma_start;
+    Elf_Addr text_offset;
+    Elf_Addr plt_offset;
+    Elf_Addr got_offset;
 };
 
 struct target_entity {
@@ -115,7 +116,7 @@ struct patched_func_node {
  */
 struct target_entity *get_target_entity(const char* target_path);
 
-struct target_entity *get_target_entity_from_inode(struct inode *inode);
+struct target_entity *get_target_entity_by_inode(struct inode *inode);
 
 /*
  * Load a target entity
