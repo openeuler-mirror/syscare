@@ -25,7 +25,6 @@
 
 #include "patch_entity.h"
 #include "process_entity.h"
-#include "patch_manage.h"
 #include "util.h"
 
 #define ELF_ADDR_MAX UINT_MAX
@@ -415,8 +414,6 @@ void free_target_entity(struct target_entity *target)
     KFREE_CLEAR(target->path);
     free_elf_meta(&target->meta);
     hash_del(&target->node);
-
-    target_unregister_uprobes(target);
 
     up_write(&target->patch_lock);
 

@@ -22,7 +22,6 @@
 #define _UPATCH_MANAGE_PATCH_MANAGE_H
 
 enum upatch_status;
-struct target_entity;
 
 enum upatch_status upatch_status(const char *patch_file);
 
@@ -33,7 +32,5 @@ int upatch_remove(const char *patch_file);
 int upatch_active(const char *patch_file);
 
 int upatch_deactive(const char *patch_file);
-
-void target_unregister_uprobes(struct target_entity *target);
 
 #endif // _UPATCH_MANAGE_PATCH_MANAGE_H

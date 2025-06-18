@@ -506,17 +506,3 @@ int upatch_deactive(const char *patch_file)
     log_debug("patch '%s' is deactived\n", patch_file);
     return 0;
 }
-
-void target_unregister_uprobes(struct target_entity *target)
-{
-    struct patched_offset *off = NULL;
-    struct patched_offset *tmp_off = NULL;
-
-    log_debug("unregister '%s' (inode: %lu) uprobes:", target->path, target->inode->i_ino);
-    list_for_each_entry_safe(off, tmp_off, &target->off_head, list) {
-        log_debug("unregister offset 0x%llx\n", off->offset);
-        uprobe_unregister(target->inode, off->offset, &patch_consumer);
-        list_del(&off->list);
-        kfree(off);
-    }
-}
