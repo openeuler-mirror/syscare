@@ -48,15 +48,6 @@ struct upatch_layout {
     struct jmp_table table;
 };
 
-struct running_elf {
-    struct target_metadata *meta;
-
-    // target vma start addr, the first vma could not be the text in LLVM
-    unsigned long vma_start_addr;
-
-    struct upatch_info *load_info;
-};
-
 // when load patch, patch need resolve in different process
 struct upatch_info {
     unsigned long len;
@@ -72,7 +63,10 @@ struct upatch_info {
     /* memory layout for patch */
     struct upatch_layout layout;
 
-    struct running_elf running_elf;
+    struct target_metadata *meta;
+
+    // target vma start addr, the first vma could not be the text in LLVM
+    unsigned long vma_start_addr;
 };
 
 int upatch_resolve(struct target_entity *target, struct patch_entity *patch, struct process_entity *process,

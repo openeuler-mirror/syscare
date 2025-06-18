@@ -274,7 +274,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 memcpy(reloc_place, &sym_addr, sizeof(u64));
                 break;
             case R_X86_64_TPOFF32:
-                tls_size = ALIGN(info->running_elf.meta->tls_size, info->running_elf.meta->tls_align);
+                tls_size = ALIGN(info->meta->tls_size, info->meta->tls_align);
                 // %fs + val - tls_size
                 if (sym_addr >= tls_size) {
                     goto overflow;

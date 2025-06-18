@@ -536,7 +536,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_TLSLE_ADD_TPREL_HI12:
-                result = ALIGN(TCB_SIZE, info->running_elf.meta->tls_align) + sym_addr;
+                result = ALIGN(TCB_SIZE, info->meta->tls_align) + sym_addr;
                 if (result < 0 || result >= BIT(24)) {
                     goto overflow;
                 }
@@ -545,7 +545,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_TLSLE_ADD_TPREL_LO12_NC:
-                result = ALIGN(TCB_SIZE, info->running_elf.meta->tls_align) + sym_addr;
+                result = ALIGN(TCB_SIZE, info->meta->tls_align) + sym_addr;
                 result = extract_insn_imm(result, 12, 0);
                 result = insert_insn_imm(AARCH64_INSN_IMM_12, reloc_place, result);
                 *(__le32 *)reloc_place = cpu_to_le32(result);

@@ -35,10 +35,10 @@ static inline bool is_same_name(const char *name, const char *name2)
     return strcmp(name, name2) == 0;
 }
 
-static unsigned long resolve_from_patch(const struct running_elf *relf,
+static unsigned long resolve_from_patch(struct upatch_info *info,
     const char *name, Elf_Sym *patch_sym)
 {
-    const struct target_metadata *elf = relf->meta;
+    struct target_metadata *elf = info->meta;
     unsigned long elf_addr = 0;
 
     if (!elf) {
@@ -49,17 +49,17 @@ static unsigned long resolve_from_patch(const struct running_elf *relf,
         return 0;
     }
 
-    elf_addr = relf->vma_start_addr + patch_sym->st_value;
+    elf_addr = info->vma_start_addr + patch_sym->st_value;
     log_debug("found symbol '%s' from patch at 0x%lx\n", name, elf_addr);
 
     return elf_addr;
 }
 
 /* handle external object, we need get it's address, used for R_X86_64_REX_GOTPCRELX */
-static unsigned long resolve_from_rela_dyn(const struct running_elf *relf,
+static unsigned long resolve_from_rela_dyn(struct upatch_info *info,
     const char *name, Elf_Sym *patch_sym)
 {
-    const struct target_metadata *elf = relf->meta;
+    struct target_metadata *elf = info->meta;
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_dyn = elf->rela_dyn;
     unsigned int i;
@@ -85,8 +85,8 @@ static unsigned long resolve_from_rela_dyn(const struct running_elf *relf,
         }
 
         /* for executable file, r_offset is virtual address of GOT table */
-        sym_addr = (void *)(relf->vma_start_addr + rela_dyn[i].r_offset);
-        elf_addr = insert_got_table(relf->load_info, ELF_R_TYPE(rela_dyn[i].r_info), sym_addr);
+        sym_addr = (void *)(info->vma_start_addr + rela_dyn[i].r_offset);
+        elf_addr = insert_got_table(info, ELF_R_TYPE(rela_dyn[i].r_info), sym_addr);
         log_debug("found symbol '%s' from '.rela.dyn' at 0x%lx, ret=0x%lx\n",
             sym_name, (unsigned long)sym_addr, elf_addr);
 
@@ -96,10 +96,10 @@ static unsigned long resolve_from_rela_dyn(const struct running_elf *relf,
     return 0;
 }
 
-static unsigned long resolve_from_rela_plt(const struct running_elf *relf,
+static unsigned long resolve_from_rela_plt(struct upatch_info *info,
     const char *name, Elf_Sym *patch_sym)
 {
-    const struct target_metadata *elf = relf->meta;
+    struct target_metadata *elf = info->meta;
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_plt = elf->rela_plt;
     unsigned int i;
@@ -130,8 +130,8 @@ static unsigned long resolve_from_rela_plt(const struct running_elf *relf,
         }
 
         /* for executable file, r_offset is virtual address of PLT table */
-        sym_addr = (void *)(relf->vma_start_addr + rela_plt[i].r_offset);
-        elf_addr = insert_plt_table(relf->load_info, ELF_R_TYPE(rela_plt[i].r_info), sym_addr);
+        sym_addr = (void *)(info->vma_start_addr + rela_plt[i].r_offset);
+        elf_addr = insert_plt_table(info, ELF_R_TYPE(rela_plt[i].r_info), sym_addr);
         if (!elf_addr) {
             return 0;
         }
@@ -144,9 +144,9 @@ static unsigned long resolve_from_rela_plt(const struct running_elf *relf,
 }
 
 // get symbol address from .dynsym
-static unsigned long resolve_from_dynsym(const struct running_elf *relf, const char *name)
+static unsigned long resolve_from_dynsym(struct upatch_info *info, const char *name)
 {
-    const struct target_metadata *elf = relf->meta;
+    struct target_metadata *elf = info->meta;
     Elf_Sym *dynsym = elf->dynsym;
     unsigned int i;
     char *sym_name;
@@ -170,8 +170,8 @@ static unsigned long resolve_from_dynsym(const struct running_elf *relf, const c
             continue;
         }
 
-        sym_addr = (void *)(relf->vma_start_addr + dynsym[i].st_value);
-        elf_addr = insert_got_table(relf->load_info, 0, sym_addr);
+        sym_addr = (void *)(info->vma_start_addr + dynsym[i].st_value);
+        elf_addr = insert_got_table(info, 0, sym_addr);
         log_debug("found symbol '%s' from '.dynsym' at 0x%lx, ret=0x%lx\n",
             sym_name, (unsigned long)sym_addr, elf_addr);
         return elf_addr;
@@ -499,7 +499,7 @@ out:
 }
 
 // Check if the current VMA is the text segment of shared object and is not the patched target itself
-static bool is_vma_other_so_text(const struct running_elf *relf, struct vm_area_struct *vma)
+static bool is_vma_other_so_text(struct upatch_info *info, struct vm_area_struct *vma)
 {
     const char *file_path;
     bool is_so;
@@ -517,7 +517,7 @@ static bool is_vma_other_so_text(const struct running_elf *relf, struct vm_area_
         return false;
     }
 
-    if (strcmp(file_path, relf->meta->file_name) == 0) {
+    if (strcmp(file_path, info->meta->file_name) == 0) {
         return false;
     }
 
@@ -548,7 +548,7 @@ static unsigned long search_base_addr(struct vm_area_struct *vma)
 
 // Search all loaded so in current VMA, read the symbol table of so and find symbol offset
 // Then combine with the so loaded base address, we can get the symbol loaded address
-static unsigned long resolve_from_vma_so(const struct running_elf *relf, const char *symbol_name)
+static unsigned long resolve_from_vma_so(struct upatch_info *info, const char *symbol_name)
 {
     struct vm_area_struct *vma;
     struct mm_struct *mm = current->mm;
@@ -566,7 +566,7 @@ static unsigned long resolve_from_vma_so(const struct running_elf *relf, const c
     mmap_read_lock(mm);
     upatch_vma_iter_init(&vmi, mm);
     while ((vma = upatch_vma_next(&vmi))) {
-        if (!is_vma_other_so_text(relf, vma)) {
+        if (!is_vma_other_so_text(info, vma)) {
             continue;
         }
 
@@ -579,9 +579,9 @@ static unsigned long resolve_from_vma_so(const struct running_elf *relf, const c
         base_addr = search_base_addr(vma);
         sym_addr += base_addr;
         if ((type & STT_FUNC) || (type & STT_IFUNC)) {
-            elf_addr = setup_jmp_table(relf->load_info, sym_addr, type == STT_IFUNC);
+            elf_addr = setup_jmp_table(info, sym_addr, type == STT_IFUNC);
         } else {
-            elf_addr = setup_got_table(relf->load_info, sym_addr, 0);
+            elf_addr = setup_got_table(info, sym_addr, 0);
         }
         log_debug("found symbol '%s' from shared object at 0x%lx (base 0x%lx), ret=0x%lx\n",
             symbol_name, sym_addr, base_addr, elf_addr);
@@ -592,9 +592,9 @@ static unsigned long resolve_from_vma_so(const struct running_elf *relf, const c
     return elf_addr;
 }
 
-static unsigned long resolve_from_symtab(const struct running_elf *relf, const char *name)
+static unsigned long resolve_from_symtab(struct upatch_info *info, const char *name)
 {
-    const struct target_metadata *elf = relf->meta;
+    struct target_metadata *elf = info->meta;
     Elf_Sym *sym = elf->symtab;
     unsigned int i;
     char *sym_name;
@@ -611,7 +611,7 @@ static unsigned long resolve_from_symtab(const struct running_elf *relf, const c
         sym_name = elf->strtab + sym[i].st_name;
 
         if (is_same_name(sym_name, name)) {
-            elf_addr = relf->vma_start_addr + sym[i].st_value;
+            elf_addr = info->vma_start_addr + sym[i].st_value;
             log_debug("found symbol '%s' from '.symtab' at 0x%lx\n", name, elf_addr);
             return elf_addr;
         }
@@ -626,33 +626,33 @@ static unsigned long resolve_from_symtab(const struct running_elf *relf, const c
  * 2. use address from PLT/GOT, problems are:
  * 3. read symbol from library that is loaded into VMA for the new called sym in .so
  */
-unsigned long resolve_symbol(const struct running_elf *relf, const char *name, Elf_Sym patch_sym)
+unsigned long resolve_symbol(struct upatch_info *info, const char *name, Elf_Sym patch_sym)
 {
     unsigned long elf_addr = 0;
 
     if (!elf_addr) {
-        elf_addr = resolve_from_vma_so(relf, name);
+        elf_addr = resolve_from_vma_so(info, name);
     }
 
     if (!elf_addr) {
-        elf_addr = resolve_from_rela_plt(relf, name, &patch_sym);
+        elf_addr = resolve_from_rela_plt(info, name, &patch_sym);
     }
 
     /* resolve from got */
     if (!elf_addr) {
-        elf_addr = resolve_from_rela_dyn(relf, name, &patch_sym);
+        elf_addr = resolve_from_rela_dyn(info, name, &patch_sym);
     }
 
     if (!elf_addr) {
-        elf_addr = resolve_from_dynsym(relf, name);
+        elf_addr = resolve_from_dynsym(info, name);
     }
 
     if (!elf_addr) {
-        elf_addr = resolve_from_symtab(relf, name);
+        elf_addr = resolve_from_symtab(info, name);
     }
 
     if (!elf_addr) {
-        elf_addr = resolve_from_patch(relf, name, &patch_sym);
+        elf_addr = resolve_from_patch(info, name, &patch_sym);
     }
 
     if (!elf_addr) {
