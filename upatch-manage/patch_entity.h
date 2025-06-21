@@ -22,15 +22,11 @@
 #define _UPATCH_MANAGE_PATCH_ENTITY_H
 
 #include <linux/types.h>
-#include <linux/list.h>
-
 #include <linux/elf.h>
 #include <linux/module.h>
 
 struct inode;
 struct target_entity;
-
-#define PATCHES_HASH_BITS 4
 
 /* Patch status */
 enum upatch_status {
@@ -39,12 +35,12 @@ enum upatch_status {
     UPATCH_STATUS_ACTIVED
 };
 
-static inline const char *patch_status(int status)
+static inline const char *patch_status_str(int status)
 {
     static const char *STATUS_STR[] = {"NOT_APPLIED", "DEACTIVED", "ACTIVED"};
 
     if (status < UPATCH_STATUS_NOT_APPLIED || status > UPATCH_STATUS_ACTIVED) {
-        return "INVALID_STATUS";
+        return "UNKNOWN";
     }
 
     return STATUS_STR[status - 1];
@@ -81,35 +77,41 @@ struct upatch_function {
 #endif
 
 /* Patch metadata */
-struct upatch_metadata {
-    struct upatch_function *funcs;   // this should vmalloc, if not, relocation of new_addr may fail
-    struct upatch_relocation *relas; // .rela.upatch.funcs
-    char *strings;                   // .upatch.strings
+struct patch_metadata {
+    void *file_buff;
+    loff_t file_size;
 
-    struct {
-        unsigned int sym, str;
-    } index;
+    Elf_Half shstrtab_index;         // section '.shstrtab' index
+    Elf_Half symtab_index;           // section '.symtab' index
+    Elf_Half strtab_index;           // section '.strtab' index
 
-    size_t func_count;
-    size_t und_count;                // UND symbol count
-    size_t got_rela_cnt;             // relocation type need add got table cnt
+    Elf_Half func_index;             // section '.upatch.funcs' index
+    Elf_Half rela_index;             // section '.rela.upatch.funcs' index
+    Elf_Half string_index;           // section '.upatch.strings' index
 
-    void *patch_buff;
-    size_t patch_size;
+    struct upatch_function *funcs;   // patch function table
+    const char *strings;             // patch string table
+
+    size_t func_num;                 // patch function count
+    size_t string_len;               // patch string table length
+
+    size_t und_sym_num;              // undefined symbol count (SHN_UNDEF)
+    size_t got_reloc_num;            // got relocation count
 };
 
 /* Patch entity */
 struct patch_entity {
-    char *path;                     // patch file path
-    struct inode *inode;            // patch file inode
+    const char *path;                // patch file path
+    struct inode *inode;             // patch file inode
 
-    struct upatch_metadata meta;    // patch metadata
-    struct target_entity *target;   // target file inode
-    enum upatch_status status;      // patch status
+    struct patch_metadata meta;      // patch elf metadata
+    struct target_entity *target;    // patch target
 
-    struct hlist_node node;         // all patches store in hash table
-    struct list_head patch_node;    // patch node in target entity
-    struct list_head actived_node;  // actived patch in target entity
+    enum upatch_status status;       // patch status
+
+    struct hlist_node node;          // all patches store in hash table
+    struct list_head patch_node;     // patch node in target entity
+    struct list_head actived_node;   // actived patch in target entity
 };
 
 struct patch_entity *get_patch_entity(const char *patch_file);
@@ -118,6 +120,6 @@ struct patch_entity *new_patch_entity(const char *patch_file);
 
 void free_patch_entity(struct patch_entity *patch);
 
-void __exit verify_patch_empty_on_exit(void);
+void __exit report_patch_table_populated(void);
 
 #endif // _UPATCH_MANAGE_PATCH_ENTITY_H

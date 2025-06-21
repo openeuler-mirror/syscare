@@ -126,7 +126,7 @@ static int ioctl_get_patch_status(void __user * user_addr)
     }
 
     ret = upatch_status(patch);
-    log_debug("patch '%s' is %s\n", patch, patch_status(ret));
+    log_debug("patch '%s' is %s\n", patch, patch_status_str(ret));
 
     vfree(patch);
     return ret;

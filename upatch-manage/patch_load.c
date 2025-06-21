@@ -40,7 +40,7 @@
 
 static int setup_load_info(struct upatch_info *info, struct patch_entity *patch)
 {
-    info->len = patch->meta.patch_size;
+    info->len = patch->meta.file_size;
     info->ehdr = vmalloc(info->len);
     if (!info->ehdr) {
         log_err("failed to vmalloc upatch info, len=%ld\n", info->len);
@@ -48,14 +48,14 @@ static int setup_load_info(struct upatch_info *info, struct patch_entity *patch)
     }
 
     // read whole patch into kernel temporarily
-    memcpy(info->ehdr, patch->meta.patch_buff, info->len);
+    memcpy(info->ehdr, patch->meta.file_buff, info->len);
 
     info->shdrs = (void *)info->ehdr + info->ehdr->e_shoff;
     info->shshdrtab = (void *)info->ehdr + info->shdrs[info->ehdr->e_shstrndx].sh_offset;
-    info->index.sym = patch->meta.index.sym;
-    info->index.str = patch->meta.index.str;
-    info->und_cnt = patch->meta.und_count;
-    info->got_rela_cnt = patch->meta.got_rela_cnt;
+    info->index.sym = patch->meta.symtab_index;
+    info->index.str = patch->meta.strtab_index;
+    info->und_cnt = patch->meta.und_sym_num;
+    info->got_rela_cnt = patch->meta.got_reloc_num;
     info->strtab = (char *)info->ehdr + info->shdrs[info->index.str].sh_offset;
     log_debug("symbol '%d', type UND, got_rela=%d\n", info->und_cnt, info->got_rela_cnt);
 

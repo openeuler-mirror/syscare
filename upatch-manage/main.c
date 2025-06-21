@@ -65,7 +65,7 @@ static int __init upatch_module_init(void)
  */
 static void __exit upatch_module_exit(void)
 {
-    verify_patch_empty_on_exit();
+    report_patch_table_populated();
     verify_target_empty_on_exit();
 
     kernel_compat_exit();
