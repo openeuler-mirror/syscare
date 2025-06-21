@@ -93,7 +93,7 @@ static int init_patch_meta(struct upatch_metadata *meta, struct file *patch)
     // elf header
     ehdr = hdr;
 
-    if (!is_elf_valid(ehdr, meta->patch_size, true)) {
+    if (!is_valid_patch(ehdr, meta->patch_size)) {
         ret = -EINVAL;
         log_err("invalid patch format\n");
         goto fail;
@@ -222,17 +222,12 @@ struct patch_entity *get_patch_entity_from_inode(struct inode *inode)
 /* public interface */
 struct patch_entity *get_patch_entity(const char *path)
 {
-    struct inode *inode;
     struct patch_entity *patch;
+    struct inode *inode;
 
-    inode = path_inode(path);
-    if (IS_ERR(inode)) {
-        return NULL;
-    }
-
-    inode = igrab(inode);
+    inode = get_path_inode(path);
     if (!inode) {
-        pr_err("%s: Failed to grab inode of %s\n", __func__, path);
+        log_err("failed to get '%s' inode\n", path);
         return NULL;
     }
 

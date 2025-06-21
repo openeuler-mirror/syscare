@@ -198,7 +198,7 @@ static int init_target_meta(struct target_metadata *meta, struct file *target)
     }
 
     ehdr = &meta->ehdr;
-    if (!is_elf_valid(ehdr, i_size_read(file_inode(target)), false)) {
+    if (!is_valid_target(ehdr, i_size_read(file_inode(target)))) {
         ret = -ENOEXEC;
         log_err("invalid target format\n");
         goto out;
@@ -327,23 +327,18 @@ struct target_entity *get_target_entity_from_inode(struct inode *inode)
 /* public interface */
 struct target_entity *get_target_entity(const char *path)
 {
-    struct inode *inode = path_inode(path);
     struct target_entity *target;
+    struct inode *inode;
 
-    log_debug("start to get target_entity for %s\n", path);
-
-    if (IS_ERR(inode)) {
-        return NULL;
-    }
-
-    inode = igrab(inode);
+    inode = get_path_inode(path);
     if (!inode) {
-        pr_err("failed to grab inode of %s\n", path);
+        log_err("failed to get '%s' inode\n", path);
         return NULL;
     }
 
     target = get_target_entity_from_inode(inode);
     iput(inode);
+
     return target;
 }
 
