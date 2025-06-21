@@ -63,7 +63,7 @@ static unsigned long resolve_from_rela_dyn(const struct running_elf *relf,
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_dyn = elf->rela_dyn;
     unsigned int i;
-    char *sym_name;
+    const char *sym_name;
     void __user *sym_addr;
     unsigned long elf_addr;
 
@@ -71,7 +71,7 @@ static unsigned long resolve_from_rela_dyn(const struct running_elf *relf,
         return 0;
     }
 
-    for (i = 0; i < elf->num.rela_dyn; i++) {
+    for (i = 0; i < elf->rela_dyn_num; i++) {
         unsigned long sym_idx = ELF_R_SYM(rela_dyn[i].r_info);
         if (!sym_idx) {
             continue;
@@ -103,7 +103,7 @@ static unsigned long resolve_from_rela_plt(const struct running_elf *relf,
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_plt = elf->rela_plt;
     unsigned int i;
-    char *sym_name;
+    const char *sym_name;
     void __user *sym_addr;
     unsigned long elf_addr = 0;
 
@@ -111,7 +111,7 @@ static unsigned long resolve_from_rela_plt(const struct running_elf *relf,
         return 0;
     }
 
-    for (i = 0; i < elf->num.rela_plt; i++) {
+    for (i = 0; i < elf->rela_plt_num; i++) {
         unsigned long sym_idx = ELF_R_SYM(rela_plt[i].r_info);
         unsigned long sym_type = ELF_ST_TYPE(dynsym[sym_idx].st_info);
         if (!sym_idx) {
@@ -149,7 +149,7 @@ static unsigned long resolve_from_dynsym(const struct running_elf *relf, const c
     const struct target_metadata *elf = relf->meta;
     Elf_Sym *dynsym = elf->dynsym;
     unsigned int i;
-    char *sym_name;
+    const char *sym_name;
     void __user *sym_addr;
     unsigned long elf_addr = 0;
 
@@ -157,7 +157,7 @@ static unsigned long resolve_from_dynsym(const struct running_elf *relf, const c
         return 0;
     }
 
-    for (i = 0; i < elf->num.dynsym; i++) {
+    for (i = 0; i < elf->dynsym_num; i++) {
         /* only need the st_value that is not 0 */
         if (dynsym[i].st_value == 0) {
             continue;
@@ -597,14 +597,14 @@ static unsigned long resolve_from_symtab(const struct running_elf *relf, const c
     const struct target_metadata *elf = relf->meta;
     Elf_Sym *sym = elf->symtab;
     unsigned int i;
-    char *sym_name;
+    const char *sym_name;
     unsigned long elf_addr;
 
     if (!sym || !elf->strtab) {
         return 0;
     }
 
-    for (i = 0; i < elf->num.symtab; i++) {
+    for (i = 0; i < elf->symtab_num; i++) {
         if (sym[i].st_shndx == SHN_UNDEF) {
             continue;
         }

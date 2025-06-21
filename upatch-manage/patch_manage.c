@@ -93,7 +93,7 @@ static struct target_entity *get_target_from_pc(unsigned long pc, unsigned long 
     }
 
     get_file(target_file);
-    target = get_target_entity_from_inode(file_inode(target_file));
+    target = get_target_entity_by_inode(file_inode(target_file));
     fput(target_file);
 
     if (!target) {
@@ -207,7 +207,7 @@ static int target_register_function(struct target_entity *target, loff_t offset,
     }
 
     // find if this target have func changed in offset
-    list_for_each_entry(off, &target->off_head, list) {
+    list_for_each_entry(off, &target->offset_node, list) {
         if (off->offset == offset) {
             find = true;
             break;
@@ -236,7 +236,7 @@ static int target_register_function(struct target_entity *target, loff_t offset,
             return ret;
         }
 
-        list_add(&off->list, &target->off_head);
+        list_add(&off->list, &target->offset_node);
     }
 
     func_node->func = func;
@@ -252,7 +252,7 @@ static void unregister_function_uprobe(struct target_entity *target, loff_t offs
     struct patched_func_node *tmp = NULL;
     bool find = false;
 
-    list_for_each_entry(off, &target->off_head, list) {
+    list_for_each_entry(off, &target->offset_node, list) {
         if (off->offset == offset) {
             find = true;
             break;
@@ -406,7 +406,7 @@ int upatch_load(const char *patch_file, const char *target_path)
         target = new_target_entity(target_path);
         if (IS_ERR(target)) {
             free_patch_entity(patch);
-            log_err("failed to init patch target '%s'\n", target_path);
+            log_err("failed to load target '%s'\n", target_path);
             return PTR_ERR(target);
         }
     }
@@ -511,7 +511,7 @@ void target_unregister_uprobes(struct target_entity *target)
     struct patched_offset *tmp_off = NULL;
 
     log_debug("unregister '%s' (inode: %lu) uprobes:", target->path, target->inode->i_ino);
-    list_for_each_entry_safe(off, tmp_off, &target->off_head, list) {
+    list_for_each_entry_safe(off, tmp_off, &target->offset_node, list) {
         log_debug("unregister offset 0x%llx\n", off->offset);
         uprobe_unregister(target->inode, off->offset, &patch_consumer);
         list_del(&off->list);

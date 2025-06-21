@@ -66,7 +66,7 @@ static int __init upatch_module_init(void)
 static void __exit upatch_module_exit(void)
 {
     report_patch_table_populated();
-    verify_target_empty_on_exit();
+    report_target_table_populated();
 
     kernel_compat_exit();
     ioctl_device_exit();

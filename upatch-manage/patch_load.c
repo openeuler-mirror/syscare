@@ -530,7 +530,7 @@ static int create_relocated_pc_maps(struct process_entity *process, struct upatc
         }
         pp->old_pc = funcs[i].old_addr +
             load_info->running_elf.vma_start_addr +
-            load_info->running_elf.meta->code_virt_offset;
+            load_info->running_elf.meta->load_offset;
         pp->new_pc = funcs[i].new_addr;
         hash_add(info->pc_maps, &pp->node, pp->old_pc);
         log_debug("function: 0x%08lx -> 0x%08lx\n", pp->old_pc, pp->new_pc);
@@ -552,7 +552,7 @@ int upatch_resolve(struct target_entity *target, struct patch_entity *patch, str
 
     memset(&info, 0, sizeof(info));
 
-    info.running_elf.vma_start_addr = target_code_start - target->meta.code_vma_offset;
+    info.running_elf.vma_start_addr = target_code_start - target->meta.vma_offset;
     log_debug("process %d: vma_start=0x%lx, code_start=0x%lx\n",
         task_pid_nr(current), info.running_elf.vma_start_addr, target_code_start);
 

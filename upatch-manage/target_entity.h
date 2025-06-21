@@ -28,67 +28,76 @@
 #include <linux/elf.h>
 #include <linux/module.h>
 
-#define TARGETS_HASH_BITS 4
-
 struct inode;
-
 struct upatch_function;
 
 /* target elf metadata */
 struct target_metadata {
-    unsigned long len;  // file len
+    const char *file_name;
+    loff_t file_size;
 
-    Elf_Ehdr ehdr;
+    Elf_Ehdr *ehdr;
+    Elf_Phdr *phdrs;
+    Elf_Shdr *shdrs;
 
-    char *file_name;
-
-    // tables
     Elf_Sym *symtab;
     Elf_Sym *dynsym;
     Elf_Dyn *dynamic;
     Elf_Rela *rela_dyn;
     Elf_Rela *rela_plt;
-    char *strtab;
-    char *dynstr;
 
-    // table entity number
-    struct {
-        unsigned int symtab, rela_dyn, rela_plt, dynsym;
-    } num;
+    const char *shstrtab;
+    const char *strtab;
+    const char *dynstr;
+
+    size_t symtab_num;
+    size_t dynsym_num;
+    size_t dynamic_num;
+    size_t rela_dyn_num;
+    size_t rela_plt_num;
+
+    size_t shstrtab_len;
+    size_t strtab_len;
+    size_t dynstr_len;
+
+    Elf_Addr vma_offset;  // .text page-aligned offset from the minimum load address
+    Elf_Addr load_offset; // .text load segment vma - offset
 
     Elf_Addr tls_size;
     Elf_Addr tls_align;
-
-    // In LLVM, offset != virtaddr, target VMA start != vma_code_start - offset
-    // code_vma_offset = VirtAddr round down to PAGE_SIZE
-    // The target VMA start = vma_code_start - code_vma_offset
-    Elf_Addr code_vma_offset;
-
-    // code LOAD segment VirtAddr - offset
-    unsigned long code_virt_offset;
 };
 
 struct target_entity {
-    char *path;
-    struct inode *inode;
+    const char *path;               // patch file path
+    struct inode *inode;            // target file inode
 
-    struct target_metadata meta; // store target elf info
+    struct target_metadata meta;    // target file elf data
 
-    // there is only one thread to call active/deactive so we don't need to lock
-    struct list_head off_head;      // list of file offset of active patch function for struct patched_offset
+    /*
+     * there is only one thread to call active / deactive
+     * we don't need a lock
+     */
+    struct list_head offset_node;   // list of file offset of active patch function for struct patched_offset
     struct hlist_node node;         // all target store in hash table
 
-    // all patches related to this target, including active and deactive patches
-    // don't need lock. only load_patch, remove_patch, rmmod upatch_manage will read/write this list
-    // uprobe_handle will not use this list, and we limit there is only one thread to manage patch
+    /*
+     * all patches related to this target, including active and deactive patches
+     * don't need lock. only load_patch, remove_patch, rmmod upatch_manage will read/write this list
+     * uprobe_handle will not use this list, and we limit there is only one thread to manage patch
+     */
     struct list_head all_patch_list;
 
-    // active patch list need lock, uprobe handle will read it, active method will write it
+    /*
+     * active patch list need lock
+     * uprobe handle will read it, active method will write it
+     */
     struct rw_semaphore patch_lock;
     struct list_head actived_patch_list;
 
-    // target ELF may run in different process (so)
-    // every process will have a active patch
+    /*
+     * target ELF may run in different process, such as a dynamic object
+     * every process will have a actived patch
+     */
     struct mutex process_lock;      // uprobe handle will call free_process, so we need lock
     struct list_head process_head;
 };
@@ -113,7 +122,7 @@ struct patched_func_node {
  */
 struct target_entity *get_target_entity(const char* target_path);
 
-struct target_entity *get_target_entity_from_inode(struct inode *inode);
+struct target_entity *get_target_entity_by_inode(struct inode *inode);
 
 /*
  * Load a target entity
@@ -137,14 +146,6 @@ void free_target_entity(struct target_entity *target);
  */
 bool is_target_has_patch(const struct target_entity *target);
 
-/*
- * Check if a target offset has been patched
- * @param target: target entity
- * @param offset: target offset
- * @return result
- */
-bool upatch_binary_has_addr(const struct target_entity *target, loff_t offset);
-
-void __exit verify_target_empty_on_exit(void);
+void __exit report_target_table_populated(void);
 
 #endif // _UPATCH_MANAGE_TARGET_ENTITY_H
