@@ -285,7 +285,7 @@ static void target_unregister_functions(struct target_entity *target, struct pat
     struct upatch_function *func = NULL;
     size_t i = 0;
     loff_t offset = 0;
-    char *name = NULL;
+    const char *name = NULL;
 
     log_debug("unregister patch '%s' functions:\n", target->path);
     for (i = 0; i < count; i++) {
@@ -293,8 +293,7 @@ static void target_unregister_functions(struct target_entity *target, struct pat
         offset = func->old_addr;
         name = patch->meta.strings + func->name_off;
 
-        log_debug("- function: offset=0x%08llx, size=0x%08zx, name='%s'\n",
-            offset, (size_t)func->old_size, name);
+        log_debug("- function: offset=0x%08llx, size=0x%04llx, name='%s'\n", offset, func->old_size, name);
         unregister_function_uprobe(target, offset, func);
     }
 }
@@ -307,18 +306,17 @@ static int do_active_patch(struct target_entity *target, struct patch_entity *pa
     int ret = 0;
     size_t i = 0;
     loff_t offset;
-    char *name = NULL;
+    const char *name = NULL;
 
     log_debug("register target '%s' functions:\n", target->path);
     down_write(&target->patch_lock);
 
-    for (i = 0; i < patch->meta.func_count; i++) {
+    for (i = 0; i < patch->meta.func_num; i++) {
         func = &funcs[i];
         offset = func->old_addr;
         name = patch->meta.strings + func->name_off;
 
-        log_debug("+ function: offset=0x%08llx, size=0x%zx, name='%s'\n",
-            offset, (size_t)func->old_size, name);
+        log_debug("+ function: offset=0x%08llx, size=0x%04llx, name='%s'\n", offset, func->old_size, name);
         ret = target_register_function(target, offset, func);
         if (ret) {
             log_err("failed to register function '%s', ret=%d\n", name, ret);
@@ -364,7 +362,7 @@ static void do_deactive_patch(struct patch_entity *patch)
 
     down_write(&target->patch_lock);
 
-    target_unregister_functions(target, patch, funcs, patch->meta.func_count);
+    target_unregister_functions(target, patch, funcs, patch->meta.func_num);
     target_remove_actived_patch(target, patch);
     patch->status = UPATCH_STATUS_DEACTIVED;
 
@@ -399,7 +397,7 @@ int upatch_load(const char *patch_file, const char *target_path)
 
     patch = new_patch_entity(patch_file);
     if (IS_ERR(patch)) {
-        log_err("failed to init patch '%s'\n", patch_file);
+        log_err("failed to load patch '%s'\n", patch_file);
         return PTR_ERR(patch);
     }
 
