@@ -68,6 +68,9 @@ struct patch_context {
     Elf_Shdr *func_shdr;
     Elf_Shdr *rela_shdr;
     Elf_Shdr *string_shdr;
+
+    void *plt;
+    uintptr_t *got;
 };
 
 int upatch_resolve(struct target_entity *target, struct patch_entity *patch, struct process_entity *process,

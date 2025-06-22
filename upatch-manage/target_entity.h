@@ -28,6 +28,21 @@
 #include <linux/elf.h>
 #include <linux/module.h>
 
+#if defined(__x86_64__)
+    #if defined(__CET__) || defined(__SHSTK__)
+        #define PLT_ENTRY_SIZE  20 // PLT with CET
+    #else
+        #define PLT_ENTRY_SIZE  16
+    #endif
+#elif defined(__aarch64__)
+    #if defined(__ARM_PAC) || defined(__ARM_FEATURE_PAC_DEFAULT)
+        #define PLT_ENTRY_SIZE  20 // PLT with PAC
+    #else
+        #define PLT_ENTRY_SIZE  16
+    #endif
+#endif
+#define GOT_ENTRY_SIZE  sizeof(uintptr_t)  // GOT entry size is pointer size
+
 struct inode;
 struct upatch_function;
 
@@ -65,6 +80,11 @@ struct target_metadata {
 
     Elf_Addr tls_size;
     Elf_Addr tls_align;
+
+    Elf_Addr plt_addr;
+    Elf_Addr got_addr;
+    size_t plt_size;
+    size_t got_size;
 };
 
 struct target_entity {
