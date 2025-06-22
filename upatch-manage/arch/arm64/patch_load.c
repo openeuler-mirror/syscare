@@ -127,10 +127,10 @@ enum aarch64_reloc_op {
     RELOC_OP_PAGE,
 };
 
-unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, bool is_ifunc)
+unsigned long setup_jmp_table(struct patch_context *ctx, unsigned long jmp_addr, bool is_ifunc)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int index = table->cur;
     int entry_num = is_ifunc ? IFUNC_JMP_ENTRY_NUM : NORMAL_JMP_ENTRY_NUM;
     if (table->cur + entry_num > table->max) {
@@ -151,14 +151,14 @@ unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, 
     }
     table->cur += entry_num;
 
-    return info->layout.base + table->off + index * JMP_ENTRY_SIZE;
+    return ctx->layout.base + table->off + index * JMP_ENTRY_SIZE;
 }
 
-static unsigned long setup_jmp_table_with_plt(struct upatch_info *info,
+static unsigned long setup_jmp_table_with_plt(struct patch_context *ctx,
     unsigned long jmp_addr, unsigned long plt_addr)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int index = table->cur;
     int entry_num = PLT_JMP_ENTRY_NUM;
     if (table->cur + entry_num > table->max) {
@@ -173,15 +173,15 @@ static unsigned long setup_jmp_table_with_plt(struct upatch_info *info,
     jmp[index + 3]  = plt_addr;
     table->cur += entry_num;
 
-    return info->layout.base + table->off + index * JMP_ENTRY_SIZE;
+    return ctx->layout.base + table->off + index * JMP_ENTRY_SIZE;
 }
 
-unsigned long setup_got_table(struct upatch_info *info, unsigned long jmp_addr, unsigned long tls_addr)
+unsigned long setup_got_table(struct patch_context *ctx, unsigned long jmp_addr, unsigned long tls_addr)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int index = table->cur;
-    unsigned long entry_addr = info->layout.base + table->off + index * JMP_ENTRY_SIZE;
+    unsigned long entry_addr = ctx->layout.base + table->off + index * JMP_ENTRY_SIZE;
     int entry_num = NORMAL_JMP_ENTRY_NUM;
     if (table->cur + entry_num > table->max) {
         log_err("jmp table overflow, cur = %d, max = %d, num = %d\n",
@@ -199,7 +199,7 @@ unsigned long setup_got_table(struct upatch_info *info, unsigned long jmp_addr, 
     return entry_addr;
 }
 
-unsigned long insert_plt_table(struct upatch_info *info, unsigned long r_type, void __user *addr)
+unsigned long insert_plt_table(struct patch_context *ctx, unsigned long r_type, void __user *addr)
 {
     unsigned long jmp_addr;
     unsigned long tls_addr = 0xffffffff;
@@ -217,9 +217,9 @@ unsigned long insert_plt_table(struct upatch_info *info, unsigned long r_type, v
     }
 
     if (r_type == R_AARCH64_TLSDESC)
-        elf_addr = setup_got_table(info, jmp_addr, tls_addr);
+        elf_addr = setup_got_table(ctx, jmp_addr, tls_addr);
     else
-        elf_addr = setup_jmp_table_with_plt(info, jmp_addr, (unsigned long)(uintptr_t)addr);
+        elf_addr = setup_jmp_table_with_plt(ctx, jmp_addr, (unsigned long)(uintptr_t)addr);
 
     log_debug("jump: 0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n",
         elf_addr, jmp_addr, tls_addr);
@@ -228,24 +228,24 @@ out:
     return elf_addr;
 }
 
-static unsigned long search_insert_plt_table(struct upatch_info *info,
+static unsigned long search_insert_plt_table(struct patch_context *ctx,
     unsigned long jmp_addr, unsigned long plt_addr)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int i = 0;
 
     for (i = 0; i < table->max; ++i) {
         if (jmp[i] != jmp_addr) {
             continue;
         }
-        return info->layout.base + table->off + i * JMP_ENTRY_SIZE;
+        return ctx->layout.base + table->off + i * JMP_ENTRY_SIZE;
     }
 
-    return setup_jmp_table_with_plt(info, jmp_addr, plt_addr);
+    return setup_jmp_table_with_plt(ctx, jmp_addr, plt_addr);
 }
 
-unsigned long insert_got_table(struct upatch_info *info, unsigned long r_type, void __user *addr)
+unsigned long insert_got_table(struct patch_context *ctx, unsigned long r_type, void __user *addr)
 {
     unsigned long jmp_addr;
     unsigned long tls_addr = 0xffffffff;
@@ -262,7 +262,7 @@ unsigned long insert_got_table(struct upatch_info *info, unsigned long r_type, v
         goto out;
     }
 
-    elf_addr = setup_got_table(info, jmp_addr, tls_addr);
+    elf_addr = setup_got_table(ctx, jmp_addr, tls_addr);
 
 out:
     return elf_addr;
@@ -319,11 +319,11 @@ static inline u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *pla
     return new_insn;
 }
 
-int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
+int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
 {
-    Elf_Shdr *shdrs = info->shdrs;
-    const char *strtab = info->strtab;
-    unsigned int symindex = info->index.sym;
+    Elf_Shdr *shdrs = ctx->shdrs;
+    Elf_Sym *symtab = (void *)ctx->symtab_shdr->sh_addr;
+    const char *strtab = (void *)ctx->strtab_shdr->sh_addr;
     unsigned int i;
     Elf_Sym *sym;
     char const *sym_name;
@@ -332,7 +332,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
     u64 sym_addr;
     u64 got;
     s64 result;
-    u64 got_start = info->layout.base + info->layout.table.off;
+    u64 got_start = ctx->layout.base + ctx->layout.table.off;
     Elf_Rela *rel = (void *)shdrs[relsec].sh_addr;
 
     unsigned int reloc_sec = shdrs[relsec].sh_info;
@@ -351,7 +351,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
         ureloc_place = (void *)sec_vaddr + rel[i].r_offset;
 
         /* sym is the ELF symbol we're referring to */
-        sym = (Elf_Sym *)shdrs[symindex].sh_addr + ELF_R_SYM(rel[i].r_info);
+        sym = &symtab[ELF_R_SYM(rel[i].r_info)];
         sym_name = strtab + sym->st_name;
 
         /* src corresponds to (S + A) */
@@ -484,7 +484,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 if (result < -(s64)BIT(27) || result >= (s64)BIT(27)) {
                     log_warn("\tR_AARCH64_CALL26 overflow: result = 0x%llx, uloc = 0x%lx, val = 0x%llx\n",
                         result, (unsigned long)(uintptr_t)ureloc_place, sym_addr);
-                    sym_addr = search_insert_plt_table(info, sym_addr, (u64)&sym_addr);
+                    sym_addr = search_insert_plt_table(ctx, sym_addr, (u64)&sym_addr);
                     log_warn("\tR_AARCH64_CALL26 overflow: plt.addr = 0x%llx\n", sym_addr);
                     if (!sym_addr) {
                         goto overflow;
@@ -496,7 +496,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_ADR_GOT_PAGE:
-                got = get_or_setup_got_entry(info, sym);
+                got = get_or_setup_got_entry(ctx, sym);
                 if (got == 0) {
                     goto overflow;
                 }
@@ -509,7 +509,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_LD64_GOT_LO12_NC:
-                got = get_or_setup_got_entry(info, sym);
+                got = get_or_setup_got_entry(ctx, sym);
                 if (got == 0) {
                     goto overflow;
                 }
@@ -521,7 +521,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_LD64_GOTPAGE_LO15:
-                got = get_or_setup_got_entry(info, sym);
+                got = get_or_setup_got_entry(ctx, sym);
                 if (got == 0) {
                     goto overflow;
                 }
@@ -536,7 +536,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_TLSLE_ADD_TPREL_HI12:
-                result = ALIGN(TCB_SIZE, info->running_elf.meta->tls_align) + sym_addr;
+                result = ALIGN(TCB_SIZE, ctx->target->tls_align) + sym_addr;
                 if (result < 0 || result >= BIT(24)) {
                     goto overflow;
                 }
@@ -545,7 +545,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 *(__le32 *)reloc_place = cpu_to_le32(result);
                 break;
             case R_AARCH64_TLSLE_ADD_TPREL_LO12_NC:
-                result = ALIGN(TCB_SIZE, info->running_elf.meta->tls_align) + sym_addr;
+                result = ALIGN(TCB_SIZE, ctx->target->tls_align) + sym_addr;
                 result = extract_insn_imm(result, 12, 0);
                 result = insert_insn_imm(AARCH64_INSN_IMM_12, reloc_place, result);
                 *(__le32 *)reloc_place = cpu_to_le32(result);

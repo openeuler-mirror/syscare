@@ -49,8 +49,8 @@
 # endif
 #endif
 
-struct running_elf;
+struct patch_context;
 
-unsigned long resolve_symbol(const struct running_elf *relf, const char *name, Elf_Sym patch_sym);
+unsigned long resolve_symbol(struct patch_context *ctx, const char *name, Elf_Sym *patch_sym);
 
 #endif // _UPATCH_SYMBOL_RESOLVE_H

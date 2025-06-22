@@ -70,10 +70,10 @@
 #define X86_64_CALL_IFUNC_1 0x00000715FF525657
 #define X86_64_CALL_IFUNC_2 0x9090E0FF5F5E5A00
 
-unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, bool is_ifunc)
+unsigned long setup_jmp_table(struct patch_context *ctx, unsigned long jmp_addr, bool is_ifunc)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int index = table->cur;
     int entry_num = is_ifunc ? IFUNC_JMP_ENTRY_NUM : NORMAL_JMP_ENTRY_NUM;
     if (table->cur + entry_num > table->max) {
@@ -92,7 +92,7 @@ unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, 
     }
     table->cur += entry_num;
 
-    return info->layout.base + table->off + index * JMP_ENTRY_SIZE;
+    return ctx->layout.base + table->off + index * JMP_ENTRY_SIZE;
 }
 
 /*
@@ -101,12 +101,12 @@ unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, 
  * GOT only need record address and resolve it by [got_addr].
  * To simplify design, use same table for both jmp table and GOT.
  */
-unsigned long setup_got_table(struct upatch_info *info, unsigned long jmp_addr, unsigned long tls_addr)
+unsigned long setup_got_table(struct patch_context *ctx, unsigned long jmp_addr, unsigned long tls_addr)
 {
-    struct jmp_table *table = &info->layout.table;
-    unsigned long *jmp = info->layout.kbase + table->off;
+    struct jmp_table *table = &ctx->layout.table;
+    unsigned long *jmp = ctx->layout.kbase + table->off;
     unsigned int index = table->cur;
-    unsigned long entry_addr = info->layout.base + table->off + index * JMP_ENTRY_SIZE;
+    unsigned long entry_addr = ctx->layout.base + table->off + index * JMP_ENTRY_SIZE;
     if (table->cur + NORMAL_JMP_ENTRY_NUM > table->max) {
         log_err("jmp table overflow, cur = %d, max = %d, num = %d\n",
             table->cur, table->max, NORMAL_JMP_ENTRY_NUM);
@@ -123,7 +123,7 @@ unsigned long setup_got_table(struct upatch_info *info, unsigned long jmp_addr, 
     return entry_addr;
 }
 
-unsigned long insert_plt_table(struct upatch_info *info, unsigned long r_type, void __user *addr)
+unsigned long insert_plt_table(struct patch_context *ctx, unsigned long r_type, void __user *addr)
 {
     unsigned long jmp_addr;
     unsigned long elf_addr = 0;
@@ -133,7 +133,7 @@ unsigned long insert_plt_table(struct upatch_info *info, unsigned long r_type, v
         goto out;
     }
 
-    elf_addr = setup_jmp_table(info, jmp_addr, false);
+    elf_addr = setup_jmp_table(ctx, jmp_addr, false);
 
     log_debug("PLT: 0x%lx -> 0x%lx\n", elf_addr, jmp_addr);
 
@@ -142,7 +142,7 @@ out:
 }
 
 
-unsigned long insert_got_table(struct upatch_info *info, unsigned long r_type, void __user *addr)
+unsigned long insert_got_table(struct patch_context *ctx, unsigned long r_type, void __user *addr)
 {
     unsigned long jmp_addr;
     unsigned long tls_addr = 0xffffffff;
@@ -163,17 +163,17 @@ unsigned long insert_got_table(struct upatch_info *info, unsigned long r_type, v
         goto out;
     }
 
-    elf_addr = setup_got_table(info, jmp_addr, tls_addr);
+    elf_addr = setup_got_table(ctx, jmp_addr, tls_addr);
 
 out:
     return elf_addr;
 }
 
-int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
+int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
 {
-    Elf_Shdr *shdrs = info->shdrs;
-    const char *strtab = info->strtab;
-    unsigned int symindex = info->index.sym;
+    Elf_Shdr *shdrs = ctx->shdrs;
+    Elf_Sym *symtab = (void *)ctx->symtab_shdr->sh_addr;
+    const char *strtab = (void *)ctx->strtab_shdr->sh_addr;
     unsigned int i;
     Elf_Rela *rel = (void *)shdrs[relsec].sh_addr;
     Elf_Sym *sym;
@@ -206,7 +206,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
 
         /* This is the symbol it is referring to. Note that all
             undefined symbols have been resolved. */
-        sym = (Elf_Sym *)shdrs[symindex].sh_addr + ELF_R_SYM(rel[i].r_info);
+        sym = &symtab[ELF_R_SYM(rel[i].r_info)];
         name = strtab + sym->st_name;
 
         /* src corresponds to (S + A) */
@@ -250,7 +250,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
             case R_X86_64_GOTPCRELX:
             case R_X86_64_REX_GOTPCRELX:
                 /* get GOT address */
-                got = get_or_setup_got_entry(info, sym);
+                got = get_or_setup_got_entry(ctx, sym);
                 if (got == 0) {
                     goto overflow;
                 }
@@ -274,7 +274,7 @@ int apply_relocate_add(struct upatch_info *info, unsigned int relsec)
                 memcpy(reloc_place, &sym_addr, sizeof(u64));
                 break;
             case R_X86_64_TPOFF32:
-                tls_size = ALIGN(info->running_elf.meta->tls_size, info->running_elf.meta->tls_align);
+                tls_size = ALIGN(ctx->target->tls_size, ctx->target->tls_align);
                 // %fs + val - tls_size
                 if (sym_addr >= tls_size) {
                     goto overflow;
