@@ -147,13 +147,28 @@ static int init_load_info(struct patch_context *ctx,
     ctx->rela_shdr = &ctx->shdrs[patch->meta.rela_index];
     ctx->string_shdr = &ctx->shdrs[patch->meta.string_index];
 
+    // alloc patch sections
     layout_sections(ctx);
+
+    // read process plt & got
+    ctx->plt = vmalloc_copy_user((void __user *)ctx->load_bias, ctx->target->plt_addr, ctx->target->plt_size);
+    if (IS_ERR(ctx->plt)) {
+        ctx->plt = NULL;
+    }
+
+    ctx->got = vmalloc_copy_user((void __user *)ctx->load_bias, ctx->target->got_addr, ctx->target->got_size);
+    if (IS_ERR(ctx->got)) {
+        ctx->got = NULL;
+    }
+
     return 0;
 }
 
 static void clear_load_info(struct patch_context *ctx)
 {
     VFREE_CLEAR(ctx->buff);
+    VFREE_CLEAR(ctx->plt);
+    VFREE_CLEAR(ctx->got);
     KFREE_CLEAR(ctx->layout.kbase);
 }
 

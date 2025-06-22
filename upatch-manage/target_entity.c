@@ -36,6 +36,8 @@ static const char *STRTAB_NAME   = ".strtab";
 static const char *DYNSTR_NAME   = ".dynstr";
 static const char *DYN_RELA_NAME = ".rela.dyn";
 static const char *PLT_RELA_NAME = ".rela.plt";
+static const char *PLT_NAME      = ".plt";
+static const char *GOT_NAME      = ".got";
 
 DEFINE_HASHTABLE(g_target_table, TARGET_TABLE_HASH_BITS);
 DEFINE_MUTEX(g_target_table_lock);
@@ -166,8 +168,16 @@ static int resolve_target_address(struct target_metadata *meta)
 
     Elf_Phdr *phdrs = meta->phdrs;
     Elf_Half phdr_num = meta->ehdr->e_phnum;
-    Elf_Half i;
     Elf_Phdr *phdr;
+
+    Elf_Shdr *shdrs = meta->shdrs;
+    Elf_Half shdr_num = meta->ehdr->e_shnum;
+    Elf_Shdr *shdr;
+
+    const char *shstrtab = meta->shstrtab;
+    const char *sec_name;
+
+    Elf_Half i;
 
     /* find minimum load virtual address */
     for (i = 0; i < phdr_num; i++) {
@@ -214,7 +224,34 @@ static int resolve_target_address(struct target_metadata *meta)
         return -ENOEXEC;
     }
 
-    log_debug("text_vma_offset: 0x%llx, text_load_offset: 0x%llx\n", meta->vma_offset, meta->load_offset);
+    /* parse section headers */
+    for (Elf_Half i = 0; i < shdr_num; i++) {
+        if (meta->plt_addr && meta->got_addr) {
+            break;
+        }
+
+        shdr = &shdrs[i];
+        if (shdr->sh_type != SHT_PROGBITS) {
+            continue;
+        }
+
+        sec_name = shstrtab + shdr->sh_name;
+        if ((shdr->sh_flags & (SHF_ALLOC|SHF_EXECINSTR)) == (SHF_ALLOC|SHF_EXECINSTR)) {
+            if (!meta->plt_addr && strcmp(sec_name, PLT_NAME) == 0) {
+                meta->plt_addr = shdr->sh_addr;
+                meta->plt_size = shdr->sh_size;
+            }
+        }
+        if ((shdr->sh_flags & (SHF_ALLOC|SHF_WRITE)) == (SHF_ALLOC|SHF_WRITE)) {
+            if (!meta->got_addr && strcmp(sec_name, GOT_NAME) == 0) {
+                meta->got_addr = shdr->sh_addr;
+                meta->got_size = shdr->sh_size;
+            }
+        }
+    }
+
+    log_debug("vma_offset: 0x%llx, load_offset: 0x%llx, plt_addr: 0x%llx, got_addr: 0x%llx\n",
+        meta->vma_offset, meta->load_offset, meta->plt_addr, meta->got_addr);
     return 0;
 }
 
