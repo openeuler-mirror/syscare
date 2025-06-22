@@ -580,18 +580,22 @@ fail:
     return ret;
 }
 
-static inline bool is_addr_in_got_table(struct patch_layout *layout, u64 addr)
+static inline bool is_addr_in_got(struct patch_context *ctx, Elf_Addr addr)
 {
-    unsigned long table_start = layout->base + layout->table.off;
-    unsigned long table_end = table_start + layout->table.max;
-    return addr >= table_start && addr < table_end;
+    unsigned long got_start = ctx->load_bias + ctx->target->got_addr;
+    unsigned long got_end = got_start + ctx->target->got_size;
+
+    unsigned long jmp_table_start = ctx->layout.base + ctx->layout.table.off;
+    unsigned long jmp_table_end = jmp_table_start + ctx->layout.table.max;
+
+    return (addr >= got_start && addr < got_end) || (addr >= jmp_table_start && addr < jmp_table_end);
 }
 
 unsigned long get_or_setup_got_entry(struct patch_context *ctx, Elf_Sym *sym)
 {
     unsigned long got;
 
-    if (sym->st_shndx == SHN_UNDEF && is_addr_in_got_table(&ctx->layout, sym->st_value)) {
+    if (sym->st_shndx == SHN_UNDEF && is_addr_in_got(ctx, sym->st_value)) {
         got = sym->st_value;
     } else {
         got = setup_got_table(ctx, sym->st_value, 0);

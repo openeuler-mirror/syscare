@@ -35,6 +35,42 @@ static inline bool is_same_name(const char *name, const char *name2)
     return strcmp(name, name2) == 0;
 }
 
+static unsigned long search_process_got(struct patch_context *ctx, unsigned long addr)
+{
+    uintptr_t *got = ctx->got;
+    size_t got_num = ctx->target->got_size / GOT_ENTRY_SIZE;
+    size_t i;
+
+    if (unlikely(!got || !got_num)) {
+        return 0;
+    }
+
+    for (i = 0; i < got_num; i++) {
+        if (unlikely(!got[i])) {
+            continue;
+        }
+        if (got[i] == addr) {
+            return ctx->load_bias + ctx->target->got_addr + (i * GOT_ENTRY_SIZE);
+        }
+    }
+
+    return 0;
+}
+
+static unsigned long resolve_from_got(struct patch_context *ctx, const char *name, Elf_Sym *sym)
+{
+    unsigned long sym_addr = ctx->load_bias + sym->st_value;
+    unsigned long addr;
+
+    addr = search_process_got(ctx, sym_addr);
+    if (!addr) {
+        return 0;
+    }
+
+    log_debug("found symbol '%s' from '.got' at 0x%lx\n", name, addr);
+    return addr;
+}
+
 static unsigned long resolve_from_patch(struct patch_context *ctx, const char *name, Elf_Sym *patch_sym)
 {
     const struct target_metadata *elf = ctx->target;
@@ -635,9 +671,12 @@ unsigned long resolve_symbol(struct patch_context *ctx, const char *name, Elf_Sy
         elf_addr = resolve_from_rela_plt(ctx, name, patch_sym);
     }
 
-    /* resolve from got */
     if (!elf_addr) {
         elf_addr = resolve_from_rela_dyn(ctx, name, patch_sym);
+    }
+
+    if (!elf_addr) {
+        elf_addr = resolve_from_got(ctx, name, patch_sym);
     }
 
     if (!elf_addr) {
