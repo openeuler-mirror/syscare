@@ -11,6 +11,7 @@
 #define _ARCH_PATCH_LOAD_H
 
 #include "../patch_load.h"
+#include "../patch_entity.h"
 #include "../target_entity.h"
 #include "../util.h"
 
@@ -55,15 +56,15 @@ struct upatch_jmp_table_entry {
 
 #define JMP_TABLE_ENTRY_MAX_SIZE (JMP_ENTRY_SIZE * IFUNC_JMP_ENTRY_NUM)
 
-unsigned long insert_plt_table(struct upatch_info *info, unsigned long r_type, void __user *addr);
+unsigned long insert_plt_table(struct patch_context *ctx, unsigned long r_type, void __user *addr);
 
 // write jmp addr in jmp table in text section, return the real jmp entry address in VMA
-unsigned long setup_jmp_table(struct upatch_info *info, unsigned long jmp_addr, bool is_ifunc);
+unsigned long setup_jmp_table(struct patch_context *ctx, unsigned long jmp_addr, bool is_ifunc);
 
-unsigned long insert_got_table(struct upatch_info *info, unsigned long r_type, void __user *addr);
+unsigned long insert_got_table(struct patch_context *ctx, unsigned long r_type, void __user *addr);
 
-unsigned long setup_got_table(struct upatch_info *info, unsigned long jmp_addr, unsigned long tls_addr);
+unsigned long setup_got_table(struct patch_context *ctx, unsigned long jmp_addr, unsigned long tls_addr);
 
-int apply_relocate_add(struct upatch_info *info, unsigned int relsec);
+int apply_relocate_add(struct patch_context *ctx, unsigned int relsec);
 
 #endif /* _ARCH_PATCH_LOAD_H */
