@@ -38,6 +38,10 @@ static void correlate_symbol(struct symbol *sym_orig,
             sym_patched->name, sym_orig->name);
         sym_patched->name = sym_orig->name;
     }
+    if (sym_patched->sec && sym_orig->sec) {
+        sym_patched->sec->twin = sym_orig->sec;
+        sym_orig->sec->twin = sym_patched->sec;
+    }
 }
 
 void upatch_correlate_symbols(struct upatch_elf *uelf_source,
