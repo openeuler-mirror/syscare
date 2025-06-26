@@ -369,7 +369,9 @@ static int simplify_symbols(struct patch_context *ctx)
                 log_debug("resolved external symbol '%s' at 0x%lx\n", sym_name, (unsigned long)sym->st_value);
                 break;
             case SHN_LIVEPATCH:
-                sym->st_value += ctx->load_bias;
+                if (ctx->target->need_load_bias) {
+                    sym->st_value += ctx->load_bias;
+                }
                 log_debug("resolved livepatch symbol '%s' at 0x%lx\n", sym_name, (unsigned long)sym->st_value);
                 break;
             default:
