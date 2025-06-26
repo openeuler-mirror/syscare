@@ -291,22 +291,23 @@ impl FileRelation {
         );
 
         // We want subsequent objects to contain more identifiers.
-        object_info.sort_by(|(_, _, lhs), (_, _, rhs)| lhs.len().cmp(&rhs.len()));
+        object_info.sort_by(|(_, _, lhs), (_, _, rhs)| rhs.len().cmp(&lhs.len()));
 
         let mut upatch_id_map = IndexMap::new();
-        while let Some((object_file, archive_file, mut upatch_ids)) = object_info.pop() {
-            // Remove identifiers in other objects
-            for (_, _, ids) in &object_info {
-                upatch_ids.retain(|id| !ids.contains(id));
-            }
-            // Current object is fully composed of other objects, we skip it.
-            if upatch_ids.is_empty() {
-                warn!("Skipped {}", object_file.display());
-            }
-            for upatch_id in upatch_ids {
-                upatch_id_map.insert(upatch_id, (object_file.clone(), archive_file.clone()));
+        for (object, archive, ids) in object_info {
+            for id in ids {
+                let result = upatch_id_map.insert(id.clone(), (object.clone(), archive.clone()));
+                if let Some((old_object, _)) = result {
+                    warn!(
+                        "{}: Object {} is replaced by {}",
+                        id.to_string_lossy(),
+                        old_object.display(),
+                        object.display()
+                    );
+                }
             }
         }
+
         ensure!(
             !upatch_id_map.is_empty(),
             "Cannot find any upatch id in {}",
