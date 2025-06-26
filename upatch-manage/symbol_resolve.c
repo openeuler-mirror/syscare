@@ -50,7 +50,11 @@ static unsigned long search_process_got(struct patch_context *ctx, unsigned long
             continue;
         }
         if (got[i] == addr) {
-            return ctx->load_bias + ctx->target->got_addr + (i * GOT_ENTRY_SIZE);
+            if (!ctx->target->need_load_bias) {
+                return ctx->target->got_addr + (i * GOT_ENTRY_SIZE);
+            } else {
+                return ctx->load_bias + ctx->target->got_addr + (i * GOT_ENTRY_SIZE);
+            }
         }
     }
 
@@ -59,8 +63,14 @@ static unsigned long search_process_got(struct patch_context *ctx, unsigned long
 
 static unsigned long resolve_from_got(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
-    unsigned long sym_addr = ctx->load_bias + sym->st_value;
+    unsigned long sym_addr;
     unsigned long addr;
+
+    if (!ctx->target->need_load_bias) {
+        sym_addr = sym->st_value;
+    } else {
+        sym_addr = ctx->load_bias + sym->st_value;
+    }
 
     addr = search_process_got(ctx, sym_addr);
     if (!addr) {
@@ -71,27 +81,31 @@ static unsigned long resolve_from_got(struct patch_context *ctx, const char *nam
     return addr;
 }
 
-static unsigned long resolve_from_patch(struct patch_context *ctx, const char *name, Elf_Sym *patch_sym)
+static unsigned long resolve_from_patch(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
     const struct target_metadata *elf = ctx->target;
-    unsigned long elf_addr = 0;
+    unsigned long addr = 0;
 
     if (!elf) {
         return 0;
     }
 
-    if (!patch_sym->st_value) {
+    if (!sym->st_value) {
         return 0;
     }
 
-    elf_addr = ctx->load_bias + patch_sym->st_value;
-    log_debug("found symbol '%s' from patch at 0x%lx\n", name, elf_addr);
+    if (!ctx->target->need_load_bias) {
+        addr = sym->st_value;
+    } else {
+        addr = ctx->load_bias + sym->st_value;
+    }
+    log_debug("found symbol '%s' from patch at 0x%lx\n", name, addr);
 
-    return elf_addr;
+    return addr;
 }
 
 /* handle external object, we need get it's address, used for R_X86_64_REX_GOTPCRELX */
-static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char *name, Elf_Sym *patch_sym)
+static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
     const struct target_metadata *elf = ctx->target;
     Elf_Sym *dynsym = elf->dynsym;
@@ -99,7 +113,7 @@ static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char
     unsigned int i;
     const char *sym_name;
     void __user *sym_addr;
-    unsigned long elf_addr;
+    unsigned long addr;
 
     if (!dynsym || !rela_dyn || !elf->dynstr) {
         return 0;
@@ -119,18 +133,22 @@ static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char
         }
 
         /* for executable file, r_offset is virtual address of GOT table */
-        sym_addr = (void *)(ctx->load_bias + rela_dyn[i].r_offset);
-        elf_addr = insert_got_table(ctx, ELF_R_TYPE(rela_dyn[i].r_info), sym_addr);
+        if (!ctx->target->need_load_bias) {
+            sym_addr = (void __user *)rela_dyn[i].r_offset;
+        } else {
+            sym_addr = (void __user *)(ctx->load_bias + rela_dyn[i].r_offset);
+        }
+        addr = insert_got_table(ctx, ELF_R_TYPE(rela_dyn[i].r_info), sym_addr);
         log_debug("found symbol '%s' from '.rela.dyn' at 0x%lx, ret=0x%lx\n",
-            sym_name, (unsigned long)sym_addr, elf_addr);
+            sym_name, (unsigned long)sym_addr, addr);
 
-        return elf_addr;
+        return addr;
     }
 
     return 0;
 }
 
-static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char *name, Elf_Sym *patch_sym)
+static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
     const struct target_metadata *elf = ctx->target;
     Elf_Sym *dynsym = elf->dynsym;
@@ -138,7 +156,7 @@ static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char
     unsigned int i;
     const char *sym_name;
     void __user *sym_addr;
-    unsigned long elf_addr = 0;
+    unsigned long addr = 0;
 
     if (!dynsym || !rela_plt || !elf->dynstr) {
         return 0;
@@ -163,14 +181,18 @@ static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char
         }
 
         /* for executable file, r_offset is virtual address of PLT table */
-        sym_addr = (void *)(ctx->load_bias + rela_plt[i].r_offset);
-        elf_addr = insert_plt_table(ctx, ELF_R_TYPE(rela_plt[i].r_info), sym_addr);
-        if (!elf_addr) {
+        if (!ctx->target->need_load_bias) {
+            sym_addr = (void __user *)rela_plt[i].r_offset;
+        } else {
+            sym_addr = (void __user *)(ctx->load_bias + rela_plt[i].r_offset);
+        }
+        addr = insert_plt_table(ctx, ELF_R_TYPE(rela_plt[i].r_info), sym_addr);
+        if (!addr) {
             return 0;
         }
         log_debug("found symbol '%s' from '.rela.plt' at 0x%lx, ret=0x%lx\n",
-            sym_name, (unsigned long)sym_addr, elf_addr);
-        return elf_addr;
+            sym_name, (unsigned long)sym_addr, addr);
+        return addr;
     }
 
     return 0;
@@ -184,7 +206,7 @@ static unsigned long resolve_from_dynsym(struct patch_context *ctx, const char *
     unsigned int i;
     const char *sym_name;
     void __user *sym_addr;
-    unsigned long elf_addr = 0;
+    unsigned long addr = 0;
 
     if (!dynsym) {
         return 0;
@@ -203,11 +225,15 @@ static unsigned long resolve_from_dynsym(struct patch_context *ctx, const char *
             continue;
         }
 
-        sym_addr = (void *)(ctx->load_bias + dynsym[i].st_value);
-        elf_addr = insert_got_table(ctx, 0, sym_addr);
+        if (!ctx->target->need_load_bias) {
+            sym_addr = (void __user *)(dynsym[i].st_value);
+        } else {
+            sym_addr = (void __user *)(ctx->load_bias + dynsym[i].st_value);
+        }
+        addr = insert_got_table(ctx, 0, sym_addr);
         log_debug("found symbol '%s' from '.dynsym' at 0x%lx, ret=0x%lx\n",
-            sym_name, (unsigned long)sym_addr, elf_addr);
-        return elf_addr;
+            sym_name, (unsigned long)sym_addr, addr);
+        return addr;
     }
 
     return 0;
@@ -631,7 +657,7 @@ static unsigned long resolve_from_symtab(const struct patch_context *ctx, const 
     Elf_Sym *sym = elf->symtab;
     unsigned int i;
     const char *sym_name;
-    unsigned long elf_addr;
+    unsigned long addr;
 
     if (!sym || !elf->strtab) {
         return 0;
@@ -644,9 +670,13 @@ static unsigned long resolve_from_symtab(const struct patch_context *ctx, const 
         sym_name = elf->strtab + sym[i].st_name;
 
         if (is_same_name(sym_name, name)) {
-            elf_addr = ctx->load_bias + sym[i].st_value;
-            log_debug("found symbol '%s' from '.symtab' at 0x%lx\n", name, elf_addr);
-            return elf_addr;
+            if (!ctx->target->need_load_bias) {
+                addr = sym[i].st_value;
+            } else {
+                addr = ctx->load_bias + sym[i].st_value;
+            }
+            log_debug("found symbol '%s' from '.symtab' at 0x%lx\n", name, addr);
+            return addr;
         }
     }
 
