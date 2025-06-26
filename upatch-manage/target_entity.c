@@ -166,6 +166,7 @@ static int resolve_target_address(struct target_metadata *meta)
     Elf_Addr min_load_addr = ELF_ADDR_MAX;
     bool found_text_segment = false;
 
+    Elf_Ehdr *ehdr = meta->ehdr;
     Elf_Phdr *phdrs = meta->phdrs;
     Elf_Half phdr_num = meta->ehdr->e_phnum;
     Elf_Phdr *phdr;
@@ -178,6 +179,20 @@ static int resolve_target_address(struct target_metadata *meta)
     const char *sec_name;
 
     Elf_Half i;
+
+    /*
+     * Check if the ELF file is position-independent (ET_DYN type).
+     * This includes:
+     *   - Shared libraries (.so)
+     *   - Position-Independent Executables (PIE)
+     * Such files require load bias adjustment (ASLR support).
+     * Non-PIE executables (ET_EXEC) load at fixed addresses and don't need bias.
+     */
+    if (ehdr->e_type == ET_DYN) {
+        meta->need_load_bias = true;
+    } else {
+        meta->need_load_bias = false;
+    }
 
     /* find minimum load virtual address */
     for (i = 0; i < phdr_num; i++) {

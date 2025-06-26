@@ -75,6 +75,7 @@ struct target_metadata {
     size_t strtab_len;
     size_t dynstr_len;
 
+    bool need_load_bias;  // PIE & shared object needs ASLR adjustment
     Elf_Addr vma_offset;  // .text page-aligned offset from the minimum load address
     Elf_Addr load_offset; // .text load segment vma - offset
 
