@@ -25,6 +25,20 @@ use uuid::Uuid;
 const COMPILER_KEYWORDS_CC: &[&str] = &["cc", "clang"];
 const COMPILER_KEYWORDS_CXX: &[&str] = &["++", "xx"];
 
+const COMPILER_EXCLUDE_FLAGS: &[&str] = &[
+    "-E",            // Preprocess only; does not compile.
+    "--version",     // Print compiler version and exit.
+    "--help",        // Print help message and exit.
+    "--target-help", // Print target-specific help and exit.
+    "-dumpversion",  // Print compiler version string (e.g., "11.2.0") and exit.
+    "-dumpmachine",  // Print compiler target machine (e.g., "x86_64-linux-gnu") and exit.
+    "-###",          // Dry run: print commands that would be executed, but do not run them.
+];
+const COMPILER_EXCLUDE_FLAG_PREFIXES: &[&str] = &["--print-"];
+const COMPILER_COMPILE_SIGNAL_FLAGS: &[&str] = &["-x"];
+const COMPILER_SPECIAL_SOURCE_FILES: &[&str] = &["-", "@args.txt"];
+const COMPILER_SOURCE_FILE_EXTENSIONS: &[&str] = &["c", "cc", "cpp", "cxx", "s", "S"];
+
 const HELPER_ENV_NAME_CC: &str = "UPATCH_HELPER_CC";
 const HELPER_ENV_NAME_CXX: &str = "UPATCH_HELPER_CXX";
 const HELPER_ENV_NAMES: &[(&[&str], &str)] = &[
@@ -32,7 +46,6 @@ const HELPER_ENV_NAMES: &[(&[&str], &str)] = &[
     (COMPILER_KEYWORDS_CXX, HELPER_ENV_NAME_CXX),
 ];
 
-const COMPILE_FLAG_NAME: &str = "-c";
 const COMPILE_OPTIONS_GNU: &[&str] = &[
     "-gdwarf",                 // generate dwarf debuginfo
     "-ffunction-sections",     // generate corresponding section for each function
@@ -55,7 +68,47 @@ const UPATCH_ID_PREFIX: &str = ".upatch_";
 
 #[inline(always)]
 fn is_compilation(args: &[OsString]) -> bool {
-    args.iter().any(|arg| arg == COMPILE_FLAG_NAME)
+    /* check exclude flags */
+    for arg in args.iter().skip(1) {
+        if COMPILER_EXCLUDE_FLAGS
+            .iter()
+            .any(|&flag| arg == OsStr::new(flag))
+        {
+            return false;
+        }
+        if COMPILER_EXCLUDE_FLAG_PREFIXES
+            .iter()
+            .any(|&prefix| arg.as_bytes().starts_with(prefix.as_bytes()))
+        {
+            return false;
+        }
+    }
+
+    /* check compile flag & source file */
+    for arg in args.iter().skip(1) {
+        if COMPILER_COMPILE_SIGNAL_FLAGS
+            .iter()
+            .any(|&name| arg == OsStr::new(name))
+        {
+            return true;
+        }
+        if COMPILER_SPECIAL_SOURCE_FILES
+            .iter()
+            .any(|&name| arg == OsStr::new(name))
+        {
+            return true;
+        }
+        if let Some(src_ext) = Path::new(arg).extension() {
+            if COMPILER_SOURCE_FILE_EXTENSIONS
+                .iter()
+                .any(|&ext| src_ext == OsStr::new(ext))
+            {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 #[inline(always)]
