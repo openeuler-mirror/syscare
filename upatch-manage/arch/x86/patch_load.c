@@ -221,15 +221,9 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
             case R_X86_64_NONE:
                 break;
             case R_X86_64_64:
-                if (*(u64 *)reloc_place != 0) {
-                    goto invalid_relocation;
-                }
                 memcpy(reloc_place, &sym_addr, sizeof(u64));
                 break;
             case R_X86_64_32:
-                if (*(u32 *)reloc_place != 0) {
-                    goto invalid_relocation;
-                }
                 memcpy(reloc_place, &sym_addr, sizeof(u32));
                 if (sym_addr != *(u32 *)reloc_place
                     && (ELF_ST_TYPE(sym->st_info) != STT_SECTION)) {
@@ -237,9 +231,6 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
                 }
                 break;
             case R_X86_64_32S:
-                if (*(s32 *)reloc_place != 0) {
-                    goto invalid_relocation;
-                }
                 memcpy(reloc_place, &sym_addr, sizeof(u32));
                 if ((s64)sym_addr != *(s32 *)reloc_place && (ELF_ST_TYPE(sym->st_info) != STT_SECTION)) {
                     goto overflow;
@@ -260,16 +251,10 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
                 fallthrough;
             case R_X86_64_PC32:
             case R_X86_64_PLT32:
-                if (*(u32 *)reloc_place != 0) {
-                    goto invalid_relocation;
-                }
                 sym_addr -= (u64)ureloc_place;
                 memcpy(reloc_place, &sym_addr, sizeof(u32));
                 break;
             case R_X86_64_PC64:
-                if (*(u64 *)reloc_place != 0) {
-                    goto invalid_relocation;
-                }
                 sym_addr -= (u64)ureloc_place;
                 memcpy(reloc_place, &sym_addr, sizeof(u64));
                 break;
@@ -289,12 +274,6 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
         log_debug("\t(after) *reloc_place = 0x%llx\n", *(u64*)reloc_place);
     }
     return 0;
-
-invalid_relocation:
-    log_err("\tSkipping invalid relocation target, \
-        existing value is nonzero for type %d, loc %p, name %s\n",
-        (int)ELF_R_TYPE(rel[i].r_info), reloc_place, name);
-    return -ENOEXEC;
 
 overflow:
     log_err("\toverflow in relocation type %d name %s\n",
