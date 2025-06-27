@@ -122,7 +122,8 @@ impl SyscareBuild {
     }
 
     fn collect_package_info(&self) -> Result<Vec<PackageInfo>> {
-        let mut pkg_list = Vec::new();
+        let mut source_pkg_list = Vec::new();
+        let mut debug_pkg_list = Vec::new();
 
         for pkg_path in self.args.source.clone() {
             let mut pkg_info = PKG_IMPL.parse_package_info(&pkg_path)?;
@@ -139,7 +140,7 @@ impl SyscareBuild {
                 bail!("File {} is not a source package", pkg_info.short_name());
             }
 
-            pkg_list.push(pkg_info);
+            source_pkg_list.push(pkg_info);
         }
 
         for pkg_path in self.args.debuginfo.clone() {
@@ -160,10 +161,22 @@ impl SyscareBuild {
                     self.args.patch_arch
                 );
             }
+            debug_pkg_list.push(pkg_info);
         }
         info!("------------------------------");
 
-        Ok(pkg_list)
+        for source_pkg in &source_pkg_list {
+            ensure!(
+                debug_pkg_list.iter().any(|debug_pkg| {
+                    source_pkg.version == debug_pkg.version
+                        && source_pkg.release == debug_pkg.release
+                }),
+                "Package {} has no matching debuginfo package",
+                source_pkg.full_name(),
+            );
+        }
+
+        Ok(source_pkg_list)
     }
 
     fn prepare_source_code(
