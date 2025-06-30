@@ -26,17 +26,12 @@
 #include "patch_load.h"
 #include "util.h"
 
-#define PATCH_TABLE_HASH_BITS 4
-
 static const char *SYMTAB_NAME    = ".symtab";
 static const char *TEXT_RELA_NAME = ".rela.text.";
 
 static const char *UPATCH_FUNCS_NAME      = ".upatch.funcs";
 static const char *UPATCH_FUNCS_RELA_NAME = ".rela.upatch.funcs";
 static const char *UPATCH_STRINGS_NAME    = ".upatch.strings";
-
-DEFINE_HASHTABLE(g_patch_table, PATCH_TABLE_HASH_BITS);
-DEFINE_MUTEX(g_patch_table_lock);
 
 static inline void count_und_symbol(struct patch_metadata *meta, Elf_Sym *symtab, size_t count)
 {
@@ -60,13 +55,22 @@ static inline void count_got_reloc(struct patch_metadata *meta, Elf_Rela *relas,
     }
 }
 
-static void clear_patch_metadata(struct patch_metadata *meta)
+static void destroy_patch_metadata(struct patch_metadata *meta)
 {
-    VFREE_CLEAR(meta->file_buff);
-    meta->file_size = 0;
+    KFREE_CLEAR(meta->path);
+    iput(meta->inode);
+    meta->inode = NULL;
 
+    VFREE_CLEAR(meta->buff);
+    meta->size = 0;
+
+    meta->shstrtab_index = 0;
     meta->symtab_index = 0;
     meta->strtab_index = 0;
+
+    meta->func_index = 0;
+    meta->rela_index = 0;
+    meta->string_index = 0;
 
     meta->funcs = NULL;
     meta->strings = NULL;
@@ -78,11 +82,9 @@ static void clear_patch_metadata(struct patch_metadata *meta)
     meta->got_reloc_num = 0;
 }
 
-static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patch)
+static int resolve_patch_metadata(struct patch_metadata *meta, const char *file_path)
 {
-    int ret = 0;
-
-    loff_t file_size;
+    struct file *file;
 
     Elf_Ehdr *ehdr;
     Elf_Shdr *shdrs;
@@ -99,26 +101,49 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
     struct upatch_relocation *relas = NULL;
     size_t rela_num = 0;
 
-    meta->file_size = i_size_read(file_inode(patch));
-    meta->file_buff = vmalloc_read(patch, 0, meta->file_size);
-    if (IS_ERR(meta->file_buff)) {
-        ret = PTR_ERR(meta->file_buff);
-        log_err("failed to read file, len=0x%llx\n", meta->file_size);
-        goto fail;
+    int ret = 0;
+
+    file = filp_open(file_path, O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        log_err("failed to open '%s'\n", file_path);
+        ret = PTR_ERR(file);
+        file = NULL;
+        goto out;
     }
 
-    ehdr = meta->file_buff;
-    if (!is_valid_patch(ehdr, meta->file_size)) {
-        ret = -ENOEXEC;
+    meta->path = kstrdup(file_path, GFP_KERNEL);
+    if (!meta->path) {
+        log_err("faild to alloc file path\n");
+        ret = -ENOMEM;
+        goto out;
+    }
+
+    meta->inode = igrab(file_inode(file));
+    if (!meta->inode) {
+        log_err("file '%s' inode is invalid\n", meta->path);
+        ret = -ENOENT;
+        goto out;
+    }
+
+    meta->size = i_size_read(meta->inode);
+    meta->buff = vmalloc_read(file, 0, meta->size);
+    if (IS_ERR(meta->buff)) {
+        log_err("failed to read file, len=0x%llx\n", meta->size);
+        ret = PTR_ERR(meta->buff);
+        goto out;
+    }
+
+    ehdr = meta->buff;
+    if (!is_valid_patch(ehdr, meta->size)) {
         log_err("invalid file format\n");
-        goto fail;
+        ret = -ENOEXEC;
+        goto out;
     }
     meta->shstrtab_index = ehdr->e_shstrndx;
 
-    file_size = meta->file_size;
-    shdrs = meta->file_buff + ehdr->e_shoff;
+    shdrs = meta->buff + ehdr->e_shoff;
     shdr_num = ehdr->e_shnum;
-    shstrtab = meta->file_buff + shdrs[meta->shstrtab_index].sh_offset;
+    shstrtab = meta->buff + shdrs[meta->shstrtab_index].sh_offset;
     shstrtab_size = shdrs[meta->shstrtab_index].sh_size;
 
     for (i = 1; i < shdr_num; i++) {
@@ -126,19 +151,19 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
 
         sec_name = get_string_at(shstrtab, shstrtab_size, shdr->sh_name);
         if (sec_name == NULL) {
-            ret = -ENOEXEC;
             log_err("invalid section name, index=%u\n", i);
-            goto fail;
+            ret = -ENOEXEC;
+            goto out;
         }
 
         sec_name = shstrtab + shdr->sh_name; // no need check
-        if (shdr->sh_type != SHT_NOBITS && shdr->sh_offset + shdr->sh_size > file_size) {
+        if (shdr->sh_type != SHT_NOBITS && shdr->sh_offset + shdr->sh_size > meta->size) {
             log_err("section '%s' offset overflow, index=%u\n", sec_name, i);
             ret = -ENOEXEC;
-            goto fail;
+            goto out;
         }
 
-        sec_data = meta->file_buff + shdr->sh_offset;
+        sec_data = meta->buff + shdr->sh_offset;
         switch (shdr->sh_type) {
             case SHT_PROGBITS:
                 if (strcmp(sec_name, UPATCH_FUNCS_NAME) == 0) {
@@ -156,12 +181,12 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
                 if (shdr->sh_entsize != sizeof(Elf_Sym)) {
                     log_err("invalid section '%s' entity size\n", sec_name);
                     ret = -ENOEXEC;
-                    goto fail;
+                    goto out;
                 }
                 if (shdr->sh_link > shdr_num) {
-                    ret = -ENOEXEC;
                     log_err("invalid section '%s' string table index\n", sec_name);
-                    goto fail;
+                    ret = -ENOEXEC;
+                    goto out;
                 }
                 if (strcmp(sec_name, SYMTAB_NAME) == 0) {
                     meta->symtab_index = i;
@@ -174,7 +199,7 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
                 if (shdr->sh_entsize != sizeof(Elf_Rela)) {
                     log_err("invalid section '%s' entity size\n", sec_name);
                     ret = -ENOEXEC;
-                    goto fail;
+                    goto out;
                 }
                 if (strcmp(sec_name, UPATCH_FUNCS_RELA_NAME) == 0) {
                     meta->rela_index = i;
@@ -193,12 +218,12 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
     if (!meta->symtab_index || !meta->strtab_index) {
         log_err("patch contains no symbol\n");
         ret = -ENOEXEC;
-        goto fail;
+        goto out;
     }
     if (!meta->func_index || !meta->funcs || !meta->func_num) {
         log_err("patch contains no function\n");
         ret = -ENOEXEC;
-        goto fail;
+        goto out;
     }
     if (!meta->rela_index || !meta->string_index ||
         !relas || !meta->strings ||
@@ -206,103 +231,68 @@ static int resolve_patch_metadata(struct patch_metadata *meta, struct file *patc
         meta->func_num != rela_num) {
         log_err("invalid patch format\n");
         ret = -ENOEXEC;
-        goto fail;
+        goto out;
     }
 
     for (i = 0; i < rela_num; i++) {
         meta->funcs[i].name_off = relas[i].name.r_addend;
     }
 
-    return 0;
-
-fail:
-    clear_patch_metadata(meta);
+out:
+    if (file) {
+        filp_close(file, NULL);
+    }
+    if (ret) {
+        destroy_patch_metadata(meta);
+    }
     return ret;
 }
 
 static int resolve_patch_entity(struct patch_entity *patch, const char *file_path)
 {
-    int ret = 0;
+    int ret;
 
-    struct file *file;
+    ret = resolve_patch_metadata(&patch->meta, file_path);
+    if (ret) {
+        return ret;
+    }
 
-    INIT_HLIST_NODE(&patch->node);
-    INIT_LIST_HEAD(&patch->patch_node);
+    INIT_HLIST_NODE(&patch->table_node);
+    patch->target = NULL;
+    patch->status = UPATCH_STATUS_NOT_APPLIED;
+
+    init_rwsem(&patch->action_rwsem);
+    INIT_LIST_HEAD(&patch->loaded_node);
     INIT_LIST_HEAD(&patch->actived_node);
 
-    file = filp_open(file_path, O_RDONLY, 0);
-    if (IS_ERR(file)) {
-        log_err("failed to open '%s'\n", file_path);
-        return PTR_ERR(file);
-    }
-
-    patch->inode = igrab(file_inode(file));
-    if (!patch->inode) {
-        log_err("file '%s' inode is invalid\n", file_path);
-        ret = -ENOENT;
-        goto out;
-    }
-
-    patch->path = kstrdup(file_path, GFP_KERNEL);
-    if (!patch->path) {
-        ret = -ENOMEM;
-        iput(patch->inode);
-        log_err("faild to alloc filename\n");
-        goto out;
-    }
-
-    ret = resolve_patch_metadata(&patch->meta, file);
-    if (ret) {
-        iput(patch->inode);
-        KFREE_CLEAR(patch->path);
-        goto out;
-    }
-
-    patch->status = UPATCH_STATUS_DEACTIVED;
-
-out:
-    filp_close(file, NULL);
-    return ret;
+    return 0;
 }
 
-static struct patch_entity *get_patch_entity_by_inode(struct inode *inode)
+static void destroy_patch_entity(struct patch_entity *patch)
 {
-    struct patch_entity *patch;
-    struct patch_entity *found = NULL;
+    destroy_patch_metadata(&patch->meta);
 
-    mutex_lock(&g_patch_table_lock);
-    hash_for_each_possible(g_patch_table, patch, node, inode->i_ino) {
-        if (patch->inode == inode) {
-            found = patch;
-            break;
-        }
-    }
-    mutex_unlock(&g_patch_table_lock);
-    return found;
+    WARN_ON(!hlist_unhashed(&patch->table_node));
+
+    patch->target = NULL;
+    patch->status = UPATCH_STATUS_NOT_APPLIED;
+
+    WARN_ON(!list_empty(&patch->loaded_node));
+    WARN_ON(!list_empty(&patch->actived_node));
+    INIT_HLIST_NODE(&patch->table_node);
+    INIT_LIST_HEAD(&patch->loaded_node);
+    INIT_LIST_HEAD(&patch->actived_node);
 }
 
 /* public interface */
-struct patch_entity *get_patch_entity(const char *path)
-{
-    struct patch_entity *patch;
-    struct inode *inode;
-
-    inode = get_path_inode(path);
-    if (!inode) {
-        log_err("failed to get '%s' inode\n", path);
-        return NULL;
-    }
-
-    patch = get_patch_entity_by_inode(inode);
-    iput(inode);
-
-    return patch;
-}
-
 struct patch_entity *new_patch_entity(const char *file_path)
 {
-    int ret = 0;
     struct patch_entity *patch = NULL;
+    int ret;
+
+    if (unlikely(!file_path)) {
+        return ERR_PTR(-EINVAL);
+    }
 
     patch = kzalloc(sizeof(struct patch_entity), GFP_KERNEL);
     if (!patch) {
@@ -316,41 +306,16 @@ struct patch_entity *new_patch_entity(const char *file_path)
         return ERR_PTR(ret);
     }
 
-    mutex_lock(&g_patch_table_lock);
-    hash_add(g_patch_table, &patch->node, patch->inode->i_ino);
-    mutex_unlock(&g_patch_table_lock);
-
     return patch;
 }
 
 void free_patch_entity(struct patch_entity *patch)
 {
-    if (!patch) {
+    if (unlikely(!patch)) {
         return;
     }
 
-    log_debug("free patch '%s'\n", patch->path);
-
-    iput(patch->inode);
-    KFREE_CLEAR(patch->path);
-    clear_patch_metadata(&patch->meta);
-
-    list_del(&patch->actived_node);
-    list_del(&patch->patch_node);
-    hash_del(&patch->node);
-
+    log_debug("free patch '%s'\n", patch->meta.path);
+    destroy_patch_entity(patch);
     kfree(patch);
-}
-
-void __exit report_patch_table_populated(void)
-{
-    struct patch_entity *patch;
-    int bkt;
-
-    mutex_lock(&g_patch_table_lock);
-    hash_for_each(g_patch_table, bkt, patch, node) {
-        log_warn("found patch '%s' (%s) on exit",
-            patch->path ? patch->path : "(null)", patch_status_str(patch->status));
-    }
-    mutex_unlock(&g_patch_table_lock);
 }

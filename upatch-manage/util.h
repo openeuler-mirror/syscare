@@ -158,7 +158,7 @@ static inline bool is_valid_str(const char *strtab, size_t strtab_len, size_t of
     const char *start;
     size_t remain_len;
 
-    if (unlikely(offset == 0 || offset >= strtab_len - 1)) {
+    if (unlikely(offset >= strtab_len - 1)) {
         return false;
     }
 
@@ -181,11 +181,10 @@ static inline struct inode *get_path_inode(const char *file)
         return NULL;
     }
 
-    inode = path.dentry->d_inode;
-    path_put(&path);
+    inode = igrab(path.dentry->d_inode); // will increase inode refcnt, need call iput after use
 
-    // will increase inode refcnt, need call iput after use
-    return igrab(inode);
+    path_put(&path);
+    return inode;
 }
 
 #endif // _UPATCH_MANAGE_UTIL_H

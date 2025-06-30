@@ -78,8 +78,11 @@ struct upatch_function {
 
 /* Patch metadata */
 struct patch_metadata {
-    void *file_buff;
-    loff_t file_size;
+    const char *path;                // patch file path
+    struct inode *inode;             // patch file inode
+
+    void *buff;                      // patch file buff
+    loff_t size;                     // patch file size
 
     Elf_Half shstrtab_index;         // section '.shstrtab' index
     Elf_Half symtab_index;           // section '.symtab' index
@@ -101,25 +104,29 @@ struct patch_metadata {
 
 /* Patch entity */
 struct patch_entity {
-    const char *path;                // patch file path
-    struct inode *inode;             // patch file inode
+    struct patch_metadata meta;       // patch file metadata
+    struct hlist_node table_node;     // global patch hash table node
 
-    struct patch_metadata meta;      // patch elf metadata
-    struct target_entity *target;    // patch target
+    struct rw_semaphore action_rwsem; // patch action rw semaphore
+    struct target_entity *target;     // patch target
+    enum upatch_status status;        // patch status
 
-    enum upatch_status status;       // patch status
-
-    struct hlist_node node;          // all patches store in hash table
-    struct list_head patch_node;     // patch node in target entity
-    struct list_head actived_node;   // actived patch in target entity
+    struct list_head loaded_node;     // target loaded patch node
+    struct list_head actived_node;    // target actived patch list node
 };
 
-struct patch_entity *get_patch_entity(const char *patch_file);
+/*
+ * Load a patch file
+ * @param file_path: patch file path
+ * @return patch entity
+ */
+struct patch_entity *new_patch_entity(const char *file_path);
 
-struct patch_entity *new_patch_entity(const char *patch_file);
-
+/*
+ * Free a patch entity
+ * @param patch: patch entity
+ * @return void
+ */
 void free_patch_entity(struct patch_entity *patch);
-
-void __exit report_patch_table_populated(void);
 
 #endif // _UPATCH_MANAGE_PATCH_ENTITY_H

@@ -22,111 +22,133 @@
 
 #include <linux/sched/task.h>
 
+#include "patch_entity.h"
 #include "target_entity.h"
+
+#include "patch_load.h"
 #include "util.h"
 
-void free_patch_info(struct patch_info *info)
+static void free_patch_info(struct patch_info *patch)
 {
     struct pc_pair *pair;
     struct hlist_node *tmp;
     int bkt;
 
-    hash_for_each_safe(info->pc_maps, bkt, tmp, pair, node) {
+    if (unlikely(!patch)) {
+        return;
+    }
+
+    hash_for_each_safe(patch->pc_maps, bkt, tmp, pair, node) {
         hash_del(&pair->node);
         kfree(pair);
     }
 
-    kfree(info);
+    kfree(patch);
 }
 
-// process may be exited already, free loaded patch info
+struct process_entity *new_process(struct target_entity *target)
+{
+    if (unlikely(!target)) {
+        return ERR_PTR(-EINVAL);
+    }
+
+    struct process_entity *process = kzalloc(sizeof(struct process_entity), GFP_KERNEL);
+    if (!process) {
+        return ERR_PTR(-ENOMEM);
+    }
+
+    process->pid = get_task_pid(current, PIDTYPE_TGID);
+    if (!process->pid) {
+        log_err("failed to get process %d task pid\n", task_tgid_nr(current));
+        kfree(process);
+        return ERR_PTR(-EFAULT);
+    }
+    process->task = get_task_struct(current);
+
+    mutex_init(&process->lock);
+
+    process->latest_patch = NULL;
+    INIT_LIST_HEAD(&process->loaded_patches);
+    INIT_LIST_HEAD(&process->process_node);
+
+    return process;
+}
+
 void free_process(struct process_entity* process)
 {
     struct patch_info *info;
     struct patch_info *tmp;
-    pid_t pid;
 
-    pid = pid_nr(process->pid_s);
+    if (unlikely(!process)) {
+        return;
+    }
 
-    log_debug("free process tgid %d\n", pid);
+    log_debug("free process %d\n", task_pid_nr(process->task));
+    put_pid(process->pid);
+    put_task_struct(process->task);
 
-    put_pid(process->pid_s);
-
-    mutex_lock(&process->lock);
-    list_for_each_entry_safe(info, tmp, &process->loaded_patches, list) {
-        list_del(&info->list);
+    list_for_each_entry_safe(info, tmp, &process->loaded_patches, node) {
+        list_del(&info->node);
         free_patch_info(info);
     }
 
-    list_del(&process->list);
-    mutex_unlock(&process->lock);
     kfree(process);
 }
 
-// we use struct pid to reference different process
-static struct process_entity *do_get_process_and_free_exit_process(struct target_entity *target)
+struct patch_info *process_find_loaded_patch(struct process_entity *process, struct patch_entity *patch)
 {
-    struct process_entity *process = NULL;
-    struct process_entity *tmp = NULL;
-    struct process_entity *res = NULL;
-    struct pid *pid_s;
-    struct task_struct *task;
+    struct patch_info *curr_patch;
 
-    pid_s = get_task_pid(current, PIDTYPE_TGID);
-
-    list_for_each_entry_safe(process, tmp, &target->process_head, list) {
-        task = get_pid_task(process->pid_s, PIDTYPE_TGID);
-        if (!task) {
-            // old process is exit, so task is NULL, free it
-            free_process(process);
-            continue;
+    list_for_each_entry(curr_patch, &process->loaded_patches, node) {
+        if (curr_patch->patch == patch) {
+            return curr_patch;
         }
-        put_task_struct(task);
-
-        if (process->pid_s != pid_s) {
-            continue;
-        }
-
-        res = process;
-        break;
     }
 
-    put_pid(pid_s);
-    return res;
+    return NULL;
 }
 
-static struct process_entity *new_process(struct target_entity *target)
+int process_write_patch_info(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx)
 {
-    struct process_entity *process = kzalloc(sizeof(struct process_entity), GFP_KERNEL);
-    if (!process) {
-        return NULL;
+    struct upatch_function *funcs = (struct upatch_function *)ctx->func_shdr->sh_addr;
+    size_t func_num = ctx->func_shdr->sh_size / (sizeof (struct upatch_function));
+
+    struct upatch_relocation *relas = (struct upatch_relocation *)ctx->rela_shdr->sh_addr;
+    const char *strings = (const char *)ctx->string_shdr->sh_addr;
+
+    size_t i;
+    struct upatch_function *func;
+    const char *func_name;
+
+    struct patch_info *info;
+    struct pc_pair *entry;
+
+    info = kzalloc(sizeof(struct patch_info), GFP_KERNEL);
+    if (!info) {
+        log_err("failed to alloc patch info\n");
+        return -ENOMEM;
     }
 
-    log_debug("Create process tgid %d for %s\n", task_tgid_nr(current), target->path);
-    process->pid_s = get_task_pid(current, PIDTYPE_TGID);
-    process->task = current;
-    INIT_LIST_HEAD(&process->loaded_patches);
-    mutex_init(&process->lock);
-    list_add(&process->list, &target->process_head);
-    return process;
-}
+    hash_init(info->pc_maps);
+    for (i = 0; i < func_num; ++i) {
+        func = &funcs[i];
 
-struct process_entity *get_process(struct target_entity *target)
-{
-    struct process_entity *process = NULL;
-
-    mutex_lock(&target->process_lock);
-    process = do_get_process_and_free_exit_process(target);
-    if (!process) {
-        process = new_process(target);
-        if (!process) {
-            log_err("cannot alloc process tgid %d, for target %s\n",
-                task_tgid_nr(current), target->path);
-            goto out;
+        entry = kmalloc(sizeof(*entry), GFP_KERNEL);
+        if (!entry) {
+            free_patch_info(info);
+            return -ENOMEM;
         }
+
+        func_name = strings + relas[i].name.r_addend;
+        entry->old_pc = funcs[i].old_addr + ctx->load_bias + ctx->target->load_offset;
+        entry->new_pc = funcs[i].new_addr;
+        hash_add(info->pc_maps, &entry->node, entry->old_pc);
+        log_debug("function: 0x%08lx -> 0x%08lx, name: '%s'\n", entry->old_pc, entry->new_pc, func_name);
     }
 
-out:
-    mutex_unlock(&target->process_lock);
-    return process;
+    list_add(&info->node, &process->loaded_patches);
+    info->patch = patch;
+    process->latest_patch = info;
+
+    return 0;
 }

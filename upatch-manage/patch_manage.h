@@ -21,6 +21,10 @@
 #ifndef _UPATCH_MANAGE_PATCH_MANAGE_H
 #define _UPATCH_MANAGE_PATCH_MANAGE_H
 
+#include <linux/module.h>
+
+struct inode;
+
 enum upatch_status;
 struct target_entity;
 
@@ -34,6 +38,6 @@ int upatch_active(const char *patch_file);
 
 int upatch_deactive(const char *patch_file);
 
-void target_unregister_uprobes(struct target_entity *target);
+void __exit report_global_table_populated(void);
 
 #endif // _UPATCH_MANAGE_PATCH_MANAGE_H
