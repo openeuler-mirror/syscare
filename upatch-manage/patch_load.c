@@ -25,10 +25,11 @@
 
 #include "arch/patch_load.h"
 
-#include "patch_entity.h"
 #include "target_entity.h"
 #include "process_entity.h"
+#include "patch_entity.h"
 #include "symbol_resolve.h"
+
 #include "kernel_compat.h"
 #include "util.h"
 
@@ -120,13 +121,13 @@ static void layout_sections(struct patch_context *ctx)
 static int init_load_info(struct patch_context *ctx,
     const struct patch_entity *patch, const struct target_entity *target, unsigned long vma_start)
 {
-    void *file_buff = patch->meta.file_buff;
-    loff_t file_size = patch->meta.file_size;
+    void *file_buff = patch->meta.buff;
+    loff_t file_size = patch->meta.size;
 
     ctx->target = &target->meta;
     ctx->patch = &patch->meta;
     ctx->load_bias = vma_start - target->meta.vma_offset;
-    log_debug("process %d: vma_start=0x%lx, load_bias=0x%lx\n", task_pid_nr(current), vma_start, ctx->load_bias);
+    log_debug("process %d: vma_start=0x%lx, load_bias=0x%lx\n", task_tgid_nr(current), vma_start, ctx->load_bias);
 
     // alloc & copy whole patch into kernel temporarily
     ctx->buff = vmalloc(file_size);
@@ -479,52 +480,6 @@ static int set_memory_privileges(const struct patch_context *ctx)
     return 0;
 }
 
-static int set_execution_map(const struct patch_context *ctx,
-    struct process_entity *process, struct patch_entity *patch)
-{
-    struct upatch_function *funcs = (struct upatch_function *)ctx->func_shdr->sh_addr;
-    size_t func_num = ctx->func_shdr->sh_size / (sizeof (struct upatch_function));
-
-    struct upatch_relocation *relas = (struct upatch_relocation *)ctx->rela_shdr->sh_addr;
-    const char *strings = (const char *)ctx->string_shdr->sh_addr;
-
-    size_t i;
-    struct upatch_function *func;
-    const char *func_name;
-
-    struct patch_info *info;
-    struct pc_pair *entry;
-
-    info = kzalloc(sizeof(struct patch_info), GFP_KERNEL);
-    if (!info) {
-        log_err("failed to alloc patch info\n");
-        return -ENOMEM;
-    }
-
-    hash_init(info->pc_maps);
-    for (i = 0; i < func_num; ++i) {
-        func = &funcs[i];
-
-        entry = kmalloc(sizeof(*entry), GFP_KERNEL);
-        if (!entry) {
-            free_patch_info(info);
-            return -ENOMEM;
-        }
-
-        func_name = strings + relas[i].name.r_addend;
-        entry->old_pc = funcs[i].old_addr + ctx->load_bias + ctx->target->load_offset;
-        entry->new_pc = funcs[i].new_addr;
-        hash_add(info->pc_maps, &entry->node, entry->old_pc);
-        log_debug("function: 0x%08lx -> 0x%08lx, name: '%s'\n", entry->old_pc, entry->new_pc, func_name);
-    }
-
-    list_add(&info->list, &process->loaded_patches);
-    info->patch = patch;
-    process->active_info = info;
-
-    return 0;
-}
-
 /* The main idea is from insmod */
 int upatch_resolve(struct target_entity *target, struct patch_entity *patch, struct process_entity *process,
     unsigned long vma_start)
@@ -564,7 +519,7 @@ int upatch_resolve(struct target_entity *target, struct patch_entity *patch, str
         goto fail;
     }
 
-    ret = set_execution_map(&context, process, patch);
+    ret = process_write_patch_info(process, patch, &context);
     if (ret) {
         goto fail;
     }

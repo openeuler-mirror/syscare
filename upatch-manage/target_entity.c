@@ -25,10 +25,8 @@
 
 #include "patch_entity.h"
 #include "process_entity.h"
-#include "patch_manage.h"
 #include "util.h"
 
-#define TARGET_TABLE_HASH_BITS 4
 #define ELF_ADDR_MAX UINT_MAX
 
 static const char *SHSTRTAB_NAME = ".shstrtab";
@@ -38,38 +36,6 @@ static const char *DYN_RELA_NAME = ".rela.dyn";
 static const char *PLT_RELA_NAME = ".rela.plt";
 static const char *PLT_NAME      = ".plt";
 static const char *GOT_NAME      = ".got";
-
-DEFINE_HASHTABLE(g_target_table, TARGET_TABLE_HASH_BITS);
-DEFINE_MUTEX(g_target_table_lock);
-
-static void clear_target_metadata(struct target_metadata *meta)
-{
-    KFREE_CLEAR(meta->file_name);
-
-    VFREE_CLEAR(meta->ehdr);
-    VFREE_CLEAR(meta->phdrs);
-    VFREE_CLEAR(meta->shdrs);
-
-    VFREE_CLEAR(meta->symtab);
-    VFREE_CLEAR(meta->dynsym);
-    VFREE_CLEAR(meta->dynamic);
-    VFREE_CLEAR(meta->rela_dyn);
-    VFREE_CLEAR(meta->rela_plt);
-
-    VFREE_CLEAR(meta->shstrtab);
-    VFREE_CLEAR(meta->strtab);
-    VFREE_CLEAR(meta->dynstr);
-
-    meta->symtab_num = 0;
-    meta->dynamic_num = 0;
-    meta->dynsym_num = 0;
-    meta->rela_dyn_num = 0;
-    meta->rela_plt_num = 0;
-
-    meta->shstrtab_len = 0;
-    meta->strtab_len = 0;
-    meta->dynstr_len = 0;
-}
 
 static int resolve_target_sections(struct target_metadata *meta, struct file *target)
 {
@@ -270,52 +236,108 @@ static int resolve_target_address(struct target_metadata *meta)
     return 0;
 }
 
-static int resolve_target_metadata(struct target_metadata *meta, struct file *target)
+static void destroy_target_metadata(struct target_metadata *meta)
 {
-    int ret = 0;
+    KFREE_CLEAR(meta->path);
+    iput(meta->inode);
+    meta->inode = NULL;
 
-    if (!target->f_path.dentry) {
-        log_err("invalid file dentry\n");
-        ret = -EINVAL;
+    meta->size = 0;
+
+    VFREE_CLEAR(meta->ehdr);
+    VFREE_CLEAR(meta->phdrs);
+    VFREE_CLEAR(meta->shdrs);
+
+    VFREE_CLEAR(meta->symtab);
+    VFREE_CLEAR(meta->dynsym);
+    VFREE_CLEAR(meta->dynamic);
+    VFREE_CLEAR(meta->rela_dyn);
+    VFREE_CLEAR(meta->rela_plt);
+
+    VFREE_CLEAR(meta->shstrtab);
+    VFREE_CLEAR(meta->strtab);
+    VFREE_CLEAR(meta->dynstr);
+
+    meta->symtab_num = 0;
+    meta->dynamic_num = 0;
+    meta->dynsym_num = 0;
+    meta->rela_dyn_num = 0;
+    meta->rela_plt_num = 0;
+
+    meta->shstrtab_len = 0;
+    meta->strtab_len = 0;
+    meta->dynstr_len = 0;
+
+    meta->need_load_bias = false;
+    meta->vma_offset = 0;
+    meta->load_offset = 0;
+
+    meta->tls_size = 0;
+    meta->tls_align = 0;
+
+    meta->plt_addr = 0;
+    meta->got_addr = 0;
+    meta->plt_size = 0;
+    meta->got_size = 0;
+}
+
+static int resolve_target_metadata(struct target_metadata *meta, const char *file_path)
+{
+    struct file *file;
+    int ret;
+
+    file = filp_open(file_path, O_RDONLY, 0);
+    if (IS_ERR(file)) {
+        log_err("failed to open '%s'\n", file_path);
+        ret = PTR_ERR(file);
+        file = NULL;
         goto out;
     }
 
-    meta->file_name = kstrdup(target->f_path.dentry->d_name.name, GFP_KERNEL);
-    if (!meta->file_name) {
-        log_err("failed to alloc filename\n");
+    meta->path = kstrdup(file_path, GFP_KERNEL);
+    if (!meta->path) {
+        log_err("failed to alloc file path\n");
         ret = -ENOMEM;
         goto out;
     }
-    meta->file_size = i_size_read(file_inode(target));
 
-    meta->ehdr = vmalloc_read(target, 0, sizeof(Elf_Ehdr));
+    meta->inode = igrab(file_inode(file));
+    if (!meta->inode) {
+        log_err("file '%s' inode is invalid\n", meta->path);
+        ret = -ENOENT;
+        goto out;
+    }
+
+    meta->size = i_size_read(meta->inode);
+
+    meta->ehdr = vmalloc_read(file, 0, sizeof(Elf_Ehdr));
     if (IS_ERR(meta->ehdr)) {
-        ret = PTR_ERR(meta->ehdr);
         log_err("failed to read elf header\n");
+        ret = PTR_ERR(meta->ehdr);
         goto out;
     }
 
-    if (!is_valid_target(meta->ehdr, meta->file_size)) {
-        ret = -ENOEXEC;
+    if (!is_valid_target(meta->ehdr, meta->size)) {
         log_err("invalid file format\n");
+        ret = -ENOEXEC;
         goto out;
     }
 
-    meta->phdrs = vmalloc_read(target, meta->ehdr->e_phoff, meta->ehdr->e_phentsize * meta->ehdr->e_phnum);
+    meta->phdrs = vmalloc_read(file, meta->ehdr->e_phoff, meta->ehdr->e_phentsize * meta->ehdr->e_phnum);
     if (IS_ERR(meta->phdrs)) {
-        ret = PTR_ERR(meta->phdrs);
         log_err("failed to read program header\n");
+        ret = PTR_ERR(meta->phdrs);
         goto out;
     }
 
-    meta->shdrs = vmalloc_read(target, meta->ehdr->e_shoff, meta->ehdr->e_shentsize * meta->ehdr->e_shnum);
+    meta->shdrs = vmalloc_read(file, meta->ehdr->e_shoff, meta->ehdr->e_shentsize * meta->ehdr->e_shnum);
     if (IS_ERR(meta->shdrs)) {
-        ret = PTR_ERR(meta->shdrs);
         log_err("failed to read section header\n");
+        ret = PTR_ERR(meta->shdrs);
         goto out;
     }
 
-    ret = resolve_target_sections(meta, target);
+    ret = resolve_target_sections(meta, file);
     if (ret) {
         log_err("failed to resolve target sections\n");
         goto out;
@@ -327,108 +349,100 @@ static int resolve_target_metadata(struct target_metadata *meta, struct file *ta
         goto out;
     }
 
-    return 0;
-
 out:
-    clear_target_metadata(meta);
+    if (file) {
+        filp_close(file, NULL);
+    }
+    if (ret) {
+        destroy_target_metadata(meta);
+    }
     return ret;
 }
 
 static int resolve_target_entity(struct target_entity *target, const char *file_path)
 {
-    int ret = 0;
-    struct file *file = NULL;
+    int ret;
 
-    init_rwsem(&target->patch_lock);
-    mutex_init(&target->process_lock);
-    INIT_HLIST_NODE(&target->node);
-    INIT_LIST_HEAD(&target->offset_node);
-    INIT_LIST_HEAD(&target->all_patch_list);
-    INIT_LIST_HEAD(&target->actived_patch_list);
-    INIT_LIST_HEAD(&target->process_head);
-
-    file = filp_open(file_path, O_RDONLY, 0); // open file by inode
-    if (IS_ERR(file)) {
-        log_err("failed to open '%s'\n", file_path);
-        return PTR_ERR(file);
+    ret = resolve_target_metadata(&target->meta, file_path);
+    if (ret) {
+        return ret;
     }
 
-    target->inode = igrab(file_inode(file));
-    if (!target->inode) {
-        log_err("file '%s' inode is invalid\n", file_path);
-        ret = -ENOENT;
-        goto out;
-    }
+    INIT_HLIST_NODE(&target->table_node);
 
-    target->path = kstrdup(file_path, GFP_KERNEL);
-    if (!target->path) {
-        iput(target->inode);
-        ret = -ENOMEM;
-        log_err("faild to alloc filename\n");
-        goto out;
-    }
+    init_rwsem(&target->action_rwsem);
+    INIT_LIST_HEAD(&target->loaded_list);
+    INIT_LIST_HEAD(&target->actived_list);
+    INIT_LIST_HEAD(&target->func_list);
 
-    ret = resolve_target_metadata(&target->meta, file);
-    if (ret != 0) {
-        iput(target->inode);
-        KFREE_CLEAR(target->path);
-        goto out;
-    }
+    mutex_init(&target->process_mutex);
+    INIT_LIST_HEAD(&target->process_list);
 
-out:
-    filp_close(file, NULL);
-    return ret;
+    return 0;
 }
 
-struct target_entity *get_target_entity_by_inode(struct inode *inode)
+static void destroy_target_entity(struct target_entity *target)
 {
-    struct target_entity *target;
-    struct target_entity *found = NULL;
+    struct process_entity *process;
+    struct process_entity *tmp;
 
-    mutex_lock(&g_target_table_lock);
-    hash_for_each_possible(g_target_table, target, node, inode->i_ino) {
-        if (target->inode == inode) {
-            found = target;
+    destroy_target_metadata(&target->meta);
+
+    WARN_ON(!hlist_unhashed(&target->table_node));
+
+    WARN_ON(rwsem_is_locked(&target->action_rwsem));
+    WARN_ON(!list_empty(&target->loaded_list));
+    WARN_ON(!list_empty(&target->actived_list));
+    WARN_ON(!list_empty(&target->func_list));
+    INIT_LIST_HEAD(&target->loaded_list);
+    INIT_LIST_HEAD(&target->actived_list);
+    INIT_LIST_HEAD(&target->func_list);
+
+    mutex_destroy(&target->process_mutex);
+    list_for_each_entry_safe(process, tmp, &target->process_list, process_node) {
+        list_del_init(&process->process_node);
+        free_process(process);
+    }
+    INIT_LIST_HEAD(&target->process_list);
+}
+
+static inline struct target_function *target_get_function(struct target_entity *target, u64 addr)
+{
+    struct target_function *target_func;
+
+    list_for_each_entry(target_func, &target->func_list, func_node) {
+        if (target_func->addr == addr) {
+            return target_func;
+        }
+    }
+
+    return NULL;
+}
+
+static inline struct process_entity *target_get_process(struct target_entity *target)
+{
+    struct pid *current_pid = get_task_pid(current, PIDTYPE_TGID);
+    struct process_entity *process;
+    struct process_entity *found = NULL;
+
+    list_for_each_entry(process, &target->process_list, process_node) {
+        if (pid_nr(process->pid) == pid_nr(current_pid)) {
+            found = process;
             break;
         }
     }
-    mutex_unlock(&g_target_table_lock);
+
+    put_pid(current_pid);
     return found;
 }
 
 /* public interface */
-struct target_entity *get_target_entity(const char *path)
-{
-    struct target_entity *target;
-    struct inode *inode;
-
-    inode = get_path_inode(path);
-    if (!inode) {
-        log_err("failed to get '%s' inode\n", path);
-        return NULL;
-    }
-
-    target = get_target_entity_by_inode(inode);
-    iput(inode);
-
-    return target;
-}
-
-static void insert_target(struct target_entity *target)
-{
-    mutex_lock(&g_target_table_lock);
-    hash_add(g_target_table, &target->node, target->inode->i_ino);
-    mutex_unlock(&g_target_table_lock);
-}
-
 struct target_entity *new_target_entity(const char *file_path)
 {
     struct target_entity *target = NULL;
-    int ret = 0;
+    int ret;
 
-    log_debug("create patch target entity '%s'\n", file_path);
-
-    if (!file_path) {
+    if (unlikely(!file_path)) {
         return ERR_PTR(-EINVAL);
     }
 
@@ -439,69 +453,114 @@ struct target_entity *new_target_entity(const char *file_path)
     }
 
     ret = resolve_target_entity(target, file_path);
-    if (ret != 0) {
+    if (ret) {
         kfree(target);
         return ERR_PTR(ret);
     }
 
-    insert_target(target);
     return target;
 }
 
-// caller should lock g_target_table_lock
 void free_target_entity(struct target_entity *target)
 {
-    struct process_entity *process;
-    struct process_entity *tmp_pro;
-    struct patch_entity *patch;
-    struct patched_offset *off;
-
-    log_debug("free patch target '%s'\n", target->path);
-    down_write(&target->patch_lock);
-
-    list_for_each_entry(off, &target->offset_node, list) {
-        log_err("found uprobe in 0x%lx\n", (unsigned long)off->offset);
+    if (unlikely(!target)) {
+        return;
     }
 
-    list_for_each_entry(patch, &target->actived_patch_list, actived_node) {
-        log_err("found actived patch '%s'\n", patch->path ? patch->path : "NULL");
-    }
-
-    list_for_each_entry(patch, &target->all_patch_list, patch_node) {
-        log_err("found patch '%s'\n", patch->path ? patch->path : "NULL");
-    }
-
-    mutex_lock(&target->process_lock);
-    list_for_each_entry_safe(process, tmp_pro, &target->process_head, list) {
-        free_process(process);
-    }
-    mutex_unlock(&target->process_lock);
-
-    iput(target->inode);
-    KFREE_CLEAR(target->path);
-    clear_target_metadata(&target->meta);
-    hash_del(&target->node);
-
-    target_unregister_uprobes(target);
-
-    up_write(&target->patch_lock);
-
+    log_debug("free patch target '%s'\n", target->meta.path);
+    destroy_target_entity(target);
     kfree(target);
 }
 
-bool is_target_has_patch(const struct target_entity *target)
+int target_add_function(struct target_entity *target, struct upatch_function *func, bool *need_register)
 {
-    return !list_empty(&target->all_patch_list);
+    struct target_function *target_func;
+
+    if (!target || !func || !need_register) {
+        return -EINVAL;
+    }
+
+    *need_register = false;
+
+    // get or alloc target function
+    target_func = target_get_function(target, func->old_addr);
+    if (!target_func) {
+        target_func = kzalloc(sizeof(*target_func), GFP_KERNEL);
+        if (!target_func) {
+            log_err("failed to alloc target function\n");
+            return -ENOMEM;
+        }
+        target_func->addr = func->old_addr;
+        target_func->count = 0;
+        INIT_LIST_HEAD(&target_func->func_node);
+
+        *need_register = true;
+        list_add(&target_func->func_node, &target->func_list);
+    }
+
+    target_func->count += 1;
+
+    return 0;
 }
 
-void __exit report_target_table_populated(void)
+void target_remove_function(struct target_entity *target, struct upatch_function *func, bool *need_unregister)
 {
-    struct target_entity *target;
-    int bkt;
+    struct target_function *target_func;
 
-    mutex_lock(&g_target_table_lock);
-    hash_for_each(g_target_table, bkt, target, node) {
-        log_err("found target '%s' on exit", target->path ? target->path : "(null)");
+    if (!target || !func || !need_unregister) {
+        return;
     }
-    mutex_unlock(&g_target_table_lock);
+
+    *need_unregister = false;
+
+    target_func = target_get_function(target, func->old_addr);
+    if (!target_func) {
+        log_warn("target does not have function\n");
+        return;
+    }
+
+    target_func->count -= 1;
+    if (!target_func->count) {
+        list_del_init(&target_func->func_node);
+        kfree(target_func);
+        *need_unregister = true;
+    }
+}
+
+void target_gather_exited_processes(struct target_entity *target, struct list_head *process_list)
+{
+    struct process_entity *process;
+    struct process_entity *tmp;
+
+    if (unlikely(!target || !process_list)) {
+        return;
+    }
+
+    list_for_each_entry_safe(process, tmp, &target->process_list, process_node) {
+        if (!pid_task(process->pid, PIDTYPE_TGID)) {
+            list_move(&process->process_node, process_list);
+        }
+    }
+}
+
+struct process_entity *target_get_or_create_process(struct target_entity *target)
+{
+    struct process_entity *process = NULL;
+
+    if (unlikely(!target)) {
+        return NULL;
+    }
+
+    process = target_get_process(target);
+    if (!process) {
+        log_debug("create process %d for '%s'\n", task_pid_nr(current), target->meta.path);
+        process = new_process(target);
+        if (IS_ERR(process)) {
+            log_err("failed to create target process, ret=%d\n", (int)PTR_ERR(process));
+            return NULL;
+        }
+        list_add(&process->process_node, &target->process_list);
+    }
+
+    return process;
 }

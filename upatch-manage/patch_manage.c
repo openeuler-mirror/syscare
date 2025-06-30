@@ -23,498 +23,692 @@
 #include <linux/mm.h>
 #include <linux/file.h>
 
-#include "patch_entity.h"
+#include <linux/hashtable.h>
+#include <linux/rwsem.h>
+
 #include "target_entity.h"
 #include "process_entity.h"
+#include "patch_entity.h"
 #include "patch_load.h"
 #include "util.h"
+
+/*
+ * =====================================================================
+ *                        LOCKING HIERARCHY
+ * =====================================================================
+ * To prevent deadlocks, the following lock acquisition order MUST be
+ * strictly followed throughout the entire module:
+ *
+ * 1. g_global_table_rwsem
+ * 2. target_entity->action_rwsem
+ * 3. patch_entity->action_rwsem
+ *
+ * Any deviation from this order will lead to deadlocks.
+ * =====================================================================
+ */
+
+#define UPROBE_RUN_OLD_FUNC 0
 
 #ifndef UPROBE_ALTER_PC
 #define UPROBE_ALTER_PC 2
 #endif
 
-#define UPROBE_RUN_OLD_FUNC 0
+#define PATCH_TABLE_HASH_BITS 4
+#define TARGET_TABLE_HASH_BITS 4
 
-static int jump_to_new_pc(struct pt_regs *regs, struct patch_info *info, unsigned long old_pc)
-{
-    struct pc_pair *pp;
+static DEFINE_HASHTABLE(g_patch_table, PATCH_TABLE_HASH_BITS);
+static DEFINE_HASHTABLE(g_target_table, TARGET_TABLE_HASH_BITS);
 
-    bool find = false;
-    hash_for_each_possible(info->pc_maps, pp, node, old_pc) {
-        if (pp->old_pc == old_pc) {
-            find = true;
-            break;
-        }
-    }
+static DECLARE_RWSEM(g_global_table_rwsem);
 
-    if (!find) {
-        log_err("cannot find new pc for 0x%lx\n", old_pc);
-        return UPROBE_RUN_OLD_FUNC;
-    }
+static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *regs);
 
-    log_debug("jump from 0x%lx -> 0x%lx\n", old_pc, pp->new_pc);
-
-    instruction_pointer_set(regs, pp->new_pc);
-    return UPROBE_ALTER_PC;
-}
-
-static struct file *get_target_file_from_pc(struct mm_struct *mm, unsigned long pc, unsigned long *code_start)
-{
-    struct vm_area_struct *vma = NULL;
-
-    vma = find_vma(mm, pc);
-    if (!vma) {
-        return NULL;
-    }
-
-    if (!vma->vm_file) {
-        return NULL;
-    }
-
-    *code_start = vma->vm_start;
-
-    return vma->vm_file;
-}
-
-static struct target_entity *get_target_from_pc(unsigned long pc, unsigned long *code_start)
-{
-    struct target_entity *target;
-
-    struct mm_struct *mm = current->mm;
-    struct file *target_file;
-
-    mmap_read_lock(mm);
-    target_file = get_target_file_from_pc(mm, pc, code_start);
-    mmap_read_unlock(mm);
-
-    if (!target_file) {
-        log_err("no backen file found for upatch\n");
-        return NULL;
-    }
-
-    get_file(target_file);
-    target = get_target_entity_by_inode(file_inode(target_file));
-    fput(target_file);
-
-    if (!target) {
-        log_err("no target found in patch handler\n");
-        return NULL;
-    }
-
-    return target;
-}
-
-static struct patch_info* find_loaded_patches(struct process_entity *pro, struct patch_entity *patch)
-{
-    struct patch_info* info;
-    list_for_each_entry(info, &pro->loaded_patches, list) {
-        if (info->patch == patch) {
-            return info;
-        }
-    }
-    return NULL;
-}
-
-// UPROBE_RUN_OLD_FUNC means run old func
-// UPROBE_ALTER_PC means run new func
-static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *regs)
-{
-    unsigned long pc = instruction_pointer(regs);
-    struct target_entity *target;
-    struct patch_entity *actived_patch;
-    struct process_entity *process;
-    int ret = UPROBE_RUN_OLD_FUNC;
-    const char *name = current->comm;
-    pid_t pid = task_pid_nr(current);
-    pid_t tgid = task_tgid_nr(current);
-    unsigned long target_code_start;
-
-    log_debug("upatch handler triggered on process '%s' (pid=%d, tgid=%d, pc=0x%lx)\n", name, pid, tgid, pc);
-
-    target = get_target_from_pc(pc, &target_code_start);
-    if (!target) {
-        log_err("cannot find target entity of '%s'\n", name);
-        return ret;
-    }
-
-    down_read(&target->patch_lock);
-    actived_patch = list_first_entry(&target->actived_patch_list, struct patch_entity, actived_node);
-    up_read(&target->patch_lock);
-
-    if (!actived_patch) {
-        log_err("cannot find any actived patch of '%s'\n", name);
-        return ret;
-    }
-
-    process = get_process(target);
-    if (!process) {
-        return UPROBE_RUN_OLD_FUNC;
-    }
-
-    // multi thread may trap at the same time, only one thread can load patch, other thread should wait
-    mutex_lock(&process->lock);
-
-    if (!process->active_info) {
-        log_debug("applying new patch '%s' to '%s' (pid=%d, tgid=%d)...\n",
-            actived_patch->path, name, pid, tgid);
-        ret = upatch_resolve(target, actived_patch, process, target_code_start);
-        if (ret) {
-            log_err("failed to apply patch '%s' to '%s', ret=%d\n", actived_patch->path, name, ret);
-            goto fail;
-        }
-    } else if (process->active_info->patch != actived_patch) {
-        struct patch_info* info = find_loaded_patches(process, actived_patch);
-        if (info) {
-            process->active_info = info;
-            goto ok;
-        }
-
-        log_debug("applying latest patch '%s' to '%s' (pid=%d, tgid=%d)...\n",
-            actived_patch->path, name, pid, tgid);
-        ret = upatch_resolve(target, actived_patch, process, target_code_start);
-        if (ret) {
-            log_err("failed to apply patch '%s' to '%s', ret=%d\n", actived_patch->path, name, ret);
-            goto fail;
-        }
-    }
-
-ok:
-    ret = jump_to_new_pc(regs, process->active_info, pc);
-    mutex_unlock(&process->lock);
-    return ret;
-
-fail:
-    mutex_unlock(&process->lock);
-    return UPROBE_RUN_OLD_FUNC;
-}
-
-static struct uprobe_consumer patch_consumer = {
+static struct uprobe_consumer g_upatch_consumer = {
     .handler = upatch_uprobe_handler,
 };
 
-// register uprobe if offset of this target have no new function
-static int target_register_function(struct target_entity *target, loff_t offset,
-    struct upatch_function *func)
+/* GLOBAL ENTITY HASH TABLE */
+static struct patch_entity *find_patch_by_inode(struct inode *inode)
 {
-    struct patched_offset *off = NULL;
-    struct patched_func_node *func_node;
-    bool find = false;
-    int ret;
+    struct patch_entity *patch;
 
-    func_node = kzalloc(sizeof(struct patched_func_node), GFP_KERNEL);
-    if (!func_node) {
-        return -ENOMEM;
-    }
-
-    // find if this target have func changed in offset
-    list_for_each_entry(off, &target->offset_node, list) {
-        if (off->offset == offset) {
-            find = true;
-            break;
+    hash_for_each_possible(g_patch_table, patch, table_node, inode->i_ino) {
+        if (patch->meta.inode == inode) {
+            return patch;
         }
     }
 
-    // This is the first func in this offset, so we should create a off node
-    if (!find) {
-        off = kzalloc(sizeof(struct patched_offset), GFP_KERNEL);
-        if (!off) {
-            kfree(func_node);
-            return -ENOMEM;
-        }
-
-        off->offset = offset;
-        INIT_LIST_HEAD(&off->funcs_head);
-
-        log_debug("register uprobe on '%s' (inode: %lu) at 0x%llx\n",
-            target->path, target->inode->i_ino, offset);
-        ret = uprobe_register(target->inode, offset, &patch_consumer);
-        if (ret) {
-            log_err("failed to register uprobe on '%s' (inode: %lu) at 0x%llx, ret=%d\n",
-                target->path, target->inode->i_ino, offset, ret);
-            kfree(func_node);
-            kfree(off);
-            return ret;
-        }
-
-        list_add(&off->list, &target->offset_node);
-    }
-
-    func_node->func = func;
-    list_add(&func_node->list, &off->funcs_head);
-    return 0;
+    return NULL;
 }
 
-// unregister uprobe if offset of this target have no new function
-static void unregister_function_uprobe(struct target_entity *target, loff_t offset, struct upatch_function *func)
+struct patch_entity *find_patch(const char *path)
 {
-    struct patched_offset *off = NULL;
-    struct patched_func_node *func_node = NULL;
-    struct patched_func_node *tmp = NULL;
-    bool find = false;
+    struct patch_entity *patch;
+    struct inode *inode;
 
-    list_for_each_entry(off, &target->offset_node, list) {
-        if (off->offset == offset) {
-            find = true;
+    inode = get_path_inode(path);
+    if (!inode) {
+        log_err("failed to get '%s' inode\n", path);
+        return NULL;
+    }
+
+    patch = find_patch_by_inode(inode);
+
+    iput(inode);
+    return patch;
+}
+
+static struct target_entity *find_target_by_inode(struct inode *inode)
+{
+    struct target_entity *target;
+
+    hash_for_each_possible(g_target_table, target, table_node, inode->i_ino) {
+        if (target->meta.inode == inode) {
+            return target;
+        }
+    }
+
+    return NULL;
+}
+
+static struct target_entity *find_target(const char *path)
+{
+    struct target_entity *target;
+    struct inode *inode;
+
+    inode = get_path_inode(path);
+    if (!inode) {
+        log_err("failed to get '%s' inode\n", path);
+        return NULL;
+    }
+
+    target = find_target_by_inode(inode);
+
+    iput(inode);
+    return target;
+}
+
+/* UPROBE IMPLEMENTATION */
+static struct inode *find_vma_file_inode(unsigned long pc, unsigned long *vma_start)
+{
+    struct mm_struct *mm = current->mm;
+    struct vm_area_struct *vma;
+
+    struct file *file = NULL;
+    struct inode *inode = NULL;
+
+    mmap_read_lock(mm);
+
+    vma = find_vma(mm, pc);
+    if (likely(vma && vma->vm_file)) {
+        *vma_start = vma->vm_start;
+        file = vma->vm_file;
+        get_file(file); // get_file allows NULL pointer
+    }
+
+    mmap_read_unlock(mm);
+
+    if (unlikely(!file)) {
+        log_err("cannot find vma file on pc 0x%lx\n", pc);
+        goto out;
+    }
+
+    inode = igrab(file_inode(file));
+    if (unlikely(!inode)) {
+        log_err("cannot find vma file inode on pc 0x%lx\n", pc);
+        goto out;
+    }
+
+out:
+    if (likely(file)) {
+        fput(file);
+    }
+    return inode;
+}
+
+static int jump_to_new_pc(struct pt_regs *regs, const struct patch_info *patch, unsigned long pc)
+{
+    struct pc_pair *pair;
+    struct pc_pair *found_pair = NULL;
+
+    hash_for_each_possible(patch->pc_maps, pair, node, pc) {
+        if (pair->old_pc == pc) {
+            found_pair = pair;
             break;
         }
     }
 
-    if (!find) {
-        log_err("cannot find offest 0x%llx of '%s'\n", offset, target->path);
+    if (unlikely(!found_pair)) {
+        log_err("cannot find new pc for 0x%lx\n", pc);
+        return UPROBE_RUN_OLD_FUNC;
+    }
+
+    log_debug("jump from 0x%lx -> 0x%lx\n", pc, found_pair->new_pc);
+    instruction_pointer_set(regs, found_pair->new_pc);
+
+    return UPROBE_ALTER_PC;
+}
+
+static void free_exited_process(struct list_head *process_list)
+{
+    struct process_entity *process;
+    struct process_entity *tmp;
+
+    if (unlikely(!process_list)) {
         return;
     }
 
-    // There may be multiple version func in the same offset of a target. We should find it and delete it
-    list_for_each_entry_safe(func_node, tmp, &off->funcs_head, list) {
-        if (func_node->func == func) {
-            list_del(&func_node->list);
-            kfree(func_node);
-        }
-    }
-
-    if (list_empty(&off->funcs_head)) {
-        uprobe_unregister(target->inode, offset, &patch_consumer);
-        list_del(&off->list);
-        kfree(off);
+    list_for_each_entry_safe(process, tmp, process_list, process_node) {
+        list_del_init(&process->process_node);
+        free_process(process);
     }
 }
 
-static void target_unregister_functions(struct target_entity *target, struct patch_entity *patch,
-    struct upatch_function *funcs, size_t count)
+static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *regs)
 {
-    struct upatch_function *func = NULL;
-    size_t i = 0;
-    loff_t offset = 0;
-    const char *name = NULL;
+    const char *name = current->comm;
+    pid_t pid = task_pid_nr(current);
+    pid_t tgid = task_tgid_nr(current);
+    unsigned long pc = instruction_pointer(regs);
 
-    log_debug("unregister patch '%s' functions:\n", target->path);
-    for (i = 0; i < count; i++) {
-        func = &funcs[i];
-        offset = func->old_addr;
-        name = patch->meta.strings + func->name_off;
+    struct inode *inode;
+    unsigned long vma_start;
 
-        log_debug("- function: offset=0x%08llx, size=0x%04llx, name='%s'\n", offset, func->old_size, name);
-        unregister_function_uprobe(target, offset, func);
+    struct target_entity *target;
+    struct patch_entity *latest_patch;
+
+    struct list_head exited_proc_list = LIST_HEAD_INIT(exited_proc_list);
+    struct process_entity *process;
+    struct patch_info *loaded_patch;
+
+    int ret = UPROBE_RUN_OLD_FUNC;
+
+    log_debug("upatch handler triggered on process '%s' (pid=%d, tgid=%d, pc=0x%lx)\n", name, pid, tgid, pc);
+
+    /* find vma file and inode out of the lock */
+    inode = find_vma_file_inode(pc, &vma_start);
+    if (unlikely(!inode)) {
+        log_err("cannot find vma file inode in '%s'\n", name);
+        return UPROBE_RUN_OLD_FUNC;
     }
-}
 
-// patch will be actived in uprobe handler
-static int do_active_patch(struct target_entity *target, struct patch_entity *patch)
-{
-    struct upatch_function *funcs = patch->meta.funcs;
-    struct upatch_function *func;
-    int ret = 0;
-    size_t i = 0;
-    loff_t offset;
-    const char *name = NULL;
+    down_read(&g_global_table_rwsem);
 
-    log_debug("register target '%s' functions:\n", target->path);
-    down_write(&target->patch_lock);
+    /* step 1. find target entity by vma file inode */
+    target = find_target_by_inode(inode);
+    iput(inode);
+    inode = NULL;
 
-    for (i = 0; i < patch->meta.func_num; i++) {
-        func = &funcs[i];
-        offset = func->old_addr;
-        name = patch->meta.strings + func->name_off;
+    if (unlikely(!target)) {
+        log_err("cannot find target entity of '%s'\n", name);
+        ret = UPROBE_RUN_OLD_FUNC;
+        goto unlock_global_table;
+    }
 
-        log_debug("+ function: offset=0x%08llx, size=0x%04llx, name='%s'\n", offset, func->old_size, name);
-        ret = target_register_function(target, offset, func);
-        if (ret) {
-            log_err("failed to register function '%s', ret=%d\n", name, ret);
-            target_unregister_functions(target, patch, funcs, i);
-            goto out;
+    /* step 2. find target latest patch */
+    latest_patch = list_first_entry_or_null(&target->actived_list, struct patch_entity, actived_node);
+    if (unlikely(!latest_patch)) {
+        log_err("target '%s' has no patch\n", target->meta.path);
+        ret = UPROBE_RUN_OLD_FUNC;
+        goto unlock_global_table;
+    }
+
+    mutex_lock(&target->process_mutex);
+
+    /* step 3. collect all exited process */
+    target_gather_exited_processes(target, &exited_proc_list);
+
+    /* step 4. find or create process entity for current process */
+    process = target_get_or_create_process(target);
+    if (unlikely(!process)) {
+        log_err("failed to get process of '%s'\n", target->meta.path);
+        ret = UPROBE_RUN_OLD_FUNC;
+        mutex_unlock(&target->process_mutex);
+        goto unlock_global_table;
+    }
+
+    mutex_unlock(&target->process_mutex);
+
+    /* step 5. check if we need resolve patch on the process */
+    mutex_lock(&process->lock); // we want to ensure only one thread can resolve patch
+
+    if (!process->latest_patch || process->latest_patch->patch != latest_patch) {
+        loaded_patch = process_find_loaded_patch(process, latest_patch);
+        if (loaded_patch) {
+            log_debug("switch patch to '%s'\n", latest_patch->meta.path);
+            process->latest_patch = loaded_patch;
+        } else {
+            log_debug("applying patch '%s' to process '%s' (pid=%d)\n", latest_patch->meta.path, name, pid);
+            ret = upatch_resolve(target, latest_patch, process, vma_start);
+            if (ret) {
+                log_err("failed to apply patch '%s' to process '%s', ret=%d\n", latest_patch->meta.path, name, ret);
+                ret = UPROBE_RUN_OLD_FUNC;
+                goto unlock_process;
+            }
         }
     }
 
-    list_add(&patch->actived_node, &target->actived_patch_list);
-    patch->status = UPATCH_STATUS_ACTIVED;
+    /* search and set pc register to new address */
+    ret = jump_to_new_pc(regs, process->latest_patch, pc);
 
-out:
-    up_write(&target->patch_lock);
+unlock_process:
+    mutex_unlock(&process->lock);
 
+unlock_global_table:
+    up_read(&g_global_table_rwsem);
+
+    free_exited_process(&exited_proc_list);
     return ret;
 }
 
-static void target_remove_actived_patch(struct target_entity *target, struct patch_entity *patch)
+/* PATCH MANAGEMENT */
+static void unregister_single_patch_function(struct target_entity *target, struct upatch_function *func)
 {
-    struct patch_entity *p = NULL;
-    struct patch_entity *tmp = NULL;
-    bool found = false;
+    bool need_unregister = false;
 
-    list_for_each_entry_safe(p, tmp, &target->actived_patch_list, actived_node) {
-        if (p == patch) {
-            list_del_init(&p->actived_node);
-            found = true;
-            break;
-        }
-    }
-
-    if (!found) {
-        log_err("cannot find actived patch '%s'\n", patch->path);
+    target_remove_function(target, func, &need_unregister);
+    if (need_unregister) {
+        uprobe_unregister(target->meta.inode, func->old_addr, &g_upatch_consumer);
     }
 }
 
-// delete patch inode & function in target
-// patch will be deactived in uprobe handler
-static void do_deactive_patch(struct patch_entity *patch)
+static void unregister_patch_functions(struct target_entity *target, struct patch_entity *patch, size_t count)
 {
-    struct target_entity *target = patch->target;
     struct upatch_function *funcs = patch->meta.funcs;
+    const char *strings = patch->meta.strings;
 
-    down_write(&target->patch_lock);
+    struct upatch_function *func;
+    const char *name;
+    size_t i;
 
-    target_unregister_functions(target, patch, funcs, patch->meta.func_num);
-    target_remove_actived_patch(target, patch);
-    patch->status = UPATCH_STATUS_DEACTIVED;
+    if (count > patch->meta.func_num) {
+        log_err("function count %zu exceeds %zu\n", count, patch->meta.func_num);
+        return;
+    }
 
-    up_write(&target->patch_lock);
+    log_debug("unregister patch '%s' functions:\n", target->meta.path);
+    for (i = 0; i < count; i++) {
+        func = &funcs[i];
+        name = strings + func->name_off;
+
+        log_debug("- function: offset=0x%08llx, size=0x%04llx, name='%s'\n", func->old_addr, func->old_size, name);
+        unregister_single_patch_function(target, func);
+    }
+}
+
+static int register_single_patch_function(struct target_entity *target, struct upatch_function *func)
+{
+    bool need_register = false;
+    int ret;
+
+    ret = target_add_function(target, func, &need_register);
+    if (ret) {
+        log_err("failed to add patch function to target\n");
+        return ret;
+    }
+
+    if (need_register) {
+        ret = uprobe_register(target->meta.inode, func->old_addr, &g_upatch_consumer);
+        if (ret) {
+            target_remove_function(target, func, &need_register); // rollback, remove function from target
+            log_err("failed to register uprobe on '%s' (inode: %lu) at 0x%llx, ret=%d\n",
+                target->meta.path, target->meta.inode->i_ino, func->old_addr, ret);
+            return ret;
+        }
+    }
+
+    return 0;
+}
+
+static int register_patch_functions(struct target_entity *target, struct patch_entity *patch, size_t count)
+{
+    struct upatch_function *funcs = patch->meta.funcs;
+    const char *strings = patch->meta.strings;
+
+    struct upatch_function *func;
+    const char *name;
+    size_t i;
+
+    int ret;
+
+    if (count > patch->meta.func_num) {
+        log_err("function count %zu exceeds %zu\n", count, patch->meta.func_num);
+        return -EINVAL;
+    }
+
+    log_debug("register target '%s' functions:\n", target->meta.path);
+    for (i = 0; i < count; i++) {
+        func = &funcs[i];
+        name = strings + func->name_off;
+
+        log_debug("+ function: offset=0x%08llx, size=0x%04llx, name='%s'\n", func->old_addr, func->old_size, name);
+        ret = register_single_patch_function(target, func);
+        if (ret) {
+            log_err("failed to register function '%s'\n", name);
+            unregister_patch_functions(target, patch, i);
+            return ret;
+        }
+    }
+
+    return 0;
 }
 
 /* public interface */
 enum upatch_status upatch_status(const char *patch_file)
 {
-    struct patch_entity *patch;
+    enum upatch_status status = UPATCH_STATUS_NOT_APPLIED;
+    struct patch_entity *patch = NULL;
 
-    patch = get_patch_entity(patch_file);
-    return patch ? patch->status : UPATCH_STATUS_NOT_APPLIED;
+    down_read(&g_global_table_rwsem);
+    patch = find_patch(patch_file);
+    if (patch) {
+        status = patch->status;
+    }
+    up_read(&g_global_table_rwsem);
+
+    return status;
 }
 
-int upatch_load(const char *patch_file, const char *target_path)
+int upatch_load(const char *patch_file, const char *target_file)
 {
     struct patch_entity *patch = NULL;
+    struct patch_entity *preload_patch = NULL;
+    struct patch_entity *patch_to_free = NULL;
     struct target_entity *target = NULL;
+    struct target_entity *preload_target = NULL;
+    struct target_entity *target_to_free = NULL;
+    int ret = 0;
 
-    if (!patch_file || !target_path) {
+    if (!patch_file || !target_file) {
         return -EINVAL;
     }
 
-    log_debug("loading patch '%s' -> '%s'...\n", patch_file, target_path);
+    log_debug("loading patch '%s' -> '%s'...\n", patch_file, target_file);
 
-    patch = get_patch_entity(patch_file);
-    if (patch) {
-        log_err("patch '%s' is already loaded\n", patch_file);
-        return -EEXIST;
+    /* fast path, return if patch already exists */
+    down_read(&g_global_table_rwsem);
+    if (find_patch(patch_file)) {
+        log_err("patch '%s' is already exist\n", patch_file);
+        ret = -EEXIST;
+        up_read(&g_global_table_rwsem);
+        goto out;
     }
+    up_read(&g_global_table_rwsem);
 
-    patch = new_patch_entity(patch_file);
-    if (IS_ERR(patch)) {
+    /* preload patch & target file out of the lock */
+    preload_patch = new_patch_entity(patch_file);
+    if (IS_ERR(preload_patch)) {
         log_err("failed to load patch '%s'\n", patch_file);
-        return PTR_ERR(patch);
+        ret = PTR_ERR(preload_patch);
+        goto out_free;
     }
 
-    target = get_target_entity(target_path);
+    preload_target = new_target_entity(target_file);
+    if (IS_ERR(preload_target)) {
+        log_err("failed to load target '%s'\n", target_file);
+        patch_to_free = preload_patch;
+        ret = PTR_ERR(preload_target);
+        goto out_free;
+    }
+
+    /* slow path, load patch & target from file */
+    down_write(&g_global_table_rwsem);
+
+    /* step 1. recheck patch and target reference */
+    patch = find_patch(patch_file);
+    if (!patch) {
+        patch = preload_patch;             // patch does not exist, use preloaded patch
+    } else {
+        log_err("patch '%s' is already exist\n", patch_file);
+        ret = -EEXIST;
+        patch_to_free = preload_patch;
+        target_to_free = preload_target;
+        goto unlock_global_table;
+    }
+
+    target = find_target(target_file);
     if (!target) {
-        target = new_target_entity(target_path);
-        if (IS_ERR(target)) {
-            free_patch_entity(patch);
-            log_err("failed to load target '%s'\n", target_path);
-            return PTR_ERR(target);
-        }
+        target = preload_target;           // target does not exist, use preloaded target
+    } else {
+        target_to_free = preload_target;   // target exists, need free preload one
     }
 
-    list_add(&patch->patch_node, &target->all_patch_list);
+    if (target != preload_target) {
+        down_write(&target->action_rwsem); // lock global target, patch is always local
+    }
+
+    /* step 2. add patch to global patch table */
+    hash_add(g_patch_table, &patch->table_node, patch->meta.inode->i_ino);
+
+    /* step 3. add patch to target all patches list */
+    list_add(&patch->loaded_node, &target->loaded_list);
+
+    /* step 4. update patch status */
     patch->target = target;
     patch->status = UPATCH_STATUS_DEACTIVED;
 
-    log_debug("patch '%s' is loaded\n", patch_file);
-    return 0;
+    if (target != preload_target) {
+        up_write(&target->action_rwsem);   // unlock global target, patch is always local
+    } else {
+        /* step 5. add new target to global target table */
+        hash_add(g_target_table, &target->table_node, target->meta.inode->i_ino);
+    }
+
+unlock_global_table:
+    up_write(&g_global_table_rwsem);
+
+out_free:
+    if (patch_to_free) {
+        free_patch_entity(patch_to_free);
+    }
+    if (target_to_free) {
+        free_target_entity(target_to_free);
+    }
+
+out:
+    if (!ret) {
+        log_debug("patch '%s' is loaded\n", patch_file);
+    }
+    return ret;
 }
 
 int upatch_remove(const char *patch_file)
 {
     struct patch_entity *patch = NULL;
     struct target_entity *target = NULL;
+    struct patch_entity *patch_to_free = NULL;
+    struct target_entity *target_to_free = NULL;
+
+    int ret = 0;
 
     log_debug("removing patch '%s'...\n", patch_file);
 
-    patch = get_patch_entity(patch_file);
+    down_write(&g_global_table_rwsem);
+
+    patch = find_patch(patch_file);
     if (!patch) {
-        log_err("cannot find patch entity '%s'\n", patch_file);
-        return -ENOENT;
+        log_err("cannot find patch entity\n");
+        ret = -ENOENT;
+        goto unlock_global_table;
     }
 
     if (patch->status != UPATCH_STATUS_DEACTIVED) {
         log_err("invalid patch status\n");
-        return -EPERM;
+        ret = -EPERM;
+        goto unlock_global_table;
     }
 
     target = patch->target;
-
-    free_patch_entity(patch);
-    if (!is_target_has_patch(target)) {
-        free_target_entity(target);
+    if (!target) {
+        log_err("cannot find target entity\n");
+        ret = -EFAULT;
+        goto unlock_global_table;
     }
 
-    log_debug("patch '%s' is removed\n", patch_file);
-    return 0;
+    down_write(&target->action_rwsem);
+    down_write(&patch->action_rwsem);
+
+    /* step 1. remove patch from from global table */
+    hash_del(&patch->table_node);
+
+    /* step 2. remove patch from target patch list */
+    list_del_init(&patch->loaded_node);
+
+    /* step 3. check & remove target form global table */
+    if (list_empty(&target->loaded_list)) {
+        hash_del(&target->table_node);
+        target_to_free = target;
+    }
+
+    /* step 4. update patch status */
+    patch->target = NULL;
+    patch->status = UPATCH_STATUS_NOT_APPLIED;
+    patch_to_free = patch;
+
+    up_write(&patch->action_rwsem);
+    up_write(&target->action_rwsem);
+
+unlock_global_table:
+    up_write(&g_global_table_rwsem);
+
+    if (patch_to_free) {
+        free_patch_entity(patch_to_free);
+    }
+    if (target_to_free) {
+        free_target_entity(target_to_free);
+    }
+    if (!ret) {
+        log_debug("patch '%s' is removed\n", patch_file);
+    }
+    return ret;
 }
 
 int upatch_active(const char *patch_file)
 {
     struct patch_entity *patch = NULL;
     struct target_entity *target = NULL;
-    int ret;
+    int ret = 0;
 
     log_debug("activating patch '%s'...\n", patch_file);
 
-    patch = get_patch_entity(patch_file);
+    down_read(&g_global_table_rwsem);
+
+    patch = find_patch(patch_file);
     if (!patch) {
-        log_err("cannot find patch entity '%s'\n", patch_file);
-        return -ENOENT;
+        log_err("cannot find patch entity\n");
+        ret = -ENOENT;
+        goto unlock_global_table;
     }
 
-    // check patch status
     if (patch->status != UPATCH_STATUS_DEACTIVED) {
         log_err("invalid patch status\n");
-        return -EPERM;
+        ret = -EPERM;
+        goto unlock_global_table;
     }
 
     target = patch->target;
-
-    ret = do_active_patch(target, patch);
-    if (ret) {
-        log_err("failed to active patch '%s', ret=%d\n", patch_file, ret);
-        return ret;
+    if (!target) {
+        log_err("cannot find target entity\n");
+        ret = -EFAULT;
+        goto unlock_global_table;
     }
 
-    log_debug("patch '%s' is actived\n", patch_file);
-    return 0;
+    down_write(&target->action_rwsem);
+    down_write(&patch->action_rwsem);
+
+    /* step 1. register patch functions to target */
+    ret = register_patch_functions(target, patch, patch->meta.func_num);
+    if (ret) {
+        log_err("failed to register patch functions\n");
+        goto unlock_entity;
+    }
+
+    /* step 2. add patch to target actived patch list */
+    list_add(&patch->actived_node, &target->actived_list);
+
+    /* step 3. update patch status */
+    patch->status = UPATCH_STATUS_ACTIVED;
+
+unlock_entity:
+    up_write(&patch->action_rwsem);
+    up_write(&target->action_rwsem);
+
+unlock_global_table:
+    up_read(&g_global_table_rwsem);
+
+    if (!ret) {
+        log_debug("patch '%s' is actived\n", patch_file);
+    }
+    return ret;
 }
 
 int upatch_deactive(const char *patch_file)
 {
     struct patch_entity *patch = NULL;
+    struct target_entity *target = NULL;
+    int ret = 0;
 
     log_debug("deactivating patch '%s'...\n", patch_file);
 
-    // find patch
-    patch = get_patch_entity(patch_file);
+    down_read(&g_global_table_rwsem);
+
+    patch = find_patch(patch_file);
     if (!patch) {
-        log_err("cannot find patch entity '%s'\n", patch_file);
-        return -ENOENT;
+        log_err("cannot find patch entity\n");
+        ret = -ENOENT;
+        goto unlock_global_table;
     }
 
-    // check patch status
     if (patch->status != UPATCH_STATUS_ACTIVED) {
         log_err("invalid patch status\n");
-        return -EPERM;
+        ret = -EPERM;
+        goto unlock_global_table;
     }
 
-    do_deactive_patch(patch);
+    target = patch->target;
+    if (!target) {
+        log_err("cannot find target entity\n");
+        ret = -EFAULT;
+        goto unlock_global_table;
+    }
 
-    log_debug("patch '%s' is deactived\n", patch_file);
-    return 0;
+    down_write(&target->action_rwsem);
+    down_write(&patch->action_rwsem);
+
+    /* step 1. remove patch functions from target */
+    unregister_patch_functions(target, patch, patch->meta.func_num);
+
+    /* step 2. remove patch from target actived patch list */
+    list_del_init(&patch->actived_node);
+
+    /* step 3. update patch status */
+    patch->status = UPATCH_STATUS_DEACTIVED;
+
+    up_write(&patch->action_rwsem);
+    up_write(&target->action_rwsem);
+
+unlock_global_table:
+    up_read(&g_global_table_rwsem);
+
+    if (!ret) {
+        log_debug("patch '%s' is deactived\n", patch_file);
+    }
+    return ret;
 }
 
-void target_unregister_uprobes(struct target_entity *target)
+void __exit report_global_table_populated(void)
 {
-    struct patched_offset *off = NULL;
-    struct patched_offset *tmp_off = NULL;
+    struct patch_entity *patch;
+    struct target_entity *target;
+    int bkt;
 
-    log_debug("unregister '%s' (inode: %lu) uprobes:", target->path, target->inode->i_ino);
-    list_for_each_entry_safe(off, tmp_off, &target->offset_node, list) {
-        log_debug("unregister offset 0x%llx\n", off->offset);
-        uprobe_unregister(target->inode, off->offset, &patch_consumer);
-        list_del(&off->list);
-        kfree(off);
+    down_read(&g_global_table_rwsem);
+    hash_for_each(g_patch_table, bkt, patch, table_node) {
+        log_warn("found patch '%s' on exit, status=%s",
+            patch->meta.path ? patch->meta.path : "(null)", patch_status_str(patch->status));
     }
+    hash_for_each(g_target_table, bkt, target, table_node) {
+        log_err("found target '%s' on exit", target->meta.path ? target->meta.path : "(null)");
+    }
+    up_read(&g_global_table_rwsem);
 }

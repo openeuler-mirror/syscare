@@ -22,10 +22,9 @@
 #include <linux/fs.h>
 #include <linux/init.h>
 
-#include "kernel_compat.h"
 #include "ioctl_dev.h"
-#include "patch_entity.h"
-#include "target_entity.h"
+#include "patch_manage.h"
+#include "kernel_compat.h"
 #include "util.h"
 
 #ifndef MODNAME
@@ -65,8 +64,7 @@ static int __init upatch_module_init(void)
  */
 static void __exit upatch_module_exit(void)
 {
-    report_patch_table_populated();
-    report_target_table_populated();
+    report_global_table_populated();
 
     kernel_compat_exit();
     ioctl_device_exit();

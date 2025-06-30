@@ -576,7 +576,7 @@ static bool is_vma_other_so_text(struct patch_context *ctx, struct vm_area_struc
         return false;
     }
 
-    if (strcmp(file_path, ctx->target->file_name) == 0) {
+    if (strcmp(file_path, ctx->target->path) == 0) {
         return false;
     }
 

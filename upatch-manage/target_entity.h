@@ -23,6 +23,7 @@
 
 #include <linux/types.h>
 #include <linux/list.h>
+#include <linux/rwsem.h>
 #include <linux/mutex.h>
 
 #include <linux/elf.h>
@@ -44,12 +45,16 @@
 #define GOT_ENTRY_SIZE  sizeof(uintptr_t)  // GOT entry size is pointer size
 
 struct inode;
+
+struct patch_entity;
 struct upatch_function;
 
 /* target elf metadata */
 struct target_metadata {
-    const char *file_name;
-    loff_t file_size;
+    const char *path;
+    struct inode *inode;
+
+    loff_t size;
 
     Elf_Ehdr *ehdr;
     Elf_Phdr *phdrs;
@@ -88,62 +93,26 @@ struct target_metadata {
     size_t got_size;
 };
 
+/* target function record */
+struct target_function {
+    u64 addr;                        // target function address
+    size_t count;                    // target function patch count
+    struct list_head func_node;      // target function list node
+};
+
 struct target_entity {
-    const char *path;               // patch file path
-    struct inode *inode;            // target file inode
+    struct target_metadata meta;      // target file metadata
+    struct hlist_node table_node;     // global target hash table node
 
-    struct target_metadata meta;    // target file elf data
+    struct rw_semaphore action_rwsem; // target action rw semaphore
 
-    /*
-     * there is only one thread to call active / deactive
-     * we don't need a lock
-     */
-    struct list_head offset_node;   // list of file offset of active patch function for struct patched_offset
-    struct hlist_node node;         // all target store in hash table
+    struct list_head loaded_list;     // target loaded patches
+    struct list_head actived_list;    // target actived patches
+    struct list_head func_list;       // target registered functions
 
-    /*
-     * all patches related to this target, including active and deactive patches
-     * don't need lock. only load_patch, remove_patch, rmmod upatch_manage will read/write this list
-     * uprobe_handle will not use this list, and we limit there is only one thread to manage patch
-     */
-    struct list_head all_patch_list;
-
-    /*
-     * active patch list need lock
-     * uprobe handle will read it, active method will write it
-     */
-    struct rw_semaphore patch_lock;
-    struct list_head actived_patch_list;
-
-    /*
-     * target ELF may run in different process, such as a dynamic object
-     * every process will have a actived patch
-     */
-    struct mutex process_lock;      // uprobe handle will call free_process, so we need lock
-    struct list_head process_head;
+    struct mutex process_mutex;
+    struct list_head process_list;    // all processes of the target
 };
-
-/* Patched address */
-struct patched_offset {
-    loff_t offset;                  // offset of the patched func addr
-    struct list_head funcs_head;    // patched function list head
-    struct list_head list;          // address list node
-};
-
-/* Patched function record */
-struct patched_func_node {
-    struct upatch_function *func;   // patched function
-    struct list_head list;
-};
-
-/*
- * Find a target entity
- * @param ino: target file inode number
- * @return target entity
- */
-struct target_entity *get_target_entity(const char* target_path);
-
-struct target_entity *get_target_entity_by_inode(struct inode *inode);
 
 /*
  * Load a target entity
@@ -153,20 +122,43 @@ struct target_entity *get_target_entity_by_inode(struct inode *inode);
 struct target_entity *new_target_entity(const char *file_path);
 
 /*
- * Remove a target entity
+ * Free a target entity
  * @param target: target entity
  * @return void
  */
 void free_target_entity(struct target_entity *target);
 
 /*
- * Check if a target has related patches. DEACTIVE/ACTIVE patches are all counted
+ * Add a patch function to target entity
  * @param target: target entity
- * @param offset: target offset
+ * @param func: patch function
+ * @param need_register: target offset needs register uprobe
  * @return result
  */
-bool is_target_has_patch(const struct target_entity *target);
+int target_add_function(struct target_entity *target, struct upatch_function *func, bool *need_register);
 
-void __exit report_target_table_populated(void);
+/*
+ * Remove a patch function from target entity
+ * @param target: target entity
+ * @param func: patch function
+ * @param need_unregister: target offset needs unregister uprobe
+ * @return result
+ */
+void target_remove_function(struct target_entity *target, struct upatch_function *func, bool *need_unregister);
+
+/*
+ * Collect all exited process into a list
+ * @param target: target entity
+ * @param process_list: exited process list
+ * @return void
+ */
+void target_gather_exited_processes(struct target_entity *target, struct list_head *process_list);
+
+/*
+ * Get or create a process entity from target entity
+ * @param target: target entity
+ * @return process entity
+ */
+struct process_entity *target_get_or_create_process(struct target_entity *target);
 
 #endif // _UPATCH_MANAGE_TARGET_ENTITY_H
