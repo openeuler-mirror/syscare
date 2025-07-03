@@ -90,8 +90,16 @@ impl PatchMetadata {
             .decompress(&self.root_dir)
             .context("Failed to decompress patch metadata")?;
 
-        serde::deserialize_with_magic::<PatchInfo, _, _>(&self.metadata_path, PATCH_INFO_MAGIC)
-            .context("Failed to read patch metadata")
+        let mut patch_info: PatchInfo =
+            serde::deserialize_with_magic(&self.metadata_path, PATCH_INFO_MAGIC)
+                .context("Failed to read patch metadata")?;
+
+        // rewrite file path to metadata directory path
+        for patch_file in &mut patch_info.patches {
+            patch_file.path = self.metadata_dir.join(&patch_file.name)
+        }
+
+        Ok(patch_info)
     }
 
     pub fn write<P: AsRef<Path>>(
