@@ -37,7 +37,7 @@ use package::{
     PackageBuildRoot, PackageBuilderFactory, PackageFormat, PackageImpl, PackageSpecBuilderFactory,
     PackageSpecWriterFactory,
 };
-use patch::{PatchBuilderFactory, PatchHelper, PatchMetadata, PATCH_FILE_EXT};
+use patch::{PatchBuilderFactory, PatchHelper, PatchMetadata};
 
 const CLI_NAME: &str = "syscare build";
 const CLI_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -292,12 +292,13 @@ impl SyscareBuild {
             }
 
             // Override patch list
-            let mut new_patch_files = PatchHelper::collect_patch_files(fs::list_files_by_ext(
-                &patch_metadata.metadata_dir,
-                PATCH_FILE_EXT,
-                fs::TraverseOptions { recursive: false },
-            )?)
-            .context("Failed to collect patch file from metadata directory")?;
+            let mut new_patch_files = PatchHelper::collect_patch_files(
+                saved_patch_info
+                    .patches
+                    .iter()
+                    .map(|patch_file| &patch_file.path),
+            )
+            .context("Failed to collect patch file from patch metadata")?;
 
             new_patch_files.extend(patch_files);
             patch_files = new_patch_files;
