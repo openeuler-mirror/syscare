@@ -165,14 +165,14 @@ impl SyscareBuild {
         }
         info!("------------------------------");
 
-        for source_pkg in &source_pkg_list {
+        for debug_pkg in &debug_pkg_list {
             ensure!(
-                debug_pkg_list.iter().any(|debug_pkg| {
-                    source_pkg.version == debug_pkg.version
-                        && source_pkg.release == debug_pkg.release
+                source_pkg_list.iter().any(|source_pkg| {
+                    debug_pkg.version == source_pkg.version
+                        && debug_pkg.release == source_pkg.release
                 }),
-                "Package {} has no matching debuginfo package",
-                source_pkg.full_name(),
+                "Package {} has no matching source package",
+                debug_pkg.full_name(),
             );
         }
 
