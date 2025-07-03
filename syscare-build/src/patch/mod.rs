@@ -12,8 +12,6 @@
  * See the Mulan PSL v2 for more details.
  */
 
-pub const PATCH_FILE_EXT: &str = "patch";
-
 mod kernel_patch;
 mod metadata;
 mod patch_builder;
