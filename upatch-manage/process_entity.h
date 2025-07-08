@@ -46,6 +46,13 @@ struct pc_pair {
 struct patch_info {
     struct patch_entity *patch;
     struct list_head node;
+
+    unsigned long text_addr;
+    unsigned long rodata_addr;
+
+    size_t text_len;
+    size_t rodata_len;
+
     DECLARE_HASHTABLE(pc_maps, FUNC_HASH_BITS);
 };
 
