@@ -20,6 +20,7 @@
 
 #include "process_entity.h"
 
+#include <linux/mm.h>
 #include <linux/sched/task.h>
 
 #include "patch_entity.h"
@@ -27,6 +28,66 @@
 
 #include "patch_load.h"
 #include "util.h"
+
+static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t len)
+{
+    struct vm_area_struct *vma;
+
+    if (!addr) {
+        return -EINVAL;
+    }
+
+    if (!len) {
+        return 0;
+    }
+
+    vma = find_vma(mm, addr);
+    if (unlikely(!vma)) {
+        return -ENOENT;
+    }
+
+    if (unlikely(vma->vm_start != addr || (vma->vm_end - vma->vm_start) != len)) {
+        return -EFAULT;
+    }
+
+    return do_munmap(mm, addr, len, NULL);
+}
+
+static void free_patch_memory(struct task_struct *task, struct patch_info *patch)
+{
+    pid_t pid = task_pid_nr(task);
+    struct mm_struct *mm;
+
+    int ret;
+
+    mm = get_task_mm(task);
+    if (unlikely(!mm)) {
+        return;
+    }
+
+    mmap_write_lock(mm);
+
+    log_debug("process %d: free patch text, addr=0x%lx, len=0x%lx\n",
+        pid, patch->text_addr, patch->text_len);
+    ret = do_free_patch_memory(mm, patch->text_addr, patch->text_len);
+    if (ret) {
+        log_err("failed to free patch text, pid=%d, addr=0x%lx, len=0x%lx, ret=%d\n",
+            pid, patch->text_addr, patch->text_len, ret);
+    }
+
+    log_debug("process %d: free patch rodata, addr=0x%lx, len=0x%lx\n",
+        pid, patch->rodata_addr, patch->rodata_len);
+    ret = do_free_patch_memory(mm, patch->rodata_addr, patch->rodata_len);
+    if (ret) {
+        log_err("failed to free patch rodata, pid=%d, addr=0x%lx, len=0x%lx, ret=%d\n",
+            pid, patch->rodata_addr, patch->rodata_len, ret);
+    }
+
+    mmap_write_unlock(mm);
+
+    mmput(mm);
+    return;
+}
 
 static void free_patch_info(struct patch_info *patch)
 {
@@ -74,23 +135,27 @@ struct process_entity *new_process(struct target_entity *target)
     return process;
 }
 
-void free_process(struct process_entity* process)
+void free_process(struct process_entity *process)
 {
-    struct patch_info *info;
+    pid_t pid;
+    struct patch_info *patch;
     struct patch_info *tmp;
 
     if (unlikely(!process)) {
         return;
     }
 
-    log_debug("free process %d\n", task_pid_nr(process->task));
+    pid = task_pid_nr(process->task);
+
+    log_debug("free process %d\n", pid);
+    list_for_each_entry_safe(patch, tmp, &process->loaded_patches, node) {
+        list_del(&patch->node);
+        free_patch_memory(process->task, patch);
+        free_patch_info(patch);
+    }
+
     put_pid(process->pid);
     put_task_struct(process->task);
-
-    list_for_each_entry_safe(info, tmp, &process->loaded_patches, node) {
-        list_del(&info->node);
-        free_patch_info(info);
-    }
 
     kfree(process);
 }
@@ -146,8 +211,15 @@ int process_write_patch_info(struct process_entity *process, struct patch_entity
         log_debug("function: 0x%08lx -> 0x%08lx, name: '%s'\n", entry->old_pc, entry->new_pc, func_name);
     }
 
-    list_add(&info->node, &process->loaded_patches);
     info->patch = patch;
+
+    info->text_addr = ctx->layout.base;
+    info->text_len = ctx->layout.text_end;
+
+    info->rodata_addr = ctx->layout.base + ctx->layout.text_end;
+    info->rodata_len = ctx->layout.ro_after_init_end - ctx->layout.text_end;
+
+    list_add(&info->node, &process->loaded_patches);
     process->latest_patch = info;
 
     return 0;
