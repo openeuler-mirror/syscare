@@ -143,12 +143,14 @@ foreach(CURR_FLAG IN LISTS BUILD_FLAGS_RUST)
 endforeach()
 
 add_custom_target(syscare ALL
-    COMMAND cargo build --release --target-dir ${RUST_TARGET_DIR}
+    COMMAND ${CMAKE_COMMAND} -E env
+        "BUILD_VERSION=${BUILD_VERSION}"
+        "RUSTFLAGS=${RUST_FLAGS}"
+        cargo build --release --target-dir "${RUST_TARGET_DIR}"
     WORKING_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}
 )
 
 set_target_properties(syscare PROPERTIES
-    ENVIRONMENT "RUSTFLAGS=${RUST_FLAGS};BUILD_VERSION=${BUILD_VERSION}"
     ADDITIONAL_CLEAN_FILES "${RUST_TARGET_DIR}"
 )
 
