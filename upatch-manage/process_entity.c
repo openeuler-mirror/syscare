@@ -27,6 +27,8 @@
 #include "target_entity.h"
 
 #include "patch_load.h"
+#include "stack_check.h"
+
 #include "util.h"
 
 static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t len)
@@ -223,4 +225,52 @@ int process_write_patch_info(struct process_entity *process, struct patch_entity
     process->latest_patch = info;
 
     return 0;
+}
+
+static bool is_patch_removable(pid_t pid, const void *page, void *context)
+{
+    static const size_t VALUE_NR = PAGE_SIZE / sizeof(unsigned long);
+
+    const struct patch_info *patch = (const struct patch_info *)context;
+
+    const bool check_text = (patch->text_len > 0);
+    const unsigned long text_start = patch->text_addr;
+    const unsigned long text_end = patch->text_addr + patch->text_len;
+
+    const bool check_rodata = (patch->rodata_len > 0);
+    const unsigned long rodata_start = patch->rodata_addr;
+    const unsigned long rodata_end = patch->rodata_addr + patch->rodata_len;
+
+    const unsigned long *page_data = (const unsigned long *)page;
+    size_t i;
+
+    for (i = 0; i < VALUE_NR; i++) {
+        if (check_text && unlikely(page_data[i] >= text_start && page_data[i] < text_end)) {
+            log_err("process %d: found patch text 0x%lx on stack\n", pid, page_data[i]);
+            return false;
+        }
+
+        if (check_rodata && unlikely(page_data[i] >= rodata_start && page_data[i] < rodata_end)) {
+            log_err("process %d: found patch rodata 0x%lx on stack\n", pid, page_data[i]);
+            return false;
+        }
+    }
+
+    return true;
+}
+
+int process_check_patch_on_stack(struct process_entity *process, struct patch_entity *patch)
+{
+    struct patch_info *patch_info;
+
+    if (unlikely(!process || !patch)) {
+        return -EINVAL;
+    }
+
+    patch_info = process_find_loaded_patch(process, patch);
+    if (unlikely(!patch_info)) {
+        return 0;
+    }
+
+    return check_process_stack(process->task, is_patch_removable, patch_info);
 }

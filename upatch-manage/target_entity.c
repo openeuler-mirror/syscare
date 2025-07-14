@@ -564,3 +564,22 @@ struct process_entity *target_get_or_create_process(struct target_entity *target
 
     return process;
 }
+
+int target_check_patch_removable(struct target_entity *target, struct patch_entity *patch)
+{
+    struct process_entity *process = NULL;
+    int ret = 0;
+
+    if (unlikely(!target || !patch)) {
+        return -EINVAL;
+    }
+
+    list_for_each_entry(process, &target->process_list, process_node) {
+        ret = process_check_patch_on_stack(process, patch);
+        if (ret) {
+            break;
+        }
+    }
+
+    return ret;
+}
