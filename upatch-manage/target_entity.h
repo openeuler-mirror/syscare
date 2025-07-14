@@ -161,4 +161,11 @@ void target_gather_exited_processes(struct target_entity *target, struct list_he
  */
 struct process_entity *target_get_or_create_process(struct target_entity *target);
 
+/*
+ * Check target process stack
+ * @param target: target entity
+ * @return result
+ */
+int target_check_patch_removable(struct target_entity *target, struct patch_entity *patch);
+
 #endif // _UPATCH_MANAGE_TARGET_ENTITY_H

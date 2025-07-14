@@ -547,24 +547,31 @@ int upatch_remove(const char *patch_file)
     down_write(&target->action_rwsem);
     down_write(&patch->action_rwsem);
 
-    /* step 1. remove patch from from global table */
+    /* step 1. check if the patch removable */
+    ret = target_check_patch_removable(target, patch);
+    if (ret) {
+        log_err("patch %s is not removable\n", patch_file);
+        goto unlock_target;
+    }
+
+    /* step 2. remove patch from from global table */
     hash_del(&patch->table_node);
 
-    /* step 2. remove patch from target patch list */
+    /* step 3. remove patch from target patch list */
     list_del_init(&patch->loaded_node);
 
-    /* step 3. check & remove target form global table */
+    /* step 4. check & remove target form global table */
     if (list_empty(&target->loaded_list)) {
         hash_del(&target->table_node);
         target_to_free = target;
     }
 
-    /* step 4. update patch status */
+    /* step 5. update patch status */
     patch->target = NULL;
     patch->status = UPATCH_STATUS_NOT_APPLIED;
     patch_to_free = patch;
 
-    up_write(&patch->action_rwsem);
+unlock_target:
     up_write(&target->action_rwsem);
 
 unlock_global_table:

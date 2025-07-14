@@ -78,10 +78,10 @@ struct process_entity *new_process(struct target_entity *target);
 
 void free_process(struct process_entity *process);
 
-struct process_entity *get_process(struct target_entity *target);
-
 struct patch_info *process_find_loaded_patch(struct process_entity *process, struct patch_entity *patch);
 
 int process_write_patch_info(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx);
+
+int process_check_patch_on_stack(struct process_entity *process, struct patch_entity *patch);
 
 #endif // _UPATCH_MANAGE_PROCESS_ENTITY_H
