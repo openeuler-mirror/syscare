@@ -32,10 +32,10 @@
 
 static const char* MODULE_NAME = THIS_MODULE->name;
 
-#define log_err(fmt, args...)    pr_err("%s: " fmt, MODULE_NAME, ##args)
-#define log_warn(fmt, args...)   pr_warn("%s: " fmt, MODULE_NAME, ##args)
-#define log_info(fmt, args...)   pr_info("%s: " fmt, MODULE_NAME, ##args)
-#define log_debug(fmt, args...)  pr_debug("%s: " fmt, MODULE_NAME, ##args)
+#define log_err(fmt, args...)    pr_err_ratelimited("%s: " fmt, MODULE_NAME, ##args)
+#define log_warn(fmt, args...)   pr_warn_ratelimited("%s: " fmt, MODULE_NAME, ##args)
+#define log_info(fmt, args...)   pr_info_ratelimited("%s: " fmt, MODULE_NAME, ##args)
+#define log_debug(fmt, args...)  pr_debug_ratelimited("%s: " fmt, MODULE_NAME, ##args)
 
 /*
  * Alloc buffer and read file content

@@ -248,7 +248,6 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
     /* step 2. find target latest patch */
     latest_patch = list_first_entry_or_null(&target->actived_list, struct patch_entity, actived_node);
     if (unlikely(!latest_patch)) {
-        log_err("target '%s' has no patch\n", target->meta.path);
         ret = UPROBE_RUN_OLD_FUNC;
         goto unlock_global_table;
     }
