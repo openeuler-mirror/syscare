@@ -23,7 +23,7 @@ use std::{
 };
 
 use anyhow::{bail, ensure, Result};
-use log::{debug, warn};
+use log::{debug, info, warn};
 use parking_lot::RwLock;
 use uuid::Uuid;
 
@@ -207,12 +207,11 @@ impl UserPatchDriver {
         patch_target.clean_dead_process(&process_list);
 
         let all_patches = patch_target.all_patches().collect::<Vec<_>>();
-        let need_actived = patch_target.need_actived(&process_list);
-
         for (uuid, patch_file) in all_patches {
+            let need_actived = patch_target.need_actived_process(&process_list, &uuid);
             if !need_actived.is_empty() {
-                debug!(
-                    "Upatch: Activating patch '{}' ({}) for process {:?}",
+                info!(
+                    "Upatch: Activating patch '{}' ({}) on new process {:?}",
                     uuid,
                     target_elf.display(),
                     need_actived,
@@ -220,10 +219,10 @@ impl UserPatchDriver {
             }
             for &pid in &need_actived {
                 match sys::active_patch(&uuid, pid, target_elf, &patch_file) {
-                    Ok(_) => patch_target.add_process(pid),
+                    Ok(_) => patch_target.process_register_patch(pid, &uuid),
                     Err(e) => {
                         warn!(
-                            "Upatch: Failed to active patch '{}' for process {}, {}",
+                            "Upatch: Failed to active patch '{}' on process {}, {}",
                             uuid,
                             pid,
                             e.to_string().to_lowercase(),
@@ -266,7 +265,13 @@ impl UserPatchDriver {
         let start_watch = !patch_target.is_patched();
 
         // Active patch
-        let need_actived = patch_target.need_actived(&process_list);
+        let need_actived = patch_target.need_actived_process(&process_list, &patch.uuid);
+        info!(
+            "Upatch: Activating patch '{}' ({}) on process {:?}",
+            patch.uuid,
+            patch.target_elf.display(),
+            need_actived,
+        );
 
         let mut results = Vec::new();
         for pid in need_actived {
@@ -290,10 +295,10 @@ impl UserPatchDriver {
         // Process results
         for (pid, result) in results {
             match result {
-                Ok(_) => patch_target.add_process(pid),
+                Ok(_) => patch_target.process_register_patch(pid, &patch.uuid),
                 Err(e) => {
                     warn!(
-                        "Upatch: Failed to active patch '{}' for process {}, {}",
+                        "Upatch: Failed to active patch '{}' on process {}, {}",
                         patch.uuid,
                         pid,
                         e.to_string().to_lowercase(),
@@ -322,10 +327,16 @@ impl UserPatchDriver {
         patch_target.clean_dead_process(&process_list);
 
         // Deactive patch
-        let need_deactive = patch_target.need_deactived(&process_list);
+        let need_deactived = patch_target.need_deactived_process(&process_list, &patch.uuid);
+        info!(
+            "Upatch: Deactivating patch '{}' ({}) on process {:?}",
+            patch.uuid,
+            patch.target_elf.display(),
+            need_deactived,
+        );
 
         let mut results = Vec::new();
-        for pid in need_deactive {
+        for pid in need_deactived {
             let result =
                 sys::deactive_patch(&patch.uuid, pid, &patch.target_elf, &patch.patch_file);
             results.push((pid, result));
@@ -347,10 +358,10 @@ impl UserPatchDriver {
         // Process results
         for (pid, result) in results {
             match result {
-                Ok(_) => patch_target.remove_process(pid),
+                Ok(_) => patch_target.process_unregister_patch(pid, &patch.uuid),
                 Err(e) => {
                     warn!(
-                        "Upatch: Failed to deactive patch '{}' for process {}, {}",
+                        "Upatch: Failed to deactive patch '{}' on process {}, {}",
                         patch.uuid,
                         pid,
                         e.to_string().to_lowercase(),

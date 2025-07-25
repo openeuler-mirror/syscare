@@ -24,36 +24,57 @@ use crate::patch::entity::UserPatch;
 
 #[derive(Debug, Default)]
 pub struct PatchTarget {
-    process_list: HashSet<i32>,
-    patch_map: HashMap<Uuid, PathBuf>, // uuid -> patch file
+    process_map: HashMap<i32, HashSet<Uuid>>, // pid -> patch list
+    patch_map: HashMap<Uuid, PathBuf>,        // uuid -> patch file
     collision_map: HashMap<u64, IndexSet<Uuid>>, // function old addr -> patch collision list
 }
 
 impl PatchTarget {
-    pub fn add_process(&mut self, pid: i32) {
-        self.process_list.insert(pid);
+    pub fn process_register_patch(&mut self, pid: i32, uuid: &Uuid) {
+        self.process_map.entry(pid).or_default().insert(*uuid);
     }
 
-    pub fn remove_process(&mut self, pid: i32) {
-        self.process_list.remove(&pid);
+    pub fn process_unregister_patch(&mut self, pid: i32, uuid: &Uuid) {
+        if let Some(patch_list) = self.process_map.get_mut(&pid) {
+            patch_list.remove(uuid);
+        }
+    }
+
+    pub fn need_actived_process(&self, process_list: &HashSet<i32>, uuid: &Uuid) -> HashSet<i32> {
+        let mut need_actived = HashSet::with_capacity(process_list.len());
+
+        for pid in process_list {
+            match self.process_map.get(pid) {
+                Some(patch_list) => {
+                    if !patch_list.contains(uuid) {
+                        need_actived.insert(*pid);
+                    }
+                }
+                None => {
+                    need_actived.insert(*pid);
+                }
+            }
+        }
+
+        need_actived
+    }
+
+    pub fn need_deactived_process(&self, process_list: &HashSet<i32>, uuid: &Uuid) -> HashSet<i32> {
+        let mut need_deactived = HashSet::with_capacity(process_list.len());
+
+        for pid in process_list {
+            if let Some(patch_list) = self.process_map.get(pid) {
+                if patch_list.contains(uuid) {
+                    need_deactived.insert(*pid);
+                }
+            }
+        }
+
+        need_deactived
     }
 
     pub fn clean_dead_process(&mut self, process_list: &HashSet<i32>) {
-        self.process_list.retain(|pid| process_list.contains(pid));
-    }
-
-    pub fn need_actived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
-        process_list
-            .difference(&self.process_list)
-            .copied()
-            .collect()
-    }
-
-    pub fn need_deactived(&self, process_list: &HashSet<i32>) -> HashSet<i32> {
-        process_list
-            .intersection(&self.process_list)
-            .copied()
-            .collect()
+        self.process_map.retain(|pid, _| process_list.contains(pid));
     }
 }
 
