@@ -12,7 +12,7 @@
 
 ### 前提条件
 
-安装openEuler 24.03 LTS SP1版本。
+安装openEuler 24.03 LTS SP2版本。
 
 ### 源码编译安装SysCare
 
