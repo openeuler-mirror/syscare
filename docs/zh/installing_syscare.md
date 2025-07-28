@@ -43,7 +43,7 @@ make install
 相关命令如下：
 
 ```shell
-dnf/yum install syscare syscare-kmod syscare-build syscare-build-ebpf
+dnf/yum install syscare syscare-build
 ```
 
 ### 卸载SysCare
@@ -51,5 +51,5 @@ dnf/yum install syscare syscare-kmod syscare-build syscare-build-ebpf
 相关命令如下：
 
 ```shell
-dnf/yum erase syscare syscare-kmod syscare-build syscare-build-ebpf
+dnf/yum erase syscare syscare-build
 ```
