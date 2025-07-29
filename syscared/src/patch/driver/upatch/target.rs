@@ -17,15 +17,15 @@ use std::{
     path::PathBuf,
 };
 
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 use uuid::Uuid;
 
 use crate::patch::entity::UserPatch;
 
 #[derive(Debug, Default)]
 pub struct PatchTarget {
-    process_map: HashMap<i32, HashSet<Uuid>>, // pid -> patch list
-    patch_map: HashMap<Uuid, PathBuf>,        // uuid -> patch file
+    process_map: HashMap<i32, HashSet<Uuid>>,    // pid -> patch list
+    patch_map: IndexMap<Uuid, PathBuf>,          // uuid -> patch file
     collision_map: HashMap<u64, IndexSet<Uuid>>, // function old addr -> patch collision list
 }
 
