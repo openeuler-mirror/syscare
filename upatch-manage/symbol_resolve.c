@@ -83,7 +83,7 @@ static unsigned long resolve_from_got(struct patch_context *ctx, const char *nam
 
 static unsigned long resolve_from_patch(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
-    const struct target_metadata *elf = ctx->target;
+    const struct target_file *elf = ctx->target;
     unsigned long addr = 0;
 
     if (!elf) {
@@ -107,7 +107,7 @@ static unsigned long resolve_from_patch(struct patch_context *ctx, const char *n
 /* handle external object, we need get it's address, used for R_X86_64_REX_GOTPCRELX */
 static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
-    const struct target_metadata *elf = ctx->target;
+    const struct target_file *elf = ctx->target;
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_dyn = elf->rela_dyn;
     unsigned int i;
@@ -150,7 +150,7 @@ static unsigned long resolve_from_rela_dyn(struct patch_context *ctx, const char
 
 static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char *name, Elf_Sym *sym)
 {
-    const struct target_metadata *elf = ctx->target;
+    const struct target_file *elf = ctx->target;
     Elf_Sym *dynsym = elf->dynsym;
     Elf_Rela *rela_plt = elf->rela_plt;
     unsigned int i;
@@ -201,7 +201,7 @@ static unsigned long resolve_from_rela_plt(struct patch_context *ctx, const char
 // get symbol address from .dynsym
 static unsigned long resolve_from_dynsym(struct patch_context *ctx, const char *name)
 {
-    const struct target_metadata *elf = ctx->target;
+    const struct target_file *elf = ctx->target;
     Elf_Sym *dynsym = elf->dynsym;
     unsigned int i;
     const char *sym_name;
@@ -653,7 +653,7 @@ static unsigned long resolve_from_vma_so(struct patch_context *ctx, const char *
 
 static unsigned long resolve_from_symtab(const struct patch_context *ctx, const char *name)
 {
-    const struct target_metadata *elf = ctx->target;
+    const struct target_file *elf = ctx->target;
     Elf_Sym *sym = elf->symtab;
     unsigned int i;
     const char *sym_name;

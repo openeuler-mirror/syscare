@@ -23,8 +23,9 @@
 #include <linux/init.h>
 
 #include "ioctl_dev.h"
-#include "patch_manage.h"
 #include "kernel_compat.h"
+#include "process_cache.h"
+#include "patch_manage.h"
 #include "util.h"
 
 #ifndef MODNAME
@@ -40,13 +41,19 @@ static int __init upatch_module_init(void)
     int ret;
 
     ret = kernel_compat_init();
-    if (ret) {
+    if (unlikely(ret)) {
         log_err("failed to initialize kernel compat layer, ret=%d\n", ret);
         return ret;
     }
 
+    ret = process_cache_init();
+    if (unlikely(ret)) {
+        log_err("failed to initialize process cache, ret=%d\n", ret);
+        return ret;
+    }
+
     ret = ioctl_device_init();
-    if (ret) {
+    if (unlikely(ret)) {
         log_err("failed to initialize ioctl device, ret=%d\n", ret);
         return ret;
     }
@@ -64,10 +71,11 @@ static int __init upatch_module_init(void)
  */
 static void __exit upatch_module_exit(void)
 {
-    report_global_table_populated();
+    check_target_table_populated();
 
-    kernel_compat_exit();
     ioctl_device_exit();
+    process_cache_exit();
+    kernel_compat_exit();
 
     log_info("%s %s exited\n", MODNAME, MODVER);
 }

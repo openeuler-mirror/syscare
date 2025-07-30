@@ -30,6 +30,8 @@
 #include <linux/slab.h>
 #include <linux/vmalloc.h>
 
+#include <linux/hash.h>
+
 static const char* MODULE_NAME = THIS_MODULE->name;
 
 #define log_err(fmt, args...)    pr_err_ratelimited("%s: " fmt, MODULE_NAME, ##args)
@@ -172,19 +174,43 @@ static inline const char *get_string_at(const char *strtab, size_t strtab_len, s
     return is_valid_str(strtab, strtab_len, offset) ? strtab + offset : NULL;
 }
 
-static inline struct inode *get_path_inode(const char *file)
+static inline struct inode *get_path_inode(const char *filename)
 {
     struct path path;
     struct inode *inode;
 
-    if (unlikely(!file || kern_path(file, LOOKUP_FOLLOW, &path))) {
+    if (unlikely(!filename || kern_path(filename, LOOKUP_FOLLOW, &path))) {
         return NULL;
     }
-
     inode = igrab(path.dentry->d_inode); // will increase inode refcnt, need call iput after use
 
     path_put(&path);
     return inode;
+}
+
+/**
+ * @brief Calculate hash value of an inode
+ *
+ * @param inode Pointer to the inode structure to hash (must not be NULL)
+ * @param bits Number of bits to use for the hash (must be between 1 and 31)
+ * @return Hashed value
+ */
+static inline unsigned long hash_inode(const struct inode *inode, unsigned int bits)
+{
+    return hash_long(inode->i_ino, bits) ^ hash_ptr(inode->i_sb, bits);
+}
+
+/**
+ * @brief Compare two inodes for equality
+ *
+ * @param lhs First inode to compare
+ * @param rhs Second inode to compare
+ * @return True If both inodes are non-NULL and have matching i_ino and i_sb
+ *         False If either inode is NULL or i_ino/i_sb don't match
+ */
+static inline bool inode_equal(const struct inode *lhs, const struct inode *rhs)
+{
+    return lhs && rhs && lhs->i_ino == rhs->i_ino && lhs->i_sb == rhs->i_sb;
 }
 
 #endif // _UPATCH_MANAGE_UTIL_H

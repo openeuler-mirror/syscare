@@ -49,9 +49,9 @@ static int check_stack_pages(pid_t pid, struct page **pages, long count, stack_c
     return 0;
 }
 
-static int check_thread_stack(pid_t pid, struct task_struct *thread, stack_check_fn check_fn, void *check_ctx)
+static int check_thread_stack(struct task_struct *process, struct task_struct *thread,
+    stack_check_fn check_fn, void *check_ctx)
 {
-    pid_t tid;
     struct mm_struct *mm;
 
     unsigned long stack_pointer;
@@ -67,6 +67,8 @@ static int check_thread_stack(pid_t pid, struct task_struct *thread, stack_check
     long page_count;
     int i;
 
+    pid_t tgid = task_tgid_nr(process);
+    pid_t pid = task_pid_nr(thread);
     int ret = 0;
 
     // skip if thread has no mm
@@ -101,7 +103,7 @@ static int check_thread_stack(pid_t pid, struct task_struct *thread, stack_check
     }
 
     log_debug("process %d: thread %d stack at 0x%lx-0x%lx (%lu pages)\n",
-        pid, tid, stack_start, stack_end, stack_page_nr);
+        tgid, pid, stack_start, stack_end, stack_page_nr);
 
     stack_addr = stack_start;
     while (stack_addr < stack_end) {
@@ -116,13 +118,13 @@ static int check_thread_stack(pid_t pid, struct task_struct *thread, stack_check
         page_count = get_user_pages_remote(mm, stack_addr, page_nr, FOLL_GET, stack_pages, NULL);
         if (unlikely(page_count < 0)) {
             ret = page_count;
-            log_err("process %d: failed to get stack pages at 0x%lx, ret=%d\n", pid, stack_addr, ret);
+            log_err("process %d: failed to get stack pages at 0x%lx, ret=%d\n", tgid, stack_addr, ret);
             break;
         } else if (page_count == 0) {
-            log_debug("process %d: skipped %lu unmapped pages\n", pid, page_nr);
+            log_debug("process %d: skipped %lu unmapped pages\n", tgid, page_nr);
             stack_addr += page_nr * PAGE_SIZE;
         } else {
-            ret = check_stack_pages(pid, stack_pages, page_count, check_fn, check_ctx);
+            ret = check_stack_pages(tgid, stack_pages, page_count, check_fn, check_ctx);
             for (i = 0; i < page_count; i++) {
                 put_page(stack_pages[i]);
             }
@@ -142,7 +144,6 @@ unlock_mm:
 
 int check_process_stack(struct task_struct *process, stack_check_fn check_fn, void *check_ctx)
 {
-    pid_t pid;
     struct task_struct *thread;
 
     int ret = 0;
@@ -151,12 +152,9 @@ int check_process_stack(struct task_struct *process, stack_check_fn check_fn, vo
         return -EINVAL;
     }
 
-    pid = task_pid_nr(process);
-
     rcu_read_lock();
     for_each_thread(process, thread) {
-        log_debug("process %d: checking all thread stacks\n", pid);
-        ret = check_thread_stack(pid, thread, check_fn, check_ctx);
+        ret = check_thread_stack(process, thread, check_fn, check_ctx);
         if (ret) {
             break;
         }

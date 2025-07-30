@@ -19,10 +19,10 @@ ifdef GCOV
 endif
 
 obj-m += $(MODULE_NAME).o
-$(MODULE_NAME)-objs := main.o ioctl_dev.o
+$(MODULE_NAME)-objs := kernel_compat.o process_cache.o ioctl_dev.o main.o
 $(MODULE_NAME)-objs += patch_entity.o target_entity.o process_entity.o
 $(MODULE_NAME)-objs += patch_load.o arch/$(ARCH)/patch_load.o symbol_resolve.o stack_check.o
-$(MODULE_NAME)-objs += patch_manage.o kernel_compat.o
+$(MODULE_NAME)-objs += patch_manage.o
 
 ifeq ($(ARCH), arm64)
 	$(MODULE_NAME)-objs += arch/$(ARCH)/insn.o

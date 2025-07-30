@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
- * provide kload kactive kdeactive kremove API to manage patch
+ * process related struct kmem cache
  * Copyright (C) 2024 Huawei Technologies Co., Ltd.
  *
  * This program is free software; you can redistribute it and/or modify
@@ -18,26 +18,17 @@
  * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
  */
 
-#ifndef _UPATCH_MANAGE_PATCH_MANAGE_H
-#define _UPATCH_MANAGE_PATCH_MANAGE_H
+#ifndef _UPATCH_PROCESS_CACHE_H
+#define _UPATCH_PROCESS_CACHE_H
 
-#include <linux/module.h>
+#include <linux/init.h>
+#include <linux/slab.h>
 
-struct inode;
+extern struct kmem_cache *g_process_cache;
+extern struct kmem_cache *g_patch_info_cache;
+extern struct kmem_cache *g_jump_entry_cache;
 
-enum upatch_status;
-struct target_entity;
+int __init process_cache_init(void);
+void __exit process_cache_exit(void);
 
-int upatch_load(const char *target_file, const char *patch_file);
-
-int upatch_remove(const char *target_file, const char *patch_file);
-
-int upatch_active(const char *target_file, const char *patch_file);
-
-int upatch_deactive(const char *target_file, const char *patch_file);
-
-enum upatch_status upatch_status(const char *target_file, const char *patch_file);
-
-void __exit check_target_table_populated(void);
-
-#endif // _UPATCH_MANAGE_PATCH_MANAGE_H
+#endif // _UPATCH_PROCESS_CACHE_H

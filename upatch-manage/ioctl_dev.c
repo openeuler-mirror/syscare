@@ -35,11 +35,6 @@
 #include "patch_manage.h"
 #include "util.h"
 
-struct patch_load_request {
-    const char *patch_file;
-    const char *target_elf;
-};
-
 long handle_ioctl(struct file *file, unsigned int code, unsigned long arg);
 
 static const struct file_operations UPATCH_DEV_OPS = {
@@ -54,24 +49,26 @@ static struct miscdevice upatch_dev = {
     .mode  = UPATCH_DEV_MODE,
 };
 
-static char *vmalloc_string_from_user(void __user *addr)
+static char *read_patch_requrest_param(void __user *addr)
 {
     size_t len;
     char *buf;
     int ret;
 
-    if (addr == 0) {
+    if (unlikely(!addr)) {
         return ERR_PTR(-EINVAL);
     }
 
     len = strnlen_user(addr, MAX_ARG_STRLEN);
-    if (len > PATH_MAX) {
+    if (unlikely(len == 0)) {
+        return ERR_PTR(-EINVAL);
+    }
+    if (unlikely(len > PATH_MAX)) {
         return ERR_PTR(-EOVERFLOW);
     }
 
     buf = vmalloc(len);
     if (!buf) {
-        log_err("failed to vmalloc string, len=0x%lx\n", len);
         return ERR_PTR(-ENOMEM);
     }
 
@@ -84,175 +81,83 @@ static char *vmalloc_string_from_user(void __user *addr)
     return buf;
 }
 
-static int get_load_para_from_user(void __user *user_addr, struct patch_load_request *res)
+static int read_patch_request(struct upatch_request *req, void __user *msg)
 {
-    struct patch_load_request req;
-    int error;
     int ret;
 
-    ret = copy_from_user(&req, user_addr, sizeof(struct patch_load_request));
+    ret = copy_from_user(req, msg, sizeof(struct upatch_request));
     if (ret) {
-        log_err("failed to get target elf path, ret=%d\n", ret);
         return -EINVAL;
     }
 
-    res->target_elf = vmalloc_string_from_user((void __user *)req.target_elf);
-    if (IS_ERR(res->target_elf)) {
-        error = PTR_ERR(res->target_elf);
-        log_err("failed to get target elf path, ret=%d\n", error);
-        return error;
-    }
-
-    res->patch_file = vmalloc_string_from_user((void __user *)req.patch_file);
-    if (IS_ERR(res->patch_file)) {
-        error = PTR_ERR(res->patch_file);
-        log_err("failed to get patch file path, ret=%d\n", error);
-        vfree(res->patch_file);
-        return error;
-    }
-
-    return 0;
-}
-
-static int ioctl_get_patch_status(void __user * user_addr)
-{
-    int ret;
-
-    char *patch = vmalloc_string_from_user(user_addr);
-
-    if (IS_ERR(patch)) {
-        log_err("failed to get patch file path\n");
-        return PTR_ERR(patch);
-    }
-
-    ret = upatch_status(patch);
-    log_debug("patch '%s' is %s\n", patch, patch_status_str(ret));
-
-    vfree(patch);
-    return ret;
-}
-
-static int ioctl_load_patch(void __user * user_addr)
-{
-    int ret;
-    struct patch_load_request req;
-
-    if (!try_module_get(THIS_MODULE)) {
-        log_err("cannot increase '%s' refcnt!", THIS_MODULE->name);
-        return -ENODEV;
-    }
-
-    ret = get_load_para_from_user(user_addr, &req);
-    if (ret) {
-        log_err("failed to get patch file path\n");
-        module_put(THIS_MODULE);
+    req->target_elf = read_patch_requrest_param((void __user *)req->target_elf);
+    if (IS_ERR(req->target_elf)) {
+        ret = PTR_ERR(req->target_elf);
+        log_err("failed to read target elf\n");
         return ret;
     }
 
-    ret = upatch_load(req.patch_file, req.target_elf);
-    if (ret) {
-        log_err("failed to load '%s' for '%s', ret=%d\n",
-            req.patch_file, req.target_elf, ret);
-        module_put(THIS_MODULE);
+    req->patch_file = read_patch_requrest_param((void __user *)req->patch_file);
+    if (IS_ERR(req->patch_file)) {
+        ret = PTR_ERR(req->patch_file);
+        log_err("failed to read patch file\n");
+        vfree(req->patch_file);
+        return ret;
     }
 
-    vfree(req.patch_file);
-    vfree(req.target_elf);
     return ret;
 }
 
-static int ioctl_active_patch(void __user * user_addr)
+static inline void clear_patch_request(struct upatch_request *request)
 {
-    int ret;
-    char *patch = vmalloc_string_from_user(user_addr);
-
-    if (IS_ERR(patch)) {
-        log_err("failed to get patch file path\n");
-        return PTR_ERR(patch);
-    }
-
-    ret = upatch_active(patch);
-    if (ret) {
-        log_err("failed to active patch '%s', ret=%d\n", patch, ret);
-    }
-
-    vfree(patch);
-    return ret;
-}
-
-static int ioctl_deactive_patch(void __user * user_addr)
-{
-    int ret;
-    char *patch = vmalloc_string_from_user(user_addr);
-
-    if (IS_ERR(patch)) {
-        log_err("failed to get patch file path\n");
-        return PTR_ERR(patch);
-    }
-
-    ret = upatch_deactive(patch);
-    if (ret) {
-        log_err("failed to deactive patch '%s', ret=%d\n", patch, ret);
-    }
-
-    vfree(patch);
-    return ret;
-}
-
-static int ioctl_remove_patch(void __user * user_addr)
-{
-    int ret;
-    char *patch = vmalloc_string_from_user(user_addr);
-
-    if (IS_ERR(patch)) {
-        log_err("failed to get patch file path\n");
-        return PTR_ERR(patch);
-    }
-
-    ret = upatch_remove(patch);
-    if (ret) {
-        log_err("failed to remove patch %s, ret=%d\n", patch, ret);
-    } else {
-        module_put(THIS_MODULE);
-    }
-
-    vfree(patch);
-    return ret;
+    vfree(request->target_elf);
+    vfree(request->patch_file);
 }
 
 long handle_ioctl(struct file *file, unsigned int code, unsigned long arg)
 {
     unsigned int type = _IOC_TYPE(code);
     unsigned int nr = _IOC_NR(code);
-    void __user *argp = (void __user *)arg;
+    void __user *msg = (void __user *)arg;
 
-    if (type != UPATCH_MAGIC) {
-        log_err("invalid ioctl type 0x%x\n", type);
+    struct upatch_request req;
+    int ret = 0;
+
+    if (unlikely(type != UPATCH_MAGIC || !msg)) {
+        log_err("invalid ioctl message\n");
         return -EINVAL;
     }
 
-    switch (nr) {
-        case UPATCH_STATUS:
-            return ioctl_get_patch_status(argp);
-
-        case UPATCH_LOAD:
-            return ioctl_load_patch(argp);
-
-        case UPATCH_ACTIVE:
-            return ioctl_active_patch(argp);
-
-        case UPATCH_DEACTIVE:
-            return ioctl_deactive_patch(argp);
-
-        case UPATCH_REMOVE:
-            return ioctl_remove_patch(argp);
-
-        default:
-            log_err("invalid ioctl nr 0x%x\n", nr);
-            return -EINVAL;
+    ret = read_patch_request(&req, msg);
+    if (unlikely(ret)) {
+        log_err("failed to read patch requrest\n");
+        return ret;
     }
 
-    return 0;
+    switch (nr) {
+        case UPATCH_LOAD:
+            ret = upatch_load(req.target_elf, req.patch_file);
+            break;
+        case UPATCH_REMOVE:
+            ret = upatch_remove(req.target_elf, req.patch_file);
+            break;
+        case UPATCH_ACTIVE:
+            ret = upatch_active(req.target_elf, req.patch_file);
+            break;
+        case UPATCH_DEACTIVE:
+            ret = upatch_deactive(req.target_elf, req.patch_file);
+            break;
+        case UPATCH_STATUS:
+            ret = upatch_status(req.target_elf, req.patch_file);
+            break;
+        default:
+            log_err("invalid ioctl nr 0x%x\n", nr);
+            ret = -EINVAL;
+            break;
+    }
+
+    clear_patch_request(&req);
+    return ret;
 }
 
 int __init ioctl_device_init(void)

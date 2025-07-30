@@ -20,8 +20,8 @@
 
 #include "patch_entity.h"
 
+#include <linux/list.h>
 #include <linux/fs.h>
-#include <linux/hashtable.h>
 
 #include "patch_load.h"
 #include "util.h"
@@ -33,59 +33,60 @@ static const char *UPATCH_FUNCS_NAME      = ".upatch.funcs";
 static const char *UPATCH_FUNCS_RELA_NAME = ".rela.upatch.funcs";
 static const char *UPATCH_STRINGS_NAME    = ".upatch.strings";
 
-static inline void count_und_symbol(struct patch_metadata *meta, Elf_Sym *symtab, size_t count)
+/* --- Patch life-cycle management --- */
+
+static void destroy_patch_file(struct patch_file *patch_file)
+{
+    iput(patch_file->inode);
+
+    patch_file->path = NULL;
+    patch_file->inode = NULL;
+    patch_file->size = 0;
+
+    VFREE_CLEAR(patch_file->buff);
+
+    patch_file->shstrtab_index = 0;
+    patch_file->symtab_index = 0;
+    patch_file->strtab_index = 0;
+
+    patch_file->func_index = 0;
+    patch_file->rela_index = 0;
+    patch_file->string_index = 0;
+
+    patch_file->funcs = NULL;
+    patch_file->strings = NULL;
+
+    patch_file->func_num = 0;
+    patch_file->string_len = 0;
+
+    patch_file->und_sym_num = 0;
+    patch_file->got_reloc_num = 0;
+}
+
+static inline void resolve_und_symbol_count(struct patch_file *patch_file, Elf_Sym *symtab, size_t count)
 {
     size_t i;
 
     for (i = 1; i < count; i++) {
         if (symtab[i].st_shndx == SHN_UNDEF) {
-            meta->und_sym_num++;
+            patch_file->und_sym_num++;
         }
     }
 }
 
-static inline void count_got_reloc(struct patch_metadata *meta, Elf_Rela *relas, size_t count)
+static inline void resolve_got_reloc_count(struct patch_file *patch_file, Elf_Rela *relas, size_t count)
 {
     size_t i;
 
     for (i = 0; i < count; i++) {
         if (is_got_rela_type(ELF_R_TYPE(relas[i].r_info))) {
-            meta->got_reloc_num++;
+            patch_file->got_reloc_num++;
         }
     }
 }
 
-static void destroy_patch_metadata(struct patch_metadata *meta)
+static int resolve_patch_file(struct patch_file *patch_file, struct file *file)
 {
-    KFREE_CLEAR(meta->path);
-    iput(meta->inode);
-    meta->inode = NULL;
-
-    VFREE_CLEAR(meta->buff);
-    meta->size = 0;
-
-    meta->shstrtab_index = 0;
-    meta->symtab_index = 0;
-    meta->strtab_index = 0;
-
-    meta->func_index = 0;
-    meta->rela_index = 0;
-    meta->string_index = 0;
-
-    meta->funcs = NULL;
-    meta->strings = NULL;
-
-    meta->func_num = 0;
-    meta->string_len = 0;
-
-    meta->und_sym_num = 0;
-    meta->got_reloc_num = 0;
-}
-
-static int resolve_patch_metadata(struct patch_metadata *meta, const char *file_path)
-{
-    struct file *file;
-
     Elf_Ehdr *ehdr;
     Elf_Shdr *shdrs;
     Elf_Half shdr_num;
@@ -103,110 +104,106 @@ static int resolve_patch_metadata(struct patch_metadata *meta, const char *file_
 
     int ret = 0;
 
-    file = filp_open(file_path, O_RDONLY, 0);
-    if (IS_ERR(file)) {
-        log_err("failed to open '%s'\n", file_path);
-        ret = PTR_ERR(file);
-        file = NULL;
+    rcu_read_lock();
+    patch_file->path = file_path(file, patch_file->path_buff, PATH_MAX);
+    rcu_read_unlock();
+
+    if (unlikely(IS_ERR(patch_file->path))) {
+        ret = PTR_ERR(patch_file->path);
+        log_err("faild to get file path\n");
         goto out;
     }
 
-    meta->path = kstrdup(file_path, GFP_KERNEL);
-    if (!meta->path) {
-        log_err("faild to alloc file path\n");
-        ret = -ENOMEM;
-        goto out;
-    }
-
-    meta->inode = igrab(file_inode(file));
-    if (!meta->inode) {
-        log_err("file '%s' inode is invalid\n", meta->path);
+    patch_file->inode = igrab(file_inode(file));
+    if (unlikely(!patch_file->inode)) {
+        log_err("failed to get file inode\n");
         ret = -ENOENT;
         goto out;
     }
 
-    meta->size = i_size_read(meta->inode);
-    meta->buff = vmalloc_read(file, 0, meta->size);
-    if (IS_ERR(meta->buff)) {
-        log_err("failed to read file, len=0x%llx\n", meta->size);
-        ret = PTR_ERR(meta->buff);
+    patch_file->size = i_size_read(patch_file->inode);
+
+    patch_file->buff = vmalloc_read(file, 0, patch_file->size);
+    if (unlikely(IS_ERR(patch_file->buff))) {
+        log_err("failed to read file, len=0x%llx\n", patch_file->size);
+        ret = PTR_ERR(patch_file->buff);
         goto out;
     }
 
-    ehdr = meta->buff;
-    if (!is_valid_patch(ehdr, meta->size)) {
+    ehdr = patch_file->buff;
+    if (unlikely(!is_valid_patch(ehdr, patch_file->size))) {
         log_err("invalid file format\n");
         ret = -ENOEXEC;
         goto out;
     }
-    meta->shstrtab_index = ehdr->e_shstrndx;
+    patch_file->shstrtab_index = ehdr->e_shstrndx;
 
-    shdrs = meta->buff + ehdr->e_shoff;
+    shdrs = patch_file->buff + ehdr->e_shoff;
     shdr_num = ehdr->e_shnum;
-    shstrtab = meta->buff + shdrs[meta->shstrtab_index].sh_offset;
-    shstrtab_size = shdrs[meta->shstrtab_index].sh_size;
+    shstrtab = patch_file->buff + shdrs[patch_file->shstrtab_index].sh_offset;
+    shstrtab_size = shdrs[patch_file->shstrtab_index].sh_size;
 
     for (i = 1; i < shdr_num; i++) {
         shdr = &shdrs[i];
 
         sec_name = get_string_at(shstrtab, shstrtab_size, shdr->sh_name);
-        if (sec_name == NULL) {
+        if (unlikely(sec_name == NULL)) {
             log_err("invalid section name, index=%u\n", i);
             ret = -ENOEXEC;
             goto out;
         }
 
         sec_name = shstrtab + shdr->sh_name; // no need check
-        if (shdr->sh_type != SHT_NOBITS && shdr->sh_offset + shdr->sh_size > meta->size) {
+        if (unlikely(shdr->sh_type != SHT_NOBITS && shdr->sh_offset + shdr->sh_size > patch_file->size)) {
             log_err("section '%s' offset overflow, index=%u\n", sec_name, i);
             ret = -ENOEXEC;
             goto out;
         }
 
-        sec_data = meta->buff + shdr->sh_offset;
+        sec_data = patch_file->buff + shdr->sh_offset;
         switch (shdr->sh_type) {
             case SHT_PROGBITS:
                 if (strcmp(sec_name, UPATCH_FUNCS_NAME) == 0) {
-                    meta->func_index = i;
-                    meta->funcs = sec_data;
-                    meta->func_num = shdr->sh_size / sizeof(struct upatch_function);
+                    patch_file->func_index = i;
+                    patch_file->funcs = sec_data;
+                    patch_file->func_num = shdr->sh_size / sizeof(struct upatch_function);
                 } else if (strcmp(sec_name, UPATCH_STRINGS_NAME) == 0) { // .upatch.strings is not SHT_STRTAB
-                    meta->string_index = i;
-                    meta->strings = sec_data;
-                    meta->string_len = shdr->sh_size;
+                    patch_file->string_index = i;
+                    patch_file->strings = sec_data;
+                    patch_file->string_len = shdr->sh_size;
                 }
                 break;
 
             case SHT_SYMTAB:
-                if (shdr->sh_entsize != sizeof(Elf_Sym)) {
+                if (unlikely(shdr->sh_entsize != sizeof(Elf_Sym))) {
                     log_err("invalid section '%s' entity size\n", sec_name);
                     ret = -ENOEXEC;
                     goto out;
                 }
-                if (shdr->sh_link > shdr_num) {
+                if (unlikely(shdr->sh_link > shdr_num)) {
                     log_err("invalid section '%s' string table index\n", sec_name);
                     ret = -ENOEXEC;
                     goto out;
                 }
                 if (strcmp(sec_name, SYMTAB_NAME) == 0) {
-                    meta->symtab_index = i;
-                    meta->strtab_index = shdr->sh_link;
-                    count_und_symbol(meta, sec_data, shdr->sh_size / shdr->sh_entsize);
+                    patch_file->symtab_index = i;
+                    patch_file->strtab_index = shdr->sh_link;
+                    resolve_und_symbol_count(patch_file, sec_data, shdr->sh_size / shdr->sh_entsize);
                 }
                 break;
 
             case SHT_RELA:
-                if (shdr->sh_entsize != sizeof(Elf_Rela)) {
+                if (unlikely(shdr->sh_entsize != sizeof(Elf_Rela))) {
                     log_err("invalid section '%s' entity size\n", sec_name);
                     ret = -ENOEXEC;
                     goto out;
                 }
                 if (strcmp(sec_name, UPATCH_FUNCS_RELA_NAME) == 0) {
-                    meta->rela_index = i;
+                    patch_file->rela_index = i;
                     relas = sec_data;
                     rela_num = shdr->sh_size / sizeof(struct upatch_relocation);
                 } else if (strncmp(sec_name, TEXT_RELA_NAME, strlen(TEXT_RELA_NAME)) == 0) {
-                    count_got_reloc(meta, sec_data, shdr->sh_size / shdr->sh_entsize);
+                    resolve_got_reloc_count(patch_file, sec_data, shdr->sh_size / shdr->sh_entsize);
                 }
                 break;
 
@@ -215,107 +212,103 @@ static int resolve_patch_metadata(struct patch_metadata *meta, const char *file_
         }
     }
 
-    if (!meta->symtab_index || !meta->strtab_index) {
+    if (unlikely(!patch_file->symtab_index || !patch_file->strtab_index)) {
         log_err("patch contains no symbol\n");
         ret = -ENOEXEC;
         goto out;
     }
-    if (!meta->func_index || !meta->funcs || !meta->func_num) {
+    if (unlikely(!patch_file->func_index || !patch_file->funcs || !patch_file->func_num)) {
         log_err("patch contains no function\n");
         ret = -ENOEXEC;
         goto out;
     }
-    if (!meta->rela_index || !meta->string_index ||
-        !relas || !meta->strings ||
-        !rela_num || !meta->string_len ||
-        meta->func_num != rela_num) {
+    if (unlikely(!patch_file->rela_index || !patch_file->string_index ||
+        !relas || !patch_file->strings ||
+        !rela_num || !patch_file->string_len ||
+        patch_file->func_num != rela_num)) {
         log_err("invalid patch format\n");
         ret = -ENOEXEC;
         goto out;
     }
 
     for (i = 0; i < rela_num; i++) {
-        meta->funcs[i].name_off = relas[i].name.r_addend;
+        patch_file->funcs[i].name_off = relas[i].name.r_addend;
     }
 
 out:
-    if (file) {
-        filp_close(file, NULL);
+    if (unlikely(ret)) {
+        destroy_patch_file(patch_file);
     }
-    if (ret) {
-        destroy_patch_metadata(meta);
-    }
+
     return ret;
 }
 
-static int resolve_patch_entity(struct patch_entity *patch, const char *file_path)
+static int resolve_patch(struct patch_entity *patch, struct file *file)
 {
     int ret;
 
-    ret = resolve_patch_metadata(&patch->meta, file_path);
+    ret = resolve_patch_file(&patch->file, file);
     if (ret) {
         return ret;
     }
-
-    INIT_HLIST_NODE(&patch->table_node);
-    patch->target = NULL;
     patch->status = UPATCH_STATUS_NOT_APPLIED;
 
-    init_rwsem(&patch->action_rwsem);
-    INIT_LIST_HEAD(&patch->loaded_node);
+    INIT_HLIST_NODE(&patch->node);
     INIT_LIST_HEAD(&patch->actived_node);
+    kref_init(&patch->kref);
 
     return 0;
 }
 
-static void destroy_patch_entity(struct patch_entity *patch)
+static void destroy_patch(struct patch_entity *patch)
 {
-    destroy_patch_metadata(&patch->meta);
+    WARN_ON(!hlist_unhashed(&patch->node));
+    WARN_ON(!list_empty(&patch->actived_node));
 
-    WARN_ON(!hlist_unhashed(&patch->table_node));
-
-    patch->target = NULL;
+    destroy_patch_file(&patch->file);
     patch->status = UPATCH_STATUS_NOT_APPLIED;
 
-    WARN_ON(!list_empty(&patch->loaded_node));
-    WARN_ON(!list_empty(&patch->actived_node));
-    INIT_HLIST_NODE(&patch->table_node);
-    INIT_LIST_HEAD(&patch->loaded_node);
+    INIT_HLIST_NODE(&patch->node);
     INIT_LIST_HEAD(&patch->actived_node);
 }
 
-/* public interface */
-struct patch_entity *new_patch_entity(const char *file_path)
+/* --- Public interface --- */
+
+struct patch_entity *load_patch(struct file *file)
 {
     struct patch_entity *patch = NULL;
     int ret;
 
-    if (unlikely(!file_path)) {
+    if (unlikely(!file)) {
         return ERR_PTR(-EINVAL);
     }
 
     patch = kzalloc(sizeof(struct patch_entity), GFP_KERNEL);
-    if (!patch) {
-        log_err("failed to alloc patch entity\n");
+    if (unlikely(!patch)) {
         return ERR_PTR(-ENOMEM);
     }
 
-    ret = resolve_patch_entity(patch, file_path);
-    if (ret) {
+    ret = resolve_patch(patch, file);
+    if (unlikely(ret)) {
         kfree(patch);
         return ERR_PTR(ret);
     }
 
+    log_debug("new patch %s\n", patch->file.path);
     return patch;
 }
 
-void free_patch_entity(struct patch_entity *patch)
+void release_patch(struct kref *kref)
 {
-    if (unlikely(!patch)) {
+    struct patch_entity *patch;
+
+    if (unlikely(!kref)) {
         return;
     }
 
-    log_debug("free patch '%s'\n", patch->meta.path);
-    destroy_patch_entity(patch);
+    patch = container_of(kref, struct patch_entity, kref);
+    log_debug("free patch %s\n", patch->file.path);
+
+    destroy_patch(patch);
     kfree(patch);
 }

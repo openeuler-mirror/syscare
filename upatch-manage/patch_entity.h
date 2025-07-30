@@ -24,7 +24,9 @@
 #include <linux/types.h>
 #include <linux/elf.h>
 #include <linux/module.h>
+#include <linux/kref.h>
 
+struct file;
 struct inode;
 struct target_entity;
 
@@ -76,57 +78,95 @@ struct upatch_function {
 };
 #endif
 
-/* Patch metadata */
-struct patch_metadata {
-    const char *path;                // patch file path
-    struct inode *inode;             // patch file inode
+/* Patch file */
+struct patch_file {
+    char path_buff[PATH_MAX];
 
-    void *buff;                      // patch file buff
-    loff_t size;                     // patch file size
+    const char *path;               // patch file path
+    struct inode *inode;            // patch file path
+    loff_t size;                    // patch file size
 
-    Elf_Half shstrtab_index;         // section '.shstrtab' index
-    Elf_Half symtab_index;           // section '.symtab' index
-    Elf_Half strtab_index;           // section '.strtab' index
+    void *buff;                     // patch file buff
 
-    Elf_Half func_index;             // section '.upatch.funcs' index
-    Elf_Half rela_index;             // section '.rela.upatch.funcs' index
-    Elf_Half string_index;           // section '.upatch.strings' index
+    Elf_Half shstrtab_index;        // section '.shstrtab' index
+    Elf_Half symtab_index;          // section '.symtab' index
+    Elf_Half strtab_index;          // section '.strtab' index
 
-    struct upatch_function *funcs;   // patch function table
-    const char *strings;             // patch string table
+    Elf_Half func_index;            // section '.upatch.funcs' index
+    Elf_Half rela_index;            // section '.rela.upatch.funcs' index
+    Elf_Half string_index;          // section '.upatch.strings' index
 
-    size_t func_num;                 // patch function count
-    size_t string_len;               // patch string table length
+    struct upatch_function *funcs;  // patch function table
+    const char *strings;            // patch string table
 
-    size_t und_sym_num;              // undefined symbol count (SHN_UNDEF)
-    size_t got_reloc_num;            // got relocation count
+    size_t func_num;                // patch function count
+    size_t string_len;              // patch string table length
+
+    size_t und_sym_num;             // undefined symbol count (SHN_UNDEF)
+    size_t got_reloc_num;           // got relocation count
 };
 
 /* Patch entity */
 struct patch_entity {
-    struct patch_metadata meta;       // patch file metadata
-    struct hlist_node table_node;     // global patch hash table node
+    struct patch_file file;         // patch file
+    enum upatch_status status;      // patch status
 
-    struct rw_semaphore action_rwsem; // patch action rw semaphore
-    struct target_entity *target;     // patch target
-    enum upatch_status status;        // patch status
+    struct hlist_node node;         // hash table node
+    struct list_head actived_node;  // target actived patch list node
 
-    struct list_head loaded_node;     // target loaded patch node
-    struct list_head actived_node;    // target actived patch list node
+    struct kref kref;
 };
 
-/*
- * Load a patch file
- * @param file_path: patch file path
- * @return patch entity
+/**
+ * @brief Load a new patch file
+ * @param file: Patch file struct pointer
+ * @return Newly allocated patch entity with refcount=1, or NULL on failure
+ *
+ * Allocates and initializes a new patch entity structure with reference count 1.
+ * The caller is responsible for calling put_patch() when done.
  */
-struct patch_entity *new_patch_entity(const char *file_path);
+struct patch_entity *load_patch(struct file *file);
 
-/*
- * Free a patch entity
- * @param patch: patch entity
- * @return void
+/**
+ * @brief Release patch resources when refcount reaches zero
+ * @param kref: Reference counter
+ *
+ * Called automatically by kref_put().
+ * Frees all patch resources and disassociates from target.
  */
-void free_patch_entity(struct patch_entity *patch);
+void release_patch(struct kref *kref);
+
+/**
+ * @brief Acquire a reference to a patch entity
+ * @param patch: Patch entity pointer
+ * @return Patch with incremented refcount, or NULL if input is NULL
+ *
+ * Caller must balance with put_patch().
+ */
+static inline struct patch_entity *get_patch(struct patch_entity *patch)
+{
+    if (unlikely(!patch)) {
+        return NULL;
+    }
+
+    kref_get(&patch->kref);
+    return patch;
+}
+
+/**
+ * @brief Release a patch entity reference
+ * @param patch: Patch entity pointer
+ *
+ * Decrements refcount and triggers release_patch_entity() when reaching zero.
+ * Safe to call with NULL.
+ */
+static inline void put_patch(struct patch_entity *patch)
+{
+    if (unlikely(!patch)) {
+        return;
+    }
+
+    kref_put(&patch->kref, release_patch);
+}
 
 #endif // _UPATCH_MANAGE_PATCH_ENTITY_H

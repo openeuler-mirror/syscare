@@ -22,8 +22,10 @@
 #define _UPATCH_MANAGE_PROCESS_ENTITY_H
 
 #include <linux/types.h>
-#include <linux/list.h>
 #include <linux/mutex.h>
+#include <linux/sched.h>
+#include <linux/kref.h>
+#include <linux/spinlock.h>
 
 #include <linux/hashtable.h>
 
@@ -34,13 +36,13 @@ struct patch_context;
 struct patch_entity;
 struct target_entity;
 
-// we assume one patch will only modify less than 2^4 = 16 old funcs in target
-#define FUNC_HASH_BITS 4
+#define PATCH_FUNC_HASH_BITS 6  // Single patch would have less than 2^6 = 64 funcs
 
-struct pc_pair {
-    unsigned long old_pc;
-    unsigned long new_pc;
-    struct hlist_node node;     // maintain pc pair in <old, new> hash table
+struct patch_jump_entry {
+    struct hlist_node node;
+
+    unsigned long old_addr;
+    unsigned long new_addr;
 };
 
 struct patch_info {
@@ -48,40 +50,153 @@ struct patch_info {
     struct list_head node;
 
     unsigned long text_addr;
-    unsigned long rodata_addr;
-
     size_t text_len;
+
+    unsigned long rodata_addr;
     size_t rodata_len;
 
-    DECLARE_HASHTABLE(pc_maps, FUNC_HASH_BITS);
+    DECLARE_HASHTABLE(jump_table, PATCH_FUNC_HASH_BITS);
 };
 
 // target may be loaded into different process
 // due to latency of uprobe handle, process may dealy patch loading
 struct process_entity {
-    struct pid *pid;
-    struct task_struct *task;
+    struct task_struct *task;       // underlying task struct
+    pid_t tgid;
 
-    // multi-thread may trap and run uprobe_handle, we only need one to load patch
-    struct mutex lock;
+    spinlock_t thread_lock;         // thread lock
 
-    // loaded but deactive patch will not free from VMA because the function of deactive patch may in call stack
-    // so we have to maintain all patches the process loaded
-    // For example we load and active p1, p2, p3, the patches list will be p3->p2->p1
-    // when we want to active p2, we just look through this list and active p2 to avoid load p2 again
-    struct patch_info *latest_patch;    // latest actived patch
-    struct list_head loaded_patches;    // patch_info list head
-    struct list_head process_node;      // target process list node
+    struct hlist_node node;         // hash table node
+    struct list_head pending_node;  // pending list node
+
+    struct list_head patch_list;    // all actived patches
+    struct patch_info *patch_info;  // current actived patch info
+
+    struct kref kref;
 };
 
-struct process_entity *new_process(struct target_entity *target);
+/**
+ * @brief Create and initialize a new process entity for a given task.
+ * @param task The kernel task_struct to be wrapped by the new entity.
+ *             This function will take its own reference to the task via
+ *             get_task_struct().
+ *
+ * @return On success, returns a pointer to the allocated process_entity with
+ *         its reference count initialized to 1.
+ *         On memory allocation failure, returns an ERR_PTR (e.g., ERR_PTR(-ENOMEM)).
+ *
+ * The caller owns the returned reference and is responsible for releasing it
+ * using put_process() when it is no longer needed.
+ */
+struct process_entity *new_process(struct task_struct *task);
 
-void free_process(struct process_entity *process);
+/**
+ * @brief Release process resources when refcount reaches zero
+ * @param kref: Reference counter
+ *
+ * Called automatically by kref_put().
+ * Frees all process resources and disassociates from target.
+ */
+void release_process(struct kref *kref);
 
-struct patch_info *process_find_loaded_patch(struct process_entity *process, struct patch_entity *patch);
+/**
+ * @brief Acquire a reference to a process entity
+ * @param process: Process entity pointer
+ * @return Process entity with incremented refcount, or NULL if input is NULL
+ *
+ * Caller must balance with put_process().
+ */
+static inline struct process_entity *get_process(struct process_entity *process)
+{
+    if (unlikely(!process)) {
+        return NULL;
+    }
 
-int process_write_patch_info(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx);
+    kref_get(&process->kref);
+    return process;
+}
 
+/**
+ * @brief Release a process entity reference
+ * @param process: Process entity pointer
+ *
+ * Decrements refcount and triggers release_process() when reaching zero.
+ * Safe to call with NULL.
+ */
+static inline void put_process(struct process_entity *process)
+{
+    if (unlikely(!process)) {
+        return;
+    }
+
+    kref_put(&process->kref, release_process);
+}
+
+/**
+ * @brief Check if a process entity's underlying task is still alive.
+ * @param process: The process entity to check.
+ * @return Returns true if the task is considered alive by the kernel,
+ *         false otherwise.
+ *
+ * Safe to call with NULL; it will be treated as not alive.
+ */
+static inline bool process_is_alive(struct process_entity *process)
+{
+    if (unlikely(!process || !process->task)) {
+        return false;
+    }
+
+    return pid_alive(process->task);
+}
+
+/**
+ * @brief Switch and get process actived patch to specific one
+ * @param process: Process entity (must not NULL)
+ * @param patch: Patch entity (must not NULL)
+ * @return Patch info pointer, NULL if not found
+ *
+ * Caller must hold thread lock.
+ */
+struct patch_info *process_switch_and_get_patch(struct process_entity *process, struct patch_entity *patch);
+
+/**
+ * @brief Find function jump address in the process
+ * @param process: Process entity
+ * @param addr: Current function address (usually pc register)
+ * @return Jump address if found, 0 otherwise
+ *
+ * Caller must hold thread lock.
+ */
+unsigned long process_get_jump_addr(struct process_entity *process, unsigned long addr);
+
+/**
+ * @brief Load a patch to the process
+ * @param process: Process entity
+ * @param patch: Patch entity being applied
+ * @param ctx: Patch context
+ * @return 0 on success, negative error code on failure
+ *
+ * Caller must hold thread lock.
+ */
+int process_load_patch(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx);
+
+/**
+ * @brief Remove patch is on the process
+ * @param process: Process entity
+ * @param patch: Patch entity to remove
+ *
+ * Caller must hold thread lock.
+ */
+void process_remove_patch(struct process_entity *process, struct patch_entity *patch);
+
+/**
+ * @brief Verify patch is not on process stack
+ * @param process: Process entity
+ * @param patch: Patch entity to verify
+ * @return 0 if safe to modify, -EBUSY if patch is on the stack
+ *
+ * Caller must hold thread lock.
+ */
 int process_check_patch_on_stack(struct process_entity *process, struct patch_entity *patch);
 
 #endif // _UPATCH_MANAGE_PROCESS_ENTITY_H

@@ -22,12 +22,19 @@
 #define _UPATCH_MANAGE_TARGET_ENTITY_H
 
 #include <linux/types.h>
-#include <linux/list.h>
-#include <linux/rwsem.h>
+#include <linux/limits.h>
+
 #include <linux/mutex.h>
+#include <linux/spinlock.h>
+#include <linux/hashtable.h>
+#include <linux/kref.h>
 
 #include <linux/elf.h>
 #include <linux/module.h>
+
+#define PATCH_HASH_BITS   4  // Single patch target would have less than 16 patches
+#define UPROBE_HASH_BITS  7  // Single patch target would have less than 128 uprobes
+#define PROCESS_HASH_BITS 4  // Single patch target would have less than 16 processes
 
 #if defined(__x86_64__)
     #if defined(__CET__) || defined(__SHSTK__)
@@ -44,16 +51,18 @@
 #endif
 #define GOT_ENTRY_SIZE  sizeof(uintptr_t)  // GOT entry size is pointer size
 
+struct file;
 struct inode;
 
 struct patch_entity;
 struct upatch_function;
 
-/* target elf metadata */
-struct target_metadata {
+/* Target file */
+struct target_file {
+    char path_buff[PATH_MAX];
+
     const char *path;
     struct inode *inode;
-
     loff_t size;
 
     Elf_Ehdr *ehdr;
@@ -93,79 +102,144 @@ struct target_metadata {
     size_t got_size;
 };
 
-/* target function record */
-struct target_function {
-    u64 addr;                        // target function address
-    size_t count;                    // target function patch count
-    struct list_head func_node;      // target function list node
-};
-
+/* Target entity */
 struct target_entity {
-    struct target_metadata meta;      // target file metadata
-    struct hlist_node table_node;     // global target hash table node
+    struct target_file file;                       // target file
 
-    struct rw_semaphore action_rwsem; // target action rw semaphore
+    struct hlist_node node;                        // hash table node
+    bool is_deleting;                              // marker for deleting from hash table
 
-    struct list_head loaded_list;     // target loaded patches
-    struct list_head actived_list;    // target actived patches
-    struct list_head func_list;       // target registered functions
+    DECLARE_HASHTABLE(patches, PATCH_HASH_BITS);   // all loaded patches
+    DECLARE_HASHTABLE(uprobes, UPROBE_HASH_BITS);  // all registered uprobes
+    struct mutex patch_lock;
 
-    struct mutex process_mutex;
-    struct list_head process_list;    // all processes of the target
+    struct list_head actived_patches;              // actived patch list
+    spinlock_t active_lock;
+
+    DECLARE_HASHTABLE(processes, PROCESS_HASH_BITS);  // all running processes
+    spinlock_t process_lock;
+
+    struct kref kref;
 };
 
-/*
- * Load a target entity
- * @param file_path: target file path
- * @return target entity
+/**
+ * @brief Load a new target file
+ * @param file: Target file struct pointer
+ * @return Newly allocated target entity with refcount=1, or NULL on failure
+ *
+ * Allocates and initializes a new taget entity structure with reference count 1.
+ * The caller is responsible for calling put_target() when done.
  */
-struct target_entity *new_target_entity(const char *file_path);
+struct target_entity *load_target(struct file *file);
 
-/*
- * Free a target entity
- * @param target: target entity
- * @return void
+/**
+ * @brief Release target resources when refcount reaches zero
+ * @param kref: Reference counter
+ *
+ * Called automatically by kref_put().
+ * Frees all target resources and disassociates from target.
  */
-void free_target_entity(struct target_entity *target);
+void release_target(struct kref *kref);
 
-/*
- * Add a patch function to target entity
- * @param target: target entity
- * @param func: patch function
- * @param need_register: target offset needs register uprobe
- * @return result
+/**
+ * @brief Acquire a reference to a target entity
+ * @param target: Target entity pointer
+ * @return Target entity with incremented refcount, or NULL if input is NULL
+ *
+ * Caller must balance with put_target().
  */
-int target_add_function(struct target_entity *target, struct upatch_function *func, bool *need_register);
+static inline struct target_entity *get_target(struct target_entity *target)
+{
+    if (unlikely(!target)) {
+        return NULL;
+    }
 
-/*
- * Remove a patch function from target entity
- * @param target: target entity
- * @param func: patch function
- * @param need_unregister: target offset needs unregister uprobe
- * @return result
- */
-void target_remove_function(struct target_entity *target, struct upatch_function *func, bool *need_unregister);
+    kref_get(&target->kref);
+    return target;
+}
 
-/*
- * Collect all exited process into a list
- * @param target: target entity
- * @param process_list: exited process list
- * @return void
+/**
+ * @brief Release a target entity reference
+ * @param target: Target entity
+ *
+ * Decrements refcount and triggers release_target() when reaching zero.
+ * Safe to call with NULL.
  */
-void target_gather_exited_processes(struct target_entity *target, struct list_head *process_list);
+static inline void put_target(struct target_entity *target)
+{
+    if (unlikely(!target)) {
+        return;
+    }
 
-/*
- * Get or create a process entity from target entity
- * @param target: target entity
- * @return process entity
- */
-struct process_entity *target_get_or_create_process(struct target_entity *target);
+    kref_put(&target->kref, release_target);
+}
 
-/*
- * Check target process stack
- * @param target: target entity
- * @return result
+/**
+ * @brief Load a patch to the target
+ * @param target Target entity
+ * @param patch Fully initialized patch entity
+ * @return 0 on success, negative error code on failure
  */
-int target_check_patch_removable(struct target_entity *target, struct patch_entity *patch);
+int target_load_patch(struct target_entity *target, const char *filename);
+
+/**
+ * @brief Remove a patch from the target
+ * @param target Target entity
+ * @param inode Patch inode
+ * @return 0 on success, negative error code on failure
+ */
+int target_remove_patch(struct target_entity *target, struct inode *inode);
+
+/**
+ * @brief Activate a patch on the target
+ * @param target Target entity
+ * @param inode Patch inode
+ * @param uc Uprobe consumer
+ * @return 0 on success, negative error code on failure
+ */
+int target_active_patch(struct target_entity *target, struct inode *inode, struct uprobe_consumer *uc);
+
+/**
+ * @brief Deactivate a patch on the target
+ * @param target Target entity
+ * @param inode Patch inode
+ * @param uc Uprobe consumer
+ * @return 0 on success, negative error code on failure
+ */
+int target_deactive_patch(struct target_entity *target, struct inode *inode, struct uprobe_consumer *uc);
+
+/**
+ * @brief Get patch status on the target
+ * @param target Target entity
+ * @param inode Patch inode
+ * @return Patch entity
+ */
+enum upatch_status target_patch_status(struct target_entity *target, const struct inode *inode);
+
+/**
+ * @brief Get current actived patch on the target
+ * @param target Target entity
+ * @return Current actived patch entity or NULL if none exists
+ *
+ * The returned patch has its reference count incremented.
+ * Caller must call put_patch() when done.
+ */
+struct patch_entity *target_get_actived_patch(struct target_entity *target);
+
+/**
+ * @brief Get or create process entity
+ * @param target Target entity
+ * @param task Process task_struct
+ * @return Process entity with incremented refcount
+ *
+ * Caller must call put_process() when done.
+ */
+struct process_entity *target_get_process(struct target_entity *target, struct task_struct *task);
+
+/**
+ * @brief Cleanup exited processes of the target
+ * @param target Target entity
+ */
+void target_cleanup_process(struct target_entity *target);
 
 #endif // _UPATCH_MANAGE_TARGET_ENTITY_H
