@@ -25,10 +25,10 @@
 #include <linux/module.h>
 
 struct target_entity;
-struct target_metadata;
+struct target_file;
 
 struct patch_entity;
-struct patch_metadata;
+struct patch_file;
 
 struct process_entity;
 
@@ -51,8 +51,8 @@ struct patch_layout {
 
 // when load patch, patch need resolve in different process
 struct patch_context {
-    const struct target_metadata *target;
-    const struct patch_metadata *patch;
+    const struct target_file *target;
+    const struct patch_file *patch;
     unsigned long load_bias;
 
     void *buff; // patch image in kernelspace

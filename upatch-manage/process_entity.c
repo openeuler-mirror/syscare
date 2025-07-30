@@ -24,6 +24,8 @@
 #include <linux/sched/task.h>
 
 #include "kernel_compat.h"
+#include "process_cache.h"
+
 #include "patch_entity.h"
 #include "target_entity.h"
 
@@ -31,6 +33,8 @@
 #include "stack_check.h"
 
 #include "util.h"
+
+/* --- Process life-cycle management --- */
 
 static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t len)
 {
@@ -58,7 +62,7 @@ static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t
 
 static void free_patch_memory(struct task_struct *task, struct patch_info *patch)
 {
-    pid_t pid = task_pid_nr(task);
+    pid_t pid = task_tgid_nr(task);
     struct mm_struct *mm;
 
     int ret;
@@ -92,157 +96,57 @@ static void free_patch_memory(struct task_struct *task, struct patch_info *patch
     return;
 }
 
-static void free_patch_info(struct patch_info *patch)
+static void free_patch_info(struct patch_info *patch_info)
 {
-    struct pc_pair *pair;
+    struct patch_jump_entry *entry;
     struct hlist_node *tmp;
     int bkt;
 
-    if (unlikely(!patch)) {
+    if (unlikely(!patch_info)) {
         return;
     }
 
-    hash_for_each_safe(patch->pc_maps, bkt, tmp, pair, node) {
-        hash_del(&pair->node);
-        kfree(pair);
+    hash_for_each_safe(patch_info->jump_table, bkt, tmp, entry, node) {
+        hash_del(&entry->node);
+        kmem_cache_free(g_jump_entry_cache, entry);
     }
 
-    kfree(patch);
+    put_patch(patch_info->patch);
+    patch_info->patch = NULL;
+
+    kmem_cache_free(g_patch_info_cache, patch_info);
 }
 
-struct process_entity *new_process(struct target_entity *target)
+static struct patch_info *find_patch_info_unlocked(struct process_entity *process, struct patch_entity *patch)
 {
-    if (unlikely(!target)) {
-        return ERR_PTR(-EINVAL);
+    struct patch_info *patch_info;
+    struct patch_info *found = NULL;
+
+    if (unlikely(!process || !patch)) {
+        return NULL;
     }
 
-    struct process_entity *process = kzalloc(sizeof(struct process_entity), GFP_KERNEL);
-    if (!process) {
-        return ERR_PTR(-ENOMEM);
-    }
-
-    process->pid = get_task_pid(current, PIDTYPE_TGID);
-    if (!process->pid) {
-        log_err("failed to get process %d task pid\n", task_tgid_nr(current));
-        kfree(process);
-        return ERR_PTR(-EFAULT);
-    }
-    process->task = get_task_struct(current);
-
-    mutex_init(&process->lock);
-
-    process->latest_patch = NULL;
-    INIT_LIST_HEAD(&process->loaded_patches);
-    INIT_LIST_HEAD(&process->process_node);
-
-    return process;
-}
-
-void free_process(struct process_entity *process)
-{
-    pid_t pid;
-    struct patch_info *patch;
-    struct patch_info *tmp;
-
-    if (unlikely(!process)) {
-        return;
-    }
-
-    pid = task_pid_nr(process->task);
-
-    log_debug("free process %d\n", pid);
-    list_for_each_entry_safe(patch, tmp, &process->loaded_patches, node) {
-        list_del(&patch->node);
-        free_patch_memory(process->task, patch);
-        free_patch_info(patch);
-    }
-
-    put_pid(process->pid);
-    put_task_struct(process->task);
-
-    kfree(process);
-}
-
-struct patch_info *process_find_loaded_patch(struct process_entity *process, struct patch_entity *patch)
-{
-    struct patch_info *curr_patch;
-
-    list_for_each_entry(curr_patch, &process->loaded_patches, node) {
-        if (curr_patch->patch == patch) {
-            return curr_patch;
+    list_for_each_entry(patch_info, &process->patch_list, node) {
+        if (patch_info->patch == patch) {
+            found = patch_info;
+            break;
         }
     }
 
-    return NULL;
-}
-
-int process_write_patch_info(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx)
-{
-    struct upatch_function *funcs = (struct upatch_function *)ctx->func_shdr->sh_addr;
-    size_t func_num = ctx->func_shdr->sh_size / (sizeof (struct upatch_function));
-
-    struct upatch_relocation *relas = (struct upatch_relocation *)ctx->rela_shdr->sh_addr;
-    const char *strings = (const char *)ctx->string_shdr->sh_addr;
-
-    size_t i;
-    struct upatch_function *func;
-    const char *func_name;
-
-    struct patch_info *info;
-    struct pc_pair *entry;
-
-    info = kzalloc(sizeof(struct patch_info), GFP_KERNEL);
-    if (!info) {
-        log_err("failed to alloc patch info\n");
-        return -ENOMEM;
-    }
-
-    hash_init(info->pc_maps);
-    for (i = 0; i < func_num; ++i) {
-        func = &funcs[i];
-
-        entry = kmalloc(sizeof(*entry), GFP_KERNEL);
-        if (!entry) {
-            free_patch_info(info);
-            return -ENOMEM;
-        }
-
-        func_name = strings + relas[i].name.r_addend;
-        entry->old_pc = funcs[i].old_addr + ctx->load_bias + ctx->target->load_offset;
-        entry->new_pc = funcs[i].new_addr;
-        hash_add(info->pc_maps, &entry->node, entry->old_pc);
-        log_debug("function: 0x%08lx -> 0x%08lx, name: '%s'\n", entry->old_pc, entry->new_pc, func_name);
-    }
-
-    info->patch = patch;
-
-    info->text_addr = ctx->layout.base;
-    info->text_len = ctx->layout.text_end;
-
-    info->rodata_addr = ctx->layout.base + ctx->layout.text_end;
-    info->rodata_len = ctx->layout.ro_after_init_end - ctx->layout.text_end;
-
-    list_add(&info->node, &process->loaded_patches);
-    process->latest_patch = info;
-
-    return 0;
+    return found;
 }
 
 static bool is_patch_removable(pid_t pid, const void *page, void *context)
 {
     static const size_t VALUE_NR = PAGE_SIZE / sizeof(unsigned long);
 
-    const struct patch_info *patch = (const struct patch_info *)context;
+    const struct patch_info *patch = context;
 
     const bool check_text = (patch->text_len > 0);
     const unsigned long text_start = patch->text_addr;
     const unsigned long text_end = patch->text_addr + patch->text_len;
 
-    const bool check_rodata = (patch->rodata_len > 0);
-    const unsigned long rodata_start = patch->rodata_addr;
-    const unsigned long rodata_end = patch->rodata_addr + patch->rodata_len;
-
-    const unsigned long *page_data = (const unsigned long *)page;
+    const unsigned long *page_data = page;
     size_t i;
 
     for (i = 0; i < VALUE_NR; i++) {
@@ -250,14 +154,183 @@ static bool is_patch_removable(pid_t pid, const void *page, void *context)
             log_err("process %d: found patch text 0x%lx on stack\n", pid, page_data[i]);
             return false;
         }
-
-        if (check_rodata && unlikely(page_data[i] >= rodata_start && page_data[i] < rodata_end)) {
-            log_err("process %d: found patch rodata 0x%lx on stack\n", pid, page_data[i]);
-            return false;
-        }
     }
 
     return true;
+}
+
+/* --- Public interface --- */
+
+struct process_entity *new_process(struct task_struct *task)
+{
+    struct process_entity *process;
+
+    if (unlikely(!task)) {
+        return ERR_PTR(-EINVAL);
+    }
+
+    process = kmem_cache_alloc(g_process_cache, GFP_ATOMIC);
+    if (!process) {
+        return ERR_PTR(-ENOMEM);
+    }
+
+    process->task = get_task_struct(task);
+    process->tgid = task_tgid_nr(task);
+
+    spin_lock_init(&process->thread_lock);
+
+    INIT_HLIST_NODE(&process->node);
+    INIT_LIST_HEAD(&process->pending_node);
+
+    INIT_LIST_HEAD(&process->patch_list);
+    process->patch_info = NULL;
+
+    kref_init(&process->kref);
+
+    log_debug("new process %d\n", process->tgid);
+    return process;
+}
+
+void release_process(struct kref *kref)
+{
+    struct process_entity *process;
+    struct patch_info *patch_info;
+    struct patch_info *tmp;
+
+    if (unlikely(!kref)) {
+        return;
+    }
+
+    process = container_of(kref, struct process_entity, kref);
+    log_debug("free process %d\n", process->tgid);
+
+    WARN_ON(spin_is_locked(&process->thread_lock));
+
+    WARN_ON(!hlist_unhashed(&process->node));
+    WARN_ON(!list_empty(&process->pending_node));
+
+    list_for_each_entry_safe(patch_info, tmp, &process->patch_list, node) {
+        list_del_init(&patch_info->node);
+        free_patch_memory(process->task, patch_info);
+        free_patch_info(patch_info);
+    }
+    process->patch_info = NULL;
+
+    put_task_struct(process->task);
+    process->task = NULL;
+    process->tgid = 0;
+
+    kmem_cache_free(g_process_cache, process);
+}
+
+struct patch_info *process_switch_and_get_patch(struct process_entity *process, struct patch_entity *patch)
+{
+    struct patch_info *patch_info;
+
+    BUG_ON(unlikely(!process || !patch));
+
+    if (likely(process->patch_info && process->patch_info->patch == patch)) {
+        return process->patch_info;
+    }
+
+    patch_info = find_patch_info_unlocked(process, patch);
+    if (unlikely(!patch_info)) {
+        return NULL;
+    }
+
+    process->patch_info = patch_info;
+
+    return patch_info;
+}
+
+unsigned long process_get_jump_addr(struct process_entity *process, unsigned long old_addr)
+{
+    struct patch_jump_entry *entry;
+    unsigned long jump_addr = 0;
+
+    if (unlikely(!process || !process->patch_info)) {
+        return 0;
+    }
+
+    hash_for_each_possible(process->patch_info->jump_table, entry, node, hash_long(old_addr, PATCH_FUNC_HASH_BITS)) {
+        if (entry->old_addr == old_addr) {
+            jump_addr = entry->new_addr;
+            break;
+        }
+    }
+
+    return jump_addr;
+}
+
+int process_load_patch(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx)
+{
+    struct upatch_function *funcs = (struct upatch_function *)ctx->func_shdr->sh_addr;
+    size_t func_num = ctx->func_shdr->sh_size / (sizeof (struct upatch_function));
+
+    struct upatch_relocation *relas = (struct upatch_relocation *)ctx->rela_shdr->sh_addr;
+    const char *strings = (const char *)ctx->string_shdr->sh_addr;
+
+    const char *func_name;
+    size_t i;
+
+    struct patch_info *patch_info;
+    struct patch_jump_entry *jump_entry;
+
+    if (unlikely(!process || !patch || !ctx)) {
+        return -EINVAL;
+    }
+
+    patch_info = kmem_cache_alloc(g_patch_info_cache, GFP_ATOMIC);
+    if (!patch_info) {
+        return -ENOMEM;
+    }
+
+    patch_info->patch = get_patch(patch);
+    INIT_LIST_HEAD(&patch_info->node);
+
+    patch_info->text_addr = ctx->layout.base;
+    patch_info->text_len = ctx->layout.text_end;
+
+    patch_info->rodata_addr = ctx->layout.base + ctx->layout.text_end;
+    patch_info->rodata_len = ctx->layout.ro_after_init_end - ctx->layout.text_end;
+
+    hash_init(patch_info->jump_table);
+
+    for (i = 0; i < func_num; ++i) {
+        func_name = strings + relas[i].name.r_addend;
+
+        jump_entry = kmem_cache_alloc(g_jump_entry_cache, GFP_ATOMIC);
+        if (!jump_entry) {
+            free_patch_info(patch_info);
+            return -ENOMEM;
+        }
+
+        INIT_HLIST_NODE(&jump_entry->node);
+        jump_entry->old_addr = funcs[i].old_addr + ctx->load_bias + ctx->target->load_offset;
+        jump_entry->new_addr = funcs[i].new_addr;
+
+        log_debug("process %d: old_addr=0x%08lx, new_addr=0x%08lx, func='%s'\n",
+            process->tgid, jump_entry->old_addr, jump_entry->new_addr, func_name);
+        hash_add(patch_info->jump_table, &jump_entry->node, hash_long(jump_entry->old_addr, PATCH_FUNC_HASH_BITS));
+    }
+
+    list_add(&patch_info->node, &process->patch_list);
+    process->patch_info = patch_info;
+
+    return 0;
+}
+
+void process_remove_patch(struct process_entity *process, struct patch_entity *patch)
+{
+    struct patch_info *patch_info;
+
+    patch_info = find_patch_info_unlocked(process, patch);
+    if (unlikely(!patch_info)) {
+        return;
+    }
+
+    list_del_init(&patch_info->node);
+    free_patch_info(patch_info);
 }
 
 int process_check_patch_on_stack(struct process_entity *process, struct patch_entity *patch)
@@ -268,7 +341,7 @@ int process_check_patch_on_stack(struct process_entity *process, struct patch_en
         return -EINVAL;
     }
 
-    patch_info = process_find_loaded_patch(process, patch);
+    patch_info = find_patch_info_unlocked(process, patch);
     if (unlikely(!patch_info)) {
         return 0;
     }

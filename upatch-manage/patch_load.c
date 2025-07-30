@@ -121,12 +121,12 @@ static void layout_sections(struct patch_context *ctx)
 static int init_load_info(struct patch_context *ctx,
     const struct patch_entity *patch, const struct target_entity *target, unsigned long vma_start)
 {
-    void *file_buff = patch->meta.buff;
-    loff_t file_size = patch->meta.size;
+    void *file_buff = patch->file.buff;
+    loff_t file_size = patch->file.size;
 
-    ctx->target = &target->meta;
-    ctx->patch = &patch->meta;
-    ctx->load_bias = vma_start - target->meta.vma_offset;
+    ctx->target = &target->file;
+    ctx->patch = &patch->file;
+    ctx->load_bias = vma_start - target->file.vma_offset;
     log_debug("process %d: vma_start=0x%lx, load_bias=0x%lx\n", task_tgid_nr(current), vma_start, ctx->load_bias);
 
     // alloc & copy whole patch into kernel temporarily
@@ -140,13 +140,13 @@ static int init_load_info(struct patch_context *ctx,
     ctx->ehdr = ctx->buff;
     ctx->shdrs = ctx->buff + ctx->ehdr->e_shoff;
 
-    ctx->shstrtab_shdr = &ctx->shdrs[patch->meta.shstrtab_index];
-    ctx->symtab_shdr = &ctx->shdrs[patch->meta.symtab_index];
-    ctx->strtab_shdr = &ctx->shdrs[patch->meta.strtab_index];
+    ctx->shstrtab_shdr = &ctx->shdrs[patch->file.shstrtab_index];
+    ctx->symtab_shdr = &ctx->shdrs[patch->file.symtab_index];
+    ctx->strtab_shdr = &ctx->shdrs[patch->file.strtab_index];
 
-    ctx->func_shdr = &ctx->shdrs[patch->meta.func_index];
-    ctx->rela_shdr = &ctx->shdrs[patch->meta.rela_index];
-    ctx->string_shdr = &ctx->shdrs[patch->meta.string_index];
+    ctx->func_shdr = &ctx->shdrs[patch->file.func_index];
+    ctx->rela_shdr = &ctx->shdrs[patch->file.rela_index];
+    ctx->string_shdr = &ctx->shdrs[patch->file.string_index];
 
     // alloc patch sections
     layout_sections(ctx);
@@ -518,7 +518,7 @@ int upatch_resolve(struct target_entity *target, struct patch_entity *patch, str
         goto fail;
     }
 
-    ret = process_write_patch_info(process, patch, &context);
+    ret = process_load_patch(process, patch, &context);
     if (ret) {
         goto fail;
     }
