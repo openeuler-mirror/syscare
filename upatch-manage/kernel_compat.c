@@ -120,9 +120,10 @@ typedef long (*do_mprotect_pkey_fn)(
 );
 
 static const char *mprotect_symbol_names[] = {
-    "do_mprotect_pkey.constprop.0",
     "do_mprotect_pkey",
-    "do_mprotect",
+    "do_mprotect_pkey.constprop.0",
+    "do_mprotect_pkey.constprop.1",
+    "do_mprotect_pkey.constprop.2",
     NULL
 };
 static do_mprotect_pkey_fn do_mprotect_pkey = NULL;
