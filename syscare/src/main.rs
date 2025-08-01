@@ -12,9 +12,9 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, ffi::OsString, os::unix::process::CommandExt, process::Command};
+use std::{env, ffi::OsString, process::Command};
 
-use anyhow::{bail, Context, Result};
+use anyhow::{anyhow, Context, Result};
 use args::SubCommand;
 use flexi_logger::{LogSpecification, Logger, WriteMode};
 use log::{debug, LevelFilter};
@@ -41,22 +41,22 @@ const EXTERNAL_CMD_PREFIX: &str = "syscare-";
 fn exec_external_cmd(mut args: Vec<OsString>) -> Result<()> {
     let program = concat_os!(EXTERNAL_CMD_PREFIX, args.remove(0).trim());
 
-    let error = Command::new(&program).args(&args).exec();
-    match error.kind() {
-        std::io::ErrorKind::NotFound => {
-            bail!(
+    let _ = Command::new(&program)
+        .args(&args)
+        .status()
+        .map_err(|e| match e.kind() {
+            std::io::ErrorKind::NotFound => anyhow!(
                 "External command '{}' is not installed",
                 program.to_string_lossy()
-            );
-        }
-        _ => {
-            bail!(
-                "Failed to execute '{}', {}",
+            ),
+            _ => anyhow!(
+                "Failed to execute '{}': {}",
                 program.to_string_lossy(),
-                error
-            );
-        }
-    }
+                e.to_string().to_lowercase()
+            ),
+        })?;
+
+    Ok(())
 }
 
 fn main() -> Result<()> {
