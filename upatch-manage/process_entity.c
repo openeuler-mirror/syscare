@@ -23,6 +23,7 @@
 #include <linux/mm.h>
 #include <linux/sched/task.h>
 
+#include "kernel_compat.h"
 #include "patch_entity.h"
 #include "target_entity.h"
 
@@ -52,7 +53,7 @@ static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t
         return -EFAULT;
     }
 
-    return do_munmap(mm, addr, len, NULL);
+    return upatch_munmap(mm, addr, len, NULL);
 }
 
 static void free_patch_memory(struct task_struct *task, struct patch_info *patch)

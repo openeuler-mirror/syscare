@@ -37,6 +37,76 @@
 
 #include "util.h"
 
+typedef long (*do_mprotect_pkey_fn)(
+    unsigned long start,
+    size_t len,
+    unsigned long prot,
+    int pkey
+);
+
+typedef int (*do_munmap_fn)(
+    struct mm_struct *mm,
+    unsigned long addr,
+    size_t size,
+    struct list_head *uf
+);
+
+static const char *do_mprotect_pkey_names[] = {
+    "do_mprotect_pkey",
+    "do_mprotect_pkey.constprop.0",
+    "do_mprotect_pkey.constprop.1",
+    "do_mprotect_pkey.constprop.2",
+    NULL
+};
+
+static const char *do_munmap_names[] = {
+    "do_munmap",
+    "do_munmap.constprop.0",
+    "do_munmap.constprop.1",
+    "do_munmap.constprop.2",
+    NULL
+};
+
+static do_munmap_fn do_munmap_func = NULL;
+static do_mprotect_pkey_fn do_mprotect_pkey_func = NULL;
+
+static void *lookup_kernel_symbol(const char *name)
+{
+    struct kprobe kp = {
+        .symbol_name = name,
+    };
+
+    int ret;
+
+    if (unlikely(!name)) {
+        return NULL;
+    }
+
+    ret = register_kprobe(&kp);
+    if (ret < 0) {
+        return NULL;
+    }
+
+    unregister_kprobe(&kp);
+
+    return (void *)kp.addr;
+}
+
+static void *resolve_kernel_symbol(const char **names)
+{
+    void *addr = NULL;
+    const char **name;
+
+    for (name = names; *name; name++) {
+        addr = lookup_kernel_symbol(*name);
+        if (addr) {
+            break;
+        }
+    }
+
+    return addr;
+}
+
 __always_inline void upatch_vma_iter_init(struct upatch_vma_iter *vmi, struct mm_struct *mm)
 {
     if (unlikely(!vmi)) {
@@ -112,79 +182,28 @@ __always_inline struct vm_area_struct *upatch_vma_prev(struct upatch_vma_iter *v
 #endif
 }
 
-typedef long (*do_mprotect_pkey_fn)(
-    unsigned long start,
-    size_t len,
-    unsigned long prot,
-    int pkey
-);
-
-static const char *mprotect_symbol_names[] = {
-    "do_mprotect_pkey",
-    "do_mprotect_pkey.constprop.0",
-    "do_mprotect_pkey.constprop.1",
-    "do_mprotect_pkey.constprop.2",
-    NULL
-};
-static do_mprotect_pkey_fn do_mprotect_pkey = NULL;
-
-static void *get_kernel_symbol(const char *symbol_name)
-{
-    struct kprobe kp = {
-        .symbol_name = symbol_name,
-    };
-    void *addr;
-    int ret;
-
-    if (!symbol_name) {
-        return ERR_PTR(-EINVAL);
-    }
-
-    ret = register_kprobe(&kp);
-    if (ret < 0) {
-        return ERR_PTR(ret);
-    }
-
-    addr = (void *)kp.addr;
-    if (!addr) {
-        log_err("kernel symbol '%s' is NULL\n", symbol_name);
-        unregister_kprobe(&kp);
-        return ERR_PTR(-EFAULT);
-    }
-
-    unregister_kprobe(&kp);
-    return addr;
-}
-
 int upatch_mprotect(unsigned long addr, size_t len, unsigned long prot)
 {
-    if (!do_mprotect_pkey || IS_ERR(do_mprotect_pkey)) {
-        return -ENOSYS;
-    }
-    return do_mprotect_pkey(addr, len, prot, -1);
+    return do_mprotect_pkey_func(addr, len, prot, -1);
+}
+
+int upatch_munmap(struct mm_struct *mm, unsigned long addr, size_t size, struct list_head *uf)
+{
+    return do_munmap_func(mm, addr, size, uf);
 }
 
 int __init kernel_compat_init(void)
 {
-    int ret;
-    const char *symbol_name = NULL;
-    void *addr = NULL;
-
-    for (const char **name = mprotect_symbol_names; *name; name++) {
-        addr = get_kernel_symbol(*name);
-        if (IS_ERR(addr)) {
-            ret = PTR_ERR(addr);
-            continue;
-        }
-        symbol_name = *name;
-        do_mprotect_pkey = addr;
-        break;
+    do_mprotect_pkey_func = resolve_kernel_symbol(do_mprotect_pkey_names);
+    if (unlikely(!do_mprotect_pkey_func)) {
+        log_err("cannot find kernel symbol '%s'\n", do_mprotect_pkey_names[0]);
+        return -ENOSYS;
     }
 
-    if (!symbol_name) {
-        ret = PTR_ERR(addr);
-        log_err("cannot find kernel symbol '%s', ret=%d\n", mprotect_symbol_names[0], ret);
-        return ret;
+    do_munmap_func = resolve_kernel_symbol(do_munmap_names);
+    if (unlikely(!do_munmap_func)) {
+        log_err("cannot find kernel symbol '%s'\n", do_munmap_names[0]);
+        return -ENOSYS;
     }
 
     return 0;

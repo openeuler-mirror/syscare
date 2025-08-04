@@ -22,8 +22,7 @@
 #define _UPATCH_MANAGE_KERNEL_COMPAT_H
 
 #include <linux/types.h>
-#include <linux/limits.h>
-#include <linux/mm.h>
+#include <linux/mm_types.h>
 
 #include <linux/version.h>
 #include <linux/init.h>
@@ -51,6 +50,8 @@ struct vm_area_struct *upatch_vma_next(struct upatch_vma_iter *vmi);
 struct vm_area_struct *upatch_vma_prev(struct upatch_vma_iter *vmi);
 
 int upatch_mprotect(unsigned long addr, size_t len, unsigned long prot);
+
+int upatch_munmap(struct mm_struct *mm, unsigned long addr, size_t size, struct list_head *uf);
 
 int __init kernel_compat_init(void);
 void __exit kernel_compat_exit(void);
