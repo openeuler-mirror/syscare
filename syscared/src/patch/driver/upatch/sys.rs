@@ -29,37 +29,71 @@ mod ffi {
     pub const UPATCH_STATUS_ACTIVED: i32 = 3;
 
     #[repr(C)]
-    pub struct PatchLoadRequest {
-        pub patch_file: *const c_char,
+    pub struct UpatchIoctlRequest {
         pub target_elf: *const c_char,
+        pub patch_file: *const c_char,
     }
 
     ioctl_write_ptr!(
         ioctl_load_patch,
         UPATCH_MAGIC,
         UPATCH_LOAD,
-        PatchLoadRequest
+        UpatchIoctlRequest
     );
-    ioctl_write_ptr!(ioctl_active_patch, UPATCH_MAGIC, UPATCH_ACTIVE, c_char);
-    ioctl_write_ptr!(ioctl_deactive_patch, UPATCH_MAGIC, UPATCH_DEACTIVE, c_char);
-    ioctl_write_ptr!(ioctl_remove_patch, UPATCH_MAGIC, UPATCH_REMOVE, c_char);
-    ioctl_write_ptr!(ioctl_get_patch_status, UPATCH_MAGIC, UPATCH_STATUS, c_char);
+    ioctl_write_ptr!(
+        ioctl_active_patch,
+        UPATCH_MAGIC,
+        UPATCH_ACTIVE,
+        UpatchIoctlRequest
+    );
+    ioctl_write_ptr!(
+        ioctl_deactive_patch,
+        UPATCH_MAGIC,
+        UPATCH_DEACTIVE,
+        UpatchIoctlRequest
+    );
+    ioctl_write_ptr!(
+        ioctl_remove_patch,
+        UPATCH_MAGIC,
+        UPATCH_REMOVE,
+        UpatchIoctlRequest
+    );
+    ioctl_write_ptr!(
+        ioctl_get_patch_status,
+        UPATCH_MAGIC,
+        UPATCH_STATUS,
+        UpatchIoctlRequest
+    );
 }
 
-pub fn get_patch_status<P>(fd: RawFd, patch_file: P) -> std::io::Result<PatchStatus>
+pub fn get_patch_status<P, Q>(
+    ioctl_dev: RawFd,
+    target_elf: P,
+    patch_file: Q,
+) -> std::io::Result<PatchStatus>
 where
     P: AsRef<Path>,
+    Q: AsRef<Path>,
 {
+    let ioctl_fd = ioctl_dev.as_raw_fd();
+    let target_elf = target_elf.as_ref();
     let patch_file = patch_file.as_ref();
     debug!(
-        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {} }}",
-        fd,
+        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {{ {}, {} }} }}",
+        ioctl_fd,
         stringify!(UPATCH_STATUS),
+        target_elf.display(),
         patch_file.display(),
     );
 
+    let target_cstr = CString::new(target_elf.as_os_str().as_bytes())?;
     let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
-    let status_code = unsafe { ffi::ioctl_get_patch_status(fd, patch_cstr.as_ptr())? };
+    let request = ffi::UpatchIoctlRequest {
+        target_elf: target_cstr.as_ptr(),
+        patch_file: patch_cstr.as_ptr(),
+    };
+
+    let status_code = unsafe { ffi::ioctl_get_patch_status(ioctl_dev, &request) }?;
     let status = match status_code {
         ffi::UPATCH_STATUS_NOT_APPLIED => PatchStatus::NotApplied,
         ffi::UPATCH_STATUS_DEACTIVED => PatchStatus::Deactived,
@@ -70,27 +104,27 @@ where
     Ok(status)
 }
 
-pub fn load_patch<P, Q>(ioctl_dev: RawFd, patch_file: Q, target_elf: P) -> std::io::Result<()>
+pub fn load_patch<P, Q>(ioctl_dev: RawFd, target_elf: P, patch_file: Q) -> std::io::Result<()>
 where
     P: AsRef<Path>,
     Q: AsRef<Path>,
 {
     let ioctl_fd = ioctl_dev.as_raw_fd();
-    let patch_file = patch_file.as_ref();
     let target_elf = target_elf.as_ref();
+    let patch_file = patch_file.as_ref();
     debug!(
         "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {{ {}, {} }} }}",
         ioctl_fd,
         stringify!(UPATCH_LOAD),
-        patch_file.display(),
         target_elf.display(),
+        patch_file.display(),
     );
 
-    let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
     let target_cstr = CString::new(target_elf.as_os_str().as_bytes())?;
-    let request = ffi::PatchLoadRequest {
-        patch_file: patch_cstr.as_ptr(),
+    let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
+    let request = ffi::UpatchIoctlRequest {
         target_elf: target_cstr.as_ptr(),
+        patch_file: patch_cstr.as_ptr(),
     };
     unsafe {
         ffi::ioctl_load_patch(ioctl_fd, &request)?;
@@ -99,61 +133,88 @@ where
     Ok(())
 }
 
-pub fn remove_patch<P>(fd: RawFd, patch_file: P) -> std::io::Result<()>
+pub fn active_patch<P, Q>(ioctl_dev: RawFd, target_elf: P, patch_file: Q) -> std::io::Result<()>
 where
     P: AsRef<Path>,
+    Q: AsRef<Path>,
 {
+    let ioctl_fd = ioctl_dev.as_raw_fd();
+    let target_elf = target_elf.as_ref();
     let patch_file = patch_file.as_ref();
     debug!(
-        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {} }}",
-        fd,
-        stringify!(UPATCH_REMOVE),
-        patch_file.display(),
-    );
-
-    let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
-    unsafe {
-        ffi::ioctl_remove_patch(fd, patch_cstr.as_ptr())?;
-    }
-
-    Ok(())
-}
-
-pub fn active_patch<P>(fd: RawFd, patch_file: P) -> std::io::Result<()>
-where
-    P: AsRef<Path>,
-{
-    let patch_file = patch_file.as_ref();
-    debug!(
-        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {} }}",
-        fd,
+        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {{ {}, {} }} }}",
+        ioctl_fd,
         stringify!(UPATCH_ACTIVE),
+        target_elf.display(),
         patch_file.display(),
     );
 
+    let target_cstr = CString::new(target_elf.as_os_str().as_bytes())?;
     let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
+    let request = ffi::UpatchIoctlRequest {
+        target_elf: target_cstr.as_ptr(),
+        patch_file: patch_cstr.as_ptr(),
+    };
     unsafe {
-        ffi::ioctl_active_patch(fd, patch_cstr.as_ptr())?;
+        ffi::ioctl_active_patch(ioctl_fd, &request)?;
     }
 
     Ok(())
 }
 
-pub fn deactive_patch<P>(fd: RawFd, patch_file: P) -> std::io::Result<()>
+pub fn deactive_patch<P, Q>(ioctl_dev: RawFd, target_elf: P, patch_file: Q) -> std::io::Result<()>
 where
     P: AsRef<Path>,
+    Q: AsRef<Path>,
 {
+    let ioctl_fd = ioctl_dev.as_raw_fd();
+    let target_elf = target_elf.as_ref();
     let patch_file = patch_file.as_ref();
     debug!(
-        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {} }}",
-        fd,
+        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {{ {}, {} }} }}",
+        ioctl_fd,
         stringify!(UPATCH_DEACTIVE),
+        target_elf.display(),
         patch_file.display(),
     );
 
+    let target_cstr = CString::new(target_elf.as_os_str().as_bytes())?;
     let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
+    let request = ffi::UpatchIoctlRequest {
+        target_elf: target_cstr.as_ptr(),
+        patch_file: patch_cstr.as_ptr(),
+    };
     unsafe {
-        ffi::ioctl_deactive_patch(fd, patch_cstr.as_ptr())?;
+        ffi::ioctl_deactive_patch(ioctl_fd, &request)?;
+    }
+
+    Ok(())
+}
+
+pub fn remove_patch<P, Q>(ioctl_dev: RawFd, target_elf: P, patch_file: Q) -> std::io::Result<()>
+where
+    P: AsRef<Path>,
+    Q: AsRef<Path>,
+{
+    let ioctl_fd = ioctl_dev.as_raw_fd();
+    let target_elf = target_elf.as_ref();
+    let patch_file = patch_file.as_ref();
+    debug!(
+        "Upatch: Ioctl {{ fd: {}, cmd: {}, data: {{ {}, {} }} }}",
+        ioctl_fd,
+        stringify!(UPATCH_REMOVE),
+        target_elf.display(),
+        patch_file.display(),
+    );
+
+    let target_cstr = CString::new(target_elf.as_os_str().as_bytes())?;
+    let patch_cstr = CString::new(patch_file.as_os_str().as_bytes())?;
+    let request = ffi::UpatchIoctlRequest {
+        target_elf: target_cstr.as_ptr(),
+        patch_file: patch_cstr.as_ptr(),
+    };
+    unsafe {
+        ffi::ioctl_remove_patch(ioctl_fd, &request)?;
     }
 
     Ok(())

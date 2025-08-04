@@ -163,7 +163,7 @@ impl UserPatchDriver {
     }
 
     pub fn get_patch_status(&self, patch: &UserPatch) -> Result<PatchStatus> {
-        sys::get_patch_status(self.ioctl_fd(), &patch.patch_file).map_err(|e| {
+        sys::get_patch_status(self.ioctl_fd(), &patch.target_elf, &patch.patch_file).map_err(|e| {
             anyhow!(
                 "Kpatch: Failed to get patch status, {}",
                 e.to_string().to_lowercase()
@@ -177,7 +177,7 @@ impl UserPatchDriver {
             "Upatch: Patch target '{}' is blocked",
             patch.target_elf.display(),
         );
-        sys::load_patch(self.ioctl_fd(), &patch.patch_file, &patch.target_elf).map_err(|e| {
+        sys::load_patch(self.ioctl_fd(), &patch.target_elf, &patch.patch_file).map_err(|e| {
             anyhow!(
                 "Upatch: Failed to load patch, {}",
                 e.to_string().to_lowercase()
@@ -186,7 +186,7 @@ impl UserPatchDriver {
     }
 
     pub fn remove_patch(&mut self, patch: &UserPatch) -> Result<()> {
-        sys::remove_patch(self.ioctl_fd(), &patch.patch_file).map_err(|e| {
+        sys::remove_patch(self.ioctl_fd(), &patch.target_elf, &patch.patch_file).map_err(|e| {
             anyhow!(
                 "Upatch: Failed to remove patch, {}",
                 e.to_string().to_lowercase()
@@ -195,7 +195,7 @@ impl UserPatchDriver {
     }
 
     pub fn active_patch(&mut self, patch: &UserPatch) -> Result<()> {
-        sys::active_patch(self.ioctl_fd(), &patch.patch_file).map_err(|e| {
+        sys::active_patch(self.ioctl_fd(), &patch.target_elf, &patch.patch_file).map_err(|e| {
             anyhow!(
                 "Upatch: Failed to active patch, {}",
                 e.to_string().to_lowercase()
@@ -207,12 +207,14 @@ impl UserPatchDriver {
     }
 
     pub fn deactive_patch(&mut self, patch: &UserPatch) -> Result<()> {
-        sys::deactive_patch(self.ioctl_fd(), &patch.patch_file).map_err(|e| {
-            anyhow!(
-                "Upatch: Failed to deactive patch, {}",
-                e.to_string().to_lowercase()
-            )
-        })?;
+        sys::deactive_patch(self.ioctl_fd(), &patch.target_elf, &patch.patch_file).map_err(
+            |e| {
+                anyhow!(
+                    "Upatch: Failed to deactive patch, {}",
+                    e.to_string().to_lowercase()
+                )
+            },
+        )?;
         self.unregister_patch(patch);
 
         Ok(())
