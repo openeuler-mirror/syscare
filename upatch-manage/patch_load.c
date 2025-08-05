@@ -234,7 +234,6 @@ static int do_alloc_patch_memory(struct patch_context *ctx)
 
     ctx->layout.kbase = (void *)kern_addr;
     ctx->layout.base = user_addr;
-    log_debug("kbase: 0x%lx, base: 0x%lx\n", kern_addr, user_addr);
     return 0;
 }
 
@@ -431,11 +430,11 @@ static int write_patch_to_user(const struct patch_context *ctx)
 {
     const struct patch_layout *layout = &ctx->layout;
 
-    log_debug("write patch image, src=0x%lx, dst=0x%lx, len=0x%x\n",
-        (unsigned long)layout->kbase, layout->base, layout->size);
+    log_debug("write patch image, dst=0x%lx, len=0x%x\n",
+        layout->base, layout->size);
     if (copy_to_user((void *)layout->base, layout->kbase, layout->size)) {
-        log_err("failed to write patch image, src=0x%lx, dst=0x%lx, len=0x%x\n",
-            (unsigned long)layout->kbase, layout->base, layout->size);
+        log_err("failed to write patch image, dst=0x%lx, len=0x%x\n",
+        layout->base, layout->size);
         return -EFAULT;
     }
 

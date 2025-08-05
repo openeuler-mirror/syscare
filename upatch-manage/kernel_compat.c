@@ -178,7 +178,6 @@ int __init kernel_compat_init(void)
         }
         symbol_name = *name;
         do_mprotect_pkey = addr;
-        log_debug("kernel symbol '%s' is at 0x%lx\n", symbol_name, (unsigned long)addr);
         break;
     }
 

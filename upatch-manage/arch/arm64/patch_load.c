@@ -193,8 +193,6 @@ unsigned long setup_got_table(struct patch_context *ctx, unsigned long jmp_addr,
     jmp[index + 1] = tls_addr;
     table->cur += entry_num;
 
-    log_debug("\tsetup got table 0x%lx -> 0x%lx, tls_addr=0x%lx\n",
-        entry_addr, jmp_addr, tls_addr);
 
     return entry_addr;
 }
@@ -221,8 +219,6 @@ unsigned long insert_plt_table(struct patch_context *ctx, unsigned long r_type, 
     else
         elf_addr = setup_jmp_table_with_plt(ctx, jmp_addr, (unsigned long)(uintptr_t)addr);
 
-    log_debug("jump: 0x%lx: jmp_addr=0x%lx, tls_addr=0x%lx\n",
-        elf_addr, jmp_addr, tls_addr);
 
 out:
     return elf_addr;
@@ -314,8 +310,6 @@ static inline u32 insert_insn_imm(enum aarch64_insn_imm_type imm_type, void *pla
     insn = le32_to_cpu(*(__le32 *)place);
     new_insn = aarch64_insn_encode_immediate(imm_type, insn, imm);
 
-    log_debug("\tinsert imm, P=0x%llx, insn=0x%x, imm_type=%d, imm=0x%llx, new_insn=0x%x\n",
-        (u64)place, insn, imm_type, imm, new_insn);
     return new_insn;
 }
 
@@ -341,7 +335,6 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
     // sh_addralign = dest, is the section start in VMA pole
     void *sec_kaddr = (void *)shdrs[reloc_sec].sh_addr;
     void *sec_vaddr = (void *)shdrs[reloc_sec].sh_addralign;
-    log_debug("sec_kaddr = 0x%llx sec_vaddr = 0x%llx\n", (u64)sec_kaddr, (u64)sec_vaddr);
 
     for (i = 0; i < shdrs[relsec].sh_size / sizeof(*rel); i++) {
         /* corresponds to P in the kernel space */
@@ -358,9 +351,8 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
         sym_addr = (s64)(sym->st_value + rel[i].r_addend);
         log_debug("'%s'\t type %d r_offset=0x%llx, st_value=0x%llx, r_addend=0x%llx\n",
             sym_name, (int)ELF_R_TYPE(rel[i].r_info), rel[i].r_offset, sym->st_value, rel[i].r_addend);
-        log_debug("\t(S + A) = 0x%llx \tP(kernel) = 0x%Lx \tP(user) = 0x%Lx\n",
-            sym_addr, (u64)reloc_place, (u64)ureloc_place);
-        log_debug("\t(before) *reloc_place = 0x%llx\n", *(u64*)reloc_place);
+        log_debug("\t(S + A) = 0x%llx \tP(user) = 0x%Lx\n",
+            sym_addr, (u64)ureloc_place);
 
         /* Perform the static relocation. */
         switch (ELF_R_TYPE(rel[i].r_info)) {
@@ -580,7 +572,6 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
                         ELF_R_TYPE(rel[i].r_info));
                 return -ENOEXEC;
         }
-        log_debug("\t(after) *reloc_place = 0x%llx, result = 0x%llx\n", *(u64*)reloc_place, result);
     }
     return 0;
 
