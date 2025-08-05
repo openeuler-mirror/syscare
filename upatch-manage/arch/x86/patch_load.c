@@ -117,8 +117,6 @@ unsigned long setup_got_table(struct patch_context *ctx, unsigned long jmp_addr,
     jmp[index + 1] = tls_addr;
     table->cur += NORMAL_JMP_ENTRY_NUM;
 
-    log_debug("\tsetup got table at 0x%lx -> 0x%lx, tls_addr = 0x%lx\n",
-        entry_addr, jmp_addr, tls_addr);
 
     return entry_addr;
 }
@@ -135,7 +133,6 @@ unsigned long insert_plt_table(struct patch_context *ctx, unsigned long r_type, 
 
     elf_addr = setup_jmp_table(ctx, jmp_addr, false);
 
-    log_debug("PLT: 0x%lx -> 0x%lx\n", elf_addr, jmp_addr);
 
 out:
     return elf_addr;
@@ -192,8 +189,8 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
     void *sec_vaddr = (void *)shdrs[reloc_sec].sh_addralign;
 
     log_debug("Applying relocate section %u to %u\n", relsec, reloc_sec);
-    log_debug("section %d: kernel address = 0x%llx, virtual address = 0x%llx\n",
-        reloc_sec, (u64)sec_kaddr, (u64)sec_vaddr);
+    log_debug("section %d: virtual address = 0x%llx\n",
+        reloc_sec, (u64)sec_vaddr);
 
     for (i = 0; i < shdrs[relsec].sh_size / sizeof(*rel); i++) {
         /* This is where to make the change, calculate it from kernel address. */
@@ -214,9 +211,9 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
 
         log_debug("'%s'\t type %d st_value 0x%llx r_addend %ld r_offset 0x%llx\n",
             name, (int)ELF_R_TYPE(rel[i].r_info), sym->st_value, (long int)rel[i].r_addend, rel[i].r_offset);
-        log_debug("\t(S + A) = 0x%llx \tP(kernel) = 0x%Lx \tP(user) = 0x%Lx\n",
-            sym_addr, (u64)reloc_place, (u64)ureloc_place);
-        log_debug("\t(before) *reloc_place = 0x%llx\n", *(u64*)reloc_place);
+        log_debug("\t(S + A) = 0x%llx \tP(user) = 0x%Lx\n",
+            sym_addr, (u64)ureloc_place);
+
         switch (ELF_R_TYPE(rel[i].r_info)) {
             case R_X86_64_NONE:
                 break;
@@ -271,7 +268,6 @@ int apply_relocate_add(struct patch_context *ctx, unsigned int relsec)
                 log_err("\tUnknown rela relocation: %llu\n", ELF_R_TYPE(rel[i].r_info));
                 return -ENOEXEC;
         }
-        log_debug("\t(after) *reloc_place = 0x%llx\n", *(u64*)reloc_place);
     }
     return 0;
 
