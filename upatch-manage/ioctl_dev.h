@@ -25,6 +25,11 @@ enum upatch_command {
     UPATCH_STATUS,
 };
 
+struct upatch_request_user {
+    const char __user *target_elf;
+    const char __user *patch_file;
+};
+
 struct upatch_request {
     const char *target_elf;
     const char *patch_file;

@@ -49,69 +49,74 @@ static struct miscdevice upatch_dev = {
     .mode  = UPATCH_DEV_MODE,
 };
 
-static char *read_patch_requrest_param(void __user *addr)
+static char *read_patch_requrest_param(const char __user *uaddr)
 {
-    size_t len;
+    long len;
     char *buf;
-    int ret;
 
-    if (unlikely(!addr)) {
+    if (unlikely(!uaddr)) {
         return ERR_PTR(-EINVAL);
     }
 
-    len = strnlen_user(addr, MAX_ARG_STRLEN);
-    if (unlikely(len == 0)) {
+    len = strnlen_user(uaddr, PATH_MAX);
+    if (unlikely(len <= 0)) {
         return ERR_PTR(-EINVAL);
     }
-    if (unlikely(len > PATH_MAX)) {
-        return ERR_PTR(-EOVERFLOW);
+    if (unlikely(len >= PATH_MAX)) {
+        return ERR_PTR(-ENAMETOOLONG);
     }
 
-    buf = vmalloc(len);
-    if (!buf) {
+    buf = vmalloc(len + 1);
+    if (unlikely(!buf)) {
         return ERR_PTR(-ENOMEM);
     }
 
-    ret = copy_from_user(buf, addr, len);
-    if (ret) {
-        VFREE_CLEAR(buf);
-        return ERR_PTR(ret);
+    if (unlikely(copy_from_user(buf, uaddr, len))) {
+        vfree(buf);
+        return ERR_PTR(-EFAULT);
     }
+    buf[len] = '\0';
 
     return buf;
 }
 
-static int read_patch_request(struct upatch_request *req, void __user *msg)
-{
-    int ret;
-
-    ret = copy_from_user(req, msg, sizeof(struct upatch_request));
-    if (ret) {
-        return -EINVAL;
-    }
-
-    req->target_elf = read_patch_requrest_param((void __user *)req->target_elf);
-    if (IS_ERR(req->target_elf)) {
-        ret = PTR_ERR(req->target_elf);
-        log_err("failed to read target elf\n");
-        return ret;
-    }
-
-    req->patch_file = read_patch_requrest_param((void __user *)req->patch_file);
-    if (IS_ERR(req->patch_file)) {
-        ret = PTR_ERR(req->patch_file);
-        log_err("failed to read patch file\n");
-        vfree(req->patch_file);
-        return ret;
-    }
-
-    return ret;
-}
-
-static inline void clear_patch_request(struct upatch_request *request)
+static inline void free_patch_request(struct upatch_request *request)
 {
     vfree(request->target_elf);
     vfree(request->patch_file);
+}
+
+static int read_patch_request(struct upatch_request *kreq, void __user *uaddr)
+{
+    struct upatch_request_user ureq = { 0 };
+    int ret = 0;
+
+    kreq->target_elf = NULL;
+    kreq->patch_file = NULL;
+
+    if (unlikely(copy_from_user(&ureq, uaddr, sizeof(ureq)))) {
+        return -EFAULT;
+    }
+
+    kreq->target_elf = read_patch_requrest_param(ureq.target_elf);
+    if (unlikely(IS_ERR(kreq->target_elf))) {
+        ret = PTR_ERR(kreq->target_elf);
+        kreq->target_elf = NULL;
+        goto out_err;
+    }
+
+    kreq->patch_file = read_patch_requrest_param(ureq.patch_file);
+    if (unlikely(IS_ERR(kreq->patch_file))) {
+        ret = PTR_ERR(kreq->patch_file);
+        kreq->patch_file = NULL;
+        goto out_err;
+    }
+
+    return 0;
+
+out_err:
+    free_patch_request(kreq);
+    return ret;
 }
 
 long handle_ioctl(struct file *file, unsigned int code, unsigned long arg)
@@ -130,7 +135,7 @@ long handle_ioctl(struct file *file, unsigned int code, unsigned long arg)
 
     ret = read_patch_request(&req, msg);
     if (unlikely(ret)) {
-        log_err("failed to read patch requrest\n");
+        log_err("failed to read patch requrest, ret=%d\n", ret);
         return ret;
     }
 
@@ -156,7 +161,7 @@ long handle_ioctl(struct file *file, unsigned int code, unsigned long arg)
             break;
     }
 
-    clear_patch_request(&req);
+    free_patch_request(&req);
     return ret;
 }
 
