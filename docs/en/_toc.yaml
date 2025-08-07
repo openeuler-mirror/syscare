@@ -1,0 +1,12 @@
+label: SysCare User Guide
+isManual: true
+description: Online hot patching
+sections:
+  - label: SysCare Introduction
+    href: ./syscare_introduction.md
+  - label: SysCare Installation
+    href: ./installing_syscare.md
+  - label: SysCare Usage
+    href: ./using_syscare.md
+  - label: Constraints
+    href: ./constraints.md
