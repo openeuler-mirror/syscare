@@ -12,9 +12,9 @@
  * See the Mulan PSL v2 for more details.
  */
 
-use std::{env, ffi::OsString, process::Command};
+use std::{env, ffi::OsString, process};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{Context, Result};
 use args::SubCommand;
 use flexi_logger::{LogSpecification, Logger, WriteMode};
 use log::{debug, LevelFilter};
@@ -38,25 +38,16 @@ const PATH_ENV_NAME: &str = "PATH";
 const PATH_ENV_VALUE: &str = "/usr/libexec/syscare";
 const EXTERNAL_CMD_PREFIX: &str = "syscare-";
 
-fn exec_external_cmd(mut args: Vec<OsString>) -> Result<()> {
+fn exec_external_cmd(mut args: Vec<OsString>) -> ! {
     let program = concat_os!(EXTERNAL_CMD_PREFIX, args.remove(0).trim());
 
-    let _ = Command::new(&program)
-        .args(&args)
-        .status()
-        .map_err(|e| match e.kind() {
-            std::io::ErrorKind::NotFound => anyhow!(
-                "External command '{}' is not installed",
-                program.to_string_lossy()
-            ),
-            _ => anyhow!(
-                "Failed to execute '{}': {}",
-                program.to_string_lossy(),
-                e.to_string().to_lowercase()
-            ),
-        })?;
+    let exit_status = process::Command::new(&program).args(&args).status();
+    let exit_code = match exit_status {
+        Ok(status) => status.code().unwrap_or(1),
+        Err(e) => e.raw_os_error().unwrap_or(1),
+    };
 
-    Ok(())
+    process::exit(exit_code);
 }
 
 fn main() -> Result<()> {
@@ -85,8 +76,7 @@ fn main() -> Result<()> {
 
     debug!("Start with {:#?}", args);
     if let SubCommand::External(cmd_args) = args.subcommand {
-        self::exec_external_cmd(cmd_args)?;
-        return Ok(());
+        self::exec_external_cmd(cmd_args);
     }
 
     debug!("Initializing rpc client...");
