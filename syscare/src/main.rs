@@ -17,7 +17,7 @@ use std::{env, ffi::OsString, process};
 use anyhow::{Context, Result};
 use args::SubCommand;
 use flexi_logger::{LogSpecification, Logger, WriteMode};
-use log::{debug, LevelFilter};
+use log::{debug, error, LevelFilter};
 
 use syscare_common::{concat_os, ffi::OsStrExt, os};
 
@@ -44,7 +44,20 @@ fn exec_external_cmd(mut args: Vec<OsString>) -> ! {
     let exit_status = process::Command::new(&program).args(&args).status();
     let exit_code = match exit_status {
         Ok(status) => status.code().unwrap_or(1),
-        Err(e) => e.raw_os_error().unwrap_or(1),
+        Err(e) => {
+            match e.kind() {
+                std::io::ErrorKind::NotFound => error!(
+                    "Error: External command '{}' is not installed",
+                    program.to_string_lossy()
+                ),
+                _ => error!(
+                    "Error: Failed to execute '{}': {}",
+                    program.to_string_lossy(),
+                    e.to_string().to_lowercase()
+                ),
+            }
+            e.raw_os_error().unwrap_or(1)
+        }
     };
 
     process::exit(exit_code);
