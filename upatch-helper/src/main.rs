@@ -66,6 +66,16 @@ const COMPILE_OPTIONS_CLANG: &[&str] = &[
 
 const UPATCH_ID_PREFIX: &str = ".upatch_";
 
+#[cfg(target_arch = "aarch64")]
+fn arch_specific_args() -> &'static [&'static str] {
+    &["-mno-outline-atomics"]
+}
+
+#[cfg(not(any(target_arch = "aarch64")))]
+fn arch_specific_args() -> &'static [&'static str] {
+    &[]
+}
+
 #[inline(always)]
 fn is_compilation(args: &[OsString]) -> bool {
     /* check exclude flags */
@@ -167,6 +177,7 @@ fn add_compile_options(command: &mut Command) {
     };
     let assembler_arg = format!("-Wa,--defsym,{}{}=0", UPATCH_ID_PREFIX, Uuid::new_v4());
 
+    command.args(self::arch_specific_args());
     command.args(compiler_args);
     command.arg(assembler_arg);
 }
