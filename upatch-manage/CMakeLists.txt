@@ -2,8 +2,7 @@
 
 set(UPATCH_MANAGE_KMOD "upatch_manage.ko")
 
-if (DEFINED KERNEL_VERSION)
-    set(KERNEL_SRC /lib/modules/${KERNEL_VERSION}/build)
+if (DEFINED KERNEL_SRC)
     set(KMOD_KERNEL "KERNEL_SRC=${KERNEL_SRC}")
 endif()
 
