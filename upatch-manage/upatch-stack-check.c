@@ -29,7 +29,7 @@ static int stack_check(struct upatch_info *uinfo, unsigned long pc, upatch_actio
             log_error("Unknown upatch action\n");
             return -1;
         }
-        if (pc >= start && pc <= end) {
+        if (pc >= start && pc < end) {
             log_error("Failed to check stack, running function: %s\n",
                 uinfo->funcs[i].name);
             return -1;
