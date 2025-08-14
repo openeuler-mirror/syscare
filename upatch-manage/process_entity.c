@@ -141,18 +141,31 @@ static bool is_patch_removable(pid_t pid, const void *page, void *context)
     static const size_t VALUE_NR = PAGE_SIZE / sizeof(unsigned long);
 
     const struct patch_info *patch = context;
-
-    const bool check_text = (patch->text_len > 0);
-    const unsigned long text_start = patch->text_addr;
-    const unsigned long text_end = patch->text_addr + patch->text_len;
-
-    const unsigned long *page_data = page;
+    const unsigned long *stack_page = page;
+    unsigned long stack_value;
     size_t i;
 
+    struct patch_jump_entry *entry;
+    int bkt;
+
+    if (unlikely(patch->jump_min_addr >= patch->jump_max_addr)) {
+        return true;
+    }
+
     for (i = 0; i < VALUE_NR; i++) {
-        if (check_text && unlikely(page_data[i] >= text_start && page_data[i] < text_end)) {
-            log_err("process %d: found patch text 0x%lx on stack\n", pid, page_data[i]);
-            return false;
+        stack_value = stack_page[i];
+
+        /* Filter value does not in jump table range */
+        if (likely(stack_value < patch->jump_min_addr || stack_value >= patch->jump_max_addr)) {
+            continue;
+        }
+
+        /* Check if value is on the jump table */
+        hash_for_each(patch->jump_table, bkt, entry, node) {
+            if (unlikely(stack_value >= entry->new_addr && stack_value < entry->new_end)) {
+                log_err("process %d: found patch function 0x%lx on stack\n", pid, entry->new_addr);
+                return false;
+            }
         }
     }
 
@@ -294,6 +307,9 @@ int process_load_patch(struct process_entity *process, struct patch_entity *patc
     patch_info->rodata_addr = ctx->layout.base + ctx->layout.text_end;
     patch_info->rodata_len = ctx->layout.ro_after_init_end - ctx->layout.text_end;
 
+    patch_info->jump_min_addr = ULONG_MAX;
+    patch_info->jump_max_addr = 0;
+
     hash_init(patch_info->jump_table);
 
     for (i = 0; i < func_num; ++i) {
@@ -308,6 +324,14 @@ int process_load_patch(struct process_entity *process, struct patch_entity *patc
         INIT_HLIST_NODE(&jump_entry->node);
         jump_entry->old_addr = funcs[i].old_addr + ctx->load_bias + ctx->target->load_offset;
         jump_entry->new_addr = funcs[i].new_addr;
+        jump_entry->new_end = funcs[i].new_addr + funcs[i].new_size;
+
+        if (patch_info->jump_min_addr > jump_entry->new_addr) {
+            patch_info->jump_min_addr = jump_entry->new_addr;
+        }
+        if (patch_info->jump_max_addr < jump_entry->new_end) {
+            patch_info->jump_max_addr = jump_entry->new_end;
+        }
 
         log_debug("process %d: old_addr=0x%08lx, new_addr=0x%08lx, func='%s'\n",
             process->tgid, jump_entry->old_addr, jump_entry->new_addr, func_name);

@@ -43,6 +43,7 @@ struct patch_jump_entry {
 
     unsigned long old_addr;
     unsigned long new_addr;
+    unsigned long new_end;
 };
 
 struct patch_info {
@@ -54,6 +55,9 @@ struct patch_info {
 
     unsigned long rodata_addr;
     size_t rodata_len;
+
+    unsigned long jump_min_addr;
+    unsigned long jump_max_addr;
 
     DECLARE_HASHTABLE(jump_table, PATCH_FUNC_HASH_BITS);
 };
