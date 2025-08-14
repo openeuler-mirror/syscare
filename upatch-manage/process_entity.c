@@ -330,6 +330,7 @@ void process_remove_patch(struct process_entity *process, struct patch_entity *p
     }
 
     list_del_init(&patch_info->node);
+    free_patch_memory(process->task, patch_info);
     free_patch_info(patch_info);
 }
 
