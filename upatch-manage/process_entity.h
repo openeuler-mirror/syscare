@@ -22,7 +22,8 @@
 #define _UPATCH_MANAGE_PROCESS_ENTITY_H
 
 #include <linux/types.h>
-#include <linux/mutex.h>
+#include <linux/err.h>
+
 #include <linux/sched.h>
 #include <linux/kref.h>
 #include <linux/spinlock.h>
@@ -112,7 +113,7 @@ void release_process(struct kref *kref);
  */
 static inline struct process_entity *get_process(struct process_entity *process)
 {
-    if (unlikely(!process)) {
+    if (unlikely(IS_ERR_OR_NULL(process))) {
         return NULL;
     }
 
@@ -129,7 +130,7 @@ static inline struct process_entity *get_process(struct process_entity *process)
  */
 static inline void put_process(struct process_entity *process)
 {
-    if (unlikely(!process)) {
+    if (unlikely(IS_ERR_OR_NULL(process))) {
         return;
     }
 
