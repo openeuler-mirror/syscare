@@ -23,6 +23,7 @@
 
 #include <linux/types.h>
 #include <linux/limits.h>
+#include <linux/err.h>
 
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
@@ -150,7 +151,7 @@ void release_target(struct kref *kref);
  */
 static inline struct target_entity *get_target(struct target_entity *target)
 {
-    if (unlikely(!target)) {
+    if (unlikely(IS_ERR_OR_NULL(target))) {
         return NULL;
     }
 
@@ -167,7 +168,7 @@ static inline struct target_entity *get_target(struct target_entity *target)
  */
 static inline void put_target(struct target_entity *target)
 {
-    if (unlikely(!target)) {
+    if (unlikely(IS_ERR_OR_NULL(target))) {
         return;
     }
 
