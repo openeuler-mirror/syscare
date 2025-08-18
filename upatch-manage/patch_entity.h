@@ -22,6 +22,7 @@
 #define _UPATCH_MANAGE_PATCH_ENTITY_H
 
 #include <linux/types.h>
+#include <linux/err.h>
 #include <linux/elf.h>
 #include <linux/module.h>
 #include <linux/kref.h>
@@ -145,7 +146,7 @@ void release_patch(struct kref *kref);
  */
 static inline struct patch_entity *get_patch(struct patch_entity *patch)
 {
-    if (unlikely(!patch)) {
+    if (unlikely(IS_ERR_OR_NULL(patch))) {
         return NULL;
     }
 
@@ -162,7 +163,7 @@ static inline struct patch_entity *get_patch(struct patch_entity *patch)
  */
 static inline void put_patch(struct patch_entity *patch)
 {
-    if (unlikely(!patch)) {
+    if (unlikely(IS_ERR_OR_NULL(patch))) {
         return;
     }
 

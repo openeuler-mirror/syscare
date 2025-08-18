@@ -239,6 +239,7 @@ int upatch_load(const char *target_file, const char *patch_file)
         new_target = load_target(file);
         if (unlikely(IS_ERR(new_target))) {
             ret = PTR_ERR(new_target);
+            new_target = NULL;
             log_err("failed to load target %s, ret=%d\n", target_file, ret);
             goto release_out;
         }
