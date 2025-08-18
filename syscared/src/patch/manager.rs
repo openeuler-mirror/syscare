@@ -396,6 +396,8 @@ impl PatchManager {
     fn parse_patches(root_dir: &Path) -> Result<Vec<Patch>> {
         let root_name = root_dir.file_name().expect("Invalid patch root directory");
         let patch_metadata = root_dir.join(PATCH_INFO_FILE_NAME);
+
+        // Parse patch metadata
         let patch_info = Arc::new(
             serde::deserialize_with_magic::<PatchInfo, _, _>(patch_metadata, PATCH_INFO_MAGIC)
                 .with_context(|| {
@@ -406,25 +408,50 @@ impl PatchManager {
                 })?,
         );
 
-        patch_info
-            .entities
-            .iter()
-            .map(|patch_entity| {
-                let patch_info = patch_info.clone();
-                match patch_info.kind {
-                    PatchType::UserPatch => Ok(Patch::UserPatch(Self::parse_user_patch(
-                        root_dir,
-                        patch_info,
-                        patch_entity,
-                    )?)),
-                    PatchType::KernelPatch => Ok(Patch::KernelPatch(Self::parse_kernel_patch(
-                        root_dir,
-                        patch_info,
-                        patch_entity,
-                    )?)),
+        // Collect all successfully parsed patches, ignoring failed patches
+        let mut successful_patches = Vec::new();
+        let mut has_errors = false;
+
+        for patch_entity in &patch_info.entities {
+            let patch_info = patch_info.clone();
+            let parse_result = match patch_info.kind {
+                PatchType::UserPatch => Self::parse_user_patch(
+                    root_dir,
+                    patch_info,
+                    patch_entity,
+                ).map(Patch::UserPatch),
+                PatchType::KernelPatch => Self::parse_kernel_patch(
+                    root_dir,
+                    patch_info,
+                    patch_entity,
+                ).map(Patch::KernelPatch),
+            };
+
+            match parse_result {
+                Ok(patch_entity) => {
+                    debug!("Successfully parsed patch entity '{}' ({})", patch_entity.uuid(), patch_entity);
+                    successful_patches.push(patch_entity);
                 }
-            })
-            .collect::<Result<Vec<_>>>()
+                Err(e) => {
+                    // Log individual patch parsing error but continue processing other patches
+                    error!("Failed to parse patch entity '{}': {}", patch_entity.uuid, e);
+                    has_errors = true;
+                }
+            }
+        }
+
+        // Return error if no patch was successfully parsed
+        if successful_patches.is_empty() && !patch_info.entities.is_empty() {
+            bail!("No patches could be parsed from directory '{}'", root_name.to_string_lossy());
+        }
+
+        // Log warning if some patches failed to parse but the other patches were successfully parsed
+        if has_errors && !successful_patches.is_empty() {
+            warn!("Some patches failed to parse in directory '{}', but {} patches were successfully loaded", 
+                root_name.to_string_lossy(), successful_patches.len());
+        }
+
+        Ok(successful_patches)
     }
 
     fn scan_patches<P: AsRef<Path>>(directory: P) -> Result<IndexMap<Uuid, Arc<Patch>>> {
