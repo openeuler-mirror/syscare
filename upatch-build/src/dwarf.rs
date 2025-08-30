@@ -304,7 +304,7 @@ pub struct ProducerIterator<R: Reader> {
 }
 
 impl<R: Reader<Offset = usize>> ProducerIterator<R> {
-    fn current(&self) -> Result<Option<(&Unit<R>, DebuggingInformationEntry<R>)>> {
+    fn current(&self) -> Result<Option<(&Unit<R>, DebuggingInformationEntry<'_, '_, R>)>> {
         if let Some((unit, offsets)) = &self.state {
             if let Some(offset) = offsets.last() {
                 return Ok(Some((unit, unit.entry(*offset)?)));
