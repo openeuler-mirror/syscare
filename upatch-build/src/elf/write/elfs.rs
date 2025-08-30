@@ -70,7 +70,7 @@ impl Elf {
         Ok(res)
     }
 
-    pub fn symbols(&mut self) -> Result<SymbolHeaderTable> {
+    pub fn symbols(&mut self) -> Result<SymbolHeaderTable<'_>> {
         let sections = &self.sections()?;
         for section in sections {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
