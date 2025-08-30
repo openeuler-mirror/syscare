@@ -32,12 +32,6 @@ const UPATCH_ID_PREFIX: &str = ".upatch_";
 
 const NON_EXIST_PATH: &str = "/dev/null";
 
-#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct ObjectRelation {
-    pub original_object: PathBuf,
-    pub patched_object: PathBuf,
-}
-
 /*
  * The task of this class is to find out:
  * 1. relationship between binary and debuginfo

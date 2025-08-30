@@ -41,11 +41,11 @@ impl Elf {
         Ok(Self { mmap, endian })
     }
 
-    pub fn header(&self) -> Result<Header> {
+    pub fn header(&self) -> Result<Header<'_>> {
         Ok(Header::from(&self.mmap, self.endian))
     }
 
-    pub fn sections(&self) -> Result<SectionHeaderTable> {
+    pub fn sections(&self) -> Result<SectionHeaderTable<'_>> {
         let header = self.header()?;
         let offset = header.get_e_shoff() as usize;
         let num = header.get_e_shnum() as usize;
@@ -59,7 +59,7 @@ impl Elf {
         ))
     }
 
-    pub fn symbols(&self) -> Result<SymbolHeaderTable> {
+    pub fn symbols(&self) -> Result<SymbolHeaderTable<'_>> {
         let sections = self.sections()?;
         for section in sections.clone() {
             if section.get_sh_type().eq(&SHT_SYMTAB) {
