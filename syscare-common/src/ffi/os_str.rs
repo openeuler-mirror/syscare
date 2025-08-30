@@ -141,7 +141,7 @@ pub trait OsStrExt: AsRef<OsStr> {
         })
     }
 
-    fn split_whitespace(&self) -> Filter<Split<SplitFn>, FilterFn> {
+    fn split_whitespace(&self) -> Filter<Split<'_, SplitFn>, FilterFn> {
         self.split(SplitFn::from(char::is_whitespace))
             .filter(|s| !s.is_empty())
     }
