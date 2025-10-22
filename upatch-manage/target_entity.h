@@ -218,16 +218,6 @@ int target_deactive_patch(struct target_entity *target, struct inode *inode, str
 enum upatch_status target_patch_status(struct target_entity *target, const struct inode *inode);
 
 /**
- * @brief Get current actived patch on the target
- * @param target Target entity
- * @return Current actived patch entity or NULL if none exists
- *
- * The returned patch has its reference count incremented.
- * Caller must call put_patch() when done.
- */
-struct patch_entity *target_get_actived_patch(struct target_entity *target);
-
-/**
  * @brief Get or create process entity
  * @param target Target entity
  * @param task Process task_struct

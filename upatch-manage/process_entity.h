@@ -24,7 +24,8 @@
 #include <linux/types.h>
 #include <linux/err.h>
 
-#include <linux/sched.h>
+#include <linux/sched/task.h>
+#include <linux/pid.h>
 #include <linux/kref.h>
 #include <linux/spinlock.h>
 
@@ -66,7 +67,7 @@ struct patch_info {
 // target may be loaded into different process
 // due to latency of uprobe handle, process may dealy patch loading
 struct process_entity {
-    struct task_struct *task;       // underlying task struct
+    struct mm_struct *mm;       // underlying mm struct
     pid_t tgid;
 
     spinlock_t thread_lock;         // thread lock
@@ -75,7 +76,6 @@ struct process_entity {
     struct list_head pending_node;  // pending list node
 
     struct list_head patch_list;    // all actived patches
-    struct patch_info *patch_info;  // current actived patch info
 
     struct kref kref;
 };
@@ -145,14 +145,7 @@ static inline void put_process(struct process_entity *process)
  *
  * Safe to call with NULL; it will be treated as not alive.
  */
-static inline bool process_is_alive(struct process_entity *process)
-{
-    if (unlikely(!process || !process->task)) {
-        return false;
-    }
-
-    return pid_alive(process->task);
-}
+bool process_is_alive(struct process_entity *process);
 
 /**
  * @brief Find process patch info by patch entity

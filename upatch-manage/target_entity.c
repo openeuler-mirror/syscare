@@ -566,12 +566,12 @@ static int register_patch_functions_unlocked(struct target_entity *target, const
 
 /* --- Process management --- */
 
-static inline struct process_entity *find_process_unlocked(const struct target_entity *target, pid_t pid)
+static inline struct process_entity *find_process_unlocked(const struct target_entity *target, struct mm_struct *mm)
 {
     struct process_entity *process;
 
-    hash_for_each_possible(target->processes, process, node, hash_32(pid, PROCESS_HASH_BITS)) {
-        if (process->tgid == pid) {
+    hash_for_each_possible(target->processes, process, node, hash_ptr(mm, PROCESS_HASH_BITS)) {
+        if (process->mm == mm) {
             return process;
         }
     }
@@ -888,47 +888,61 @@ unlock_out:
     return ret;
 }
 
-struct patch_entity *target_get_actived_patch(struct target_entity *target)
-{
-    struct patch_entity *patch;
-
-    spin_lock(&target->active_lock);
-    patch = get_patch(list_first_entry_or_null(&target->actived_patches, struct patch_entity, actived_node));
-    spin_unlock(&target->active_lock);
-
-    return patch;
-}
-
 struct process_entity *target_get_process(struct target_entity *target, struct task_struct *task)
 {
-    struct process_entity *process;
-    pid_t pid = task_tgid_nr(task);
+    struct process_entity *curr_proc = NULL;
+    struct process_entity *new_proc = NULL;
+    struct mm_struct *mm = NULL;
 
-    if (unlikely(!target)) {
+    if (unlikely(!target || !task)) {
         return ERR_PTR(-EINVAL);
     }
 
-    spin_lock(&target->process_lock);
-
-    process = find_process_unlocked(target, pid);
-    if (!process) {
-        log_debug("create process %d for '%s'\n", pid, target->file.path);
-
-        process = new_process(task);
-        if (IS_ERR(process)) {
-            log_err("failed to create target process, ret=%d\n", (int)PTR_ERR(process));
-            goto unlock_out;
-        }
-
-        hash_add(target->processes, &process->node, hash_32(pid, PROCESS_HASH_BITS));
+    mm = get_task_mm(task);
+    if (unlikely(!mm)) {
+        return NULL;
     }
 
-    get_process(process);
+    /* 1.Lock to find process entity under lock */
+    spin_lock(&target->process_lock);
 
-unlock_out:
+    curr_proc = find_process_unlocked(target, mm);
+    if (curr_proc) {
+        get_process(curr_proc);
+        spin_unlock(&target->process_lock);
+        goto out;
+    }
+
     spin_unlock(&target->process_lock);
 
-    return process;
+    /* 2.Alloc new process */
+    new_proc = new_process(task);
+    if (unlikely(IS_ERR(new_proc))) {
+        curr_proc = new_proc;
+        goto out;
+    }
+
+    /* 3.Lock again to insert new process */
+    spin_lock(&target->process_lock);
+
+    curr_proc = find_process_unlocked(target, mm);
+    if (curr_proc) {
+        get_process(curr_proc);
+    } else {
+        hash_add(target->processes, &new_proc->node, hash_ptr(mm, PROCESS_HASH_BITS));
+        get_process(new_proc);
+    
+        curr_proc = new_proc;
+        new_proc = NULL;
+    }
+
+    spin_unlock(&target->process_lock);
+
+out:
+    spin_unlock(&target->process_lock);
+    mmput(mm);
+
+    return curr_proc;
 }
 
 void target_cleanup_process(struct target_entity *target)

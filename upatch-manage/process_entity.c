@@ -60,39 +60,30 @@ static int do_free_patch_memory(struct mm_struct *mm, unsigned long addr, size_t
     return upatch_munmap(mm, addr, len, NULL);
 }
 
-static void free_patch_memory(struct task_struct *task, struct patch_info *patch)
+static void free_patch_memory(struct process_entity *process, struct patch_info *patch)
 {
-    pid_t pid = task_tgid_nr(task);
-    struct mm_struct *mm;
-
     int ret;
 
-    mm = get_task_mm(task);
-    if (unlikely(!mm)) {
-        return;
-    }
-
-    mmap_write_lock(mm);
+    mmap_write_lock(process->mm);
 
     log_debug("process %d: free patch text, addr=0x%lx, len=0x%lx\n",
-        pid, patch->text_addr, patch->text_len);
-    ret = do_free_patch_memory(mm, patch->text_addr, patch->text_len);
+        process->tgid, patch->text_addr, patch->text_len);
+    ret = do_free_patch_memory(process->mm, patch->text_addr, patch->text_len);
     if (ret) {
         log_err("failed to free patch text, pid=%d, addr=0x%lx, len=0x%lx, ret=%d\n",
-            pid, patch->text_addr, patch->text_len, ret);
+            process->tgid, patch->text_addr, patch->text_len, ret);
     }
 
     log_debug("process %d: free patch rodata, addr=0x%lx, len=0x%lx\n",
-        pid, patch->rodata_addr, patch->rodata_len);
-    ret = do_free_patch_memory(mm, patch->rodata_addr, patch->rodata_len);
+        process->tgid, patch->rodata_addr, patch->rodata_len);
+    ret = do_free_patch_memory(process->mm, patch->rodata_addr, patch->rodata_len);
     if (ret) {
         log_err("failed to free patch rodata, pid=%d, addr=0x%lx, len=0x%lx, ret=%d\n",
-            pid, patch->rodata_addr, patch->rodata_len, ret);
+            process->tgid, patch->rodata_addr, patch->rodata_len, ret);
     }
 
-    mmap_write_unlock(mm);
+    mmap_write_unlock(process->mm);
 
-    mmput(mm);
     return;
 }
 
@@ -172,6 +163,34 @@ static bool is_patch_removable(pid_t pid, const void *page, void *context)
     return true;
 }
 
+static struct task_struct *process_get_task(struct process_entity *process)
+{
+    struct pid *pid;
+    struct task_struct *task;
+    
+    if (unlikely(!process)) {
+        return NULL;
+    }
+
+    pid = find_get_pid(process->tgid);
+    if (!pid) {
+        return NULL;
+    }
+
+    rcu_read_lock();
+
+    task = pid_task(pid, PIDTYPE_PID);
+    if (task) {
+        get_task_struct(task);
+    }
+
+    rcu_read_unlock();
+
+    put_pid(pid);
+
+    return task;
+};
+
 /* --- Public interface --- */
 
 struct process_entity *new_process(struct task_struct *task)
@@ -187,16 +206,14 @@ struct process_entity *new_process(struct task_struct *task)
         return ERR_PTR(-ENOMEM);
     }
 
-    process->task = get_task_struct(task);
     process->tgid = task_tgid_nr(task);
+    process->mm = get_task_mm(task);
 
     spin_lock_init(&process->thread_lock);
 
     INIT_HLIST_NODE(&process->node);
     INIT_LIST_HEAD(&process->pending_node);
-
     INIT_LIST_HEAD(&process->patch_list);
-    process->patch_info = NULL;
 
     kref_init(&process->kref);
 
@@ -224,16 +241,39 @@ void release_process(struct kref *kref)
 
     list_for_each_entry_safe(patch_info, tmp, &process->patch_list, node) {
         list_del_init(&patch_info->node);
-        free_patch_memory(process->task, patch_info);
+
+        free_patch_memory(process, patch_info);
         free_patch_info(patch_info);
     }
-    process->patch_info = NULL;
 
-    put_task_struct(process->task);
-    process->task = NULL;
+    mmput(process->mm);
+    process->mm = NULL;
     process->tgid = 0;
 
     kmem_cache_free(g_process_cache, process);
+}
+
+bool process_is_alive(struct process_entity *process)
+{
+    struct pid *pid;
+    struct task_struct *task;
+
+    if (unlikely(!process)) {
+        return false;
+    }
+
+    pid = find_get_pid(process->tgid);
+    if (!pid) {
+        return false;
+    }
+
+    rcu_read_lock();
+
+    task = pid_task(pid, PIDTYPE_PID);
+    rcu_read_unlock();
+
+    put_pid(pid);
+    return task != NULL;
 }
 
 struct patch_info *process_find_patch(struct process_entity *process, struct patch_entity *patch)
@@ -336,7 +376,6 @@ int process_load_patch(struct process_entity *process, struct patch_entity *patc
     }
 
     list_add(&patch_info->node, &process->patch_list);
-    process->patch_info = patch_info;
 
     return 0;
 }
@@ -351,13 +390,15 @@ void process_remove_patch(struct process_entity *process, struct patch_entity *p
     }
 
     list_del_init(&patch_info->node);
-    free_patch_memory(process->task, patch_info);
+
+    free_patch_memory(process, patch_info);
     free_patch_info(patch_info);
 }
 
 int process_check_patch_on_stack(struct process_entity *process, struct patch_entity *patch)
 {
     struct patch_info *patch_info;
+    struct task_struct *task;
 
     if (unlikely(!process || !patch)) {
         return -EINVAL;
@@ -368,5 +409,10 @@ int process_check_patch_on_stack(struct process_entity *process, struct patch_en
         return 0;
     }
 
-    return check_process_stack(process->task, is_patch_removable, patch_info);
+    task = process_get_task(process);
+    if (unlikely(!task)) {
+        return 0;
+    }
+
+    return check_process_stack(task, is_patch_removable, patch_info);
 }
