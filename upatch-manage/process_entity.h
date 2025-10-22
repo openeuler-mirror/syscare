@@ -155,14 +155,14 @@ static inline bool process_is_alive(struct process_entity *process)
 }
 
 /**
- * @brief Switch and get process actived patch to specific one
+ * @brief Find process patch info by patch entity
  * @param process: Process entity (must not NULL)
  * @param patch: Patch entity (must not NULL)
  * @return Patch info pointer, NULL if not found
  *
  * Caller must hold thread lock.
  */
-struct patch_info *process_switch_and_get_patch(struct process_entity *process, struct patch_entity *patch);
+struct patch_info *process_find_patch(struct process_entity *process, struct patch_entity *patch);
 
 /**
  * @brief Find function jump address in the process

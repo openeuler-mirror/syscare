@@ -236,42 +236,39 @@ void release_process(struct kref *kref)
     kmem_cache_free(g_process_cache, process);
 }
 
-struct patch_info *process_switch_and_get_patch(struct process_entity *process, struct patch_entity *patch)
+struct patch_info *process_find_patch(struct process_entity *process, struct patch_entity *patch)
 {
-    struct patch_info *patch_info;
-
-    BUG_ON(unlikely(!process || !patch));
-
-    if (likely(process->patch_info && process->patch_info->patch == patch)) {
-        return process->patch_info;
-    }
-
-    patch_info = find_patch_info_unlocked(process, patch);
-    if (unlikely(!patch_info)) {
+    if (unlikely(!process || !patch)) {
         return NULL;
     }
 
-    process->patch_info = patch_info;
-
-    return patch_info;
+    return find_patch_info_unlocked(process, patch);
 }
 
 unsigned long process_get_jump_addr(struct process_entity *process, unsigned long old_addr)
 {
+    struct patch_info *patch;
     struct patch_jump_entry *entry;
     unsigned long jump_addr = 0;
+    unsigned long addr_hash = 0;
 
-    if (unlikely(!process || !process->patch_info)) {
+    if (unlikely(!process)) {
         return 0;
     }
 
-    hash_for_each_possible(process->patch_info->jump_table, entry, node, hash_long(old_addr, PATCH_FUNC_HASH_BITS)) {
-        if (entry->old_addr == old_addr) {
-            jump_addr = entry->new_addr;
-            break;
+    // calculate address hash
+    addr_hash = hash_long(old_addr, PATCH_FUNC_HASH_BITS);
+
+    // find jump address from all active patches
+    list_for_each_entry(patch, &process->patch_list, node) {
+        hash_for_each_possible(patch->jump_table, entry, node, addr_hash) {
+            if (entry->old_addr == old_addr) {
+                jump_addr = entry->new_addr;
+                break;
+            }
         }
     }
-
+    
     return jump_addr;
 }
 

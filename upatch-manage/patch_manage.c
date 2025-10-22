@@ -131,9 +131,9 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
     struct inode *inode = NULL;
     struct target_entity *target = NULL;
     struct process_entity *process = NULL;
-    struct patch_entity *actived_patch = NULL;
+    struct patch_entity *patch = NULL;
+    struct patch_entity *patch_tmp = NULL;
 
-    struct patch_info *patch_info;
     unsigned long jump_addr;
 
     int ret = UPROBE_RUN_OLD_FUNC;
@@ -166,31 +166,27 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
 
     spin_lock(&process->thread_lock); // ensure only one thread could check & resolve patch
 
-    /* Step 5: Get actived patch entity of the target */
-    actived_patch = target_get_actived_patch(target);
-    if (unlikely(!actived_patch)) {
-        // target does not have any actived patch yet
-        goto unlock_out;
-    }
-
-    /* Step 6. Check or resolve patch of the process */
-    patch_info = process_switch_and_get_patch(process, actived_patch);
-    if (unlikely(!patch_info)) {
-        ret = upatch_resolve(target, actived_patch, process, vma_start);
+    /* Step 5: Process load all actived patches in target */
+    list_for_each_entry_safe(patch, patch_tmp, &target->actived_patches, actived_node) {
+        if (likely(process_find_patch(process, patch))) {
+            continue;
+        }
+        
+        ret = upatch_resolve(target, patch, process, vma_start);
         if (unlikely(ret)) {
-            log_err("process %d: failed to resolve patch %s, ret=%d\n", tgid, actived_patch->file.path, ret);
+            log_err("process %d: failed to resolve patch %s, ret=%d\n", tgid, patch->file.path, ret);
             goto unlock_out;
         }
     }
 
-    /* Step 7: Find patch function jump addr */
+    /* Step 6: Find patch function jump addr */
     jump_addr = process_get_jump_addr(process, pc);
     if (unlikely(!jump_addr)) {
         log_err("process %d: cannot find jump address, pc=0x%lx\n", tgid, pc);
         goto unlock_out;
     }
 
-    /* Step 8: Set patch function jump addr to pc register */
+    /* Step 7: Set patch function jump addr to pc register */
     instruction_pointer_set(regs, jump_addr);
     log_debug("process %d: jump 0x%lx -> 0x%lx\n", tgid, pc, jump_addr);
 
@@ -198,7 +194,6 @@ unlock_out:
     spin_unlock(&process->thread_lock);
 
 release_out:
-    put_patch(actived_patch);
     put_process(process);
     put_target(target);
     iput(inode);
