@@ -24,7 +24,6 @@ use jsonrpc_core::IoHandler;
 use jsonrpc_ipc_server::{Server, ServerBuilder};
 use log::{error, info, LevelFilter, Record};
 use nix::unistd::{chown, Gid, Uid};
-use parking_lot::RwLock;
 use patch::manager::PatchManager;
 use signal_hook::{consts::TERM_SIGNALS, iterator::Signals, low_level::signal_name};
 
@@ -183,7 +182,7 @@ impl Daemon {
             .context("Daemonize failed")
     }
 
-    fn initialize_skeletons(&self, patch_manager: Arc<RwLock<PatchManager>>) -> Result<IoHandler> {
+    fn initialize_skeletons(&self, patch_manager: Arc<PatchManager>) -> Result<IoHandler> {
         let mut io_handler = IoHandler::new();
 
         io_handler.extend_with(PatchSkeletonImpl::new(patch_manager).to_delegate());
@@ -225,10 +224,10 @@ impl Daemon {
 
         info!("Initializing patch manager...");
         let patch_root = &self.args.data_dir;
-        let patch_manager = Arc::new(RwLock::new(
+        let patch_manager = Arc::new(
             PatchManager::new(&self.config.patch, patch_root)
                 .context("Failed to initialize patch manager")?,
-        ));
+        );
 
         info!("Initializing patch monitor...");
         let _patch_monitor = PatchMonitor::new(patch_root, patch_manager.clone())

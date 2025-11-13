@@ -23,7 +23,7 @@ use std::{
 use anyhow::{ensure, Context, Result};
 use inotify::{EventMask, Inotify, WatchMask};
 use log::{error, info};
-use parking_lot::{Mutex, RwLock};
+use parking_lot::Mutex;
 
 use super::{manager::PatchManager, PATCH_INFO_FILE_NAME, PATCH_INSTALL_DIR};
 
@@ -40,10 +40,7 @@ pub struct PatchMonitor {
 }
 
 impl PatchMonitor {
-    pub fn new<P: AsRef<Path>>(
-        patch_root: P,
-        patch_manager: Arc<RwLock<PatchManager>>,
-    ) -> Result<Self> {
+    pub fn new<P: AsRef<Path>>(patch_root: P, patch_manager: Arc<PatchManager>) -> Result<Self> {
         let patch_install_dir = patch_root.as_ref().join(PATCH_INSTALL_DIR);
 
         let inotify = Arc::new(Mutex::new(Some({
@@ -86,7 +83,7 @@ impl Drop for PatchMonitor {
 struct MonitorThread {
     patch_root: PathBuf,
     inotify: Arc<Mutex<Option<Inotify>>>,
-    patch_manager: Arc<RwLock<PatchManager>>,
+    patch_manager: Arc<PatchManager>,
 }
 
 impl MonitorThread {
@@ -134,7 +131,6 @@ impl MonitorThread {
                         info!("Detected patch change, rescanning patches...");
                         if let Err(e) = self
                             .patch_manager
-                            .write()
                             .rescan_patches()
                             .context("An error occored while rescanning patches")
                         {
