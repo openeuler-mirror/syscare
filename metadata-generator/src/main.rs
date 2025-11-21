@@ -56,13 +56,13 @@ fn parse_target_string(target: &str) -> Option<(&str, &str, &str, &str)> {
     const PKG_DEFAULT_TAG: &str = "(none)";
 
     let mut split = target.rsplitn(3, PKG_INFO_SPLITTER);
-
     let release = split.next()?;
-    let version = split.next()?;
-    let name_epoch = split.next()?;
-    let (name, epoch) = name_epoch
+    let ver_with_epoch = split.next()?;
+    let name = split.next()?;
+
+    let (epoch, version) = ver_with_epoch
         .split_once(PKG_NAME_SPLITTER)
-        .map_or((name_epoch, PKG_DEFAULT_TAG), |(name, epoch)| (name, epoch));
+        .unwrap_or((PKG_DEFAULT_TAG, ver_with_epoch));
 
     Some((name, epoch, version, release))
 }
