@@ -16,7 +16,7 @@
 #include "../util.h"
 
 /* jmp table, solve limit for the jmp instruction, Used for both PLT/GOT */
-#if defined(__aarch64__)
+#if defined(__aarch64__) || defined(__riscv)
 struct upatch_jmp_table_entry {
     unsigned long inst[2];
     unsigned long addr[2];
@@ -29,7 +29,7 @@ struct upatch_jmp_table_entry {
 #endif
 
 #define JMP_ENTRY_SIZE (sizeof(unsigned long))
-#if defined(__arm__)
+#if defined(__arm__) || defined(__riscv)
 #define NORMAL_JMP_ENTRY_NUM 3
 #else
 #define NORMAL_JMP_ENTRY_NUM 2
@@ -52,6 +52,11 @@ struct upatch_jmp_table_entry {
 #define IFUNC_JMP_ENTRY_NUM 10
 // R_ARM_JUMP24/CALL uses a 24-bit immediate, shifted left by 2, signed -> +/- 32 MiB range.
 #define PATCH_LOAD_RANGE_LIMIT (1UL << 25) // 32 MiB (2^25)
+
+#elif defined(__riscv)
+#define IFUNC_JMP_ENTRY_NUM 8
+#define PLT_JMP_ENTRY_NUM 4
+#define PATCH_LOAD_RANGE_LIMIT (1UL << 21) // 2 MiB (2^21)
 #endif
 
 #define JMP_TABLE_ENTRY_MAX_SIZE (JMP_ENTRY_SIZE * IFUNC_JMP_ENTRY_NUM)
