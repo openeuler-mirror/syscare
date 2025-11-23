@@ -606,9 +606,9 @@ static inline void remove_patch_on_all_process(struct target_entity *target, str
     int bkt;
 
     hash_for_each(target->processes, bkt, process, node) {
-        spin_lock(&process->thread_lock);
+        mutex_lock(&process->thread_lock);
         process_remove_patch(process, patch);
-        spin_unlock(&process->thread_lock);
+        mutex_unlock(&process->thread_lock);
     }
 }
 
@@ -939,7 +939,6 @@ struct process_entity *target_get_process(struct target_entity *target, struct t
     spin_unlock(&target->process_lock);
 
 out:
-    spin_unlock(&target->process_lock);
     mmput(mm);
 
     return curr_proc;

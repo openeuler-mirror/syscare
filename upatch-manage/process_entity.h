@@ -27,7 +27,7 @@
 #include <linux/sched/task.h>
 #include <linux/pid.h>
 #include <linux/kref.h>
-#include <linux/spinlock.h>
+#include <linux/mutex.h>
 
 #include <linux/hashtable.h>
 
@@ -70,7 +70,7 @@ struct process_entity {
     struct mm_struct *mm;       // underlying mm struct
     pid_t tgid;
 
-    spinlock_t thread_lock;         // thread lock
+    struct mutex thread_lock;         // thread lock
 
     struct hlist_node node;         // hash table node
     struct list_head pending_node;  // pending list node

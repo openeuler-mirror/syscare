@@ -164,7 +164,7 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
         goto release_out;
     }
 
-    spin_lock(&process->thread_lock); // ensure only one thread could check & resolve patch
+    mutex_lock(&process->thread_lock); // ensure only one thread could check & resolve patch
 
     /* Step 5: Process load all actived patches in target */
     list_for_each_entry_safe(patch, patch_tmp, &target->actived_patches, actived_node) {
@@ -191,7 +191,7 @@ static int upatch_uprobe_handler(struct uprobe_consumer *self, struct pt_regs *r
     log_debug("process %d: jump 0x%lx -> 0x%lx\n", tgid, pc, jump_addr);
 
 unlock_out:
-    spin_unlock(&process->thread_lock);
+    mutex_unlock(&process->thread_lock);
 
 release_out:
     put_process(process);

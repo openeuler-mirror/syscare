@@ -209,7 +209,7 @@ struct process_entity *new_process(struct task_struct *task)
     process->tgid = task_tgid_nr(task);
     process->mm = get_task_mm(task);
 
-    spin_lock_init(&process->thread_lock);
+    mutex_init(&process->thread_lock);
 
     INIT_HLIST_NODE(&process->node);
     INIT_LIST_HEAD(&process->pending_node);
@@ -234,7 +234,7 @@ void release_process(struct kref *kref)
     process = container_of(kref, struct process_entity, kref);
     log_debug("free process %d\n", process->tgid);
 
-    WARN_ON(spin_is_locked(&process->thread_lock));
+    WARN_ON(mutex_is_locked(&process->thread_lock));
 
     WARN_ON(!hlist_unhashed(&process->node));
     WARN_ON(!list_empty(&process->pending_node));
