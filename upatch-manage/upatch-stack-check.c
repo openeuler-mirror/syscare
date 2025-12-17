@@ -1,5 +1,6 @@
 #include <errno.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/resource.h>
@@ -60,7 +61,12 @@ static unsigned long *stack_alloc(size_t *size)
 static size_t read_stack(struct upatch_process *proc,
     unsigned long *stack, size_t size, unsigned long sp)
 {
-    return (size_t)pread(proc->memfd, (void *)stack, size, (off_t)sp);
+    ssize_t result = pread(proc->memfd, (void *)stack, size, (off_t)sp);
+    if (result < 0) {
+        log_error("Failed to read stack from process memory: %s\n", strerror(errno));
+        return 0;
+    }
+    return (size_t)result;
 }
 
 static int stack_check_each_pid(struct upatch_process *proc,
@@ -85,6 +91,11 @@ static int stack_check_each_pid(struct upatch_process *proc,
     }
 
     stack_size = read_stack(proc, stack, stack_size, sp);
+    if (stack_size == 0) {
+        log_warn("Failed to read stack for PID %d, skipping stack check\n", pid);
+        free(stack);
+        return 0;
+    }
     log_debug("[%d] Stack size %lu, region [0x%lx, 0x%lx]\n",
         pid, stack_size, sp, sp + stack_size);
 
