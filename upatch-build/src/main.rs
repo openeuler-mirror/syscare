@@ -37,6 +37,7 @@ mod elf;
 mod file_relation;
 mod project;
 mod resolve;
+mod skip_config;
 
 use crate::{
     args::Arguments,
@@ -45,6 +46,7 @@ use crate::{
     dwarf::{ProducerParser, ProducerType},
     file_relation::FileRelation,
     project::Project,
+    skip_config::SkipConfig,
 };
 
 const CLI_NAME: &str = "upatch build";
@@ -64,6 +66,7 @@ struct UpatchBuild {
     build_root: BuildRoot,
     compiler_map: IndexMap<ProducerType, Compiler>,
     file_relation: FileRelation,
+    skip_config: SkipConfig,
 }
 
 /* Main process */
@@ -101,12 +104,21 @@ impl UpatchBuild {
             .start()
             .context("Failed to initialize logger")?;
 
+        let skip_config = SkipConfig::from_args(
+            args.skip_objects_file.as_deref(),
+        )?;
+        
+        if skip_config.get_skip_count() > 0 {
+            info!("Loaded {} skip patterns", skip_config.get_skip_count());
+        }
+
         Ok(Self {
             args,
             logger,
             build_root,
             compiler_map: IndexMap::new(),
             file_relation: FileRelation::new(),
+            skip_config,
         })
     }
 
@@ -256,6 +268,7 @@ impl UpatchBuild {
                 &debuginfo_file,
                 text_offset,
                 &temp_dir,
+                &self.skip_config,
             )
             .with_context(|| {
                 format!(
@@ -316,6 +329,10 @@ impl UpatchBuild {
         info!("{}", CLI_ABOUT);
         info!("==============================");
         trace!("{:#?}", self.args);
+
+        if self.skip_config.get_skip_count() > 0 {
+            info!("Skip patterns: {} file(s) will be skipped", self.skip_config.get_skip_count());
+        }
 
         info!("Detecting compiler(s)");
         info!("------------------------------");
@@ -464,7 +481,13 @@ impl UpatchBuild {
         debuginfo: &Path,
         text_offset: u64,
         output_dir: &Path,
+        skip_config: &SkipConfig,
     ) -> Result<()> {
+        if skip_config.should_skip(original_object) {
+            info!("Skipping object: {}", original_object.display());
+            return Ok(());
+        }
+        
         let ouput_name = original_object.file_name().with_context(|| {
             format!(
                 "Failed to parse patch file name of {}",

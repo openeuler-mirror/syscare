@@ -110,6 +110,10 @@ pub struct Arguments {
     /// Provide more detailed info
     #[clap(short, long)]
     pub verbose: bool,
+
+    /// Path to skip objects configuration file
+    #[clap(long)]
+    pub skip_objects_file: Option<PathBuf>,
 }
 
 impl Arguments {

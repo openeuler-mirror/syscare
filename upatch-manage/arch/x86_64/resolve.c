@@ -77,8 +77,11 @@ unsigned long setup_got_table(struct upatch_elf *uelf,
     table[index].addr = tls_addr;
     uelf->jmp_cur_entry++;
 
-    return (unsigned long)(uelf->core_layout.base + uelf->jmp_offs +
-        index * sizeof(struct upatch_jmp_table_entry));
+    if (jmp_addr == 0) {
+        return (unsigned long)(uelf->core_layout.kbase + uelf->jmp_offs +
+             index * sizeof(struct upatch_jmp_table_entry));
+    }
+    return (unsigned long)(uelf->core_layout.base + uelf->jmp_offs + index * sizeof(struct upatch_jmp_table_entry));
 }
 
 unsigned long insert_plt_table(struct upatch_elf *uelf, struct object_file *obj,
