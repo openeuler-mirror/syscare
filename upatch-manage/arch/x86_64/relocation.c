@@ -23,6 +23,7 @@
 #include <string.h>
 
 #include "upatch-relocation.h"
+#include "upatch-resolve.h"
 
 int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
     unsigned int relsec)
@@ -32,6 +33,7 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
     void *loc;
     void *real_loc;
     u64 val;
+    u64 offset_in_tls;
     const char *sym_name;
     GElf_Xword tls_size;
     GElf_Shdr *shdrs = (void *)uelf->info.shdrs;
@@ -90,8 +92,19 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
                     goto overflow;
                 }
                 break;
-            case R_X86_64_TLSGD:
             case R_X86_64_GOTTPOFF:
+                if (*(u32 *)loc != 0) {
+                    goto invalid_relocation;
+                }
+                tls_size = ALIGN(uelf->relf->tls_size, uelf->relf->tls_align);
+                offset_in_tls = sym->st_value - uelf->relf->load_bias;
+                u64 got_entry_base = setup_got_table(uelf, 0, offset_in_tls - tls_size);
+                // %fs - tls_size + offset
+                val = got_entry_base + sizeof(unsigned long);
+                // immediate number use 4 bytes in (mov #imme(%rip), %rax)
+                val -= ((u64)loc + 4);
+                memcpy(loc, &val, 4);
+                break;
             case R_X86_64_GOTPCRELX:
             case R_X86_64_REX_GOTPCRELX:
                 if (sym->st_value == 0) {

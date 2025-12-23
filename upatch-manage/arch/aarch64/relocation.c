@@ -323,6 +323,37 @@ int apply_relocate_add(struct upatch_elf *uelf, unsigned int symindex,
             case R_AARCH64_TLSDESC_CALL:
                 // this is a blr instruction, don't need to modify
                 break;
+            case R_AARCH64_TLSIE_ADR_GOTTPREL_PAGE21:
+                // TCB_SIZE + tls_offset
+                val = TCB_SIZE + (sym->st_value - uelf->relf->load_bias);
+                got = setup_got_table(uelf, 0, val);
+                if (!got) {
+                    goto overflow;
+                }
+                got += sizeof(unsigned long); // point to inst[1]
+
+                result = calc_reloc(RELOC_OP_PAGE, uloc, got);
+                if (result < -(s64)BIT(32) || result >= (s64)BIT(32)) {
+                    goto overflow;
+                }
+                result = extract_insn_imm(result, 21, 12);
+                result = insert_insn_imm(AARCH64_INSN_IMM_ADR, loc, (unsigned long)result);
+                *(__le32 *)loc = cpu_to_le32((__le32)result);
+                break;
+            case R_AARCH64_TLSIE_LD64_GOTTPREL_LO12_NC:
+                // TCB_SIZE + tls_offset
+                val = TCB_SIZE + (sym->st_value - uelf->relf->load_bias);
+                got = setup_got_table(uelf, 0, val);
+                if (!got) {
+                    goto overflow;
+                }
+                got += sizeof(unsigned long); // point to inst[1]
+            
+                result = calc_reloc(RELOC_OP_ABS, uloc, got);
+                result = extract_insn_imm(result, 9, 3);
+                result = insert_insn_imm(AARCH64_INSN_IMM_12, loc, (unsigned long)result);
+                *(__le32 *)loc = cpu_to_le32((__le32)result);
+                break;
             default:
                 log_error("upatch: unsupported RELA relocation: %lu\n",
                     GELF_R_TYPE(rel[i].r_info));

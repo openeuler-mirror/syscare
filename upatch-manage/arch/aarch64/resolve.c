@@ -77,6 +77,7 @@ unsigned long setup_got_table(struct upatch_elf *uelf,
         return 0;
     }
 
+    log_debug("Normal GOT entry[%u]: jmp_addr=0x%lx\n", index, jmp_addr);
     table[index].inst[0] = jmp_addr;
     table[index].inst[1] = tls_addr;
     table[index].addr[0] = 0xffffffff;
