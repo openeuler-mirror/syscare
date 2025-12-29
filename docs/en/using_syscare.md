@@ -4,7 +4,7 @@ This chapter describes how to use SysCare on openEuler.
 
 ## Prerequisites
 
-openEuler 24.03 LTS SP1 has been installed.
+openEuler 24.03 LTS SP3 has been installed.
 
 ## SysCare Usage
 
