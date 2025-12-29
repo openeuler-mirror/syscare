@@ -12,11 +12,11 @@ This chapter describes how to install SysCare on openEuler.
 
 ### Prerequisites
 
-1. openEuler 24.03 LTS SP1 has been installed.
+1. openEuler 24.03 LTS SP3 has been installed.
 
 ### Installing from Source
 
-Clone the SysCare source code <https://gitee.com/openeuler/syscare.git> and then compile and install SysCare.
+Clone the SysCare source code <https://atomgit.com/openeuler/syscare.git> and then compile and install SysCare.
 
 Before compilation, install dependencies:
 
@@ -27,7 +27,7 @@ dnf install cmake make rust cargo kernel-devel elfutils-libelf-devel llvm clang 
 Compile and install SysCare:
 
 ```shell
-git clone https://gitee.com/openeuler/syscare.git
+git clone https://atomgit.com/openeuler/syscare.git
 cd syscare
 mkdir build
 cd build

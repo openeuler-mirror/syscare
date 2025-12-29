@@ -4,7 +4,7 @@
 
 ## 前提条件
 
-安装openEuler 24.03 LTS SP2版本。
+安装openEuler 24.03 LTS SP3版本。
 
 ## SysCare使用
 

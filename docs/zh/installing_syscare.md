@@ -12,11 +12,11 @@
 
 ### 前提条件
 
-安装openEuler 24.03 LTS SP2版本。
+安装openEuler 24.03 LTS SP3版本。
 
 ### 源码编译安装SysCare
 
-SysCare源码已经归档至代码仓<https://gitee.com/openeuler/syscare.git>，用户可自行下载并编译安装。
+SysCare源码已经归档至代码仓<https://atomgit.com/openeuler/syscare.git>，用户可自行下载并编译安装。
 
 SysCare在编译前需要安装依赖包，相关命令如下：
 
@@ -27,7 +27,7 @@ dnf install cmake make rust cargo kernel-devel elfutils-libelf-devel llvm clang 
 示例如下：
 
 ```shell
-git clone https://gitee.com/openeuler/syscare.git
+git clone https://atomgit.com/openeuler/syscare.git
 cd syscare
 mkdir build
 cd build
