@@ -289,7 +289,6 @@ unsigned long process_get_jump_addr(struct process_entity *process, unsigned lon
 {
     struct patch_info *patch;
     struct patch_jump_entry *entry;
-    unsigned long jump_addr = 0;
     unsigned long addr_hash = 0;
 
     if (unlikely(!process)) {
@@ -303,13 +302,14 @@ unsigned long process_get_jump_addr(struct process_entity *process, unsigned lon
     list_for_each_entry(patch, &process->patch_list, node) {
         hash_for_each_possible(patch->jump_table, entry, node, addr_hash) {
             if (entry->old_addr == old_addr) {
-                jump_addr = entry->new_addr;
-                break;
+                // Patches are prepended to the list (LIFO). The first match found
+                // is the most recently applied one, which should take precedence.
+                return entry->new_addr;
             }
         }
     }
     
-    return jump_addr;
+    return 0;
 }
 
 int process_load_patch(struct process_entity *process, struct patch_entity *patch, struct patch_context *ctx)
@@ -375,6 +375,8 @@ int process_load_patch(struct process_entity *process, struct patch_entity *patc
         hash_add(patch_info->jump_table, &jump_entry->node, hash_long(jump_entry->old_addr, PATCH_FUNC_HASH_BITS));
     }
 
+    // Prepend the latest patch to the head of the list. This ensures that
+    // process_get_jump_addr finds the newest redirection first (LIFO order).
     list_add(&patch_info->node, &process->patch_list);
 
     return 0;

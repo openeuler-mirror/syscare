@@ -804,7 +804,9 @@ int target_active_patch(struct target_entity *target, struct inode *inode, struc
 
     /* Step 4: Insert the patch into target actived patch list */
     spin_lock(&target->active_lock);
-    list_add(&patch->actived_node, &target->actived_patches);
+    // Append to the tail to maintain a chronological sequence of activation.
+    // This preserves the history of applied patches from oldest to newest.
+    list_add_tail(&patch->actived_node, &target->actived_patches);
     get_patch(patch);
     spin_unlock(&target->active_lock);
 
