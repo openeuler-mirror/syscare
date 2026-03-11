@@ -431,6 +431,13 @@ impl UpatchBuild {
                 .context("Failed to restore line macros")?;
         }
 
+        if !self.args.clean_cmd.is_empty() {
+            info!("Cleaning '{}'", project);
+            project
+                .clean()
+                .with_context(|| format!("Failed to clean {}", project))?;
+        }
+
         if !self.args.skip_cleanup {
             info!("Cleaning up");
             self.build_root.remove().ok();
