@@ -1354,6 +1354,7 @@ name = "upatch-helper"
 version = "1.2.2"
 dependencies = [
  "anyhow",
+ "bitflags",
  "uuid",
 ]
 
