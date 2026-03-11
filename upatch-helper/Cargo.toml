@@ -11,3 +11,4 @@ build        = "build.rs"
 [dependencies]
 anyhow         = { version = "1.0" }
 uuid           = { version = "0.8", features = ["v4"] }
+bitflags       = { version = "1.3" }

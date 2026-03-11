@@ -45,6 +45,9 @@ const CXX_ENV: &str = "CXX";
 const UPATCH_CC_ENV: &str = "UPATCH_HELPER_CC";
 const UPATCH_CXX_ENV: &str = "UPATCH_HELPER_CXX";
 
+const CC_VERSION_ENV: &str = "CC_VERSION";
+const CXX_VERSION_ENV: &str = "CXX_VERSION";
+
 pub struct Project<'a> {
     name: OsString,
     build_root: &'a BuildRoot,
@@ -74,13 +77,16 @@ impl<'a> Project<'a> {
                 .context("Failed to parse compiler name")?;
             match kind {
                 ProducerType::GnuC | ProducerType::ClangC => {
-                    env::set_var(UPATCH_CC_ENV, compiler_path)
+                    env::set_var(UPATCH_CC_ENV, compiler_path);
+                    env::set_var(CC_VERSION_ENV, compiler.version.clone());
                 }
                 ProducerType::GnuCxx | ProducerType::ClangCxx => {
-                    env::set_var(UPATCH_CXX_ENV, compiler_path)
+                    env::set_var(UPATCH_CXX_ENV, compiler_path);
+                    env::set_var(CXX_VERSION_ENV, compiler.version.clone());
                 }
                 _ => {}
             }
+
             fs::soft_link(&upatch_helper, build_root.bin_dir.join(compiler_name))?;
         }
 
