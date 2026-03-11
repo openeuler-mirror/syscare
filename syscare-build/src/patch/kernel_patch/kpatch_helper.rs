@@ -17,9 +17,9 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use anyhow::Result;
+use anyhow::{Context, Result};
 use log::Level;
-use syscare_common::{fs, process::Command};
+use syscare_common::{fs, os::cpu::arch, process::Command};
 
 pub const VMLINUX_FILE_NAME: &str = "vmlinux";
 pub const KPATCH_SUFFIX: &str = "ko";
@@ -41,6 +41,48 @@ impl KernelPatchHelper {
             .stdout(Level::Debug)
             .run_with_output()?
             .exit_ok()
+    }
+
+    pub fn update_kernel_config<P, Q>(kernel_source_dir: P, config_file: Q) -> Result<PathBuf>
+    where
+        P: AsRef<Path>,
+        Q: AsRef<Path>,
+    {
+        let arch = arch();
+        let arch_name = match arch.to_str().unwrap_or_default() {
+            "x86_64" => "x86",
+            "aarch64" => "arm64",
+            name => name,
+        };
+        let new_config = kernel_source_dir.as_ref().join(".config");
+
+        // Clean old files
+        Command::new(MAKE_BIN)
+            .arg("-C")
+            .arg(kernel_source_dir.as_ref())
+            .arg("mrproper")
+            .stdout(Level::Debug)
+            .run_with_output()?
+            .exit_ok()?;
+
+        //Write current kernel config
+        let curr_config = config_file.as_ref();
+        if curr_config != new_config {
+            fs::copy(curr_config, &new_config)
+                .with_context(|| format!("Failed to write '{}'", new_config.display()))?;
+        }
+
+        // Generate suitable config file
+        Command::new(MAKE_BIN)
+            .arg("-C")
+            .arg(kernel_source_dir.as_ref())
+            .arg(format!("ARCH={}", arch_name))
+            .arg("olddefconfig")
+            .stdout(Level::Debug)
+            .run_with_output()?
+            .exit_ok()?;
+
+        Ok(new_config)
     }
 
     pub fn find_vmlinux<P: AsRef<Path>>(directory: P) -> std::io::Result<PathBuf> {
