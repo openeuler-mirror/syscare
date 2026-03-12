@@ -45,6 +45,9 @@ const CXX_ENV: &str = "CXX";
 const UPATCH_CC_ENV: &str = "UPATCH_HELPER_CC";
 const UPATCH_CXX_ENV: &str = "UPATCH_HELPER_CXX";
 
+const CC_VERSION_ENV: &str = "CC_VERSION";
+const CXX_VERSION_ENV: &str = "CXX_VERSION";
+
 pub struct Project<'a> {
     name: OsString,
     build_root: &'a BuildRoot,
@@ -74,13 +77,16 @@ impl<'a> Project<'a> {
                 .context("Failed to parse compiler name")?;
             match kind {
                 ProducerType::GnuC | ProducerType::ClangC => {
-                    env::set_var(UPATCH_CC_ENV, compiler_path)
+                    env::set_var(UPATCH_CC_ENV, compiler_path);
+                    env::set_var(CC_VERSION_ENV, compiler.version.clone());
                 }
                 ProducerType::GnuCxx | ProducerType::ClangCxx => {
-                    env::set_var(UPATCH_CXX_ENV, compiler_path)
+                    env::set_var(UPATCH_CXX_ENV, compiler_path);
+                    env::set_var(CXX_VERSION_ENV, compiler.version.clone());
                 }
                 _ => {}
             }
+
             fs::soft_link(&upatch_helper, build_root.bin_dir.join(compiler_name))?;
         }
 
@@ -180,9 +186,23 @@ impl Project<'_> {
         Ok(())
     }
 
-    pub fn override_line_macros(&self) -> Result<()> {
+    pub fn restore_backup_files(&self, backup_files: &[PathBuf]) -> Result<()> {
+        for file_path in backup_files {
+            let backup_path = PathBuf::from(concat_os!(file_path, ".bak"));
+            if backup_path.exists() {
+                fs::rename(&backup_path, file_path)?;
+                debug!("Restored: {}", backup_path.to_string_lossy());
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn override_line_macros(&self) -> Result<Vec<PathBuf>> {
         const LINE_MACRO_NAME: &str = "__LINE__";
         const LINE_MACRO_VALUE: &str = "0";
+
+        let mut backup_files = Vec::new();
 
         let file_list = fs::list_files(self.source_dir, fs::TraverseOptions { recursive: true })?;
         for file_path in file_list {
@@ -196,12 +216,17 @@ impl Project<'_> {
                 .replace(LINE_MACRO_NAME, LINE_MACRO_VALUE)
                 .into_vec();
             if old_contents != new_contents {
+                // prepare to backup original file
+                let backup_path = PathBuf::from(concat_os!(&file_path, ".bak"));
+                fs::copy(&file_path, &backup_path)?;
+                backup_files.push(file_path.clone());
+
                 debug!("* {}", file_path.display());
                 fs::write(&file_path, new_contents)?;
             }
         }
 
-        Ok(())
+        Ok(backup_files)
     }
 
     pub fn prepare(&self) -> Result<()> {

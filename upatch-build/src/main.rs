@@ -352,9 +352,11 @@ impl UpatchBuild {
                 .with_context(|| format!("Failed to clean {}", project))?;
         }
 
+        // backup_files store pathes of override files
+        let mut backup_files = Vec::new();
         if self.args.override_line_macros {
             info!("Overriding line macros");
-            project
+            backup_files = project
                 .override_line_macros()
                 .context("Failed to override line macros")?;
         }
@@ -390,6 +392,13 @@ impl UpatchBuild {
                 .with_context(|| format!("Failed to clean {}", project))?;
         }
 
+        if !backup_files.is_empty() {
+            info!("Restoring line macros");
+            project
+                .restore_backup_files(&backup_files)
+                .context("Failed to restore line macros")?;
+        }
+
         info!("Patching '{}'", project);
         project
             .apply_patches()
@@ -414,6 +423,20 @@ impl UpatchBuild {
         info!("Patches");
         info!("------------------------------");
         self.build_patches()?;
+
+        if !backup_files.is_empty() {
+            info!("Restoring line macros");
+            project
+                .restore_backup_files(&backup_files)
+                .context("Failed to restore line macros")?;
+        }
+
+        if !self.args.clean_cmd.is_empty() {
+            info!("Cleaning '{}'", project);
+            project
+                .clean()
+                .with_context(|| format!("Failed to clean {}", project))?;
+        }
 
         if !self.args.skip_cleanup {
             info!("Cleaning up");

@@ -15,7 +15,7 @@
 use std::ffi::OsString;
 use std::path::PathBuf;
 
-use anyhow::{ensure, Result};
+use anyhow::{ensure, Context, Result};
 use clap::{AppSettings, ColorChoice, Parser};
 use syscare_common::{fs, os};
 use which::which;
@@ -151,7 +151,9 @@ impl Arguments {
         self.output_dir = fs::normalize(&self.output_dir)?;
 
         for compiler in &mut self.compiler {
-            *compiler = which(&compiler)?;
+            *compiler = which(&compiler).with_context(|| {
+                format!("Cannot find compiler executable {}", compiler.display())
+            })?;
         }
         for debuginfo in &mut self.debuginfo {
             *debuginfo = fs::normalize(&debuginfo)?;

@@ -128,6 +128,10 @@ impl KernelPatchBuilder {
             }
         };
 
+        info!(" - Updating kernel config file");
+        let config_file = KernelPatchHelper::update_kernel_config(&kernel_source_dir, &config_file)
+            .context("Failed to update kernel config")?;
+
         info!("- Finding vmlinux");
         let vmlinux_file = KernelPatchHelper::find_vmlinux(kernel_debug_dir)
             .context("Cannot find kernel vmlinux")?;
