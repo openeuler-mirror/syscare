@@ -10,23 +10,23 @@ bitflags! {
     }
 
     pub struct CompilerFamily: u8 {
-        const GNU = 1 << 0;
+        const GNU   = 1 << 0;
         const CLANG = 1 << 1;
-        const ALL = Self::GNU.bits() | Self::CLANG.bits();
+        const ALL   = Self::GNU.bits() | Self::CLANG.bits();
     }
 
     pub struct CompilerLanguage: u8 {
-        const C = 1 << 0;
+        const C   = 1 << 0;
         const CXX = 1 << 1;
         const ALL = Self::C.bits() | Self::CXX.bits();
     }
 }
 
-//　Version structure with comparison support
+// Version structure with comparison support
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub struct CompilerVersion {
-    pub major: u16,
-    pub minor: u16,
+    major: u16,
+    minor: u16,
 }
 
 impl CompilerVersion {
@@ -35,12 +35,12 @@ impl CompilerVersion {
     }
 
     /// Parses a version from a string like "11.2" or "9.4.1"
-    /// Returns None if the format is invalid or numbers are out of range.
+    /// Returns None if the format is invalid or numbers are out of u16 range.
     #[inline]
     pub fn parse_str(str: &str) -> Option<Self> {
         let mut parts = str.split('.');
 
-        // Parse to u16,trimming any accidental whitespace
+        // Parse to u16, trimming any accidental whitespace
         let major = parts.next()?.trim().parse::<u16>().ok()?;
         let minor = parts.next().unwrap_or("0").trim().parse::<u16>().ok()?;
 
@@ -73,12 +73,12 @@ impl Compiler {
     }
 }
 
-// Internal struct for flag rulers
+// Internal structure for flag rules
 struct CompileFlag {
     name: &'static str,
-    archs: Arch,
-    familes: CompilerFamily,
-    languages: CompilerLanguage,
+    archs: Arch,                 // Bitmask for supported architectures
+    families: CompilerFamily,    // Bitmask for supported compiler families
+    languages: CompilerLanguage, // Bitmask for supported languages
     min_version: Option<CompilerVersion>,
 }
 
@@ -88,50 +88,50 @@ impl CompileFlag {
     #[inline]
     fn is_active(&self, compiler: &Compiler) -> bool {
         self.archs.intersects(compiler.arch)
-            && self.familes.intersects(compiler.family)
+            && self.families.intersects(compiler.family)
             && self.languages.intersects(compiler.language)
             && self.min_version.map_or(true, |min| compiler.version >= min)
     }
 }
 
-// Returns a lazy iterator of applicable compiler flags.
-// This implementation performs zero heap allocations.
+/// Returns a lazy iterator of applicable compiler flags.
+/// This implementation performs zero heap allocations.
 pub fn get_compile_flags(compiler: &Compiler) -> impl Iterator<Item = &'static str> + '_ {
     const COMPILE_FLAGS: &[CompileFlag] = &[
         // Debugging and Section Generation
         CompileFlag {
             name: "-gdwarf",
             archs: Arch::ALL,
-            familes: CompilerFamily::ALL,
+            families: CompilerFamily::ALL,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
         CompileFlag {
             name: "-ffunction-sections",
             archs: Arch::ALL,
-            familes: CompilerFamily::ALL,
+            families: CompilerFamily::ALL,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
         CompileFlag {
             name: "-fdata-sections",
             archs: Arch::ALL,
-            familes: CompilerFamily::ALL,
+            families: CompilerFamily::ALL,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
-        // Symbol and Variabie Behavior
+        // Symbol and Variable Behavior
         CompileFlag {
             name: "-fno-common",
             archs: Arch::ALL,
-            familes: CompilerFamily::ALL,
+            families: CompilerFamily::ALL,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
         CompileFlag {
             name: "-fmerge-constants",
             archs: Arch::ALL,
-            familes: CompilerFamily::GNU,
+            families: CompilerFamily::GNU,
             languages: CompilerLanguage::ALL,
             min_version: Some(CompilerVersion::new(4, 8)),
         },
@@ -139,14 +139,14 @@ pub fn get_compile_flags(compiler: &Compiler) -> impl Iterator<Item = &'static s
         CompileFlag {
             name: "-fno-tree-slp-vectorize",
             archs: Arch::ALL,
-            familes: CompilerFamily::GNU,
+            families: CompilerFamily::GNU,
             languages: CompilerLanguage::ALL,
             min_version: Some(CompilerVersion::new(4, 9)),
         },
         CompileFlag {
             name: "-fno-slp-vectorize",
             archs: Arch::ALL,
-            familes: CompilerFamily::CLANG,
+            families: CompilerFamily::CLANG,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
@@ -154,14 +154,14 @@ pub fn get_compile_flags(compiler: &Compiler) -> impl Iterator<Item = &'static s
         CompileFlag {
             name: "-fno-integrated-as",
             archs: Arch::ALL,
-            familes: CompilerFamily::CLANG,
+            families: CompilerFamily::CLANG,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
         CompileFlag {
             name: "-Werror=uninitialized",
             archs: Arch::ALL,
-            familes: CompilerFamily::CLANG,
+            families: CompilerFamily::CLANG,
             languages: CompilerLanguage::ALL,
             min_version: None,
         },
@@ -169,14 +169,14 @@ pub fn get_compile_flags(compiler: &Compiler) -> impl Iterator<Item = &'static s
         CompileFlag {
             name: "-mno-outline-atomics",
             archs: Arch::AARCH64,
-            familes: CompilerFamily::GNU,
+            families: CompilerFamily::GNU,
             languages: CompilerLanguage::ALL,
             min_version: Some(CompilerVersion::new(9, 4)),
         },
         CompileFlag {
             name: "-mno-outline-atomics",
             archs: Arch::AARCH64,
-            familes: CompilerFamily::CLANG,
+            families: CompilerFamily::CLANG,
             languages: CompilerLanguage::ALL,
             min_version: Some(CompilerVersion::new(10, 0)),
         },
@@ -242,7 +242,7 @@ mod tests {
 
     #[test]
     fn test_clang_x86_64() {
-        // Clang 10.0 on x86 should have Clang-specific vectorization and safety flags
+        // Clang on x86 should have Clang-specific vectorization and safety flags
         let compiler = Compiler::new(
             Arch::X86_64,
             CompilerFamily::CLANG,
@@ -269,8 +269,8 @@ mod tests {
         let flags: Vec<_> = get_compile_flags(&compiler).collect();
 
         assert!(flags.contains(&"-gdwarf"));
-        assert!(!flags.contains(&"-fmerge-constants")); // Require 4.8
-        assert!(!flags.contains(&"-fno-tree-slp-vectorize")); // Require 4.9
+        assert!(!flags.contains(&"-fmerge-constants")); // Requires 4.8
+        assert!(!flags.contains(&"-fno-tree-slp-vectorize")); // Requires 4.9
     }
 
     #[test]
