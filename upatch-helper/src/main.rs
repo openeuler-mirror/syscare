@@ -139,7 +139,7 @@ fn find_compiler(arg0: &OsStr) -> Result<PathBuf> {
 }
 
 #[inline(always)]
-fn parse_compile_info(command: &Command) -> Result<Compiler> {
+fn parse_compiler_info(command: &Command) -> Result<Compiler> {
     let prog_name = Path::new(command.get_program())
         .file_name()
         .unwrap_or_default();
@@ -195,7 +195,7 @@ fn parse_compile_info(command: &Command) -> Result<Compiler> {
 fn add_compile_options(command: &mut Command) -> Result<()> {
     let assembler_arg = format!("-Wa,--defsym,{}{}=0", UPATCH_ID_PREFIX, Uuid::new_v4());
 
-    let compiler = parse_compile_info(command)?;
+    let compiler = parse_compiler_info(&command)?;
     command.args(compiler::get_compile_flags(&compiler));
     command.arg(assembler_arg);
 
@@ -232,9 +232,9 @@ mod tests {
         std::env::set_var(CC_VERSION_ENV, "9.4.0");
         let command = Command::new("/usr/bin/gcc");
 
-        let compiler = parse_compile_info(&command)?;
+        let compiler = parse_compiler_info(&command)?;
 
-        //let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(9, 4));
+        // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(9, 4));
         let flags: Vec<_> = compiler::get_compile_flags(&compiler).collect();
 
         assert!(flags.contains(&"-gdwarf"));
@@ -257,9 +257,9 @@ mod tests {
         // GCC 4.9 on Aarch64 should not include -mno-outline-atomics
         std::env::set_var(CC_VERSION_ENV, "4.9");
 
-        let compiler = parse_compile_info(&command)?;
+        let compiler = parse_compiler_info(&command)?;
 
-        // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(9, 4));
+        // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(4, 9));
         let flags: Vec<_> = compiler::get_compile_flags(&compiler).collect();
 
         assert!(flags.contains(&"-gdwarf"));
@@ -275,11 +275,11 @@ mod tests {
         assert!(!flags.contains(&"-Werror=uninitialized")); // Clang specific
 
         // GCC 4.8 on Aarch64 should not include -mno-outline-atomics and -fno-tree-slp-vectorize
-        std::env::set_var(CC_VERSION_ENV, "4.9");
+        std::env::set_var(CC_VERSION_ENV, "4.8");
 
-        let compiler = parse_compile_info(&command)?;
+        let compiler = parse_compiler_info(&command)?;
 
-        // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(9, 4));
+        // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::GNU, CompilerLanguage::C, CompilerVersion::new(4, 8));
         let flags: Vec<_> = compiler::get_compile_flags(&compiler).collect();
 
         assert!(flags.contains(&"-gdwarf"));
@@ -303,7 +303,7 @@ mod tests {
         std::env::set_var(CC_VERSION_ENV, "10.0.0");
         let command = Command::new("/usr/bin/clang");
 
-        let compiler = parse_compile_info(&command)?;
+        let compiler = parse_compiler_info(&command)?;
 
         // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::CLANG, CompilerLanguage::C, CompilerVersion::new(10, 0));
         let flags: Vec<_> = compiler::get_compile_flags(&compiler).collect();
@@ -318,7 +318,7 @@ mod tests {
         assert!(flags.contains(&"-Werror=uninitialized")); // Clang specific
 
         assert!(!flags.contains(&"-fmerge-constants"));
-        assert!(!flags.contains(&"-fno-tree-slp-vectorize")); // >= 4.9
+        assert!(!flags.contains(&"-fno-tree-slp-vectorize"));
 
         if std::env::consts::ARCH == "aarch64" {
             assert!(flags.contains(&"-mno-outline-atomics"));
@@ -329,7 +329,7 @@ mod tests {
         // Clang 4.8 on Aarch64 should not include -mno-outline-atomics and -fno-tree-slp-vectorize
         std::env::set_var(CC_VERSION_ENV, "4.8");
 
-        let compiler = parse_compile_info(&command)?;
+        let compiler = parse_compiler_info(&command)?;
 
         // let compiler = Compiler::new(Arch::AARCH64, CompilerFamily::CLANG, CompilerLanguage::C, CompilerVersion::new(4, 8));
         let flags: Vec<_> = compiler::get_compile_flags(&compiler).collect();
