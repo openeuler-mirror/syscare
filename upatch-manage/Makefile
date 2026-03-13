@@ -1,11 +1,20 @@
 # SPDX-License-Identifier: GPL-2.0
 
-MODULE_NAME = upatch_manage
-ifndef MODULE_VERSION
-	MODULE_VERSION := dev
+MODULE_NAME ?= upatch_manage
+MODULE_VERSION ?= 1.0.0-dev
+
+KERNEL_SRC ?= /lib/modules/$(shell uname -r)/build
+MODULE_SRC ?= $(shell pwd)
+
+ccflags-y += -D__KERNEL__ -DMODULE -DMODNAME=\"$(MODULE_NAME)\" -DMODVER=\"$(MODULE_VERSION)\"
+ccflags-y += -D_FORTIFY_SOURCE=2 -DSECUREC_SUPPORT_FORMAT_WARNING=1
+ccflags-y += -O2 -Wall -pipe
+
+ifdef DEBUG
+	ccflags-y += -g -DDEBUG
 endif
 
-ifeq ($(ENABLE_GCOV), 1)
+ifdef GCOV
 	GCOV_PROFILE := y
 endif
 
@@ -16,11 +25,13 @@ $(MODULE_NAME)-objs += patch_load.o arch/$(ARCH)/patch_load.o symbol_resolve.o s
 $(MODULE_NAME)-objs += patch_manage.o
 
 ifeq ($(ARCH), arm64)
-	${MODULE_NAME}-objs += arch/$(ARCH)/insn.o
+	$(MODULE_NAME)-objs += arch/$(ARCH)/insn.o
 endif
 
-all:
-	make -C $(KERNEL_SRC) M=$(MODULE_SRC) modules -j
+.PHONY: module
+
+module:
+	make -C $(KERNEL_SRC) M=$(MODULE_SRC) modules
 
 clean:
 	make -C $(KERNEL_SRC) M=$(MODULE_SRC) clean
