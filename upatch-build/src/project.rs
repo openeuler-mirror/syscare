@@ -57,6 +57,7 @@ pub struct Project<'a> {
     build_cmd: &'a OsStr,
     clean_cmd: &'a OsStr,
     patches: &'a [PathBuf],
+    backup_files: Vec<PathBuf>, // Stores files that were modified by override_line_macros
 }
 
 impl<'a> Project<'a> {
@@ -107,6 +108,7 @@ impl<'a> Project<'a> {
             build_cmd: args.build_cmd.as_os_str(),
             clean_cmd: args.clean_cmd.as_os_str(),
             patches: args.patch.as_slice(),
+            backup_files: Vec::new(),
         })
     }
 }
@@ -163,6 +165,8 @@ impl Project<'_> {
     pub fn apply_patches(&self) -> Result<()> {
         for patch in self.patches.iter() {
             debug!("* {}", patch.display());
+            self.patch(patch, ["-N", "--dry-run", "-p1"])
+                .with_context(|| format!("Failed to patch {}", patch.display()))?;
             self.patch(patch, ["-N", "-p1"])
                 .with_context(|| format!("Failed to patch {}", patch.display()))?;
         }
@@ -172,8 +176,16 @@ impl Project<'_> {
 
     pub fn remove_patches(&self) -> Result<()> {
         for patch in self.patches.iter().rev() {
-            self.patch(patch, ["-R", "-p1"])
-                .with_context(|| format!("Failed to unpatch {}", patch.display()))?;
+            if let Err(e) = self
+                .patch(patch, ["-R", "--dry-run", "-p1"])
+                .with_context(|| format!("Failed to unpatch {}", patch.display()))
+            {
+                debug!("{}", e);
+            } else {
+                debug!("Successfully unpatch: {}", patch.display());
+                self.patch(patch, ["-R", "-p1"])
+                    .with_context(|| format!("Failed to unpatch {}", patch.display()))?;
+            }
         }
 
         Ok(())
@@ -186,8 +198,8 @@ impl Project<'_> {
         Ok(())
     }
 
-    pub fn restore_backup_files(&self, backup_files: &[PathBuf]) -> Result<()> {
-        for file_path in backup_files {
+    pub fn restore_backup_files(&self) -> Result<()> {
+        for file_path in self.backup_files.iter() {
             let backup_path = PathBuf::from(concat_os!(file_path, ".bak"));
             if backup_path.exists() {
                 fs::rename(&backup_path, file_path)?;
@@ -198,11 +210,9 @@ impl Project<'_> {
         Ok(())
     }
 
-    pub fn override_line_macros(&self) -> Result<Vec<PathBuf>> {
+    pub fn override_line_macros(&mut self) -> Result<()> {
         const LINE_MACRO_NAME: &str = "__LINE__";
         const LINE_MACRO_VALUE: &str = "0";
-
-        let mut backup_files = Vec::new();
 
         let file_list = fs::list_files(self.source_dir, fs::TraverseOptions { recursive: true })?;
         for file_path in file_list {
@@ -219,14 +229,14 @@ impl Project<'_> {
                 // prepare to backup original file
                 let backup_path = PathBuf::from(concat_os!(&file_path, ".bak"));
                 fs::copy(&file_path, &backup_path)?;
-                backup_files.push(file_path.clone());
+                self.backup_files.push(file_path.clone());
 
                 debug!("* {}", file_path.display());
                 fs::write(&file_path, new_contents)?;
             }
         }
 
-        Ok(backup_files)
+        Ok(())
     }
 
     pub fn prepare(&self) -> Result<()> {
@@ -250,6 +260,7 @@ impl std::fmt::Display for Project<'_> {
 
 impl Drop for Project<'_> {
     fn drop(&mut self) {
+        self.restore_backup_files().ok();
         self.remove_patches().ok();
     }
 }
