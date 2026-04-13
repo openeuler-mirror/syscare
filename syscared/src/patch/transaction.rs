@@ -17,7 +17,6 @@ use std::sync::Arc;
 use anyhow::{Context, Result};
 use log::{debug, warn};
 
-use parking_lot::RwLock;
 use syscare_abi::{PatchStateRecord, PatchStatus};
 
 use super::{driver::PatchOpFlag, entity::Patch, manager::PatchManager};
@@ -26,7 +25,7 @@ type TransationRecord = (Arc<Patch>, PatchStatus);
 
 pub struct PatchTransaction<F> {
     name: String,
-    patch_manager: Arc<RwLock<PatchManager>>,
+    patch_manager: Arc<PatchManager>,
     action: F,
     identifier: String,
     flag: PatchOpFlag,
@@ -35,11 +34,11 @@ pub struct PatchTransaction<F> {
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
+    F: Fn(&PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     pub fn new(
         name: String,
-        patch_manager: Arc<RwLock<PatchManager>>,
+        patch_manager: Arc<PatchManager>,
         action: F,
         flag: PatchOpFlag,
         identifier: String,
@@ -57,17 +56,15 @@ where
 
 impl<F> PatchTransaction<F>
 where
-    F: Fn(&mut PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
+    F: Fn(&PatchManager, &Patch, PatchOpFlag) -> Result<PatchStatus>,
 {
     fn start(&mut self) -> Result<Vec<PatchStateRecord>> {
-        let mut patch_manager = self.patch_manager.write();
-
-        let mut patch_list = patch_manager.match_patch(&self.identifier)?;
+        let mut patch_list = self.patch_manager.match_patch(&self.identifier)?;
         let mut records = Vec::with_capacity(patch_list.len());
 
         while let Some(patch) = patch_list.pop() {
-            let old_status = patch_manager.get_patch_status(&patch)?;
-            let new_status = (self.action)(&mut patch_manager, &patch, self.flag)?;
+            let old_status = self.patch_manager.get_patch_status(&patch)?;
+            let new_status = (self.action)(&self.patch_manager, &patch, self.flag)?;
 
             records.push(PatchStateRecord {
                 name: patch.to_string(),
@@ -79,9 +76,9 @@ where
     }
 
     fn rollback(&mut self) -> Result<()> {
-        let mut patch_manager = self.patch_manager.write();
         while let Some((patch, status)) = self.finish_list.pop() {
-            patch_manager.do_status_transition(&patch, status, PatchOpFlag::Normal)?;
+            self.patch_manager
+                .do_status_transition(&patch, status, PatchOpFlag::Normal)?;
         }
         Ok(())
     }

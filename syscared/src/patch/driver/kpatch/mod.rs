@@ -20,6 +20,7 @@ use std::{
 };
 
 use anyhow::{anyhow, ensure, Context, Result};
+use indexmap::IndexSet;
 use log::debug;
 
 use syscare_abi::PatchStatus;
@@ -124,11 +125,11 @@ impl KernelPatchDriver {
     }
 
     pub fn check_conflicted_patches(&self, patch: &KernelPatch) -> Result<()> {
-        let conflicted: HashSet<_> = self
-            .target_map
-            .values()
-            .flat_map(|object| object.get_conflicted_patches(patch))
-            .collect();
+        let mut conflicted = IndexSet::with_capacity(self.target_map.len());
+
+        for object in self.target_map.values() {
+            conflicted.extend(object.get_conflicted_patches(patch));
+        }
 
         ensure!(conflicted.is_empty(), {
             let mut msg = String::new();
@@ -143,11 +144,11 @@ impl KernelPatchDriver {
     }
 
     pub fn check_overridden_patches(&self, patch: &KernelPatch) -> Result<()> {
-        let overridden: HashSet<_> = self
-            .target_map
-            .values()
-            .flat_map(|object| object.get_overridden_patches(patch))
-            .collect();
+        let mut overridden = IndexSet::with_capacity(self.target_map.len());
+
+        for object in self.target_map.values() {
+            overridden.extend(object.get_overridden_patches(patch));
+        }
 
         ensure!(overridden.is_empty(), {
             let mut msg = String::new();
@@ -179,7 +180,7 @@ impl KernelPatchDriver {
         })
     }
 
-    pub fn load_patch(&mut self, patch: &KernelPatch) -> Result<()> {
+    pub fn load_patch(&self, patch: &KernelPatch) -> Result<()> {
         ensure!(
             !self.blocked_targets.contains(&patch.target_name),
             "Kpatch: Patch target '{}' is blocked",
@@ -202,7 +203,7 @@ impl KernelPatchDriver {
         })
     }
 
-    pub fn remove_patch(&mut self, patch: &KernelPatch) -> Result<()> {
+    pub fn remove_patch(&self, patch: &KernelPatch) -> Result<()> {
         sys::remove_patch(&patch.module.name).map_err(|e| {
             anyhow!(
                 "Kpatch: Failed to remove patch, {}",
