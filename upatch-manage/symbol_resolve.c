@@ -21,6 +21,7 @@
 #include "symbol_resolve.h"
 
 #include <linux/fs.h>
+#include <linux/file.h>
 #include <linux/mm.h>
 
 #include "target_entity.h"
@@ -590,14 +591,18 @@ static unsigned long search_base_addr(struct vm_area_struct *vma)
     struct vm_area_struct *search_vma;
     struct upatch_vma_iter vmi;
 
+    if (!vma->vm_file) {
+        return base_addr;
+    }
+    struct inode *vma_inode = file_inode(vma->vm_file);
+
     // A file could be map into multiple VMA, find the first one
     upatch_vma_iter_set(&vmi, vma);
     while ((search_vma = upatch_vma_prev(&vmi))) {
         if (!search_vma->vm_file) {
             continue;
         }
-        if (search_vma->vm_file->f_inode->i_sb->s_dev == vma->vm_file->f_inode->i_sb->s_dev &&
-            search_vma->vm_file->f_inode->i_ino == vma->vm_file->f_inode->i_ino) {
+        if (file_inode(search_vma->vm_file) == vma_inode) {
             base_addr = search_vma->vm_start;
         }
     }
@@ -617,6 +622,7 @@ static unsigned long resolve_from_vma_so(struct patch_context *ctx, const char *
     unsigned long sym_addr = 0;
     unsigned long elf_addr = 0;
     char type;
+    struct file *so_file = NULL;
 
     if (!mm) {
         return 0;
@@ -629,9 +635,13 @@ static unsigned long resolve_from_vma_so(struct patch_context *ctx, const char *
             continue;
         }
 
+        // Take a reference on vm_file before releasing mmap_lock,
+        // so the file remains valid during kernel_read in find_sym_st_value_in_elf.
+        so_file = get_file(vma->vm_file);
         // Search for the symbol in the shared object
         sym_addr = find_sym_st_value_in_elf(vma->vm_file, symbol_name, &type);
         if (sym_addr == 0) {
+            fput(so_file);
             continue;
         }
 
@@ -644,6 +654,7 @@ static unsigned long resolve_from_vma_so(struct patch_context *ctx, const char *
         }
         log_debug("found symbol '%s' from shared object at 0x%lx (base 0x%lx), ret=0x%lx\n",
             symbol_name, sym_addr, base_addr, elf_addr);
+        fput(so_file);
         break;
     }
     mmap_read_unlock(mm);
