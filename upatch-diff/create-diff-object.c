@@ -726,6 +726,9 @@ static int verify_section_patchability(struct upatch_elf *uelf)
             // changed .data & .bss section cannot be included
             if (is_data_section(sec) || is_bss_section(sec)) {
                 struct rela *rela = NULL;
+                if (sec->rela == NULL) {
+                    continue;
+                }
                 list_for_each_entry(rela, &sec->rela->relas, list) {
                     if ((rela->sym == NULL) || (rela->sym->status != CHANGED)) {
                         continue;
