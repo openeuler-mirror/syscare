@@ -887,16 +887,16 @@ static int upatch_unapply_prepare(struct upatch_process *proc,
 {
     int ret = 0;
 
+    *patch = upatch_find_patch(proc, uuid);
+    if (*patch == NULL) {
+        log_error("Patch '%s' is not found\n", uuid);
+        return -ENODATA;
+    }
+
     for (int i = 0; i < STACK_CHECK_RETRY_TIMES; i++) {
         ret = upatch_process_attach(proc);
         if (ret < 0) {
             log_error("Failed to attach process\n");
-            goto detach;
-        }
-        *patch = upatch_find_patch(proc, uuid);
-        if (*patch == NULL) {
-            log_error("Patch '%s' is not found\n", uuid);
-            ret = -ENODATA;
             goto detach;
         }
         ret = upatch_stack_check((*patch)->uinfo, proc, DEACTIVE);
