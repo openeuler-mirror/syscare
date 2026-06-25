@@ -90,7 +90,7 @@ static int process_get_comm(struct upatch_process *proc)
     (void) snprintf(path, sizeof(path), "/proc/%d/exe", proc->pid);
     log_debug("Reading from '%s'...", path);
 
-    ret = readlink(path, realpath, sizeof(realpath));
+    ret = readlink(path, realpath, sizeof(realpath) - 1);
     if (ret < 0) {
         return -1;
     }
