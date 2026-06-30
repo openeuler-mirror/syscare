@@ -262,15 +262,15 @@ static void parse_section_metadata(struct upatch_elf *uelf)
         if ((sec->sh.sh_type == SHT_REL) || (sec->sh.sh_type == SHT_RELA)) {
             sec->info = find_section_by_index(&uelf->sections,
                 (GElf_Section)sec->sh.sh_info);
-            if (sec->link == NULL) {
+            if (sec->info == NULL) {
                 ERROR("Cannot find '%s' info section, sh_info=%d",
-                    sec->name, sec->sh.sh_link);
+                    sec->name, sec->sh.sh_info);
             }
         } else if (sec->sh.sh_type == SHT_GROUP) {
             sec->info = find_symbol_by_index(&uelf->symbols, sec->sh.sh_info);
-            if (sec->link == NULL) {
+            if (sec->info == NULL) {
                 ERROR("Cannot find '%s' info symbol, sh_info=%d",
-                    sec->name, sec->sh.sh_link);
+                    sec->name, sec->sh.sh_info);
             }
         }
         /* handle rela section */
