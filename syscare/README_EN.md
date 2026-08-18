@@ -35,7 +35,7 @@ syscare [OPTIONS] <COMMAND>
 
 ## syscare build
 
-See [../builder/README.md](https://gitee.com/openeuler/syscare/blob/master/builder/README.md).
+See [../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/builder/README.md).
 
 ## syscare info
 

@@ -32,7 +32,7 @@ syscare [OPTIONS] <COMMAND>
 
 
 ## syscare build
-请见[../builder/README.md](https://gitee.com/openeuler/syscare/blob/master/builder/README.md)
+请见[../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/builder/README.md)
 
 
 
