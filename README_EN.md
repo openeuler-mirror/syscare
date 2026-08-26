@@ -32,7 +32,7 @@
     Note: If you directly compile the code, a message indicating that dependencies are missing will be displayed during patch installation. Therefore, you are advised to install the app using the RPM package.
 
     ```bash
-    git clone https://gitee.com/openeuler/syscare.git
+    git clone https://atomgit.com/openeuler/syscare.git
     cd syscare
     mkdir tmp
     cd tmp
@@ -104,7 +104,7 @@ $ syscare build \
    --patch ./0001-test.patch
 ```
 
-For details about how to create a patch, see [syscare-build/README.md](https://gitee.com/openeuler/syscare/blob/master/syscare-build/README.md).
+For details about how to create a patch, see [syscare-build/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare-build/README.md).
 
 ### Patch Management
 
@@ -170,7 +170,7 @@ For details about how to create a patch, see [syscare-build/README.md](https://g
     $ syscare reboot
     ```
 
-For details about how to use the command, see [cli/README.md](https://gitee.com/openeuler/syscare/blob/master/cli/README.md).
+For details about how to use the command, see [cli/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare/README_EN.md).
 
 ## Constraints
 
@@ -195,7 +195,7 @@ For details about how to use the command, see [cli/README.md](https://gitee.com/
 
 ## Contributions
 
-1. Fork this repository: `$ git clone https://gitee.com/openeuler/syscare.git`
+1. Fork this repository: `$ git clone https://atomgit.com/openeuler/syscare.git`
 2. Create your own branch: `$ cd syscare & git branch -b Feature_XXXX`
 3. Improve feature code: `$ vim src/upatch/xxxx & git commit -m ""`
 4. Commit code: `$ git push origin`

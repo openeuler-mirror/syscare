@@ -36,7 +36,7 @@
     PS: 直接编译在应用补丁的时候会显示缺少依赖，建议通过rpm包安装
 
     ```bash
-    git clone https://gitee.com/openeuler/syscare.git
+    git clone https://atomgit.com/openeuler/syscare.git
     cd syscare
     mkdir tmp
     cd tmp
@@ -104,7 +104,7 @@ $ syscare build \
    --patch ./0001-test.patch
 ```
 
-补丁制作详细使用说明请见[syscare-build/README.md](https://gitee.com/openeuler/syscare/blob/master/syscare-build/README.md)
+补丁制作详细使用说明请见[syscare-build/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare-build/README.md)
 
 
 
@@ -173,7 +173,7 @@ $ syscare list
 $ syscare reboot
 ```
 
-命令行详细使用说明请见[cli/README.md](https://gitee.com/openeuler/syscare/blob/master/cli/README.md)
+命令行详细使用说明请见[cli/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare/README.md) 
 
 
 
@@ -202,7 +202,7 @@ $ syscare reboot
 
 ## 参与贡献
 
-1.  Fork 本仓库 ```$ git clone https://gitee.com/openeuler/syscare.git```
+1.  Fork 本仓库 ```$ git clone https://atomgit.com/openeuler/syscare.git```
 2.  建立自己分支 ```$ cd syscare & git branch -b Feature_XXXX```
 3.  完善特性代码 ```$ vim src/upatch/xxxx & git commit -m ""```
 4.  提交代码 ```$ git push origin```

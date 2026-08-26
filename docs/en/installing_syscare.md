@@ -16,10 +16,10 @@ This chapter describes how to install SysCare on openEuler.
 
 ### Installing from Source
 
-Clone the SysCare source code <https://gitee.com/openeuler/syscare.git> and then compile and install SysCare as follows:
+Clone the SysCare source code <https://atomgit.com/openeuler/syscare.git> and then compile and install SysCare as follows:
 
 ```shell
-git clone https://gitee.com/openeuler/syscare.git
+git clone https://atomgit.com/openeuler/syscare.git
 cd syscare
 mkdir build
 cd build
