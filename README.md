@@ -1,3 +1,5 @@
+[English](./README_EN.md) | 简体中文
+
 # SysCare: 系统热服务
 
 ## 介绍
