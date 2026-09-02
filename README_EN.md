@@ -1,3 +1,5 @@
+English | [简体中文](./README.md)
+
 # SysCare: System Hot Service
 
 ## Overview
