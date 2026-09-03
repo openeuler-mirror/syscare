@@ -1,5 +1,7 @@
 # SysCare CLI
 
+English | [简体中文](./README.md)
+
 SysCare CLI Entry
 
 ## Format
@@ -35,7 +37,7 @@ syscare [OPTIONS] <COMMAND>
 
 ## syscare build
 
-See [../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/builder/README.md).
+See [../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare-build/README_EN.md).
 
 ## syscare info
 

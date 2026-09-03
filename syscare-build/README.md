@@ -1,5 +1,7 @@
 # Syscare build
 
+简体中文 | [English](./README_EN.md)
+
 Syscare 补丁制作工具
 
 syscare build为纯CLI工具，提供从RPM包生成热补丁包的功能，补丁包以RPM包的形式封装维护，支持制作内核热补及用户态热补丁。
