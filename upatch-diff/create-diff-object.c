@@ -501,6 +501,8 @@ static void mark_ignored_sections(struct upatch_elf *uelf)
         ".eh_frame",
         ".note",
         ".debug_",
+        ".gnu.lto.",
+        ".gnu.debuglto_",
         ".comment",
         ".discard",
         ".rela.discard",
