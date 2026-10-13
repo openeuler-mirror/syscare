@@ -1,4 +1,7 @@
 # Syscare CLI
+
+简体中文 | [English](./README_EN.md)
+
 Syscare cli入口
 
 ## 调用格式
@@ -32,7 +35,7 @@ syscare [OPTIONS] <COMMAND>
 
 
 ## syscare build
-请见[../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/builder/README.md)
+请见[../builder/README.md](https://atomgit.com/openeuler/syscare/blob/master/syscare-build/README.md)
 
 
 

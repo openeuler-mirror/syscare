@@ -1,5 +1,7 @@
 # SysCare build
 
+English | [简体中文](./README.md)
+
 SysCare patch creation tool
 
 SysCare build is a CLI tool that generates hot patch packages from RPM packages. The patch packages are encapsulated and maintained as RPM packages. It supports the creation of kernel hot patches and user-mode hot patches.
